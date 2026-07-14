@@ -1,0 +1,12 @@
+build/
+cmake-build-*/
+dist/
+.tools/
+dotnet/**/bin/
+dotnet/**/obj/
+stroke/*.strokebin
+stroke/*.part
+stroke/*.json
+*.user
+.vs/
+out/
