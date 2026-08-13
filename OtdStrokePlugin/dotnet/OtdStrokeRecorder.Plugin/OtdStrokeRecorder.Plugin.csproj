@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>OtdStrokeRecorder.Plugin</AssemblyName>
+    <RootNamespace>OtdStrokeRecorder.Plugin</RootNamespace>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenTabletDriver.Plugin" Version="0.6.5.1" />
+  </ItemGroup>
+
+  <!-- Ship native recorder beside the managed plugin. -->
+  <ItemGroup>
+    <None Include="..\..\build\Release\otd_stroke.dll" Condition="Exists('..\..\build\Release\otd_stroke.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>otd_stroke.dll</Link>
+    </None>
+  </ItemGroup>
+</Project>

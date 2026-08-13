@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup Label="Project Properties">
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(FrameworkBase)</TargetFramework>
+    <AutoreleasePoolSupport>true</AutoreleasePoolSupport>
+    <UseCurrentRuntimeIdentifier>true</UseCurrentRuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup Label="NuGet Packages">
+    <PackageReference Include="Eto.Platform.Mac64" Version="2.11.0" />
+  </ItemGroup>
+  
+  <ItemGroup Label="Project References">
+    <ProjectReference Include="..\OpenTabletDriver.UX\OpenTabletDriver.UX.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Label="Project Resources">
+    <Content Include="../eng/bash/macos/Icon.icns" />
+    <None Include="../eng/bash/macos/Info.plist" />
+  </ItemGroup>
+  
+</Project>

@@ -1,0 +1,12 @@
+{
+  "Name": "ART Stroke Recorder",
+  "Owner": "ART_line",
+  "Description": "Asynchronous stroke binary recorder for OpenTabletDriver. Writes .strokebin under OpenTabletDriver/stroke.",
+  "PluginVersion": "0.1.0.0",
+  "SupportedDriverVersion": "0.6.0.0",
+  "RepositoryUrl": "",
+  "DownloadUrl": "",
+  "CompressionFormat": "zip",
+  "WikiUrl": "",
+  "LicenseIdentifier": "MIT"
+}

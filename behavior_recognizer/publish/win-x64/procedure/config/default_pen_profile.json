@@ -1,0 +1,14 @@
+{
+  "profileId": "builtin-default",
+  "displayName": "Default Pen Profile",
+  "pressureCurve": [0.0, 0.15, 0.45, 0.75, 1.0],
+  "pressureSensitivity": 1.0,
+  "tipThreshold": 0.01,
+  "buttonMappings": {
+    "button1": "secondary",
+    "button2": "eraser"
+  },
+  "tiltEnabled": true,
+  "hoverTracking": true,
+  "notes": "Built-in defaults applied automatically on first launch."
+}

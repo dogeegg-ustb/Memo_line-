@@ -1,12 +1,29 @@
+# Build / tooling
 build/
 cmake-build-*/
-dist/
 .tools/
-dotnet/**/bin/
-dotnet/**/obj/
-stroke/*.strokebin
-stroke/*.part
-stroke/*.json
+**/bin/
+**/obj/
 *.user
 .vs/
 out/
+__pycache__/
+*.pyc
+*.pyo
+
+# Python virtualenvs (recreate from requirements.txt)
+.venv/
+**/venv/
+
+# Junction duplicate of transfomer/
+/transformer/
+
+# Local stroke capture dumps
+stroke/*.strokebin
+stroke/*.part
+stroke/*.json
+
+# Large / local runtime logs
+run_log.txt
+*_debug.log
+debug_runtime*.log
