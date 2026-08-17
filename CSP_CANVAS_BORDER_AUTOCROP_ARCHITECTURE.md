@@ -40,7 +40,7 @@ Workspace = Canvas + WorkspaceBackground
   → 用户确认 ROI
   → 软件对冻结截图执行检测与修正
   → CapturePx 转换为屏幕物理像素
-  → 在真实屏幕对应位置显示透明淡绿色矩形覆盖层
+  → 在真实屏幕对应位置显示绿色边框覆盖层
 ```
 
 强制约束：
@@ -49,8 +49,8 @@ Workspace = Canvas + WorkspaceBackground
 - 检测期间真实绘画软件窗口发生变化时，不得偷偷改用新截图；
 - 用户 ROI MUST 在冻结截图坐标系中记录；
 - 检测输出不是自动裁剪图片，也不是修改绘画软件窗口；
-- 成功后的主要可视反馈 MUST 是覆盖在屏幕上的透明淡绿色矩形；
-- 覆盖矩形表示修正后的整个工作区，即“画布 + 工作区背景”；
+- 成功后的主要可视反馈 MUST 是覆盖在屏幕上的绿色边框；
+- 覆盖边框表示修正后的整个工作区，即“画布 + 工作区背景”；
 - 检测失败时 MUST NOT 显示绿色成功覆盖层，应显示明确失败状态并允许重新截图框选。
 
 ## 2. 核心几何假设
@@ -177,10 +177,12 @@ WorkspaceCaptureSession
 1. 所有检测几何 MUST 在截图物理像素 `CapturePx` 中完成。
 2. 矩形 MUST 使用半开区间 `[left,right) × [top,bottom)`。
 3. `UserRoi` MUST 标准化、裁剪到截图范围并验证最小尺寸。
-4. `SearchRoi` MAY 在用户 ROI 外扩，但必须受截图范围和最大外扩比例限制。
+4. **实现约定（本仓库）**：`UserRoi` 仅用于工作区背景特征/种子采样；背景相似图与连通生长 MUST 在整幅截图（`grow_roi = CaptureBounds`）上进行，不得再把生长限制在 UserRoi 外扩的局部 SearchRoi 内。原文“SearchRoi MAY 外扩”对本实现不适用。
 5. 下采样结果只能用于产生粗候选；最终四边 MUST 回到原始分辨率精修。
 6. 必须显式处理 stride、像素格式、DPI、整数溢出和坐标转换。
 7. 输出 `WorkspaceRect` 必须包含识别出的画布主体及工作区背景主体。
+8. **画布 MUST 在背景模型层被硬剔除**（实心高填充、无孔洞、弱多边支撑），不得留到假设层靠加权打分分辨。
+9. **合格检测路径 MUST NOT 使用加权候选评分**；仅用 A/B/C-L/C-II 硬几何约束与歧义拒绝，再经原图精修与独立外边验证。
 
 失败状态至少包括：
 
@@ -204,18 +206,19 @@ Cancelled
 ```text
 截图 + 用户粗框
   → 输入、坐标、DPI 与缓冲区校验
-  → 构造 SearchRoi
+  → UserRoi 仅采样背景种子/特征（生长域=全截图）
   → 提取 Lab / 灰度 / 方向梯度 / 局部方差
   → 在 ROI 内寻找大块、低方差、矩形残缺的颜色簇
   → 生成多个工作区背景模型候选
+  → 背景模型层硬剔除画布状实心簇
   → 构造连续相似度、强弱掩膜和屏障掩膜
-  → 对每个候选执行受约束连通生长
+  → 对每个可靠候选在全截图执行受约束连通生长
   → 将画布视为背景连通域内部的大孔洞/遮挡，不填平其颜色
   → 提取背景连通域的外侧轮廓、条带和端点
   → 构建 A / B / C-L / C-II 工作区外矩形假设
-  → 联合评分并拒绝歧义
+  → 硬几何选优并拒绝歧义（无加权合格打分）
   → 在原始分辨率精修工作区四条外边
-  → 使用独立采样验证外边与包含关系
+  → 使用独立采样验证外边（不依赖画布检出）
   → 输出整个 WorkspaceRect
 ```
 
@@ -482,22 +485,22 @@ S=w_bC_{background}+w_gC_{geometry}+w_eC_{endpoint}+w_oC_{outerTransition}
 
 ## 10. 屏幕覆盖层显示契约
 
-检测成功后，软件 MUST 创建一个独立、无边框、透明、置顶且不激活的屏幕覆盖窗口，在 `WorkspaceRectScreenPhysicalPx` 上显示淡绿色矩形。
+检测成功后，软件 MUST 创建一个独立、无边框、透明、置顶且不激活的屏幕覆盖窗口，在 `WorkspaceRectScreenPhysicalPx` 上显示绿色边框。
 
 ### 10.1 视觉规范
 
 ```text
 WorkspaceOverlayStyle
-- FillColor: light green
-- FillOpacity: 0.12–0.20
+- FillColor: none
+- FillOpacity: 0
 - BorderColor: light/medium green
 - BorderOpacity: 0.75–0.95
 - BorderThicknessPhysicalPx: 1–2
 - CornerRadiusPhysicalPx: 0–3
 ```
 
-- 矩形内部 MUST 使用均匀半透明淡绿色填充，底下绘画软件仍应清晰可见；
-- MUST 绘制清晰但不过度遮挡的绿色边框；
+- MUST 仅绘制清晰但不过度遮挡的绿色边框；
+- MUST NOT 使用内部填充；
 - 禁止使用完全不透明填充；
 - 禁止使用会改变目标含义的外扩阴影；
 - 边框几何 MUST 与检测矩形一致，不得为视觉效果擅自扩大或缩小检测结果；
@@ -523,7 +526,7 @@ Windows 实现 SHOULD 使用不激活、工具窗口、分层窗口和鼠标穿�
 
 - 新截图会话开始时 MUST 立即关闭旧覆盖层；
 - 用户取消、重新框选或检测失败时 MUST 关闭覆盖层；
-- 只有 `Status == Success` 且独立验证通过时才能显示绿色覆盖层；
+- 只有 `Status == Success` 且独立验证通过时才能显示绿色边框覆盖层；
 - 覆盖层 MUST 绑定 `CaptureId`，过期检测任务完成后不得覆盖当前会话；
 - 用户 MUST 能通过明确命令隐藏覆盖层；
 - SHOULD 提供重新检测入口；

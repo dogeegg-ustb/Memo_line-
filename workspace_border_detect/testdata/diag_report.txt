@@ -1,0 +1,74 @@
+﻿
+========== d:\ART_line A\ART_line\workspace_border_detect\testdata\roi1 ==========
+[0] size=1024x724 user_roi=[4,4,1020,720) search=[0,0,1024,724) expand=129
+[API] status=7 (AmbiguousCandidates) msg=AmbiguousCandidates grade=None conf=0.000 rect=[0,0,0,0)
+[1] seeds=60 accepted=50
+[2] models=2
+  model[0] conf=1.00 seeds=44 de=3.5/6.0 Lab=(18.5,0.0,0.0)
+  model[1] conf=0.69 seeds=6 de=3.5/6.0 Lab=(100.0,0.0,0.0)
+[3] model[0] grown px=548988 bbox=[5,9,1014,724) hole=0.24 fill=0.76 border=0.26 plausible=1
+[4] model[0] sides=4 bands=4 L=4 coverage=0.96
+    side=0 coord=9 run=[19,724) cov=0.97 trunc=0 mad=1.58 out=0.89 tr=0.79
+    side=1 coord=18 run=[5,1014) cov=0.99 trunc=0 mad=159.55 out=0.89 tr=0.50
+    side=2 coord=910 run=[9,724) cov=0.99 trunc=0 mad=212.94 out=0.90 tr=0.50
+    side=3 coord=724 run=[10,910) cov=0.88 trunc=0 mad=10.17 out=0.86 tr=0.50
+[5] model[0] raw_hyps=11
+    grade=A rect=[9,18,910,724) trunc=0 keep
+    grade=B rect=[0,18,910,724) trunc=0 keep
+    grade=B rect=[9,0,910,724) trunc=0 keep
+    grade=B rect=[9,18,1024,724) trunc=0 keep
+    grade=B rect=[9,18,910,724) trunc=0 keep
+    grade=C_L rect=[9,18,1014,724) trunc=0 keep
+    grade=C_L rect=[9,19,910,724) trunc=0 keep
+    grade=C_L rect=[5,18,910,724) trunc=0 keep
+    grade=C_L rect=[10,9,910,724) trunc=0 keep
+    grade=C_II rect=[9,9,910,724) trunc=0 keep
+    grade=C_II rect=[5,18,1014,724) trunc=0 keep
+[3] model[1] grown px=39733 bbox=[562,7,1014,352) hole=0.75 fill=0.25 border=0.00 plausible=1
+[4] model[1] sides=4 bands=0 L=0 coverage=0.46
+    side=0 coord=762 run=[7,352) cov=0.48 trunc=0 mad=125.52 out=0.72 tr=0.50
+    side=1 coord=97 run=[562,1014) cov=0.44 trunc=0 mad=89.98 out=0.70 tr=0.50
+    side=2 coord=1014 run=[7,352) cov=0.48 trunc=0 mad=0.00 out=0.72 tr=0.90
+    side=3 coord=254 run=[562,1014) cov=0.44 trunc=0 mad=92.80 out=0.70 tr=0.50
+[5] model[1] raw_hyps=5
+    grade=A rect=[762,97,1014,254) trunc=0 keep
+    grade=B rect=[0,97,1014,254) trunc=0 keep
+    grade=B rect=[762,0,1014,254) trunc=0 keep
+    grade=B rect=[762,97,1024,254) trunc=0 keep
+    grade=B rect=[762,97,1014,724) trunc=0 keep
+STOP: select fail reason=AmbiguousCandidates ranked=16
+  ranked[0] grade=A score=0.617 rect=[9,18,910,724)
+  ranked[1] grade=A score=0.615 rect=[762,97,1014,254)
+  ranked[2] grade=C_II score=0.613 rect=[9,9,910,724)
+  ranked[3] grade=B score=0.606 rect=[762,0,1014,254)
+  ranked[4] grade=B score=0.604 rect=[9,0,910,724)
+
+========== d:\ART_line A\ART_line\workspace_border_detect\testdata\roi2 ==========
+[0] size=1024x731 user_roi=[4,4,1020,727) search=[0,0,1024,731) expand=130
+[API] status=7 (AmbiguousCandidates) msg=AmbiguousCandidates grade=None conf=0.000 rect=[0,0,0,0)
+[1] seeds=60 accepted=54
+[2] models=2
+  model[0] conf=1.00 seeds=36 de=3.5/6.0 Lab=(18.5,0.0,0.0)
+  model[1] conf=1.00 seeds=17 de=3.5/6.0 Lab=(100.0,0.0,0.0)
+[3] model[0] grown px=425431 bbox=[12,3,1014,724) hole=0.41 fill=0.59 border=0.00 plausible=1
+[4] model[0] sides=4 bands=4 L=4 coverage=0.93
+    side=0 coord=12 run=[8,720) cov=0.97 trunc=0 mad=1.17 out=0.89 tr=0.82
+    side=1 coord=3 run=[103,1014) cov=0.89 trunc=0 mad=0.47 out=0.86 tr=0.87
+    side=2 coord=1014 run=[3,724) cov=0.99 trunc=0 mad=0.00 out=0.90 tr=0.90
+    side=3 coord=724 run=[136,1014) cov=0.86 trunc=0 mad=0.42 out=0.85 tr=0.87
+[5] model[0] raw_hyps=11
+    grade=A rect=[12,3,1014,724) trunc=0 keep
+    grade=B rect=[0,3,1014,724) trunc=0 keep
+    grade=B rect=[12,0,1014,724) trunc=0 keep
+    grade=B rect=[12,3,1024,724) trunc=0 keep
+    grade=B rect=[12,3,1014,731) trunc=0 keep
+    grade=C_L rect=[12,3,1014,720) trunc=0 keep
+    grade=C_L rect=[12,8,1014,724) trunc=0 keep
+    grade=C_L rect=[103,3,1014,724) trunc=0 keep
+    grade=C_L rect=[136,3,1014,724) trunc=0 keep
+    grade=C_II rect=[12,3,1014,724) trunc=0 keep
+    grade=C_II rect=[103,3,1014,724) trunc=0 keep
+[3] model[1] grown px=97563 bbox=[290,49,740,686) hole=0.66 fill=0.34 border=0.00 plausible=1
+[4] model[1] sides=4 bands=2 L=0 coverage=0.66
+    side=0 coord=290 run=[49,686) cov=0.87 trunc=0 mad=27.68 out=0.85 tr=0.50
+    side=1 coord=49 run=[290,

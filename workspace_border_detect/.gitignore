@@ -1,0 +1,23 @@
+# Build outputs
+**/bin/
+**/obj/
+native/build/
+native/build_src/
+*.user
+.vs/
+
+# Compiled / linked artifacts
+*.dll
+*.exe
+*.obj
+*.lib
+*.exp
+*.pdb
+*.ilk
+
+# Local capture dumps
+*.bgra
+testdata/*.bgra
+
+# Keep placeholder for Native DLL drop
+!app/Native/PLACEHOLDER.txt

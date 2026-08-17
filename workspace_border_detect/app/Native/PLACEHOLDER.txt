@@ -1,0 +1,4 @@
+WorkspaceBorderNative.dll is produced by the native build and copied here (or next to the exe) by the build script.
+
+Expected file: WorkspaceBorderNative.dll
+Do not commit large binaries unless the team policy requires it.
