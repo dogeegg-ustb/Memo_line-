@@ -1,7 +1,11 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Globalization;
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Text;
 using System.Text.RegularExpressions;
 using ScreenCanvasTransform.Capture;
 using ScreenCanvasTransform.Models;
@@ -11,56 +15,127 @@ using Windows.Media.Ocr;
 namespace ScreenCanvasTransform.Ocr;
 
 /// <summary>
-/// Reads CSP navigator numbers relative to NavigatorRoi.
-/// Upper band → ScalePercent; lower band → RotationDegrees.
+/// Reads CSP navigator numbers in NavigatorRoi, below NavigatorThumbnailRoi.
+/// Among digit hits: upper = ScalePercent, lower = RotationDegrees.
 /// </summary>
 public sealed class NavigatorOcrService
 {
+    public static bool DebugEnabled { get; set; } = true;
+
     private static readonly Regex NumberRegex = new(
         @"[-+]?\d+(?:[.,]\d+)?",
         RegexOptions.Compiled);
 
+    private static readonly Regex HasDigit = new(@"\d", RegexOptions.Compiled);
+
     public async Task<NavigatorNumericReadingDto> ReadAsync(
         CaptureSession session,
         IntRect navigatorRoiCapturePx,
+        IntRect navigatorThumbnailRoiCapturePx,
         CancellationToken cancellationToken = default)
     {
+        string debugDir = Path.Combine(Path.GetTempPath(), "sct_ocr_debug", session.CaptureId);
+        if (DebugEnabled)
+            Directory.CreateDirectory(debugDir);
+
         var engine = OcrEngine.TryCreateFromUserProfileLanguages()
                      ?? OcrEngine.TryCreateFromLanguage(new Windows.Globalization.Language("en-US"))
                      ?? OcrEngine.TryCreateFromLanguage(new Windows.Globalization.Language("zh-Hans"));
 
         if (engine is null)
         {
-            return new NavigatorNumericReadingDto
-            {
-                SourceCaptureId = session.CaptureId,
-                CapturedAt = DateTime.UtcNow,
-                ScaleConfidence = 0,
-                RotationConfidence = 0,
-                ScaleRawText = "",
-                RotationRawText = ""
-            };
+            Log(debugDir, "engine=null");
+            return Empty(session.CaptureId);
         }
 
-        var scaleBand = TopBand(navigatorRoiCapturePx, 0.18);
-        var rotBand = BottomBand(navigatorRoiCapturePx, 0.18);
+        // Numbers live under the thumbnail, still inside the navigator panel.
+        IntRect search = BelowThumbnailInsideNavigator(
+            navigatorRoiCapturePx, navigatorThumbnailRoiCapturePx);
+        Log(debugDir,
+            $"engine={engine.RecognizerLanguage?.LanguageTag}; nav={navigatorRoiCapturePx}; " +
+            $"thumb={navigatorThumbnailRoiCapturePx}; search={search}");
 
-        var scaleTask = RecognizeBandAsync(session, scaleBand, engine, cancellationToken);
-        var rotTask = RecognizeBandAsync(session, rotBand, engine, cancellationToken);
-        await Task.WhenAll(scaleTask, rotTask).ConfigureAwait(false);
+        if (search.Width < 8 || search.Height < 8)
+        {
+            Log(debugDir, "search band empty/too small");
+            return Empty(session.CaptureId);
+        }
 
-        var (scaleRaw, scaleConf) = scaleTask.Result;
-        var (rotRaw, rotConf) = rotTask.Result;
+        var region = await RecognizeRegionAsync(
+                session, search, engine, debugDir, "below_thumb", cancellationToken)
+            .ConfigureAwait(false);
 
-        bool scaleOk = TryParseScale(scaleRaw, out float scale);
-        bool rotOk = TryParseRotation(rotRaw, out float rot);
+        // CSP puts scale/rotation on the left of the bottom control row — also OCR left half.
+        IntRect leftHalf = new(
+            search.Left,
+            search.Top,
+            search.Left + Math.Max(8, search.Width / 2),
+            search.Bottom);
+        var leftRegion = await RecognizeRegionAsync(
+                session, leftHalf, engine, debugDir, "below_thumb_left", cancellationToken)
+            .ConfigureAwait(false);
+
+        var mergedHits = region.Hits.Concat(leftRegion.Hits).ToList();
+
+        // Sort digit hits by Y (top → bottom). Upper = scale, lower = rotation.
+        var hits = mergedHits
+            .Where(h => TryParseNumber(h.Text, out _))
+            .GroupBy(h => $"{h.Text}@{(int)(h.CenterY / 6)}")
+            .Select(g => g.OrderBy(h => h.CenterX).First())
+            .OrderBy(h => h.CenterY)
+            .ThenBy(h => h.CenterX)
+            .ToList();
+
+        Log(debugDir, $"hits={hits.Count}: " +
+                       string.Join(" | ", hits.Select(h => $"'{h.Text}'@y={h.CenterY:F0}")));
+
+        bool scaleOk = false;
+        bool rotOk = false;
+        float scaleVal = 0, rotVal = 0;
+        string scaleRaw = "", rotRaw = "";
+
+        if (hits.Count >= 2)
+        {
+            scaleOk = TryParseScale(hits[0].Text, out scaleVal);
+            scaleRaw = hits[0].Text;
+            rotOk = TryParseRotation(hits[^1].Text, out rotVal);
+            rotRaw = hits[^1].Text;
+            // If first parse failed as scale but looks numeric, still try raw float with looser gate.
+            if (!scaleOk && TryParseNumber(hits[0].Text, out float s0) && s0 > 0)
+            {
+                scaleVal = s0;
+                scaleOk = s0 >= 1f;
+                scaleRaw = hits[0].Text;
+            }
+        }
+        else if (hits.Count == 1)
+        {
+            // Single hit: prefer as scale if plausible; rotation defaults to 0.
+            if (TryParseScale(hits[0].Text, out scaleVal))
+            {
+                scaleOk = true;
+                scaleRaw = hits[0].Text;
+                rotOk = true;
+                rotVal = 0;
+                rotRaw = "0";
+            }
+            else if (TryParseRotation(hits[0].Text, out rotVal))
+            {
+                rotOk = true;
+                rotRaw = hits[0].Text;
+            }
+        }
+
+        Log(debugDir,
+            $"result scaleOk={scaleOk} raw='{scaleRaw}' val={scaleVal}; " +
+            $"rotOk={rotOk} raw='{rotRaw}' val={rotVal}");
 
         return new NavigatorNumericReadingDto
         {
-            ScalePercent = scaleOk ? scale : 0,
-            RotationDegrees = rotOk ? rot : 0,
-            ScaleConfidence = scaleOk ? Math.Max(0.25f, scaleConf) : 0,
-            RotationConfidence = rotOk ? Math.Max(0.25f, rotConf) : 0,
+            ScalePercent = scaleOk ? scaleVal : 0,
+            RotationDegrees = rotOk ? rotVal : 0,
+            ScaleConfidence = scaleOk ? 0.85f : 0,
+            RotationConfidence = rotOk ? 0.85f : 0,
             ScaleRawText = scaleRaw,
             RotationRawText = rotRaw,
             SourceCaptureId = session.CaptureId,
@@ -68,109 +143,158 @@ public sealed class NavigatorOcrService
         };
     }
 
-    private static IntRect TopBand(IntRect roi, double fraction)
+    /// <summary>
+    /// Prefer strip below thumbnail inside navigator. If that strip is too short
+    /// (oversized thumbnail), expand upward to a minimum height so the control
+    /// row with scale/rotation remains inside the OCR band.
+    /// </summary>
+    private static IntRect BelowThumbnailInsideNavigator(IntRect nav, IntRect thumb)
     {
-        int h = Math.Max(1, (int)Math.Ceiling(roi.Height * fraction));
-        return new IntRect(roi.Left, roi.Top, roi.Right, Math.Min(roi.Bottom, roi.Top + h));
+        if (nav.IsEmpty)
+            return nav;
+
+        int minH = Math.Max(72, nav.Height / 4);
+        int topFromThumb = Math.Max(nav.Top, thumb.Bottom - 4);
+        int topMinBand = Math.Max(nav.Top, nav.Bottom - minH);
+        int top = Math.Min(topFromThumb, topMinBand);
+        if (nav.Bottom - top < 8)
+            return new IntRect(nav.Left, nav.Top, nav.Left, nav.Top);
+        return new IntRect(nav.Left, top, nav.Right, nav.Bottom);
     }
 
-    private static IntRect BottomBand(IntRect roi, double fraction)
+    private readonly record struct Hit(string Text, double CenterY, double CenterX);
+
+    private sealed class RegionResult
     {
-        int h = Math.Max(1, (int)Math.Ceiling(roi.Height * fraction));
-        return new IntRect(roi.Left, Math.Max(roi.Top, roi.Bottom - h), roi.Right, roi.Bottom);
+        public List<Hit> Hits { get; init; } = new();
     }
 
-    private static async Task<(string text, float confidence)> RecognizeBandAsync(
+    private static async Task<RegionResult> RecognizeRegionAsync(
         CaptureSession session,
         IntRect bandCapture,
         OcrEngine engine,
+        string debugDir,
+        string tag,
         CancellationToken cancellationToken)
     {
-        if (bandCapture.Width < 4 || bandCapture.Height < 4)
-            return ("", 0);
+        const int scale = 4;
+        int tw = Math.Max(8, bandCapture.Width * scale);
+        int th = Math.Max(8, bandCapture.Height * scale);
 
-        using var crop = new Bitmap(bandCapture.Width, bandCapture.Height, PixelFormat.Format32bppArgb);
+        using var crop = new Bitmap(tw, th, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(crop))
         {
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+            g.Clear(Color.White);
             g.DrawImage(
                 session.FrozenCapture,
-                new Rectangle(0, 0, bandCapture.Width, bandCapture.Height),
+                new Rectangle(0, 0, tw, th),
                 new Rectangle(bandCapture.Left, bandCapture.Top, bandCapture.Width, bandCapture.Height),
                 GraphicsUnit.Pixel);
         }
 
-        var data = crop.LockBits(
-            new Rectangle(0, 0, crop.Width, crop.Height),
-            ImageLockMode.ReadOnly,
-            PixelFormat.Format32bppArgb);
+        if (DebugEnabled)
+        {
+            try { crop.Save(Path.Combine(debugDir, $"{tag}.png"), ImageFormat.Png); }
+            catch { /* ignore */ }
+        }
+
+        int packedStride = tw * 4;
+        byte[] pixels = new byte[packedStride * th];
+        var data = crop.LockBits(new Rectangle(0, 0, tw, th), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
         try
         {
-            byte[] pixels = new byte[data.Stride * data.Height];
-            System.Runtime.InteropServices.Marshal.Copy(data.Scan0, pixels, 0, pixels.Length);
-
-            using var softwareBitmap = new SoftwareBitmap(
-                BitmapPixelFormat.Bgra8,
-                crop.Width,
-                crop.Height,
-                BitmapAlphaMode.Premultiplied);
-            softwareBitmap.CopyFromBuffer(pixels.AsBuffer());
-
-            OcrResult ocr = await engine.RecognizeAsync(softwareBitmap).AsTask(cancellationToken)
-                .ConfigureAwait(false);
-            string text = ocr.Text?.Trim() ?? "";
-            float conf = string.IsNullOrWhiteSpace(text) ? 0f : 0.7f;
-            return (text, conf);
+            for (int y = 0; y < th; y++)
+                Marshal.Copy(data.Scan0 + y * data.Stride, pixels, y * packedStride, packedStride);
         }
         finally
         {
             crop.UnlockBits(data);
         }
+
+        using var softwareBitmap = new SoftwareBitmap(
+            BitmapPixelFormat.Bgra8, tw, th, BitmapAlphaMode.Ignore);
+        softwareBitmap.CopyFromBuffer(pixels.AsBuffer());
+
+        OcrResult ocr = await engine.RecognizeAsync(softwareBitmap).AsTask(cancellationToken)
+            .ConfigureAwait(false);
+
+        var hits = new List<Hit>();
+        foreach (OcrLine line in ocr.Lines)
+        {
+            foreach (OcrWord word in line.Words)
+            {
+                string w = word.Text?.Trim() ?? "";
+                if (!HasDigit.IsMatch(w))
+                    continue;
+                // Keep only the numeric token(s) inside the word.
+                foreach (Match m in NumberRegex.Matches(w))
+                {
+                    var rect = word.BoundingRect;
+                    double cx = bandCapture.Left + (rect.X + rect.Width * 0.5) / scale;
+                    double cy = bandCapture.Top + (rect.Y + rect.Height * 0.5) / scale;
+                    hits.Add(new Hit(m.Value, cy, cx));
+                }
+            }
+        }
+
+        // Merge near-duplicate tokens (same number read twice).
+        hits = hits
+            .GroupBy(h => h.Text + "@" + ((int)(h.CenterY / 8)))
+            .Select(g => g.First())
+            .ToList();
+
+        Log(debugDir, $"{tag}: full='{ocr.Text}' digitHits={hits.Count}");
+        return new RegionResult { Hits = hits };
+    }
+
+    private static void Log(string dir, string msg)
+    {
+        if (!DebugEnabled || string.IsNullOrEmpty(dir)) return;
+        try
+        {
+            File.AppendAllText(Path.Combine(dir, "ocr.log"),
+                $"[{DateTime.Now:HH:mm:ss.fff}] {msg}{Environment.NewLine}");
+        }
+        catch { /* ignore */ }
+    }
+
+    private static NavigatorNumericReadingDto Empty(string captureId) => new()
+    {
+        SourceCaptureId = captureId,
+        CapturedAt = DateTime.UtcNow,
+        ScaleConfidence = 0,
+        RotationConfidence = 0,
+        ScaleRawText = "",
+        RotationRawText = ""
+    };
+
+    private static bool TryParseNumber(string raw, out float value)
+    {
+        value = 0;
+        if (string.IsNullOrWhiteSpace(raw))
+            return false;
+        string token = raw.Replace(',', '.').Trim();
+        return float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
     }
 
     public static bool TryParseScale(string raw, out float value)
     {
         value = 0;
-        if (string.IsNullOrWhiteSpace(raw))
+        if (!TryParseNumber(raw.Replace("%", "", StringComparison.Ordinal), out value))
             return false;
-
-        string cleaned = raw.Replace("%", "", StringComparison.Ordinal).Trim();
-        var m = NumberRegex.Match(cleaned);
-        if (!m.Success)
-            return false;
-
-        string token = m.Value.Replace(',', '.');
-        if (!float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
-            return false;
-
-        // OCR may drop decimal: 1000 for 100.0 — keep plausible CSP range.
-        if (value is < 1f or > 6400f)
-            return false;
-        return true;
+        return value is >= 1f and <= 6400f;
     }
 
     public static bool TryParseRotation(string raw, out float value)
     {
         value = 0;
-        if (string.IsNullOrWhiteSpace(raw))
-            return false;
-
         string cleaned = raw.Replace("°", "", StringComparison.Ordinal)
             .Replace("deg", "", StringComparison.OrdinalIgnoreCase)
             .Trim();
-        var m = NumberRegex.Match(cleaned);
-        if (!m.Success)
+        if (!TryParseNumber(cleaned, out value))
             return false;
-
-        string token = m.Value.Replace(',', '.');
-        // Recover missing minus if raw contains dash near number.
-        if (cleaned.Contains('-', StringComparison.Ordinal) && !token.StartsWith('-'))
-            token = "-" + token.TrimStart('+', '-');
-
-        if (!float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
-            return false;
-
-        if (value is < -720f or > 720f)
-            return false;
-        return true;
+        return value is >= -720f and <= 720f;
     }
 }

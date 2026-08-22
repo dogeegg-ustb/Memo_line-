@@ -81,11 +81,45 @@ public sealed class TransformPipelineService
     }
 
     /// <summary>
-    /// Continues after a successful workspace detect and a user-adopted NavigatorRoi.
+    /// C-II thumbnail inside NavigatorRoi using confirmed workspace background.
     /// </summary>
-    public async Task<PipelineResult> ContinueAfterWorkspaceAsync(
+    public DetectOutcome DetectNavigatorThumbnail(CaptureSession session, DetectOutcome workspace)
+    {
+        if (!workspace.Success || workspace.Background is null)
+        {
+            return new DetectOutcome
+            {
+                Success = false,
+                Status = 101,
+                StatusName = "WorkspaceDetectionFailed",
+                Message = "缺少有效工作区背景模型",
+                SourceCaptureId = session.CaptureId
+            };
+        }
+
+        if (session.NavigatorRoiCapturePx is null)
+        {
+            return new DetectOutcome
+            {
+                Success = false,
+                Status = 103,
+                StatusName = "NavigatorRoiInvalid",
+                Message = "缺少 NavigatorRoi",
+                SourceCaptureId = session.CaptureId
+            };
+        }
+
+        return _native.DetectNavigatorThumbnailCii(
+            session, session.NavigatorRoiCapturePx.Value, workspace.Background);
+    }
+
+    /// <summary>
+    /// Continues after workspace + thumbnail are established.
+    /// </summary>
+    public async Task<PipelineResult> ContinueAfterThumbnailAsync(
         CaptureSession session,
         DetectOutcome workspace,
+        DetectOutcome thumbnail,
         IProgress<TransformStage>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -101,6 +135,18 @@ public sealed class TransformPipelineService
                 "WorkspaceDetectionFailed");
         }
 
+        if (!thumbnail.Success)
+        {
+            throw Fail(
+                TransformStage.DetectingNavigatorThumbnailCII,
+                thumbnail.Status == 0 ? 104 : thumbnail.Status,
+                thumbnail.Message,
+                session,
+                Generation,
+                thumbnail.SourceRevision,
+                "NavigatorThumbnailCiiFailed");
+        }
+
         if (session.NavigatorRoiCapturePx is null)
             throw Fail(TransformStage.SelectingNavigatorRoi, 103, "缺少 NavigatorRoi", session, Generation);
 
@@ -113,23 +159,8 @@ public sealed class TransformPipelineService
         var workspaceRoiScreen = workspace.RectScreenPhysicalPx;
         var navigatorRoiCapture = session.NavigatorRoiCapturePx.Value;
         var navigatorRoiScreen = session.CaptureToScreen(navigatorRoiCapture);
-
-        progress?.Report(TransformStage.DetectingNavigatorThumbnailCII);
-        var thumb = _native.DetectNavigatorThumbnailCii(session, navigatorRoiCapture, background);
-        if (!thumb.Success)
-        {
-            throw Fail(
-                TransformStage.DetectingNavigatorThumbnailCII,
-                thumb.Status == 0 ? 104 : thumb.Status,
-                thumb.Message,
-                session,
-                gen,
-                thumb.SourceRevision,
-                "NavigatorThumbnailCiiFailed");
-        }
-
-        var thumbnailCapture = thumb.RectCapturePx;
-        var thumbnailScreen = thumb.RectScreenPhysicalPx;
+        var thumbnailCapture = thumbnail.RectCapturePx;
+        var thumbnailScreen = thumbnail.RectScreenPhysicalPx;
 
         progress?.Report(TransformStage.ObservingWorkspaceCanvas);
         var wsCanvas = _native.ObserveCanvas(session, workspaceRoiCapture, background);
@@ -163,7 +194,8 @@ public sealed class TransformPipelineService
         }
 
         progress?.Report(TransformStage.ReadingNavigatorNumbers);
-        var numbers = await _ocr.ReadAsync(session, navigatorRoiCapture, cancellationToken)
+        var numbers = await _ocr.ReadAsync(
+                session, navigatorRoiCapture, thumbnailCapture, cancellationToken)
             .ConfigureAwait(false);
         if (numbers.ScaleConfidence < 0.2f || numbers.ScalePercent <= 0)
         {
@@ -269,6 +301,33 @@ public sealed class TransformPipelineService
             Background = background,
             Stage = TransformStage.TrackingStable
         };
+    }
+
+    /// <summary>
+    /// Continues after a successful workspace detect and a user-adopted NavigatorRoi.
+    /// </summary>
+    public async Task<PipelineResult> ContinueAfterWorkspaceAsync(
+        CaptureSession session,
+        DetectOutcome workspace,
+        IProgress<TransformStage>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        progress?.Report(TransformStage.DetectingNavigatorThumbnailCII);
+        var thumb = DetectNavigatorThumbnail(session, workspace);
+        if (!thumb.Success)
+        {
+            throw Fail(
+                TransformStage.DetectingNavigatorThumbnailCII,
+                thumb.Status == 0 ? 104 : thumb.Status,
+                thumb.Message,
+                session,
+                Generation,
+                thumb.SourceRevision,
+                "NavigatorThumbnailCiiFailed");
+        }
+
+        return await ContinueAfterThumbnailAsync(session, workspace, thumb, progress, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static PipelineFailureException Fail(

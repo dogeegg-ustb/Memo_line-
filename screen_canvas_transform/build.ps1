@@ -1,4 +1,6 @@
 # Build ScreenCanvasNative.dll (MSVC) then C# WPF host.
+# workspace_border_detect algorithm sources are compiled into ScreenCanvasNative
+# (color/features/.../detector.cpp) — no WorkspaceBorderNative.dll, no wb_* exports.
 param(
   [string]$Configuration = "Release"
 )

@@ -37,108 +37,439 @@ std::pair<IntRect, Status> NormalizeUserRoi(const IntRect& roi, int w, int h, in
   return {r, Status::Ok};
 }
 
-std::vector<SeedPatch> FindNavigatorBackgroundSeeds(const BackgroundSimilarity& similarity,
-                                                     const IntRect& roi,
-                                                     const BackgroundModel& model) {
-  struct Component {
-    int area = 0;
-    int min_x = 0;
-    int min_y = 0;
-    int max_x = 0;
-    int max_y = 0;
-    int strong_pixels = 0;
-  };
+struct NavigatorCiiCandidate {
+  IntRect rect{};
+  float score = 0.f;
+  float left_support = 0.f;
+  float right_support = 0.f;
+  float top_support = 0.f;
+  float bottom_support = 0.f;
+};
 
-  const int width = similarity.similarity.width;
-  const int height = similarity.similarity.height;
+bool IsBackground(const BackgroundSimilarity& similarity, int x, int y) {
+  return similarity.weak_mask.At(x, y) != 0 || similarity.strong_mask.At(x, y) != 0;
+}
+
+int CountBackground(const BackgroundSimilarity& similarity, const IntRect& rect) {
+  int count = 0;
+  for (int y = rect.top; y < rect.bottom; ++y) {
+    for (int x = rect.left; x < rect.right; ++x) count += IsBackground(similarity, x, y) ? 1 : 0;
+  }
+  return count;
+}
+
+bool ContainsStrongBackground(const BackgroundSimilarity& similarity, const IntRect& rect) {
+  for (int y = rect.top; y < rect.bottom; ++y) {
+    for (int x = rect.left; x < rect.right; ++x) {
+      if (similarity.strong_mask.At(x, y)) return true;
+    }
+  }
+  return false;
+}
+
+void SubdivideNavigatorBackground(const BackgroundSimilarity& similarity, const IntRect& root,
+                                  int min_block_px, std::vector<IntRect>& leaves) {
+  std::vector<IntRect> pending{root};
+  while (!pending.empty()) {
+    const IntRect block = pending.back();
+    pending.pop_back();
+    const int area = block.area();
+    if (area <= 0) continue;
+
+    const int background = CountBackground(similarity, block);
+    if (background == 0) continue;
+    if (background == area) {
+      leaves.push_back(block);
+      continue;
+    }
+
+    if (block.width() <= min_block_px && block.height() <= min_block_px) {
+      for (int y = block.top; y < block.bottom; ++y) {
+        for (int x = block.left; x < block.right; ++x) {
+          const IntRect pixel{x, y, x + 1, y + 1};
+          if (IsBackground(similarity, x, y)) leaves.push_back(pixel);
+        }
+      }
+      continue;
+    }
+
+    if (block.width() >= block.height() && block.width() > 1) {
+      const int mid = block.left + block.width() / 2;
+      pending.push_back({block.left, block.top, mid, block.bottom});
+      pending.push_back({mid, block.top, block.right, block.bottom});
+    } else if (block.height() > 1) {
+      const int mid = block.top + block.height() / 2;
+      pending.push_back({block.left, block.top, block.right, mid});
+      pending.push_back({block.left, mid, block.right, block.bottom});
+    }
+  }
+}
+
+float SideBackgroundSupport(const BackgroundSimilarity& similarity, const IntRect& roi,
+                            const IntRect& rect, OuterSide side, int band_px) {
+  int hits = 0;
+  int total = 0;
+  if (side == OuterSide::Left || side == OuterSide::Right) {
+    const int x0 = side == OuterSide::Left ? rect.left - band_px : rect.right;
+    const int x1 = side == OuterSide::Left ? rect.left : rect.right + band_px;
+    for (int y = rect.top; y < rect.bottom; ++y) {
+      for (int x = std::max(roi.left, x0); x < std::min(roi.right, x1); ++x) {
+        ++total;
+        hits += IsBackground(similarity, x, y) ? 1 : 0;
+      }
+    }
+  } else {
+    const int y0 = side == OuterSide::Top ? rect.top - band_px : rect.bottom;
+    const int y1 = side == OuterSide::Top ? rect.top : rect.bottom + band_px;
+    for (int y = std::max(roi.top, y0); y < std::min(roi.bottom, y1); ++y) {
+      for (int x = rect.left; x < rect.right; ++x) {
+        ++total;
+        hits += IsBackground(similarity, x, y) ? 1 : 0;
+      }
+    }
+  }
+  return total > 0 ? static_cast<float>(hits) / total : 0.f;
+}
+
+bool AddNavigatorCiiCandidate(const BackgroundSimilarity& similarity, const IntRect& roi,
+                              const IntRect& rect, std::vector<NavigatorCiiCandidate>& candidates) {
+  if (!rect.valid() || rect.width() < 24 || rect.height() < 24 ||
+      rect.left < roi.left || rect.top < roi.top || rect.right > roi.right ||
+      rect.bottom > roi.bottom) {
+    return false;
+  }
+
+  const int interior = rect.area();
+  const float interior_background =
+      static_cast<float>(CountBackground(similarity, rect)) / static_cast<float>(std::max(1, interior));
+  if (interior_background > 0.82f) return false;
+
+  const int band = std::max(2, std::min(6, std::min(rect.width(), rect.height()) / 12));
+  NavigatorCiiCandidate candidate;
+  candidate.rect = rect;
+  candidate.left_support = SideBackgroundSupport(similarity, roi, rect, OuterSide::Left, band);
+  candidate.right_support = SideBackgroundSupport(similarity, roi, rect, OuterSide::Right, band);
+  candidate.top_support = SideBackgroundSupport(similarity, roi, rect, OuterSide::Top, band);
+  candidate.bottom_support = SideBackgroundSupport(similarity, roi, rect, OuterSide::Bottom, band);
+
+  const float vertical_pair = std::min(candidate.left_support, candidate.right_support);
+  const float horizontal_pair = std::min(candidate.top_support, candidate.bottom_support);
+  if (std::max(vertical_pair, horizontal_pair) < 0.32f) return false;
+
+  candidate.score = std::max(vertical_pair, horizontal_pair) * (1.f - interior_background) *
+                    std::sqrt(static_cast<float>(rect.area()));
+  candidates.push_back(candidate);
+  return true;
+}
+
+bool DetectNavigatorThumbnailFromBackgroundMask(const BackgroundSimilarity& similarity,
+                                                const IntRect& roi, const DetectorConfig& cfg,
+                                                IntRect& thumbnail, float& confidence,
+                                                std::string& reason) {
+  std::vector<IntRect> leaves;
+  SubdivideNavigatorBackground(similarity, roi, std::max(4, cfg.SafetyBandPx(1.f, std::min(roi.width(), roi.height()))),
+                               leaves);
+  if (leaves.empty() || !ContainsStrongBackground(similarity, roi)) {
+    reason = "no workspace-background pixels in navigator ROI";
+    return false;
+  }
+
+  std::vector<int> left(roi.height(), roi.right);
+  std::vector<int> right(roi.height(), roi.left);
+  std::vector<int> top(roi.width(), roi.bottom);
+  std::vector<int> bottom(roi.width(), roi.top);
+  for (const auto& leaf : leaves) {
+    for (int y = leaf.top; y < leaf.bottom; ++y) {
+      left[y - roi.top] = std::min(left[y - roi.top], leaf.left);
+      right[y - roi.top] = std::max(right[y - roi.top], leaf.right);
+    }
+    for (int x = leaf.left; x < leaf.right; ++x) {
+      top[x - roi.left] = std::min(top[x - roi.left], leaf.top);
+      bottom[x - roi.left] = std::max(bottom[x - roi.left], leaf.bottom);
+    }
+  }
+
+  std::vector<NavigatorCiiCandidate> candidates;
+  for (int y = roi.top; y < roi.bottom; ++y) {
+    int x = roi.left;
+    while (x < roi.right) {
+      while (x < roi.right && IsBackground(similarity, x, y)) ++x;
+      const int start = x;
+      while (x < roi.right && !IsBackground(similarity, x, y)) ++x;
+      const int end = x;
+      if (end - start < 24) continue;
+      int support_rows = 0;
+      int y0 = y;
+      int y1 = y + 1;
+      while (y0 > roi.top) {
+        int probe = (start + end) / 2;
+        if (IsBackground(similarity, probe, y0 - 1)) break;
+        --y0;
+      }
+      while (y1 < roi.bottom) {
+        int probe = (start + end) / 2;
+        if (IsBackground(similarity, probe, y1)) break;
+        ++y1;
+      }
+      for (int yy = y0; yy < y1; ++yy) {
+        int non_bg = 0;
+        for (int xx = start; xx < end; ++xx) non_bg += IsBackground(similarity, xx, yy) ? 0 : 1;
+        if (non_bg * 100 >= (end - start) * 55) ++support_rows;
+      }
+      if (support_rows >= 24) AddNavigatorCiiCandidate(similarity, roi, {start, y0, end, y1}, candidates);
+    }
+  }
+
+  if (candidates.empty()) {
+    reason = "no C-II background-to-nonbackground rectangle";
+    return false;
+  }
+
+  std::sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) {
+    return a.score > b.score;
+  });
+  if (candidates.size() > 1 && candidates[1].score >= candidates[0].score * 0.92f &&
+      RectIou(candidates[0].rect, candidates[1].rect) < cfg.ambiguity_iou_max) {
+    reason = "AmbiguousCandidates";
+    return false;
+  }
+
+  thumbnail = candidates.front().rect;
+  confidence = std::min(1.f, candidates.front().score /
+                                  std::max(1.f, std::sqrt(static_cast<float>(roi.area()))));
+  return true;
+}
+
+struct NavigatorEvidenceRun {
+  int left = 0;
+  int right = 0;
+  int strong = 0;
+};
+
+struct NavigatorSeedPair {
+  int seed_x = 0;
+  int seed_y = 0;
+  IntRect left_evidence{};
+  IntRect right_evidence{};
+  IntRect rect{};
+  float score = 0.f;
+};
+
+NavigatorEvidenceRun FindBackgroundRun(const BackgroundSimilarity& similarity, int y, int start,
+                                       int end, bool from_left) {
+  NavigatorEvidenceRun run;
+  int x = from_left ? start : end - 1;
+  const int step = from_left ? 1 : -1;
+  while (x >= start && x < end && !IsBackground(similarity, x, y)) x += step;
+  if (x < start || x >= end) return run;
+  if (from_left) {
+    run.left = x;
+    while (x >= start && x < end && IsBackground(similarity, x, y)) {
+      if (similarity.strong_mask.At(x, y)) ++run.strong;
+      x += step;
+    }
+    run.right = x;
+  } else {
+    run.right = x + 1;
+    while (x >= start && x < end && IsBackground(similarity, x, y)) {
+      if (similarity.strong_mask.At(x, y)) ++run.strong;
+      x += step;
+    }
+    run.left = x + 1;
+  }
+  return run;
+}
+
+bool IsNavigatorEvidenceRow(const BackgroundSimilarity& similarity, const IntRect& roi, int y,
+                            NavigatorEvidenceRun& left, NavigatorEvidenceRun& right) {
+  left = FindBackgroundRun(similarity, y, roi.left, roi.right, true);
+  right = FindBackgroundRun(similarity, y, roi.left, roi.right, false);
+  if (left.right - left.left < 4 || right.right - right.left < 4 || left.right >= right.left)
+    return false;
+  const int gap = right.left - left.right;
+  return gap >= 16 && gap >= std::max(16, roi.width() / 20);
+}
+
+bool DetectNavigatorThumbnailFromSeedPair(const BackgroundSimilarity& similarity, const IntRect& roi,
+                                          IntRect& thumbnail, float& confidence,
+                                          std::string& reason) {
+  std::vector<int> valid_rows;
+  std::vector<NavigatorEvidenceRun> left_runs;
+  std::vector<NavigatorEvidenceRun> right_runs;
+  for (int y = roi.top; y < roi.bottom; ++y) {
+    NavigatorEvidenceRun left;
+    NavigatorEvidenceRun right;
+    if (!IsNavigatorEvidenceRow(similarity, roi, y, left, right)) continue;
+    valid_rows.push_back(y);
+    left_runs.push_back(left);
+    right_runs.push_back(right);
+  }
+  if (valid_rows.empty()) {
+    reason = "no paired background evidence";
+    return false;
+  }
+
+  std::vector<NavigatorSeedPair> candidates;
+  size_t group_start = 0;
+  while (group_start < valid_rows.size()) {
+    size_t group_end = group_start + 1;
+    while (group_end < valid_rows.size() && valid_rows[group_end] == valid_rows[group_end - 1] + 1)
+      ++group_end;
+    if (group_end - group_start >= 12) {
+      int left_outer = roi.right;
+      int left_inner = roi.left;
+      int right_inner = roi.right;
+      int right_outer = roi.left;
+      int seed_x = roi.left;
+      int seed_y = valid_rows[group_start];
+      int strong_best = -1;
+      for (size_t i = group_start; i < group_end; ++i) {
+        left_outer = std::min(left_outer, left_runs[i].left);
+        left_inner = std::max(left_inner, left_runs[i].right);
+        right_inner = std::min(right_inner, right_runs[i].left);
+        right_outer = std::max(right_outer, right_runs[i].right);
+        const int candidate_x = left_runs[i].left + (left_runs[i].right - left_runs[i].left) / 2;
+        if (left_runs[i].strong > strong_best) {
+          strong_best = left_runs[i].strong;
+          seed_x = candidate_x;
+          seed_y = valid_rows[i];
+        }
+      }
+
+      const IntRect left_evidence{left_outer, valid_rows[group_start], left_inner,
+                                  valid_rows[group_end - 1] + 1};
+      const IntRect right_evidence{right_inner, valid_rows[group_start], right_outer,
+                                   valid_rows[group_end - 1] + 1};
+      const IntRect rect{left_outer, valid_rows[group_start], right_outer,
+                         valid_rows[group_end - 1] + 1};
+      if (left_evidence.valid() && right_evidence.valid() && rect.width() >= 48 && rect.height() >= 24) {
+        const float height_support = static_cast<float>(group_end - group_start) / roi.height();
+        const float gap_support = static_cast<float>(right_inner - left_inner) / roi.width();
+        NavigatorSeedPair pair;
+        pair.seed_x = seed_x;
+        pair.seed_y = seed_y;
+        pair.left_evidence = left_evidence;
+        pair.right_evidence = right_evidence;
+        pair.rect = rect;
+        pair.score = height_support * 0.55f + gap_support * 0.45f;
+        candidates.push_back(pair);
+      }
+    }
+    group_start = group_end;
+  }
+
+  if (candidates.empty()) {
+    reason = "paired background evidence too short";
+    return false;
+  }
+  std::sort(candidates.begin(), candidates.end(),
+            [](const NavigatorSeedPair& a, const NavigatorSeedPair& b) { return a.score > b.score; });
+  if (candidates.size() > 1 && candidates[1].score >= candidates[0].score * 0.92f &&
+      RectIou(candidates[0].rect, candidates[1].rect) < 0.8f) {
+    reason = "AmbiguousCandidates";
+    return false;
+  }
+
+  thumbnail = candidates.front().rect.Clamp(roi.right, roi.bottom);
+  confidence = std::min(1.f, candidates.front().score * 1.5f);
+  return thumbnail.valid();
+}
+
+struct NavigatorBackgroundComponent {
+  IntRect bbox{};
+  int area = 0;
+  int strong_pixels = 0;
+};
+
+bool DetectNavigatorThumbnailFromBackgroundComponents(const BackgroundSimilarity& similarity,
+                                                      const IntRect& roi, IntRect& thumbnail,
+                                                      float& confidence, std::string& reason) {
   ImageU8 visited;
-  visited.Allocate(width, height, 0);
-  std::vector<Component> components;
-
-  constexpr int kMinComponentPixels = 9;
-  static constexpr int kDx[4] = {1, -1, 0, 0};
-  static constexpr int kDy[4] = {0, 0, 1, -1};
+  visited.Allocate(similarity.similarity.width, similarity.similarity.height, 0);
+  std::vector<NavigatorBackgroundComponent> components;
+  static constexpr int dx[4] = {1, -1, 0, 0};
+  static constexpr int dy[4] = {0, 0, 1, -1};
 
   for (int y = roi.top; y < roi.bottom; ++y) {
     for (int x = roi.left; x < roi.right; ++x) {
-      if (visited.At(x, y) || (!similarity.weak_mask.At(x, y) && !similarity.strong_mask.At(x, y))) {
-        continue;
-      }
-
-      Component component{0, x, y, x + 1, y + 1, 0};
-      std::queue<std::pair<int, int>> queue;
-      queue.push({x, y});
+      if (visited.At(x, y) || !IsBackground(similarity, x, y)) continue;
+      NavigatorBackgroundComponent component;
+      component.bbox = {x, y, x + 1, y + 1};
+      std::queue<std::pair<int, int>> pending;
+      pending.push({x, y});
       visited.At(x, y) = 1;
-
-      while (!queue.empty()) {
-        const auto [cx, cy] = queue.front();
-        queue.pop();
+      while (!pending.empty()) {
+        const auto [cx, cy] = pending.front();
+        pending.pop();
         ++component.area;
         if (similarity.strong_mask.At(cx, cy)) ++component.strong_pixels;
-        component.min_x = std::min(component.min_x, cx);
-        component.min_y = std::min(component.min_y, cy);
-        component.max_x = std::max(component.max_x, cx + 1);
-        component.max_y = std::max(component.max_y, cy + 1);
-
+        component.bbox.left = std::min(component.bbox.left, cx);
+        component.bbox.top = std::min(component.bbox.top, cy);
+        component.bbox.right = std::max(component.bbox.right, cx + 1);
+        component.bbox.bottom = std::max(component.bbox.bottom, cy + 1);
         for (int i = 0; i < 4; ++i) {
-          const int nx = cx + kDx[i];
-          const int ny = cy + kDy[i];
+          const int nx = cx + dx[i];
+          const int ny = cy + dy[i];
           if (nx < roi.left || nx >= roi.right || ny < roi.top || ny >= roi.bottom ||
-              visited.At(nx, ny) ||
-              (!similarity.weak_mask.At(nx, ny) && !similarity.strong_mask.At(nx, ny))) {
-            continue;
-          }
+              visited.At(nx, ny) || !IsBackground(similarity, nx, ny)) continue;
           visited.At(nx, ny) = 1;
-          queue.push({nx, ny});
+          pending.push({nx, ny});
         }
       }
-
-      if (component.area >= kMinComponentPixels && component.strong_pixels > 0) {
-        components.push_back(component);
-      }
+      if (component.area >= 16 && component.strong_pixels > 0) components.push_back(component);
     }
   }
 
-  std::sort(components.begin(), components.end(), [](const Component& a, const Component& b) {
-    if (a.strong_pixels != b.strong_pixels) return a.strong_pixels > b.strong_pixels;
-    return a.area > b.area;
+  struct Pair {
+    IntRect rect{};
+    int seed_x = 0;
+    int seed_y = 0;
+    float score = 0.f;
+  };
+  std::vector<Pair> pairs;
+  for (size_t i = 0; i < components.size(); ++i) {
+    for (size_t j = i + 1; j < components.size(); ++j) {
+      const auto& a = components[i];
+      const auto& b = components[j];
+      const NavigatorBackgroundComponent* left = &a;
+      const NavigatorBackgroundComponent* right = &b;
+      if (left->bbox.left > right->bbox.left) std::swap(left, right);
+      const int overlap_top = std::max(left->bbox.top, right->bbox.top);
+      const int overlap_bottom = std::min(left->bbox.bottom, right->bbox.bottom);
+      const int overlap = overlap_bottom - overlap_top;
+      const int gap = right->bbox.left - left->bbox.right;
+      if (left->bbox.width() < 4 || right->bbox.width() < 4 || overlap < 12 || gap < 8) continue;
+      const IntRect rect{left->bbox.left, overlap_top, right->bbox.right, overlap_bottom};
+      if (!rect.valid() || rect.width() < 48 || rect.height() < 24 ||
+          rect.left < roi.left || rect.top < roi.top || rect.right > roi.right ||
+          rect.bottom > roi.bottom) continue;
+      const float overlap_ratio = static_cast<float>(overlap) /
+                                  static_cast<float>(std::min(left->bbox.height(), right->bbox.height()));
+      const float area_score = std::log1p(static_cast<float>(left->area + right->area));
+      Pair pair;
+      pair.rect = rect;
+      pair.seed_x = (left->bbox.left + left->bbox.right) / 2;
+      pair.seed_y = (overlap_top + overlap_bottom) / 2;
+      pair.score = overlap_ratio * 2.f + area_score * 0.15f;
+      pairs.push_back(pair);
+    }
+  }
+
+  if (pairs.empty()) {
+    reason = "no paired background components";
+    return false;
+  }
+  std::sort(pairs.begin(), pairs.end(), [](const Pair& a, const Pair& b) {
+    return a.score > b.score;
   });
-
-  constexpr size_t kMaxSeedComponents = 64;
-  std::vector<SeedPatch> seeds;
-  seeds.reserve(std::min(components.size(), kMaxSeedComponents));
-  int seed_id = 1;
-  for (size_t i = 0; i < components.size() && seeds.size() < kMaxSeedComponents; ++i) {
-    const auto& c = components[i];
-    const int center_x = (c.min_x + c.max_x - 1) / 2;
-    const int center_y = (c.min_y + c.max_y - 1) / 2;
-    int best_x = center_x;
-    int best_y = center_y;
-    bool found_strong = false;
-
-    for (int y = c.min_y; y < c.max_y && !found_strong; ++y) {
-      for (int x = c.min_x; x < c.max_x; ++x) {
-        if (similarity.strong_mask.At(x, y)) {
-          best_x = x;
-          best_y = y;
-          found_strong = true;
-          break;
-        }
-      }
-    }
-
-    SeedPatch seed;
-    seed.seed_id = seed_id++;
-    seed.side = OuterSide::Top;
-    seed.x = best_x;
-    seed.y = best_y;
-    seed.size = 1;
-    seed.mean_lab = model.center_lab;
-    seed.accepted = true;
-    seeds.push_back(seed);
+  if (pairs.size() > 1 && pairs[1].score >= pairs[0].score * 0.92f &&
+      RectIou(pairs[0].rect, pairs[1].rect) < 0.8f) {
+    reason = "AmbiguousCandidates";
+    return false;
   }
-
-  return seeds;
+  thumbnail = pairs.front().rect;
+  confidence = std::min(1.f, pairs.front().score / 2.5f);
+  return true;
 }
 
 }  // namespace
@@ -330,59 +661,22 @@ DetectionOutput WorkspaceBorderDetector::DetectCiiWithExternalBackground(
     BackgroundModel model = external_model;
     auto sim = BuildSimilarity(full_feat, model, search_roi, cfg_);
 
-    GrownBackground grown;
-    grown.mask.Allocate(full_feat.width, full_feat.height, 0);
-    grown.source_label.Allocate(full_feat.width, full_feat.height, 0);
-
-    auto synthetic_seeds = FindNavigatorBackgroundSeeds(sim, search_roi, model);
-    if (synthetic_seeds.empty()) {
-      return Fail(Status::NoConnectedBackgroundEvidence,
-                  "no workspace-background component inside navigator ROI", capture_id);
-    }
-    model.seed_ids.clear();
-    for (const auto& seed : synthetic_seeds) model.seed_ids.push_back(seed.seed_id);
-
-    if (!GrowBackground(synthetic_seeds, model.seed_ids, sim, search_roi, cfg_, grown)) {
-      return Fail(Status::NoConnectedBackgroundEvidence, "C-II grow failed", capture_id);
-    }
-
-    auto geo = ExtractGeometry(grown, search_roi, cfg_);
-    if (geo.outer_sides.empty()) {
-      return Fail(Status::InsufficientGeometry, "no outer sides for C-II", capture_id);
-    }
-
-    auto hyps = BuildHypotheses(geo, model, 0, grown, search_roi, cfg_);
-    std::vector<Hypothesis> cii;
-    for (auto& h : hyps) {
-      if (h.grade != EvidenceGrade::C_II) continue;
-      if (h.endpoints_truncated) continue;
-      // Thumbnail MUST lie inside navigator ROI.
-      if (h.rect.left < search_roi.left || h.rect.top < search_roi.top ||
-          h.rect.right > search_roi.right || h.rect.bottom > search_roi.bottom) {
-        continue;
+    IntRect detected;
+    float confidence = 0.f;
+    std::string reason;
+    if (!DetectNavigatorThumbnailFromBackgroundComponents(sim, search_roi, detected, confidence, reason)) {
+      if (reason == "AmbiguousCandidates") {
+        return Fail(Status::AmbiguousCandidates, reason, capture_id);
       }
-      cii.push_back(std::move(h));
-    }
-    if (cii.empty()) {
-      return Fail(Status::InsufficientGeometry, "no C-II thumbnail candidate", capture_id);
+      return Fail(Status::InsufficientGeometry, reason.empty() ? "no C-II thumbnail candidate" : reason,
+                  capture_id);
     }
 
-    auto selected = SelectBestHypothesis(std::move(cii), geo.outer_sides, cfg_);
-    if (!selected.best) {
-      if (selected.reason == "AmbiguousCandidates") {
-        return Fail(Status::AmbiguousCandidates, selected.reason, capture_id);
-      }
-      return Fail(Status::InsufficientGeometry,
-                  selected.reason.empty() ? "no C-II hypothesis" : selected.reason, capture_id);
-    }
-
-    Hypothesis best = *selected.best;
     IntRect refined;
-    if (!RefineRectangle(best.rect, full_feat, model, cfg_, dpi_scale, refined)) {
+    if (!RefineRectangle(detected, full_feat, model, cfg_, dpi_scale, refined)) {
       return Fail(Status::RefinementFailed, "C-II refine failed", capture_id);
     }
     refined = refined.Clamp(in.width, in.height);
-    // Clamp into navigator ROI after refine.
     refined.left = std::max(refined.left, search_roi.left);
     refined.top = std::max(refined.top, search_roi.top);
     refined.right = std::min(refined.right, search_roi.right);
@@ -391,25 +685,18 @@ DetectionOutput WorkspaceBorderDetector::DetectCiiWithExternalBackground(
       return Fail(Status::RectangleClosureFailed, "C-II refined rect invalid", capture_id);
     }
 
-    auto val = ValidateRectangle(refined, best, full_feat, model, &grown.mask, cfg_);
-    if (!val.ok) {
-      return Fail(Status::IndependentValidationFailed, "C-II validation failed", capture_id);
-    }
-
     DetectionOutput out;
     out.status = Status::Ok;
     out.workspace_capture = refined;
     out.workspace_screen = {refined.left + in.origin_x, refined.top + in.origin_y,
                             refined.right + in.origin_x, refined.bottom + in.origin_y};
     out.grade = EvidenceGrade::C_II;
-    out.confidence = std::max(best.confidence, val.confidence);
-    out.message = "ok-cii";
+    out.confidence = confidence;
+    out.message = "ok-cii-seed-pair";
     out.source_capture_id = capture_id;
-    out.observed_sides = best.observed_sides;
-    out.closed_sides = best.closed_sides;
     out.background_model = model;
     out.has_background_model = true;
-    out.source_revision = "wb-cpu-ref-2-cii";
+    out.source_revision = "wb-cpu-ref-4-cii-seed-pair";
     return out;
   } catch (const std::exception& ex) {
     return Fail(Status::InvalidInput, ex.what(), capture_id);

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Threading;
 using ScreenCanvasTransform.Capture;
+using ScreenCanvasTransform.Diagnostics;
 using ScreenCanvasTransform.Services;
 using ScreenCanvasTransform.State;
 using ScreenCanvasTransform.Ui;
@@ -70,6 +71,9 @@ public partial class MainWindow : Window
 
             var session = CaptureSession.CreateFromVirtualScreen();
             _activeSession = session;
+            LiveDebugLog.Write(
+                $"[Capture] id={session.CaptureId} frame={session.FrozenCapture.Width}x{session.FrozenCapture.Height} " +
+                $"origin=({session.OriginX},{session.OriginY})");
 
             // 1) Workspace user ROI
             SetStage(TransformStage.SelectingWorkspaceRoi);
@@ -135,14 +139,34 @@ public partial class MainWindow : Window
             var navigatorScreen = session.CaptureToScreen(session.NavigatorRoiCapturePx.Value);
             _navigatorBorder.Show(navigatorScreen, session.CaptureId);
 
-            SetStatus($"CaptureId={session.CaptureId}。正在 C-II / 观测 / OCR / 求解…");
+            // 4) C-II thumbnail immediately — magenta border as soon as ROI is ready
+            SetStage(TransformStage.DetectingNavigatorThumbnailCII);
+            SetStatus($"CaptureId={session.CaptureId}。正在 C-II 生成导航器缩略图…");
+            var thumbnail = await Task.Run(() => _pipeline.DetectNavigatorThumbnail(session, workspace))
+                .ConfigureAwait(true);
+            if (!thumbnail.Success)
+            {
+                _thumbnailBorder.Hide();
+                SetStatus(
+                    $"缩略图标记失败。{thumbnail.StatusName} — {thumbnail.Message} " +
+                    $"(CaptureId={session.CaptureId})");
+                return;
+            }
+
+            _thumbnailBorder.TryShowIfCaptureMatches(
+                thumbnail.RectScreenPhysicalPx,
+                session.CaptureId,
+                thumbnail.SourceCaptureId);
+            SetStatus($"缩略图已标记（品红）。继续观测 / OCR / 求解…");
+
             var progress = new Progress<TransformStage>(SetStage);
             var result = await Task.Run(
-                    async () => await _pipeline.ContinueAfterWorkspaceAsync(session, workspace, progress)
+                    async () => await _pipeline.ContinueAfterThumbnailAsync(
+                            session, workspace, thumbnail, progress)
                         .ConfigureAwait(false))
                 .ConfigureAwait(true);
 
-            // Magenta border for NavigatorThumbnailRoi
+            // Refresh borders from final snapshot
             _thumbnailBorder.TryShowIfCaptureMatches(
                 result.NavigatorThumbnailRoiScreen,
                 session.CaptureId,
@@ -187,7 +211,10 @@ public partial class MainWindow : Window
             SetStage(ex.Stage);
             SetStatus(
                 $"失败 stage={ex.Stage} status={ex.Status}：{ex.Message} " +
-                $"(CaptureId={ex.CaptureId}, gen={ex.Generation})");
+                $"(CaptureId={ex.CaptureId}, gen={ex.Generation})" +
+                (ex.Stage == TransformStage.ReadingNavigatorNumbers
+                    ? $"  OCR调试: %TEMP%\\sct_ocr_debug\\{ex.CaptureId}"
+                    : ""));
         }
         catch (Exception ex)
         {
