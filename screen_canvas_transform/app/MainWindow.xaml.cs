@@ -1,0 +1,217 @@
+using System.Windows;
+using System.Windows.Threading;
+using ScreenCanvasTransform.Capture;
+using ScreenCanvasTransform.Services;
+using ScreenCanvasTransform.State;
+using ScreenCanvasTransform.Ui;
+
+namespace ScreenCanvasTransform;
+
+public partial class MainWindow : Window
+{
+    private readonly TransformPipelineService _pipeline = new();
+    // Distinct border colors: Workspace=green, Navigator=cyan, Thumbnail=magenta.
+    private readonly RoiBorderOverlayWindow _workspaceBorder = RoiBorderOverlayWindow.CreateWorkspace();
+    private readonly RoiBorderOverlayWindow _navigatorBorder = RoiBorderOverlayWindow.CreateNavigator();
+    private readonly RoiBorderOverlayWindow _thumbnailBorder = RoiBorderOverlayWindow.CreateNavigatorThumbnail();
+    private readonly MarkerOverlayWindow _markerOverlay = new();
+    private CaptureSession? _activeSession;
+    private bool _flowRunning;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        Closed += (_, _) =>
+        {
+            _markerOverlay.Dispose();
+            _workspaceBorder.Dispose();
+            _navigatorBorder.Dispose();
+            _thumbnailBorder.Dispose();
+            _activeSession?.Dispose();
+        };
+    }
+
+    private async void StartButton_OnClick(object sender, RoutedEventArgs e)
+        => await RunInitializationFlowAsync();
+
+    private void HideOverlayButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        HideAllOverlays();
+        SetStatus("已隐藏覆盖层。");
+    }
+
+    private void HideAllOverlays()
+    {
+        _markerOverlay.Hide();
+        _workspaceBorder.Hide();
+        _navigatorBorder.Hide();
+        _thumbnailBorder.Hide();
+    }
+
+    private async Task RunInitializationFlowAsync()
+    {
+        if (_flowRunning)
+            return;
+
+        _flowRunning = true;
+        StartButton.IsEnabled = false;
+
+        try
+        {
+            // Architecture §5.1: hide overlays before capture.
+            HideAllOverlays();
+            SetStatus("正在隐藏窗口并冻结桌面截图…");
+            Hide();
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            await Task.Delay(120);
+
+            _activeSession?.Dispose();
+            _activeSession = null;
+
+            var session = CaptureSession.CreateFromVirtualScreen();
+            _activeSession = session;
+
+            // 1) Workspace user ROI
+            SetStage(TransformStage.SelectingWorkspaceRoi);
+            var wsRoi = new RoiSelectWindow(
+                session,
+                RoiKind.WorkspaceUser,
+                "拖拽框选工作区粗略范围 · Enter 确认 · Esc 取消");
+            bool? wsOk = wsRoi.ShowDialog();
+            if (wsOk != true || session.WorkspaceUserRoiCapturePx is null)
+            {
+                Show();
+                Activate();
+                SetStatus("已取消工作区框选。");
+                return;
+            }
+
+            // 2) Correct workspace immediately — failure ends init (no navigator stage).
+            SetStage(TransformStage.DetectingWorkspace);
+            SetStatus($"CaptureId={session.CaptureId}。正在纠正工作区…");
+            var workspace = await Task.Run(() => _pipeline.DetectWorkspace(session)).ConfigureAwait(true);
+
+            Show();
+            Activate();
+
+            if (!workspace.Success || workspace.Background is null)
+            {
+                HideAllOverlays();
+                SetStage(TransformStage.DetectingWorkspace);
+                SetStatus(
+                    $"工作区标记失败，初始化结束。{workspace.StatusName} — {workspace.Message} " +
+                    $"(CaptureId={session.CaptureId})");
+                return;
+            }
+
+            // Green border for corrected WorkspaceRoi
+            _workspaceBorder.TryShowIfCaptureMatches(
+                workspace.RectScreenPhysicalPx,
+                session.CaptureId,
+                workspace.SourceCaptureId);
+
+            // 3) Navigator ROI only after workspace success
+            Hide();
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            await Task.Delay(60);
+
+            SetStage(TransformStage.SelectingNavigatorRoi);
+            var navRoi = new RoiSelectWindow(
+                session,
+                RoiKind.Navigator,
+                "拖拽框选完整导航器面板（直接采用，不做外边界纠正）· Enter 确认 · Esc 取消");
+            bool? navOk = navRoi.ShowDialog();
+
+            Show();
+            Activate();
+
+            if (navOk != true || session.NavigatorRoiCapturePx is null)
+            {
+                SetStatus("已取消导航器框选。工作区绿框仍保留。");
+                return;
+            }
+
+            // Cyan border for user-adopted NavigatorRoi
+            var navigatorScreen = session.CaptureToScreen(session.NavigatorRoiCapturePx.Value);
+            _navigatorBorder.Show(navigatorScreen, session.CaptureId);
+
+            SetStatus($"CaptureId={session.CaptureId}。正在 C-II / 观测 / OCR / 求解…");
+            var progress = new Progress<TransformStage>(SetStage);
+            var result = await Task.Run(
+                    async () => await _pipeline.ContinueAfterWorkspaceAsync(session, workspace, progress)
+                        .ConfigureAwait(false))
+                .ConfigureAwait(true);
+
+            // Magenta border for NavigatorThumbnailRoi
+            _thumbnailBorder.TryShowIfCaptureMatches(
+                result.NavigatorThumbnailRoiScreen,
+                session.CaptureId,
+                result.Snapshot.CaptureId);
+
+            // Keep workspace / navigator borders with final ROIs from snapshot
+            _workspaceBorder.TryShowIfCaptureMatches(
+                result.WorkspaceRoiScreen,
+                session.CaptureId,
+                result.Snapshot.CaptureId);
+            _navigatorBorder.TryShowIfCaptureMatches(
+                result.NavigatorRoiScreen,
+                session.CaptureId,
+                result.Snapshot.CaptureId);
+
+            bool markerShown = _markerOverlay.TryShowIfGenerationMatches(
+                result.Snapshot.Marker,
+                result.Snapshot.CaptureId,
+                result.Snapshot.Generation,
+                session.CaptureId,
+                result.Snapshot.Generation);
+
+            string path = result.Snapshot.UsedDirectWorkspacePath ? "直接工作区路径" : "导航器路径";
+            string off = result.Snapshot.Marker.Offscreen != 0 ? "（MarkerOffscreen）" : "";
+            SetStatus(
+                $"已发布 gen={result.Snapshot.Generation}，{path}，" +
+                $"scale={result.Snapshot.Numbers.ScalePercent:F1}% rel={result.Snapshot.RelativeScale:F3}，" +
+                $"rot={result.Snapshot.RotationDegrees:F1}°，conf={result.Snapshot.Confidence:F2}。" +
+                " 边框：绿=工作区 / 青=导航器 / 品红=缩略图。" +
+                (markerShown ? $" 橙色 L 已显示{off}。" : " 标记未显示。"));
+            SetStage(TransformStage.TrackingStable);
+        }
+        catch (PipelineFailureException ex)
+        {
+            _markerOverlay.Hide();
+            _thumbnailBorder.Hide();
+            if (!IsVisible)
+            {
+                Show();
+                Activate();
+            }
+            SetStage(ex.Stage);
+            SetStatus(
+                $"失败 stage={ex.Stage} status={ex.Status}：{ex.Message} " +
+                $"(CaptureId={ex.CaptureId}, gen={ex.Generation})");
+        }
+        catch (Exception ex)
+        {
+            HideAllOverlays();
+            if (!IsVisible)
+            {
+                Show();
+                Activate();
+            }
+            SetStatus($"发生错误：{ex.Message}");
+        }
+        finally
+        {
+            if (!IsVisible)
+            {
+                Show();
+                Activate();
+            }
+            StartButton.IsEnabled = true;
+            _flowRunning = false;
+        }
+    }
+
+    private void SetStage(TransformStage stage) => SetStatus($"阶段：{stage}");
+
+    private void SetStatus(string text) => StatusText.Text = text;
+}
