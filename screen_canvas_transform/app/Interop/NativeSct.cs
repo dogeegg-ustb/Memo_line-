@@ -11,7 +11,7 @@ namespace ScreenCanvasTransform.Interop;
 public static class NativeSct
 {
     public const string DllName = "ScreenCanvasNative.dll";
-    public const int ApiVersionExpected = 1;
+    public const int ApiVersionExpected = 2;
     public const int StatusOk = 0;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -135,6 +135,61 @@ public static class NativeSct
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct SctVec2
+    {
+        public double X;
+        public double Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    public struct SctWorkspaceCanvasRelation
+    {
+        public SctIntRect WorkspaceRoi;
+        public SctIntRect FullCanvasModelWorkspaceLocal;
+        public SctIntRect VisibleCanvasBoundsWorkspaceLocal;
+        public SctIntRect VisibleCanvasBoundsScreen;
+        public SctVec2 CanvasAxisXWorkspaceLocal;
+        public SctVec2 CanvasAxisYWorkspaceLocal;
+        public int CanvasEdgesInWorkspace;
+        public int FullCanvasEdgeEvidence;
+        public int VisibleCanvasEdgeEvidence;
+        public int OccludedCanvasEdges;
+        public int CanvasCropSides;
+        public float CanvasAspectRatio;
+        public int CanvasPixelWidth;
+        public int CanvasPixelHeight;
+        public int WorkspaceWidth;
+        public int WorkspaceHeight;
+        public float CanvasToWorkspaceScaleX;
+        public float CanvasToWorkspaceScaleY;
+        public float VisibleCanvasWorkspaceFractionX;
+        public float VisibleCanvasWorkspaceFractionY;
+        public float VisibleCanvasFractionX;
+        public float VisibleCanvasFractionY;
+        public float Confidence;
+        public int Ambiguous;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string AmbiguityReason;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+        public string SourceCaptureId;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+        public string SourceRevision;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    public struct SctWorkspaceCanvasRelationRequest
+    {
+        public SctIntRect WorkspaceRoiScreen;
+        public SctCanvasObservation WorkspaceCanvas;
+        public int CanvasPixelWidth;
+        public int CanvasPixelHeight;
+        public IntPtr CaptureId;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct SctViewportRequest
     {
         public IntPtr Bgra;
@@ -143,15 +198,8 @@ public static class NativeSct
         public int Stride;
         public SctIntRect ThumbnailRoi;
         public SctIntRect NavigatorCanvasBounds;
-        public float WorkspaceAspect;
+        public SctWorkspaceCanvasRelation WorkspaceCanvasRelation;
         public float DpiScale;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct SctVec2
-    {
-        public double X;
-        public double Y;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
@@ -206,6 +254,9 @@ public static class NativeSct
         public SctVec2 XArmEndScreen;
         public SctVec2 YArmEndScreen;
         public int Offscreen;
+        public float TargetArmDisplayPx;
+        public float TargetStrokeDisplayPx;
+        public double ArmLengthCanvas;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
@@ -215,15 +266,21 @@ public static class NativeSct
         public string CaptureId;
 
         public ulong Generation;
+        public ulong RecomputeGeneration;
+        public int CanvasPixelWidth;
+        public int CanvasPixelHeight;
         public SctIntRect WorkspaceRoiScreen;
         public SctIntRect NavigatorRoiScreen;
         public SctIntRect NavigatorThumbnailRoiScreen;
         public SctCanvasObservation WorkspaceCanvas;
         public SctCanvasObservation NavigatorCanvas;
+        public SctWorkspaceCanvasRelation WorkspaceCanvasRelation;
         public SctNumericReading Numbers;
         public SctViewportFrame Viewport;
         public float PreviousScalePercent;
         public float InitialScalePercent;
+        public float InjectedScalePercent;
+        public int RequireOcrRotation;
         public double MarkerEpsilonCanvas;
     }
 
@@ -261,17 +318,26 @@ public static class NativeSct
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
         public string CaptureId;
 
+        public ulong RecomputeGeneration;
+        public int CanvasPixelWidth;
+        public int CanvasPixelHeight;
         public SctIntRect WorkspaceRoi;
         public SctIntRect NavigatorRoi;
         public SctIntRect NavigatorThumbnailRoi;
         public SctCanvasObservation WorkspaceCanvas;
         public SctCanvasObservation NavigatorCanvas;
+        public SctWorkspaceCanvasRelation WorkspaceCanvasRelation;
         public SctNumericReading Numbers;
         public SctViewportFrame Viewport;
         public float ScaleReference;
         public float RelativeScale;
         public float CumulativeRelativeScale;
+        public float RotationDegreesGeometry;
+        public float RotationDegreesOcrOrInjected;
         public float RotationDegrees;
+        public float ScalePercentOcrOrInjected;
+        public float ScaleGeometryEstimate;
+        public float ScaleConsistencyError;
         public SctAffine2D ScreenToWorkspace;
         public SctAffine2D WorkspaceToScreen;
         public SctAffine2D WorkspaceToCanvas;
@@ -306,6 +372,11 @@ public static class NativeSct
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int sct_observe_canvas(in SctCanvasObserveRequest req, ref SctCanvasObservation result);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    public static extern int sct_build_workspace_canvas_relation(
+        in SctWorkspaceCanvasRelationRequest req,
+        ref SctWorkspaceCanvasRelation result);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int sct_complete_viewport_frame(in SctViewportRequest req, ref SctViewportFrame result);

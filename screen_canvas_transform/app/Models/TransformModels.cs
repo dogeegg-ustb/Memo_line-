@@ -111,7 +111,10 @@ public sealed class TransformSnapshotDto
     public int Status { get; init; }
     public string SnapshotId { get; init; } = "";
     public ulong Generation { get; init; }
+    public ulong RecomputeGeneration { get; init; }
     public string CaptureId { get; init; } = "";
+    public int CanvasPixelWidth { get; init; }
+    public int CanvasPixelHeight { get; init; }
     public IntRect WorkspaceRoi { get; init; }
     public IntRect NavigatorRoi { get; init; }
     public IntRect NavigatorThumbnailRoi { get; init; }
@@ -121,7 +124,12 @@ public sealed class TransformSnapshotDto
     public float ScaleReference { get; init; }
     public float RelativeScale { get; init; }
     public float CumulativeRelativeScale { get; init; }
+    public float RotationDegreesGeometry { get; init; }
+    public float RotationDegreesOcrOrInjected { get; init; }
     public float RotationDegrees { get; init; }
+    public float ScalePercentOcrOrInjected { get; init; }
+    public float ScaleGeometryEstimate { get; init; }
+    public float ScaleConsistencyError { get; init; }
     public NativeSct.SctMarkerGeometry Marker { get; init; }
     public float Confidence { get; init; }
     public bool UsedDirectWorkspacePath { get; init; }
@@ -136,7 +144,10 @@ public sealed class TransformSnapshotDto
         Status = s.Status,
         SnapshotId = s.SnapshotId ?? "",
         Generation = s.Generation,
+        RecomputeGeneration = s.RecomputeGeneration,
         CaptureId = s.CaptureId ?? "",
+        CanvasPixelWidth = s.CanvasPixelWidth,
+        CanvasPixelHeight = s.CanvasPixelHeight,
         WorkspaceRoi = s.WorkspaceRoi.ToIntRect(),
         NavigatorRoi = s.NavigatorRoi.ToIntRect(),
         NavigatorThumbnailRoi = s.NavigatorThumbnailRoi.ToIntRect(),
@@ -156,7 +167,12 @@ public sealed class TransformSnapshotDto
         ScaleReference = s.ScaleReference,
         RelativeScale = s.RelativeScale,
         CumulativeRelativeScale = s.CumulativeRelativeScale,
+        RotationDegreesGeometry = s.RotationDegreesGeometry,
+        RotationDegreesOcrOrInjected = s.RotationDegreesOcrOrInjected,
         RotationDegrees = s.RotationDegrees,
+        ScalePercentOcrOrInjected = s.ScalePercentOcrOrInjected,
+        ScaleGeometryEstimate = s.ScaleGeometryEstimate,
+        ScaleConsistencyError = s.ScaleConsistencyError,
         Marker = s.Marker,
         Confidence = s.Confidence,
         UsedDirectWorkspacePath = s.UsedDirectWorkspacePath != 0,

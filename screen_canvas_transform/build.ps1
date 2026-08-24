@@ -25,7 +25,7 @@ try {
   $srcs = @(
     "color.cpp","features.cpp","seeds.cpp","background.cpp","similarity.cpp","grower.cpp",
     "geometry.cpp","scoring.cpp","refine.cpp","validate.cpp","detector.cpp",
-    "canvas_observe.cpp","viewport_frame.cpp","transform_solve.cpp","sct_c_api.cpp"
+    "canvas_observe.cpp","workspace_canvas_relation.cpp","viewport_frame.cpp","transform_solve.cpp","sct_c_api.cpp"
   ) | ForEach-Object { Join-Path $Native "src\$_" }
   $incs = @("/I$(Join-Path $Native 'include')")
   $common = @("/nologo","/std:c++17","/O2","/EHsc","/utf-8","/MT","/DSCT_NATIVE_EXPORTS") + $incs
@@ -43,6 +43,7 @@ try {
     "/EXPORT:sct_detect_workspace",
     "/EXPORT:sct_detect_navigator_thumbnail_cii",
     "/EXPORT:sct_observe_canvas",
+    "/EXPORT:sct_build_workspace_canvas_relation",
     "/EXPORT:sct_complete_viewport_frame",
     "/EXPORT:sct_solve_transform"
   )
@@ -75,3 +76,17 @@ if (-not $exe) { throw "ScreenCanvasTransform.exe not found" }
 Copy-Item $dll (Join-Path $exe.DirectoryName "ScreenCanvasNative.dll") -Force
 Write-Host "OK: $($exe.FullName)"
 Write-Host "DLL: $(Join-Path $exe.DirectoryName 'ScreenCanvasNative.dll')"
+
+# Native contract tests
+$testSrc = Join-Path $Native "tests\contract_tests.cpp"
+$testObjs = @(
+  (Join-Path $Build "transform_solve.obj"),
+  (Join-Path $Build "workspace_canvas_relation.obj"),
+  (Join-Path $Build "geometry.obj")
+)
+& cl.exe @common /c $testSrc /Fo"$Build\contract_tests.obj"
+if ($LASTEXITCODE -ne 0) { throw "contract test compile failed" }
+& link.exe /nologo /OUT:$Build\contract_tests.exe "$Build\contract_tests.obj" @testObjs
+if ($LASTEXITCODE -ne 0) { throw "contract test link failed" }
+& $Build\contract_tests.exe
+if ($LASTEXITCODE -ne 0) { throw "contract tests failed" }

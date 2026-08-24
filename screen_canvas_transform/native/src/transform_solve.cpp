@@ -4,9 +4,13 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 
 namespace sct {
 namespace {
+
+constexpr double kPi = 3.14159265358979323846;
+constexpr double kRotationAxisToleranceDeg = 5.0;
 
 void CopyStr(char* dst, size_t n, const char* s) {
   if (!dst || n == 0) return;
@@ -18,7 +22,6 @@ void CopyStr(char* dst, size_t n, const char* s) {
 }
 
 Affine2D MakeScreenToWorkspace(const wb::IntRect& workspace_screen) {
-  // x_w = x_s - Wl; y_w = y_s - Wt
   return Affine2D::Translation(-workspace_screen.left, -workspace_screen.top);
 }
 
@@ -26,18 +29,83 @@ Affine2D MakeWorkspaceToScreen(const wb::IntRect& workspace_screen) {
   return Affine2D::Translation(workspace_screen.left, workspace_screen.top);
 }
 
-// Display operator D = R(theta) about canvas center in attached coords.
-// CSP order fixed here: rotate about origin of attached space after normalize.
 Affine2D MakeDisplayOperator(double rotation_degrees) {
-  const double rad = rotation_degrees * 3.14159265358979323846 / 180.0;
+  const double rad = rotation_degrees * kPi / 180.0;
   const double c = std::cos(rad);
   const double s = std::sin(rad);
-  // Rotation about canvas center (0.5, 0.5).
   Affine2D to_origin = Affine2D::Translation(-0.5, -0.5);
   Affine2D rot;
   rot.m = {c, -s, 0, s, c, 0};
   Affine2D from_origin = Affine2D::Translation(0.5, 0.5);
   return Multiply(from_origin, Multiply(rot, to_origin));
+}
+
+double NormalizeAngleDeg(double deg) {
+  while (deg > 180.0) deg -= 360.0;
+  while (deg < -180.0) deg += 360.0;
+  return deg;
+}
+
+double AngleBetweenAxes(const Vec2& a, const Vec2& b) {
+  const double dot = a.x * b.x + a.y * b.y;
+  const double cross = a.x * b.y - a.y * b.x;
+  return std::atan2(cross, dot) * 180.0 / kPi;
+}
+
+double SolveGeometryRotationDegrees(const NavigatorViewportFrame& viewport) {
+  const Vec2 c_x{1, 0};
+  const Vec2 c_y{0, 1};
+  const double ax_len =
+      std::hypot(viewport.axis_x_displayed.x, viewport.axis_x_displayed.y);
+  const double ay_len =
+      std::hypot(viewport.axis_y_displayed.x, viewport.axis_y_displayed.y);
+  if (ax_len < 1e-6 || ay_len < 1e-6) return 0.0;
+
+  const Vec2 a_x{viewport.axis_x_displayed.x / ax_len, viewport.axis_x_displayed.y / ax_len};
+  const Vec2 a_y{viewport.axis_y_displayed.x / ay_len, viewport.axis_y_displayed.y / ay_len};
+  const double theta_x = AngleBetweenAxes(c_x, a_x);
+  const double theta_y = AngleBetweenAxes(c_y, a_y);
+  if (std::abs(NormalizeAngleDeg(theta_x - theta_y)) > kRotationAxisToleranceDeg) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return theta_x;
+}
+
+double ScreenLengthFromCanvasDelta(const Affine2D& c2s, double dx, double dy) {
+  const Vec2 p0 = c2s.Apply({0, 0});
+  const Vec2 p1 = c2s.Apply({dx, dy});
+  return std::hypot(p1.x - p0.x, p1.y - p0.y);
+}
+
+double CanvasEpsilonForTargetScreenLength(const Affine2D& c2s, double target_px) {
+  if (target_px <= 0) return 0.04;
+  double lo = 1e-6;
+  double hi = 1.0;
+  while (ScreenLengthFromCanvasDelta(c2s, hi, 0) < target_px && hi < 4.0) hi *= 2.0;
+  for (int i = 0; i < 40; ++i) {
+    const double mid = 0.5 * (lo + hi);
+    if (ScreenLengthFromCanvasDelta(c2s, mid, 0) < target_px)
+      lo = mid;
+    else
+      hi = mid;
+  }
+  return 0.5 * (lo + hi);
+}
+
+MarkerGeometry BuildMarkerGeometry(const Affine2D& canvas_to_screen, int canvas_pixel_width,
+                                   int canvas_pixel_height, float scale_percent) {
+  MarkerGeometry mg;
+  const int ref_px = std::max(1, std::min(canvas_pixel_width, canvas_pixel_height));
+  const float zoom = scale_percent > 0.f ? scale_percent / 100.f : 1.f;
+  mg.target_arm_display_px = static_cast<float>(ref_px) * 0.05f * zoom;
+  mg.target_stroke_display_px = static_cast<float>(ref_px) * 0.02f * zoom;
+  mg.arm_length_canvas =
+      CanvasEpsilonForTargetScreenLength(canvas_to_screen, mg.target_arm_display_px);
+
+  mg.anchor_screen = canvas_to_screen.Apply({0, 0});
+  mg.x_arm_end_screen = canvas_to_screen.Apply({mg.arm_length_canvas, 0});
+  mg.y_arm_end_screen = canvas_to_screen.Apply({0, mg.arm_length_canvas});
+  return mg;
 }
 
 SolveResult FailSolve(Stage stage, FailStatus st, const char* msg, const SolveInput& in) {
@@ -56,7 +124,6 @@ SolveResult FailSolve(Stage stage, FailStatus st, const char* msg, const SolveIn
 }  // namespace
 
 Affine2D Multiply(const Affine2D& a, const Affine2D& b) {
-  // a * b
   Affine2D r;
   r.m[0] = a.m[0] * b.m[0] + a.m[1] * b.m[3];
   r.m[1] = a.m[0] * b.m[1] + a.m[1] * b.m[4];
@@ -103,23 +170,50 @@ SolveResult SolveTransform(const SolveInput& in) {
     return FailSolve(Stage::SolvingTransform, FailStatus::InvalidCapture, "missing capture id",
                      in);
   }
+  if (in.canvas_pixel_width <= 0 || in.canvas_pixel_height <= 0) {
+    return FailSolve(Stage::SolvingTransform, FailStatus::InvalidCanvasPixelSize,
+                     "canvas pixel size missing", in);
+  }
   if (!in.workspace_roi_screen.valid()) {
     return FailSolve(Stage::SolvingTransform, FailStatus::WorkspaceDetectionFailed,
                      "invalid workspace roi", in);
   }
-  if (in.numbers.scale_percent <= 0.f || in.numbers.scale_confidence < 0.2f) {
+
+  const float scale_percent = in.injected_scale_percent > 0.f
+                                  ? in.injected_scale_percent
+                                  : in.numbers.scale_percent;
+  if (scale_percent <= 0.f ||
+      (in.injected_scale_percent <= 0.f &&
+       (in.numbers.scale_confidence < 0.2f || in.numbers.scale_percent <= 0))) {
     return FailSolve(Stage::ReadingNavigatorNumbers, FailStatus::OcrScaleFailed,
                      "scale percent invalid", in);
   }
-  // Rotation may be zero; require confidence when raw provided.
-  if (in.numbers.rotation_confidence < 0.2f) {
+
+  const double rotation_geometry = SolveGeometryRotationDegrees(in.viewport);
+  if (!std::isfinite(rotation_geometry)) {
+    return FailSolve(Stage::CompletingViewportFrame, FailStatus::AmbiguousViewportGeometry,
+                     "rotation axes inconsistent", in);
+  }
+
+  if (in.require_ocr_rotation != 0 && in.numbers.rotation_confidence < 0.2f) {
     return FailSolve(Stage::ReadingNavigatorNumbers, FailStatus::OcrRotationFailed,
                      "rotation reading invalid", in);
+  }
+
+  if (in.numbers.rotation_confidence >= 0.2f) {
+    const double ocr_rot = in.numbers.rotation_degrees;
+    if (std::abs(NormalizeAngleDeg(rotation_geometry - ocr_rot)) > kRotationAxisToleranceDeg) {
+      return FailSolve(Stage::SolvingTransform, FailStatus::RotationGeometryConflict,
+                       "OCR rotation conflicts with geometry", in);
+    }
   }
 
   TransformSnapshot snap;
   CopyStr(snap.capture_id, sizeof(snap.capture_id), in.capture_id);
   snap.generation = in.generation;
+  snap.recompute_generation = in.recompute_generation;
+  snap.canvas_pixel_width = in.canvas_pixel_width;
+  snap.canvas_pixel_height = in.canvas_pixel_height;
   std::snprintf(snap.snapshot_id, sizeof(snap.snapshot_id), "%s-%llu", in.capture_id,
                 static_cast<unsigned long long>(in.generation));
   snap.workspace_roi = in.workspace_roi_screen;
@@ -127,13 +221,17 @@ SolveResult SolveTransform(const SolveInput& in) {
   snap.navigator_thumbnail_roi = in.navigator_thumbnail_roi_screen;
   snap.workspace_canvas = in.workspace_canvas;
   snap.navigator_canvas = in.navigator_canvas;
+  snap.workspace_canvas_relation = in.workspace_canvas_relation;
   snap.numbers = in.numbers;
   snap.viewport = in.viewport;
-  snap.rotation_degrees = in.numbers.rotation_degrees;
+  snap.rotation_degrees_geometry = static_cast<float>(rotation_geometry);
+  snap.rotation_degrees_ocr_or_injected = in.numbers.rotation_degrees;
+  snap.rotation_degrees = snap.rotation_degrees_geometry;
+  snap.scale_percent_ocr_or_injected = scale_percent;
   CopyStr(snap.source_revision, sizeof(snap.source_revision), "sct-embedded-wb");
   snap.coordinate_convention_version = 1;
 
-  const float cur = in.numbers.scale_percent;
+  const float cur = scale_percent;
   snap.scale_reference = in.initial_scale_percent > 0.f ? in.initial_scale_percent : cur;
   if (in.previous_scale_percent > 0.f) {
     snap.relative_scale = cur / in.previous_scale_percent;
@@ -158,10 +256,8 @@ SolveResult SolveTransform(const SolveInput& in) {
 
   if (in.workspace_canvas.four_sides_complete && !in.workspace_canvas.ambiguous &&
       in.workspace_canvas.bounds_screen.valid()) {
-    // Direct path: WorkspaceLocalPx ↔ CanvasAttachedNormalized from visible canvas.
     snap.used_direct_workspace_path = 1;
     const auto& b = in.workspace_canvas.bounds_screen;
-    // Workspace-local corners of visible canvas map to (0,0)-(1,1) if four sides complete.
     const double l = b.left - in.workspace_roi_screen.left;
     const double t = b.top - in.workspace_roi_screen.top;
     const double r = b.right - in.workspace_roi_screen.left;
@@ -172,7 +268,6 @@ SolveResult SolveTransform(const SolveInput& in) {
       return FailSolve(Stage::SolvingTransform, FailStatus::MatrixSingular,
                        "workspace canvas degenerate", in);
     }
-    // p_c = ((x_w - l)/cw, (y_w - t)/ch)
     t_w_to_c.m = {1.0 / cw, 0, -l / cw, 0, 1.0 / ch, -t / ch};
     t_c_to_w = InvertAffine(t_w_to_c, &inv_ok);
     if (!inv_ok) {
@@ -180,14 +275,11 @@ SolveResult SolveTransform(const SolveInput& in) {
                        "direct path inverse failed", in);
     }
   } else {
-    // Navigator path via viewport frame.
     snap.used_direct_workspace_path = 0;
     if (in.viewport.width < 1.f || in.viewport.height < 1.f) {
       return FailSolve(Stage::CompletingViewportFrame, FailStatus::InsufficientViewportGeometry,
                        "viewport frame missing", in);
     }
-    // q = (x_w/Ww, y_w/Wh); p_d = o_v + q_x * a_x + q_y * a_y
-    // Then map p_d into canvas attached via D^{-1} relative to navigator canvas bounds.
     if (!in.navigator_canvas.bounds_capture.valid() &&
         !in.navigator_canvas.bounds_screen.valid()) {
       return FailSolve(Stage::ObservingNavigatorCanvas, FailStatus::NavigatorCanvasAmbiguous,
@@ -205,27 +297,22 @@ SolveResult SolveTransform(const SolveInput& in) {
                        "navigator canvas degenerate", in);
     }
 
-    // T_W→D: workspace local -> display (thumbnail absolute screen/capture space used by o_v)
-    // p_d.x = ov.x + (x_w/Ww)*ax.x + (y_w/Wh)*ay.x
     Affine2D t_w_to_d;
     t_w_to_d.m = {in.viewport.axis_x_displayed.x / Ww, in.viewport.axis_y_displayed.x / Wh,
                   in.viewport.origin_top_left_displayed.x,
                   in.viewport.axis_x_displayed.y / Ww, in.viewport.axis_y_displayed.y / Wh,
                   in.viewport.origin_top_left_displayed.y};
 
-    // Display absolute -> canvas attached before rotation undo:
-    // u = ((p_d.x - nl)/nw, (p_d.y - nt)/nh) in displayed attached space.
     Affine2D t_d_to_u;
     t_d_to_u.m = {1.0 / nw, 0, -nl / nw, 0, 1.0 / nh, -nt / nh};
 
-    Affine2D D = MakeDisplayOperator(in.numbers.rotation_degrees);
+    Affine2D D = MakeDisplayOperator(rotation_geometry);
     Affine2D Dinv = InvertAffine(D, &inv_ok);
     if (!inv_ok) {
       return FailSolve(Stage::SolvingTransform, FailStatus::MatrixSingular, "D inverse failed",
                        in);
     }
 
-    // p_c = D^{-1} * u ; T_W→C = Dinv * T_D→U * T_W→D
     Affine2D t_w_to_u = Multiply(t_d_to_u, t_w_to_d);
     t_w_to_c = Multiply(Dinv, t_w_to_u);
     t_c_to_w = InvertAffine(t_w_to_c, &inv_ok);
@@ -250,19 +337,25 @@ SolveResult SolveTransform(const SolveInput& in) {
                      in);
   }
 
-  // Marker at CanvasTopLeft (0,0)
-  Vec2 anchor = snap.canvas_to_screen.Apply({0, 0});
-  Vec2 x_end = snap.canvas_to_screen.Apply({in.marker_epsilon_canvas, 0});
-  Vec2 y_end = snap.canvas_to_screen.Apply({0, in.marker_epsilon_canvas});
-  snap.marker.anchor_screen = anchor;
-  snap.marker.x_arm_end_screen = x_end;
-  snap.marker.y_arm_end_screen = y_end;
+  // Scale consistency diagnostic only — never applied to matrix.
+  if (in.viewport.width > 1.f && in.viewport.height > 1.f) {
+    const double vp_aspect = in.viewport.width / in.viewport.height;
+    const double canvas_aspect =
+        static_cast<double>(in.canvas_pixel_width) / static_cast<double>(in.canvas_pixel_height);
+    snap.scale_geometry_estimate = static_cast<float>(vp_aspect / canvas_aspect * 100.0);
+    snap.scale_consistency_error =
+        std::abs(snap.scale_geometry_estimate - scale_percent) / std::max(scale_percent, 1.f);
+  }
 
-  // Offscreen if far outside workspace (report only; still publish with flag).
+  snap.marker = BuildMarkerGeometry(snap.canvas_to_screen, in.canvas_pixel_width,
+                                    in.canvas_pixel_height, scale_percent);
+
   const auto& wr = in.workspace_roi_screen;
   snap.marker.offscreen =
-      (anchor.x < wr.left - 8 || anchor.y < wr.top - 8 || anchor.x > wr.right + 8 ||
-       anchor.y > wr.bottom + 8);
+      (snap.marker.anchor_screen.x < wr.left - 8 ||
+       snap.marker.anchor_screen.y < wr.top - 8 ||
+       snap.marker.anchor_screen.x > wr.right + 8 ||
+       snap.marker.anchor_screen.y > wr.bottom + 8);
 
   snap.confidence = std::clamp(
       0.4f * in.workspace_canvas.confidence + 0.3f * in.navigator_canvas.confidence +
@@ -273,7 +366,6 @@ SolveResult SolveTransform(const SolveInput& in) {
   r.status = FailStatus::Ok;
   r.snapshot = snap;
   if (snap.marker.offscreen) {
-    // Publish still allowed; surface MarkerOffscreen in failure evidence but Ok status for matrix.
     r.failure.status = FailStatus::MarkerOffscreen;
     r.failure.stage = Stage::ShowingMarker;
     CopyStr(r.failure.message, sizeof(r.failure.message), "MarkerOffscreen");

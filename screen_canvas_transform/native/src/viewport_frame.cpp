@@ -123,9 +123,48 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
 
   NavigatorViewportFrame frame;
   frame.visible_edge_count = full_edges;
-  frame.completion_strategy = full_edges;
+  frame.red_evidence.segment_count = static_cast<int>(std::min<size_t>(vpeaks.size() + hpeaks.size(), 32));
+  frame.red_evidence.confirmed_complete_edge_count = full_edges;
+  frame.red_evidence.confirmed_corner_count =
+      (left >= 0 && top >= 0 ? 1 : 0) + (right >= 0 && top >= 0 ? 1 : 0) +
+      (right >= 0 && bottom >= 0 ? 1 : 0) + (left >= 0 && bottom >= 0 ? 1 : 0);
 
-  const double aspect = in.workspace_aspect > 1e-6 ? in.workspace_aspect : 1.0;
+  auto set_pattern = [&](ViewportCompletionPattern p) {
+    frame.completion_strategy = static_cast<int>(p);
+    frame.red_evidence.completion_pattern = p;
+  };
+
+  const double aspect = in.workspace_canvas_relation.canvas_aspect_ratio > 1e-6
+                            ? in.workspace_canvas_relation.canvas_aspect_ratio
+                            : 1.0;
+  const auto& wcr = in.workspace_canvas_relation;
+  const int wl = wcr.workspace_roi.left;
+  const int wt = wcr.workspace_roi.top;
+
+  auto max_horizontal_span_at = [&](int y) {
+    int best = 0;
+    int run = 0;
+    for (int x = 0; x < rw; ++x) {
+      if (red[static_cast<size_t>(y) * rw + x]) {
+        best = std::max(best, ++run);
+      } else {
+        run = 0;
+      }
+    }
+    return best;
+  };
+  auto max_vertical_span_at = [&](int x) {
+    int best = 0;
+    int run = 0;
+    for (int y = 0; y < rh; ++y) {
+      if (red[static_cast<size_t>(y) * rw + x]) {
+        best = std::max(best, ++run);
+      } else {
+        run = 0;
+      }
+    }
+    return best;
+  };
 
   auto finish_ok = [&](NavigatorViewportFrame f) {
     SetCorners(f);
@@ -161,6 +200,7 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
   auto abs_y = [&](int ly) { return roi.top + ly + 0.5; };
 
   if (full_edges == 4) {
+    set_pattern(ViewportCompletionPattern::FourCompleteEdges);
     frame.origin_top_left_displayed = {abs_x(left), abs_y(top)};
     frame.axis_x_displayed = {abs_x(right) - abs_x(left), 0};
     frame.axis_y_displayed = {0, abs_y(bottom) - abs_y(top)};
@@ -172,6 +212,7 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
   }
 
   if (full_edges == 3) {
+    set_pattern(ViewportCompletionPattern::ThreeCompleteEdges);
     if (left < 0 && right >= 0 && top >= 0 && bottom >= 0) {
       const double h = abs_y(bottom) - abs_y(top);
       const double w = h * aspect;
@@ -208,8 +249,8 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
   }
 
   if (full_edges == 2) {
-    // Adjacent edges preferred.
     if (left >= 0 && top >= 0 && right < 0 && bottom < 0) {
+      set_pattern(ViewportCompletionPattern::TwoIntersectingCompleteEdges);
       // Estimate size from red extent.
       int maxx = left, maxy = top;
       for (int y = 0; y < rh; ++y)
@@ -238,7 +279,7 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
       return finish_ok(frame);
     }
     if (left >= 0 && right >= 0) {
-      // Opposite vertical edges.
+      set_pattern(ViewportCompletionPattern::TwoParallelCompleteEdges);
       const double w = abs_x(right) - abs_x(left);
       const double h = w / aspect;
       double cy = roi.top + rh * 0.5;
@@ -256,6 +297,7 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
       return finish_ok(frame);
     }
     if (top >= 0 && bottom >= 0) {
+      set_pattern(ViewportCompletionPattern::TwoParallelCompleteEdges);
       const double h = abs_y(bottom) - abs_y(top);
       const double w = h * aspect;
       double cx = roi.left + rw * 0.5;
@@ -274,22 +316,47 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
     return Fail(FailStatus::AmbiguousViewportGeometry, "2-edge topology unsupported");
   }
 
-  // 1 edge
+  // 1 edge — use WorkspaceCanvasRelation to resolve workspace +X/+Y semantics.
   if (left >= 0 || right >= 0) {
+    set_pattern(ViewportCompletionPattern::OneCompleteEdge);
     const int xedge = left >= 0 ? left : right;
-    const double h = std::max(8.0, static_cast<double>(rh) * 0.3);
-    const double w = h * aspect;
+    const float share_y = wcr.visible_canvas_workspace_fraction_y;
+    const int covered_canvas_px = max_vertical_span_at(xedge);
+    if (share_y <= 1e-4f || covered_canvas_px < 2) {
+      return Fail(FailStatus::AmbiguousViewportGeometry,
+                  "workspace canvas ratio unavailable for vertical edge");
+    }
+    // The red edge covers a navigator-scaled slice of the canvas.  The
+    // workspace canvas/background fraction converts that slice to the full
+    // viewport edge; it is not a generic canvas aspect fallback.
+    double h = static_cast<double>(covered_canvas_px) / share_y;
+    double w = h * aspect;
     double cy = roi.top + rh * 0.5;
+    if (wcr.visible_canvas_bounds_workspace_local.height() > 0) {
+      cy = wt + wcr.visible_canvas_bounds_workspace_local.top +
+           wcr.visible_canvas_bounds_workspace_local.height() * 0.5;
+    }
     frame.origin_top_left_displayed = {left >= 0 ? abs_x(xedge) : abs_x(xedge) - w, cy - h * 0.5};
     frame.axis_x_displayed = {w, 0};
     frame.axis_y_displayed = {0, h};
     return finish_ok(frame);
   }
   if (top >= 0 || bottom >= 0) {
+    set_pattern(ViewportCompletionPattern::OneCompleteEdge);
     const int yedge = top >= 0 ? top : bottom;
-    const double w = std::max(8.0, static_cast<double>(rw) * 0.3);
-    const double h = w / aspect;
+    const float share_x = wcr.visible_canvas_workspace_fraction_x;
+    const int covered_canvas_px = max_horizontal_span_at(yedge);
+    if (share_x <= 1e-4f || covered_canvas_px < 2) {
+      return Fail(FailStatus::AmbiguousViewportGeometry,
+                  "workspace canvas ratio unavailable for horizontal edge");
+    }
+    double w = static_cast<double>(covered_canvas_px) / share_x;
+    double h = w / aspect;
     double cx = roi.left + rw * 0.5;
+    if (wcr.visible_canvas_bounds_workspace_local.width() > 0) {
+      cx = wl + wcr.visible_canvas_bounds_workspace_local.left +
+           wcr.visible_canvas_bounds_workspace_local.width() * 0.5;
+    }
     frame.origin_top_left_displayed = {cx - w * 0.5, top >= 0 ? abs_y(yedge) : abs_y(yedge) - h};
     frame.axis_x_displayed = {w, 0};
     frame.axis_y_displayed = {0, h};

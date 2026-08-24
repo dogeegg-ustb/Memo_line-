@@ -6,7 +6,6 @@
 namespace sct {
 
 // Detect / complete NavigatorViewportFrame inside NavigatorThumbnailRoi.
-// Uses red-channel evidence; completes o_v / a_x / a_y for 4/3/2/1 full right-angle edges.
 struct ViewportCompletionInput {
   const uint8_t* bgra = nullptr;
   int width = 0;
@@ -14,7 +13,7 @@ struct ViewportCompletionInput {
   int stride = 0;
   wb::IntRect thumbnail_roi{};
   wb::IntRect navigator_canvas_bounds{};
-  float workspace_aspect = 1.f;  // W_w / W_h
+  WorkspaceCanvasRelation workspace_canvas_relation{};
   float dpi_scale = 1.f;
 };
 

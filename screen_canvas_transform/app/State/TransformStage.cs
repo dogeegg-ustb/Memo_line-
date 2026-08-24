@@ -16,6 +16,7 @@ public enum TransformStage
     SolvingTransform = 10,
     ShowingCanvasTopLeftMarker = 11,
     TrackingStable = 12,
+    RecomputeRequested = 19,
     ViewChanging = 13,
     WaitingForCspStable = 14,
     ReacquiringEvidence = 15,

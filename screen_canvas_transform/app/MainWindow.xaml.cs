@@ -17,7 +17,9 @@ public partial class MainWindow : Window
     private readonly RoiBorderOverlayWindow _thumbnailBorder = RoiBorderOverlayWindow.CreateNavigatorThumbnail();
     private readonly MarkerOverlayWindow _markerOverlay = new();
     private CaptureSession? _activeSession;
+    private PipelineResult? _lastResult;
     private bool _flowRunning;
+    private bool _recomputePending;
 
     public MainWindow()
     {
@@ -59,6 +61,18 @@ public partial class MainWindow : Window
 
         try
         {
+            var sizeDialog = new CanvasSizeInputDialog();
+            bool? sizeOk = sizeDialog.ShowDialog();
+            if (sizeOk != true)
+            {
+                SetStatus("已取消：未输入有效画布像素尺寸，不会截图或进入 ROI。");
+                return;
+            }
+
+            _pipeline.BeginNewInitializationGeneration(
+                sizeDialog.CanvasPixelWidth,
+                sizeDialog.CanvasPixelHeight);
+
             // Architecture §5.1: hide overlays before capture.
             HideAllOverlays();
             SetStatus("正在隐藏窗口并冻结桌面截图…");
@@ -198,6 +212,8 @@ public partial class MainWindow : Window
                 " 边框：绿=工作区 / 青=导航器 / 品红=缩略图。" +
                 (markerShown ? $" 橙色 L 已显示{off}。" : " 标记未显示。"));
             SetStage(TransformStage.TrackingStable);
+            _lastResult = result;
+            RecomputeButton.IsEnabled = true;
         }
         catch (PipelineFailureException ex)
         {
@@ -235,6 +251,88 @@ public partial class MainWindow : Window
             }
             StartButton.IsEnabled = true;
             _flowRunning = false;
+        }
+    }
+
+    private async void RecomputeButton_OnClick(object sender, RoutedEventArgs e)
+        => await RunRecomputeAsync();
+
+    private async Task RunRecomputeAsync()
+    {
+        if (_lastResult is null || _flowRunning)
+            return;
+
+        if (_recomputePending)
+            return;
+
+        _recomputePending = true;
+        _flowRunning = true;
+        RecomputeButton.IsEnabled = false;
+
+        try
+        {
+            HideAllOverlays();
+            SetStage(TransformStage.RecomputeRequested);
+            Hide();
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            await Task.Delay(120);
+
+            _activeSession?.Dispose();
+            var session = CaptureSession.CreateFromVirtualScreen();
+            _activeSession = session;
+
+            var progress = new Progress<TransformStage>(SetStage);
+            var result = await Task.Run(
+                    async () => await _pipeline.RecomputeAsync(session, _lastResult, progress)
+                        .ConfigureAwait(false))
+                .ConfigureAwait(true);
+
+            Show();
+            Activate();
+
+            _workspaceBorder.TryShowIfCaptureMatches(
+                result.WorkspaceRoiScreen, session.CaptureId, result.Snapshot.CaptureId);
+            _navigatorBorder.TryShowIfCaptureMatches(
+                result.NavigatorRoiScreen, session.CaptureId, result.Snapshot.CaptureId);
+            _thumbnailBorder.TryShowIfCaptureMatches(
+                result.NavigatorThumbnailRoiScreen, session.CaptureId, result.Snapshot.CaptureId);
+
+            bool markerShown = _markerOverlay.TryShowIfGenerationMatches(
+                result.Snapshot.Marker,
+                result.Snapshot.CaptureId,
+                result.Snapshot.Generation,
+                session.CaptureId,
+                result.Snapshot.Generation);
+
+            _lastResult = result;
+            SetStatus(
+                $"重算完成 gen={result.Snapshot.Generation} recompute={result.Snapshot.RecomputeGeneration}，" +
+                $"rot_geo={result.Snapshot.RotationDegreesGeometry:F1}°，" +
+                $"scale={result.Snapshot.ScalePercentOcrOrInjected:F1}%。" +
+                (markerShown ? " 橙色 L 已更新。" : " 标记未显示。"));
+            SetStage(TransformStage.TrackingStable);
+        }
+        catch (PipelineFailureException ex)
+        {
+            _markerOverlay.Hide();
+            if (!IsVisible)
+            {
+                Show();
+                Activate();
+            }
+            SetStage(ex.Stage);
+            SetStatus($"重算失败 stage={ex.Stage} status={ex.Status}：{ex.Message}");
+        }
+        finally
+        {
+            _recomputePending = false;
+            _flowRunning = false;
+            RecomputeButton.IsEnabled = _lastResult is not null;
+            if (!IsVisible)
+            {
+                Show();
+                Activate();
+            }
         }
     }
 

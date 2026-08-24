@@ -16,7 +16,7 @@ extern "C" {
 #define SCT_API
 #endif
 
-#define SCT_API_VERSION 1
+#define SCT_API_VERSION 2
 #define SCT_COORD_CONVENTION_VERSION 1
 #define SCT_SOURCE_REVISION "sct-embedded-wb"
 
@@ -103,6 +103,49 @@ typedef struct SctCanvasObservation {
   char ambiguity_reason[128];
 } SctCanvasObservation;
 
+typedef struct SctVec2 {
+  double x;
+  double y;
+} SctVec2;
+
+typedef struct SctWorkspaceCanvasRelation {
+  SctIntRect workspace_roi;
+  SctIntRect full_canvas_model_workspace_local;
+  SctIntRect visible_canvas_bounds_workspace_local;
+  SctIntRect visible_canvas_bounds_screen;
+  SctVec2 canvas_axis_x_workspace_local;
+  SctVec2 canvas_axis_y_workspace_local;
+  int canvas_edges_in_workspace;
+  int full_canvas_edge_evidence;
+  int visible_canvas_edge_evidence;
+  int occluded_canvas_edges;
+  int canvas_crop_sides;
+  float canvas_aspect_ratio;
+  int canvas_pixel_width;
+  int canvas_pixel_height;
+  int workspace_width;
+  int workspace_height;
+  float canvas_to_workspace_scale_x;
+  float canvas_to_workspace_scale_y;
+  float visible_canvas_workspace_fraction_x;
+  float visible_canvas_workspace_fraction_y;
+  float visible_canvas_fraction_x;
+  float visible_canvas_fraction_y;
+  float confidence;
+  int ambiguous;
+  char ambiguity_reason[128];
+  char source_capture_id[64];
+  char source_revision[64];
+} SctWorkspaceCanvasRelation;
+
+typedef struct SctWorkspaceCanvasRelationRequest {
+  SctIntRect workspace_roi_screen;
+  SctCanvasObservation workspace_canvas;
+  int canvas_pixel_width;
+  int canvas_pixel_height;
+  const char* capture_id;
+} SctWorkspaceCanvasRelationRequest;
+
 typedef struct SctViewportRequest {
   const unsigned char* bgra;
   int width;
@@ -110,14 +153,9 @@ typedef struct SctViewportRequest {
   int stride;
   SctIntRect thumbnail_roi;
   SctIntRect navigator_canvas_bounds;
-  float workspace_aspect;
+  SctWorkspaceCanvasRelation workspace_canvas_relation;
   float dpi_scale;
 } SctViewportRequest;
-
-typedef struct SctVec2 {
-  double x;
-  double y;
-} SctVec2;
 
 typedef struct SctViewportFrame {
   int status;
@@ -152,20 +190,29 @@ typedef struct SctMarkerGeometry {
   SctVec2 x_arm_end_screen;
   SctVec2 y_arm_end_screen;
   int offscreen;
+  float target_arm_display_px;
+  float target_stroke_display_px;
+  double arm_length_canvas;
 } SctMarkerGeometry;
 
 typedef struct SctSolveRequest {
   char capture_id[64];
   uint64_t generation;
+  uint64_t recompute_generation;
+  int canvas_pixel_width;
+  int canvas_pixel_height;
   SctIntRect workspace_roi_screen;
   SctIntRect navigator_roi_screen;
   SctIntRect navigator_thumbnail_roi_screen;
   SctCanvasObservation workspace_canvas;
   SctCanvasObservation navigator_canvas;
+  SctWorkspaceCanvasRelation workspace_canvas_relation;
   SctNumericReading numbers;
   SctViewportFrame viewport;
   float previous_scale_percent;
   float initial_scale_percent;
+  float injected_scale_percent;
+  int require_ocr_rotation;
   double marker_epsilon_canvas;
 } SctSolveRequest;
 
@@ -183,18 +230,27 @@ typedef struct SctTransformSnapshot {
   int status;
   char snapshot_id[64];
   uint64_t generation;
+  uint64_t recompute_generation;
   char capture_id[64];
+  int canvas_pixel_width;
+  int canvas_pixel_height;
   SctIntRect workspace_roi;
   SctIntRect navigator_roi;
   SctIntRect navigator_thumbnail_roi;
   SctCanvasObservation workspace_canvas;
   SctCanvasObservation navigator_canvas;
+  SctWorkspaceCanvasRelation workspace_canvas_relation;
   SctNumericReading numbers;
   SctViewportFrame viewport;
   float scale_reference;
   float relative_scale;
   float cumulative_relative_scale;
+  float rotation_degrees_geometry;
+  float rotation_degrees_ocr_or_injected;
   float rotation_degrees;
+  float scale_percent_ocr_or_injected;
+  float scale_geometry_estimate;
+  float scale_consistency_error;
   SctAffine2D screen_to_workspace;
   SctAffine2D workspace_to_screen;
   SctAffine2D workspace_to_canvas;
@@ -216,6 +272,8 @@ SCT_API const char* sct_source_revision(void);
 SCT_API int sct_detect_workspace(const SctDetectRequest* req, SctDetectResult* result);
 SCT_API int sct_detect_navigator_thumbnail_cii(const SctCiiRequest* req, SctDetectResult* result);
 SCT_API int sct_observe_canvas(const SctCanvasObserveRequest* req, SctCanvasObservation* out);
+SCT_API int sct_build_workspace_canvas_relation(const SctWorkspaceCanvasRelationRequest* req,
+                                                SctWorkspaceCanvasRelation* out);
 SCT_API int sct_complete_viewport_frame(const SctViewportRequest* req, SctViewportFrame* out);
 SCT_API int sct_solve_transform(const SctSolveRequest* req, SctTransformSnapshot* out);
 

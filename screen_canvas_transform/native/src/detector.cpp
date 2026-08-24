@@ -659,6 +659,29 @@ DetectionOutput WorkspaceBorderDetector::DetectCiiWithExternalBackground(
     // No navigator seed sampling or background-model re-estimation is performed.
     FeatureMaps full_feat = ExtractFeatures(full_bgr, cfg_, dpi_scale, &search_roi);
     BackgroundModel model = external_model;
+
+    // The navigator thumbnail ROI is allowed to contain the already displayed
+    // red viewport frame. Treat red pixels as transparent background for C-II:
+    // they must neither become a thumbnail candidate nor alter the background
+    // similarity thresholds used to find the thumbnail rectangle.
+    for (int y = search_roi.top; y < search_roi.bottom; ++y) {
+      const uint8_t* row = bgra.Row(y);
+      for (int x = search_roi.left; x < search_roi.right; ++x) {
+        const uint8_t b = row[x * 4 + 0];
+        const uint8_t g = row[x * 4 + 1];
+        const uint8_t r = row[x * 4 + 2];
+        if (r < 140 || r < g + 20 || r < b + 20 || r - g < 40 || r - b < 40)
+          continue;
+        float* lab = full_feat.lab.At(x, y);
+        lab[0] = model.center_lab.L;
+        lab[1] = model.center_lab.a;
+        lab[2] = model.center_lab.b;
+        full_feat.gradient_x.At(x, y) = 0.f;
+        full_feat.gradient_y.At(x, y) = 0.f;
+        full_feat.gradient_magnitude.At(x, y) = 0.f;
+        full_feat.local_variance.At(x, y) = 0.f;
+      }
+    }
     auto sim = BuildSimilarity(full_feat, model, search_roi, cfg_);
 
     IntRect detected;

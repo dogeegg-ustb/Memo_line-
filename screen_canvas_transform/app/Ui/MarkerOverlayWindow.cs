@@ -27,8 +27,9 @@ public sealed class MarkerOverlayWindow : IDisposable
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpShowWindow = 0x0040;
     private const uint SwpNoCopyBits = 0x0100;
-    private const int MinArmScreenPx = 12;
-    private const int Pad = 8;
+    private const int MinArmScreenPx = 28;
+    private const int MinMarkerWindowPx = 64;
+    private const int Pad = 14;
 
     private static readonly IntPtr WindowClassAtom;
     private static readonly WndProcDelegate WndProcKeepAlive = StaticWndProc;
@@ -83,8 +84,20 @@ public sealed class MarkerOverlayWindow : IDisposable
         int top = (int)Math.Floor(Math.Min(ay, Math.Min(xy, yy))) - Pad;
         int right = (int)Math.Ceiling(Math.Max(ax, Math.Max(xx, yx))) + Pad;
         int bottom = (int)Math.Ceiling(Math.Max(ay, Math.Max(xy, yy))) + Pad;
-        int w = Math.Max(1, right - left);
-        int h = Math.Max(1, bottom - top);
+        int w = Math.Max(MinMarkerWindowPx, right - left);
+        int h = Math.Max(MinMarkerWindowPx, bottom - top);
+
+        // Keep the projected anchor inside the enlarged bitmap when a very small
+        // or off-screen transform produces a window smaller than the marker arms.
+        if (ax - left < Pad || ay - top < Pad || xx - left < Pad || yy - top < Pad)
+        {
+            left = (int)Math.Floor(Math.Min(ax, Math.Min(xx, yx))) - Pad;
+            top = (int)Math.Floor(Math.Min(ay, Math.Min(xy, yy))) - Pad;
+            right = Math.Max(right, left + MinMarkerWindowPx);
+            bottom = Math.Max(bottom, top + MinMarkerWindowPx);
+            w = Math.Max(MinMarkerWindowPx, right - left);
+            h = Math.Max(MinMarkerWindowPx, bottom - top);
+        }
 
         EnsureWindow();
         _boundCaptureId = captureId;
@@ -100,7 +113,8 @@ public sealed class MarkerOverlayWindow : IDisposable
         float yEndX = (float)(yx - left);
         float yEndY = (float)(yy - top);
 
-        UpdateLayeredContent(w, h, oX, oY, xEndX, xEndY, yEndX, yEndY);
+        UpdateLayeredContent(w, h, oX, oY, xEndX, xEndY, yEndX, yEndY,
+            marker.TargetStrokeDisplayPx > 0 ? marker.TargetStrokeDisplayPx : 3f);
         ShowWindow(_hwnd, SwShowNoActivate);
     }
 
@@ -180,18 +194,27 @@ public sealed class MarkerOverlayWindow : IDisposable
         int width, int height,
         float oX, float oY,
         float xEndX, float xEndY,
-        float yEndX, float yEndY)
+        float yEndX, float yEndY,
+        float strokePx)
     {
         using var bmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(bmp))
         {
             g.Clear(System.Drawing.Color.Transparent);
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            using var pen = new System.Drawing.Pen(MarkerColor, 3f)
+            float visibleStroke = Math.Max(5f, strokePx);
+            using var halo = new System.Drawing.Pen(System.Drawing.Color.FromArgb(230, 90, 35, 0), visibleStroke + 6f)
             {
                 StartCap = LineCap.Round,
                 EndCap = LineCap.Round
             };
+            using var pen = new System.Drawing.Pen(MarkerColor, visibleStroke)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round
+            };
+            g.DrawLine(halo, oX, oY, xEndX, xEndY);
+            g.DrawLine(halo, oX, oY, yEndX, yEndY);
             g.DrawLine(pen, oX, oY, xEndX, xEndY);
             g.DrawLine(pen, oX, oY, yEndX, yEndY);
         }

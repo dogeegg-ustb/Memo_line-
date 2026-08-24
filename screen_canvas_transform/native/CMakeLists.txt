@@ -18,6 +18,7 @@ add_library(ScreenCanvasNative SHARED
   src/validate.cpp
   src/detector.cpp
   src/canvas_observe.cpp
+  src/workspace_canvas_relation.cpp
   src/viewport_frame.cpp
   src/transform_solve.cpp
   src/sct_c_api.cpp

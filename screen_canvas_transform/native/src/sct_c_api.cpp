@@ -3,6 +3,7 @@
 #include "sct/canvas_observe.hpp"
 #include "sct/transform_solve.hpp"
 #include "sct/viewport_frame.hpp"
+#include "sct/workspace_canvas_relation.hpp"
 #include "wb/detector.hpp"
 
 #include <cstdio>
@@ -92,6 +93,90 @@ sct::CanvasObservation FromCObs(const SctCanvasObservation& c) {
 
 void CopyAffine(SctAffine2D& dst, const sct::Affine2D& src) {
   for (int i = 0; i < 6; ++i) dst.m[i] = src.m[i];
+}
+
+SctVec2 ToCVec(const sct::Vec2& v) { return {v.x, v.y}; }
+
+sct::Vec2 FromCVec(const SctVec2& v) { return {v.x, v.y}; }
+
+SctWorkspaceCanvasRelation ToCRel(const sct::WorkspaceCanvasRelation& r) {
+  SctWorkspaceCanvasRelation c{};
+  c.workspace_roi = {r.workspace_roi.left, r.workspace_roi.top, r.workspace_roi.right,
+                     r.workspace_roi.bottom};
+  c.full_canvas_model_workspace_local = {
+      r.full_canvas_model_workspace_local.left, r.full_canvas_model_workspace_local.top,
+      r.full_canvas_model_workspace_local.right, r.full_canvas_model_workspace_local.bottom};
+  c.visible_canvas_bounds_workspace_local = {
+      r.visible_canvas_bounds_workspace_local.left, r.visible_canvas_bounds_workspace_local.top,
+      r.visible_canvas_bounds_workspace_local.right, r.visible_canvas_bounds_workspace_local.bottom};
+  c.visible_canvas_bounds_screen = {r.visible_canvas_bounds_screen.left,
+                                    r.visible_canvas_bounds_screen.top,
+                                    r.visible_canvas_bounds_screen.right,
+                                    r.visible_canvas_bounds_screen.bottom};
+  c.canvas_axis_x_workspace_local = ToCVec(r.canvas_axis_x_workspace_local);
+  c.canvas_axis_y_workspace_local = ToCVec(r.canvas_axis_y_workspace_local);
+  c.canvas_edges_in_workspace = r.canvas_edges_in_workspace;
+  c.full_canvas_edge_evidence = r.full_canvas_edge_evidence;
+  c.visible_canvas_edge_evidence = r.visible_canvas_edge_evidence;
+  c.occluded_canvas_edges = r.occluded_canvas_edges;
+  c.canvas_crop_sides = r.canvas_crop_sides;
+  c.canvas_aspect_ratio = r.canvas_aspect_ratio;
+  c.canvas_pixel_width = r.canvas_pixel_width;
+  c.canvas_pixel_height = r.canvas_pixel_height;
+  c.workspace_width = r.workspace_width;
+  c.workspace_height = r.workspace_height;
+  c.canvas_to_workspace_scale_x = r.canvas_to_workspace_scale_x;
+  c.canvas_to_workspace_scale_y = r.canvas_to_workspace_scale_y;
+  c.visible_canvas_workspace_fraction_x = r.visible_canvas_workspace_fraction_x;
+  c.visible_canvas_workspace_fraction_y = r.visible_canvas_workspace_fraction_y;
+  c.visible_canvas_fraction_x = r.visible_canvas_fraction_x;
+  c.visible_canvas_fraction_y = r.visible_canvas_fraction_y;
+  c.confidence = r.confidence;
+  c.ambiguous = r.ambiguous ? 1 : 0;
+  CopyStrC(c.ambiguity_reason, sizeof(c.ambiguity_reason), r.ambiguity_reason);
+  CopyStrC(c.source_capture_id, sizeof(c.source_capture_id), r.source_capture_id);
+  CopyStrC(c.source_revision, sizeof(c.source_revision), r.source_revision);
+  return c;
+}
+
+sct::WorkspaceCanvasRelation FromCRel(const SctWorkspaceCanvasRelation& c) {
+  sct::WorkspaceCanvasRelation r;
+  r.workspace_roi = {c.workspace_roi.left, c.workspace_roi.top, c.workspace_roi.right,
+                     c.workspace_roi.bottom};
+  r.full_canvas_model_workspace_local = {
+      c.full_canvas_model_workspace_local.left, c.full_canvas_model_workspace_local.top,
+      c.full_canvas_model_workspace_local.right, c.full_canvas_model_workspace_local.bottom};
+  r.visible_canvas_bounds_workspace_local = {
+      c.visible_canvas_bounds_workspace_local.left, c.visible_canvas_bounds_workspace_local.top,
+      c.visible_canvas_bounds_workspace_local.right, c.visible_canvas_bounds_workspace_local.bottom};
+  r.visible_canvas_bounds_screen = {c.visible_canvas_bounds_screen.left,
+                                    c.visible_canvas_bounds_screen.top,
+                                    c.visible_canvas_bounds_screen.right,
+                                    c.visible_canvas_bounds_screen.bottom};
+  r.canvas_axis_x_workspace_local = FromCVec(c.canvas_axis_x_workspace_local);
+  r.canvas_axis_y_workspace_local = FromCVec(c.canvas_axis_y_workspace_local);
+  r.canvas_edges_in_workspace = c.canvas_edges_in_workspace;
+  r.full_canvas_edge_evidence = c.full_canvas_edge_evidence;
+  r.visible_canvas_edge_evidence = c.visible_canvas_edge_evidence;
+  r.occluded_canvas_edges = c.occluded_canvas_edges;
+  r.canvas_crop_sides = c.canvas_crop_sides;
+  r.canvas_aspect_ratio = c.canvas_aspect_ratio;
+  r.canvas_pixel_width = c.canvas_pixel_width;
+  r.canvas_pixel_height = c.canvas_pixel_height;
+  r.workspace_width = c.workspace_width;
+  r.workspace_height = c.workspace_height;
+  r.canvas_to_workspace_scale_x = c.canvas_to_workspace_scale_x;
+  r.canvas_to_workspace_scale_y = c.canvas_to_workspace_scale_y;
+  r.visible_canvas_workspace_fraction_x = c.visible_canvas_workspace_fraction_x;
+  r.visible_canvas_workspace_fraction_y = c.visible_canvas_workspace_fraction_y;
+  r.visible_canvas_fraction_x = c.visible_canvas_fraction_x;
+  r.visible_canvas_fraction_y = c.visible_canvas_fraction_y;
+  r.confidence = c.confidence;
+  r.ambiguous = c.ambiguous != 0;
+  CopyStrC(r.ambiguity_reason, sizeof(r.ambiguity_reason), c.ambiguity_reason);
+  CopyStrC(r.source_capture_id, sizeof(r.source_capture_id), c.source_capture_id);
+  CopyStrC(r.source_revision, sizeof(r.source_revision), c.source_revision);
+  return r;
 }
 
 }  // namespace
@@ -192,6 +277,25 @@ SCT_API int sct_observe_canvas(const SctCanvasObserveRequest* req, SctCanvasObse
   return out->status;
 }
 
+SCT_API int sct_build_workspace_canvas_relation(const SctWorkspaceCanvasRelationRequest* req,
+                                                  SctWorkspaceCanvasRelation* out) {
+  if (!out) return static_cast<int>(sct::FailStatus::InvalidCapture);
+  std::memset(out, 0, sizeof(*out));
+  if (!req) {
+  return static_cast<int>(sct::FailStatus::InvalidCapture);
+  }
+  sct::WorkspaceCanvasRelationInput in;
+  in.workspace_roi_screen = {req->workspace_roi_screen.left, req->workspace_roi_screen.top,
+                             req->workspace_roi_screen.right, req->workspace_roi_screen.bottom};
+  in.workspace_canvas = FromCObs(req->workspace_canvas);
+  in.canvas_pixel_width = req->canvas_pixel_width;
+  in.canvas_pixel_height = req->canvas_pixel_height;
+  in.capture_id = req->capture_id;
+  auto r = sct::BuildWorkspaceCanvasRelation(in);
+  *out = ToCRel(r.relation);
+  return static_cast<int>(r.status);
+}
+
 SCT_API int sct_complete_viewport_frame(const SctViewportRequest* req, SctViewportFrame* out) {
   if (!out) return static_cast<int>(sct::FailStatus::InvalidCapture);
   std::memset(out, 0, sizeof(*out));
@@ -210,7 +314,7 @@ SCT_API int sct_complete_viewport_frame(const SctViewportRequest* req, SctViewpo
   in.navigator_canvas_bounds = {req->navigator_canvas_bounds.left, req->navigator_canvas_bounds.top,
                                 req->navigator_canvas_bounds.right,
                                 req->navigator_canvas_bounds.bottom};
-  in.workspace_aspect = req->workspace_aspect;
+  in.workspace_canvas_relation = FromCRel(req->workspace_canvas_relation);
   in.dpi_scale = req->dpi_scale;
   auto r = sct::CompleteViewportFrame(in);
   out->status = static_cast<int>(r.status);
@@ -241,6 +345,9 @@ SCT_API int sct_solve_transform(const SctSolveRequest* req, SctTransformSnapshot
   sct::SolveInput in;
   CopyStrC(in.capture_id, sizeof(in.capture_id), req->capture_id);
   in.generation = req->generation;
+  in.recompute_generation = req->recompute_generation;
+  in.canvas_pixel_width = req->canvas_pixel_width;
+  in.canvas_pixel_height = req->canvas_pixel_height;
   in.workspace_roi_screen = {req->workspace_roi_screen.left, req->workspace_roi_screen.top,
                              req->workspace_roi_screen.right, req->workspace_roi_screen.bottom};
   in.navigator_roi_screen = {req->navigator_roi_screen.left, req->navigator_roi_screen.top,
@@ -250,6 +357,7 @@ SCT_API int sct_solve_transform(const SctSolveRequest* req, SctTransformSnapshot
       req->navigator_thumbnail_roi_screen.right, req->navigator_thumbnail_roi_screen.bottom};
   in.workspace_canvas = FromCObs(req->workspace_canvas);
   in.navigator_canvas = FromCObs(req->navigator_canvas);
+  in.workspace_canvas_relation = FromCRel(req->workspace_canvas_relation);
   in.numbers.scale_percent = req->numbers.scale_percent;
   in.numbers.rotation_degrees = req->numbers.rotation_degrees;
   in.numbers.scale_confidence = req->numbers.scale_confidence;
@@ -273,6 +381,8 @@ SCT_API int sct_solve_transform(const SctSolveRequest* req, SctTransformSnapshot
   in.viewport.confidence = req->viewport.confidence;
   in.previous_scale_percent = req->previous_scale_percent;
   in.initial_scale_percent = req->initial_scale_percent;
+  in.injected_scale_percent = req->injected_scale_percent;
+  in.require_ocr_rotation = req->require_ocr_rotation;
   in.marker_epsilon_canvas =
       req->marker_epsilon_canvas > 0 ? req->marker_epsilon_canvas : 0.04;
 
@@ -281,7 +391,10 @@ SCT_API int sct_solve_transform(const SctSolveRequest* req, SctTransformSnapshot
   const auto& s = r.snapshot;
   CopyStrC(out->snapshot_id, sizeof(out->snapshot_id), s.snapshot_id);
   out->generation = s.generation;
+  out->recompute_generation = s.recompute_generation;
   CopyStrC(out->capture_id, sizeof(out->capture_id), s.capture_id);
+  out->canvas_pixel_width = s.canvas_pixel_width;
+  out->canvas_pixel_height = s.canvas_pixel_height;
   out->workspace_roi = {s.workspace_roi.left, s.workspace_roi.top, s.workspace_roi.right,
                         s.workspace_roi.bottom};
   out->navigator_roi = {s.navigator_roi.left, s.navigator_roi.top, s.navigator_roi.right,
@@ -290,6 +403,7 @@ SCT_API int sct_solve_transform(const SctSolveRequest* req, SctTransformSnapshot
                                   s.navigator_thumbnail_roi.right, s.navigator_thumbnail_roi.bottom};
   out->workspace_canvas = ToCObs(s.workspace_canvas, 0);
   out->navigator_canvas = ToCObs(s.navigator_canvas, 0);
+  out->workspace_canvas_relation = ToCRel(s.workspace_canvas_relation);
   out->numbers = req->numbers;
   out->viewport = req->viewport;
   out->viewport.width = s.viewport.width;
@@ -298,7 +412,12 @@ SCT_API int sct_solve_transform(const SctSolveRequest* req, SctTransformSnapshot
   out->scale_reference = s.scale_reference;
   out->relative_scale = s.relative_scale;
   out->cumulative_relative_scale = s.cumulative_relative_scale;
+  out->rotation_degrees_geometry = s.rotation_degrees_geometry;
+  out->rotation_degrees_ocr_or_injected = s.rotation_degrees_ocr_or_injected;
   out->rotation_degrees = s.rotation_degrees;
+  out->scale_percent_ocr_or_injected = s.scale_percent_ocr_or_injected;
+  out->scale_geometry_estimate = s.scale_geometry_estimate;
+  out->scale_consistency_error = s.scale_consistency_error;
   CopyAffine(out->screen_to_workspace, s.screen_to_workspace);
   CopyAffine(out->workspace_to_screen, s.workspace_to_screen);
   CopyAffine(out->workspace_to_canvas, s.workspace_to_canvas);
@@ -309,6 +428,9 @@ SCT_API int sct_solve_transform(const SctSolveRequest* req, SctTransformSnapshot
   out->marker.x_arm_end_screen = {s.marker.x_arm_end_screen.x, s.marker.x_arm_end_screen.y};
   out->marker.y_arm_end_screen = {s.marker.y_arm_end_screen.x, s.marker.y_arm_end_screen.y};
   out->marker.offscreen = s.marker.offscreen ? 1 : 0;
+  out->marker.target_arm_display_px = s.marker.target_arm_display_px;
+  out->marker.target_stroke_display_px = s.marker.target_stroke_display_px;
+  out->marker.arm_length_canvas = s.marker.arm_length_canvas;
   out->confidence = s.confidence;
   out->used_direct_workspace_path = s.used_direct_workspace_path;
   CopyStrC(out->source_revision, sizeof(out->source_revision), s.source_revision);

@@ -23,7 +23,7 @@
                Grid.Row="1"
                TextWrapping="Wrap"
                VerticalAlignment="Top"
-               Text="就绪。点击开始：隐藏覆盖层 → 冻结截图 → 框选工作区 → 纠正 → 框选导航器 → C-II/观测/OCR/求解 → 橙色 L 标记。"/>
+               Text="就绪。先输入画布像素尺寸 → 冻结截图 → 框选 ROI → 求解 → 可用「重算」更新矩阵。"/>
 
     <StackPanel Grid.Row="2"
                 Orientation="Horizontal"
@@ -35,6 +35,13 @@
               Padding="12,8"
               Margin="0,0,8,0"
               Click="StartButton_OnClick"/>
+      <Button x:Name="RecomputeButton"
+              Content="重算"
+              MinWidth="100"
+              Padding="12,8"
+              Margin="0,0,8,0"
+              IsEnabled="False"
+              Click="RecomputeButton_OnClick"/>
       <Button x:Name="HideOverlayButton"
               Content="隐藏标记"
               MinWidth="100"

@@ -164,11 +164,39 @@ public sealed class SctNativeService
         });
     }
 
+    public NativeSct.SctWorkspaceCanvasRelation BuildWorkspaceCanvasRelation(
+        CaptureSession session,
+        IntRect workspaceRoiScreen,
+        CanvasObservationDto workspaceCanvas,
+        int canvasPixelWidth,
+        int canvasPixelHeight)
+    {
+        IntPtr captureIdPtr = NativeSct.StringToHGlobalAnsi(session.CaptureId);
+        try
+        {
+            var request = new NativeSct.SctWorkspaceCanvasRelationRequest
+            {
+                WorkspaceRoiScreen = NativeSct.SctIntRect.From(workspaceRoiScreen),
+                WorkspaceCanvas = workspaceCanvas.ToNative(),
+                CanvasPixelWidth = canvasPixelWidth,
+                CanvasPixelHeight = canvasPixelHeight,
+                CaptureId = captureIdPtr
+            };
+            var result = new NativeSct.SctWorkspaceCanvasRelation { AmbiguityReason = "", SourceCaptureId = "", SourceRevision = "" };
+            _ = NativeSct.sct_build_workspace_canvas_relation(in request, ref result);
+            return result;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(captureIdPtr);
+        }
+    }
+
     public NativeSct.SctViewportFrame CompleteViewportFrame(
         CaptureSession session,
         IntRect thumbnailRoiCapturePx,
         IntRect navigatorCanvasBoundsCapturePx,
-        float workspaceAspect)
+        NativeSct.SctWorkspaceCanvasRelation workspaceCanvasRelation)
     {
         return WithLockedFrame(session, (scan0, stride) =>
         {
@@ -180,7 +208,7 @@ public sealed class SctNativeService
                 Stride = stride,
                 ThumbnailRoi = NativeSct.SctIntRect.From(thumbnailRoiCapturePx),
                 NavigatorCanvasBounds = NativeSct.SctIntRect.From(navigatorCanvasBoundsCapturePx),
-                WorkspaceAspect = workspaceAspect,
+                WorkspaceCanvasRelation = workspaceCanvasRelation,
                 DpiScale = Math.Max(session.DpiX, session.DpiY) / 96f
             };
 

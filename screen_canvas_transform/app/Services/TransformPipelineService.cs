@@ -54,8 +54,28 @@ public sealed class TransformPipelineService
     private readonly SctNativeService _native = new();
     private readonly NavigatorOcrService _ocr = new();
 
+    public float? InjectedScalePercent { get; set; }
+
+    public int CanvasPixelWidth { get; private set; }
+    public int CanvasPixelHeight { get; private set; }
+    public ulong RecomputeGeneration { get; private set; }
     public float? InitialScalePercent { get; private set; }
     public float? PreviousScalePercent { get; private set; }
+
+    public void BeginNewInitializationGeneration(int canvasPixelWidth, int canvasPixelHeight)
+    {
+        if (canvasPixelWidth <= 0 || canvasPixelHeight <= 0)
+            throw new ArgumentOutOfRangeException(nameof(canvasPixelWidth));
+
+        CanvasPixelWidth = canvasPixelWidth;
+        CanvasPixelHeight = canvasPixelHeight;
+        Generation = 0;
+        RecomputeGeneration = 0;
+        InitialScalePercent = null;
+        PreviousScalePercent = null;
+        LastSnapshot = null;
+    }
+
     public TransformSnapshotDto? LastSnapshot { get; private set; }
     public ulong Generation { get; private set; }
 
@@ -162,6 +182,11 @@ public sealed class TransformPipelineService
         var thumbnailCapture = thumbnail.RectCapturePx;
         var thumbnailScreen = thumbnail.RectScreenPhysicalPx;
 
+        if (CanvasPixelWidth <= 0 || CanvasPixelHeight <= 0)
+        {
+            throw Fail(TransformStage.Idle, 121, "缺少画布像素尺寸", session, gen);
+        }
+
         progress?.Report(TransformStage.ObservingWorkspaceCanvas);
         var wsCanvas = _native.ObserveCanvas(session, workspaceRoiCapture, background);
         if (wsCanvas.Ambiguous && !wsCanvas.FourSidesComplete)
@@ -199,45 +224,38 @@ public sealed class TransformPipelineService
             .ConfigureAwait(false);
         if (numbers.ScaleConfidence < 0.2f || numbers.ScalePercent <= 0)
         {
-            throw Fail(
-                TransformStage.ReadingNavigatorNumbers,
-                107,
-                $"OcrScaleFailed raw='{numbers.ScaleRawText}'",
-                session,
-                gen,
-                evidenceSummary: numbers.ScaleRawText);
-        }
-        if (numbers.RotationConfidence < 0.2f)
-        {
-            throw Fail(
-                TransformStage.ReadingNavigatorNumbers,
-                108,
-                $"OcrRotationFailed raw='{numbers.RotationRawText}'",
-                session,
-                gen,
-                evidenceSummary: numbers.RotationRawText);
+            if (!(InjectedScalePercent is > 0))
+            {
+                throw Fail(
+                    TransformStage.ReadingNavigatorNumbers,
+                    107,
+                    $"OcrScaleFailed raw='{numbers.ScaleRawText}'",
+                    session,
+                    gen,
+                    evidenceSummary: numbers.ScaleRawText);
+            }
         }
 
         NativeSct.SctViewportFrame viewport = default;
+        var wsRelation = _native.BuildWorkspaceCanvasRelation(
+            session,
+            workspaceRoiScreen,
+            wsCanvas,
+            CanvasPixelWidth,
+            CanvasPixelHeight);
+
         if (!wsCanvas.FourSidesComplete || wsCanvas.Ambiguous)
         {
             progress?.Report(TransformStage.CompletingViewportFrame);
-            float aspect = workspaceRoiScreen.Height > 0
-                ? (float)workspaceRoiScreen.Width / workspaceRoiScreen.Height
-                : 1f;
             IntRect navCanvasCapture = navCanvas.BoundsCapture.IsEmpty
-                ? new IntRect(
-                    navCanvas.BoundsScreen.Left - session.OriginX,
-                    navCanvas.BoundsScreen.Top - session.OriginY,
-                    navCanvas.BoundsScreen.Right - session.OriginX,
-                    navCanvas.BoundsScreen.Bottom - session.OriginY)
+                ? session.ScreenToCapture(navCanvas.BoundsScreen)
                 : navCanvas.BoundsCapture;
 
             viewport = _native.CompleteViewportFrame(
                 session,
                 thumbnailCapture,
                 navCanvasCapture,
-                aspect);
+                wsRelation);
 
             if (viewport.Status != NativeSct.StatusOk)
             {
@@ -254,20 +272,27 @@ public sealed class TransformPipelineService
         progress?.Report(TransformStage.SolvingTransform);
         float initial = InitialScalePercent ?? numbers.ScalePercent;
         float previous = PreviousScalePercent ?? numbers.ScalePercent;
+        float injectedScale = InjectedScalePercent ?? 0f;
 
         var solveReq = new NativeSct.SctSolveRequest
         {
             CaptureId = captureId,
             Generation = gen,
+            RecomputeGeneration = RecomputeGeneration,
+            CanvasPixelWidth = CanvasPixelWidth,
+            CanvasPixelHeight = CanvasPixelHeight,
             WorkspaceRoiScreen = NativeSct.SctIntRect.From(workspaceRoiScreen),
             NavigatorRoiScreen = NativeSct.SctIntRect.From(navigatorRoiScreen),
             NavigatorThumbnailRoiScreen = NativeSct.SctIntRect.From(thumbnailScreen),
             WorkspaceCanvas = wsCanvas.ToNative(),
             NavigatorCanvas = navCanvas.ToNative(),
+            WorkspaceCanvasRelation = wsRelation,
             Numbers = numbers.ToNative(),
             Viewport = viewport,
             PreviousScalePercent = previous,
             InitialScalePercent = initial,
+            InjectedScalePercent = injectedScale,
+            RequireOcrRotation = 0,
             MarkerEpsilonCanvas = 0.04
         };
 
@@ -287,8 +312,8 @@ public sealed class TransformPipelineService
             }
         }
 
-        InitialScalePercent ??= numbers.ScalePercent;
-        PreviousScalePercent = numbers.ScalePercent;
+        InitialScalePercent ??= injectedScale > 0 ? injectedScale : numbers.ScalePercent;
+        PreviousScalePercent = injectedScale > 0 ? injectedScale : numbers.ScalePercent;
         LastSnapshot = snapshot;
 
         progress?.Report(TransformStage.ShowingCanvasTopLeftMarker);
@@ -301,6 +326,52 @@ public sealed class TransformPipelineService
             Background = background,
             Stage = TransformStage.TrackingStable
         };
+    }
+
+    /// <summary>
+    /// Explicit recompute: fresh capture, same screen ROIs and canvas pixel size, full evidence re-solve.
+    /// </summary>
+    public async Task<PipelineResult> RecomputeAsync(
+        CaptureSession session,
+        PipelineResult previous,
+        IProgress<TransformStage>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        progress?.Report(TransformStage.RecomputeRequested);
+        RecomputeGeneration++;
+        Generation++;
+
+        progress?.Report(TransformStage.ReacquiringEvidence);
+
+        var workspace = new DetectOutcome
+        {
+            Success = true,
+            RectCapturePx = session.ScreenToCapture(previous.WorkspaceRoiScreen),
+            RectScreenPhysicalPx = previous.WorkspaceRoiScreen,
+            Background = previous.Background,
+            SourceCaptureId = session.CaptureId,
+            Confidence = 1f
+        };
+
+        if (!session.TrySetRoi(RoiKind.Navigator, session.ScreenToCapture(previous.NavigatorRoiScreen), out string navErr))
+            throw Fail(TransformStage.ReacquiringEvidence, 103, navErr, session, Generation);
+
+        var thumbnail = await Task.Run(() => DetectNavigatorThumbnail(session, workspace), cancellationToken)
+            .ConfigureAwait(false);
+        if (!thumbnail.Success)
+        {
+            throw Fail(
+                TransformStage.DetectingNavigatorThumbnailCII,
+                thumbnail.Status == 0 ? 104 : thumbnail.Status,
+                thumbnail.Message,
+                session,
+                Generation,
+                thumbnail.SourceRevision,
+                "NavigatorThumbnailCiiFailed");
+        }
+
+        return await ContinueAfterThumbnailAsync(session, workspace, thumbnail, progress, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>

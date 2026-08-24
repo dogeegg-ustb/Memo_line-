@@ -114,6 +114,13 @@ public sealed class CaptureSession : IDisposable
             capturePx.Right + OriginX,
             capturePx.Bottom + OriginY);
 
+    public IntRect ScreenToCapture(IntRect screenPx)
+        => new(
+            screenPx.Left - OriginX,
+            screenPx.Top - OriginY,
+            screenPx.Right - OriginX,
+            screenPx.Bottom - OriginY);
+
     public void Dispose()
     {
         FrozenCapture.Dispose();

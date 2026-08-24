@@ -46,6 +46,19 @@ enum class FailStatus : int {
   GpuUnavailable = 118,
   GpuDeviceLost = 119,
   GpuAnalysisUnavailable = 120,
+  InvalidCanvasPixelSize = 121,
+  RotationGeometryConflict = 122,
+};
+
+// ViewportCompletionPattern encoding: 1=0.1, 2=0.2, 10=1.0, 20=2.0, 21=2.1, 30=3.0, 40=4.0
+enum class ViewportCompletionPattern : int {
+  ParallelSegmentsNoCompleteEdge = 1,   // 0.1
+  IntersectingSegmentsNoCompleteEdge = 2,  // 0.2
+  OneCompleteEdge = 10,                 // 1.0
+  TwoIntersectingCompleteEdges = 20,    // 2.0
+  TwoParallelCompleteEdges = 21,        // 2.1
+  ThreeCompleteEdges = 30,              // 3.0
+  FourCompleteEdges = 40,                // 4.0
 };
 
 inline const char* FailStatusName(FailStatus s) {
@@ -94,6 +107,10 @@ inline const char* FailStatusName(FailStatus s) {
       return "GpuDeviceLost";
     case FailStatus::GpuAnalysisUnavailable:
       return "GpuAnalysisUnavailable";
+    case FailStatus::InvalidCanvasPixelSize:
+      return "InvalidCanvasPixelSize";
+    case FailStatus::RotationGeometryConflict:
+      return "RotationGeometryConflict";
   }
   return "Unknown";
 }
@@ -149,13 +166,66 @@ struct CanvasObservation {
 };
 
 struct NavigatorNumericReading {
-  float scale_percent = 0.f;
-  float rotation_degrees = 0.f;
+  float scale_percent = 0.f;  // OCR or injected; marker/diagnostics only for matrix
+  float rotation_degrees = 0.f;  // OCR or injected; diagnostic/validation only
   float scale_confidence = 0.f;
   float rotation_confidence = 0.f;
   char scale_raw[64] = {};
   char rotation_raw[64] = {};
   char capture_id[64] = {};
+};
+
+struct RedLineSegment {
+  double x0 = 0;
+  double y0 = 0;
+  double x1 = 0;
+  double y1 = 0;
+  bool horizontal = false;
+  float support = 0.f;
+  int corner_at_start = -1;
+  int corner_at_end = -1;
+};
+
+struct WorkspaceCanvasRelation {
+  wb::IntRect workspace_roi{};
+  wb::IntRect full_canvas_model_workspace_local{};
+  wb::IntRect visible_canvas_bounds_workspace_local{};
+  wb::IntRect visible_canvas_bounds_screen{};
+  Vec2 canvas_axis_x_workspace_local{1, 0};
+  Vec2 canvas_axis_y_workspace_local{0, 1};
+  int canvas_edges_in_workspace = 0;
+  int full_canvas_edge_evidence = 0;
+  int visible_canvas_edge_evidence = 0;
+  int occluded_canvas_edges = 0;
+  int canvas_crop_sides = 0;
+  float canvas_aspect_ratio = 1.f;
+  int canvas_pixel_width = 0;
+  int canvas_pixel_height = 0;
+  int workspace_width = 0;
+  int workspace_height = 0;
+  float canvas_to_workspace_scale_x = 0.f;
+  float canvas_to_workspace_scale_y = 0.f;
+  // Visible canvas share of the workspace background on each directed axis.
+  float visible_canvas_workspace_fraction_x = 0.f;
+  float visible_canvas_workspace_fraction_y = 0.f;
+  // Visible canvas share of the complete canvas on each directed axis.
+  float visible_canvas_fraction_x = 0.f;
+  float visible_canvas_fraction_y = 0.f;
+  float confidence = 0.f;
+  bool ambiguous = false;
+  char ambiguity_reason[128] = {};
+  char source_capture_id[64] = {};
+  char source_revision[64] = {};
+};
+
+struct RedFrameEvidence {
+  RedLineSegment segments[32]{};
+  int segment_count = 0;
+  int confirmed_corner_count = 0;
+  int confirmed_complete_edge_count = 0;
+  int partial_edge_count = 0;
+  int unanchored_segment_count = 0;
+  ViewportCompletionPattern completion_pattern = ViewportCompletionPattern::FourCompleteEdges;
 };
 
 struct NavigatorViewportFrame {
@@ -166,8 +236,9 @@ struct NavigatorViewportFrame {
   float height = 0.f;
   Vec2 semantic_corners[4]{};  // TL, TR, BR, BL
   int visible_edge_count = 0;
-  int completion_strategy = 0;  // 4/3/2/1
+  int completion_strategy = 0;  // ViewportCompletionPattern encoding
   float confidence = 0.f;
+  RedFrameEvidence red_evidence{};
 };
 
 struct MarkerGeometry {
@@ -175,23 +246,35 @@ struct MarkerGeometry {
   Vec2 x_arm_end_screen{};
   Vec2 y_arm_end_screen{};
   bool offscreen = false;
+  float target_arm_display_px = 0.f;
+  float target_stroke_display_px = 0.f;
+  double arm_length_canvas = 0.f;
 };
 
 struct TransformSnapshot {
   char snapshot_id[64] = {};
   uint64_t generation = 0;
+  uint64_t recompute_generation = 0;
   char capture_id[64] = {};
+  int canvas_pixel_width = 0;
+  int canvas_pixel_height = 0;
   wb::IntRect workspace_roi{};
   wb::IntRect navigator_roi{};
   wb::IntRect navigator_thumbnail_roi{};
   CanvasObservation workspace_canvas{};
   CanvasObservation navigator_canvas{};
+  WorkspaceCanvasRelation workspace_canvas_relation{};
   NavigatorNumericReading numbers{};
   NavigatorViewportFrame viewport{};
   float scale_reference = 100.f;
   float relative_scale = 1.f;
   float cumulative_relative_scale = 1.f;
-  float rotation_degrees = 0.f;
+  float rotation_degrees_geometry = 0.f;
+  float rotation_degrees_ocr_or_injected = 0.f;
+  float rotation_degrees = 0.f;  // alias of geometry authority
+  float scale_percent_ocr_or_injected = 0.f;
+  float scale_geometry_estimate = 0.f;
+  float scale_consistency_error = 0.f;
   Affine2D screen_to_workspace{};
   Affine2D workspace_to_screen{};
   Affine2D workspace_to_canvas{};
