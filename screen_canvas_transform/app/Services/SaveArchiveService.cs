@@ -130,8 +130,8 @@ public sealed class SaveArchiveService
                 ScreenPhysicalRectDto.FromIntRect(result.NavigatorThumbnailRoiScreen),
             OcrLayout = new OcrLayoutDto
             {
-                PrimarySearchBandScreen = ScreenPhysicalRectDto.FromIntRect(ocrLayout.PrimarySearchBandScreen),
-                LeftHalfSearchBandScreen = ScreenPhysicalRectDto.FromIntRect(ocrLayout.LeftHalfSearchBandScreen)
+                ScaleSlotScreen = ScreenPhysicalRectDto.FromIntRect(ocrLayout.ScaleSlotScreen),
+                RotationSlotScreen = ScreenPhysicalRectDto.FromIntRect(ocrLayout.RotationSlotScreen)
             },
             Provenance = new SaveArchiveProvenance
             {
@@ -217,11 +217,11 @@ public sealed class SaveArchiveService
         if (rectError is not null)
             return rectError;
 
-        rectError = ValidateScreenRect(archive.OcrLayout?.PrimarySearchBandScreen, "OcrLayout.PrimarySearchBandScreen");
+        rectError = ValidateScreenRect(archive.OcrLayout?.ScaleSlotScreen, "OcrLayout.ScaleSlotScreen", minSizePx: 8);
         if (rectError is not null)
             return rectError;
 
-        rectError = ValidateScreenRect(archive.OcrLayout?.LeftHalfSearchBandScreen, "OcrLayout.LeftHalfSearchBandScreen");
+        rectError = ValidateScreenRect(archive.OcrLayout?.RotationSlotScreen, "OcrLayout.RotationSlotScreen", minSizePx: 8);
         if (rectError is not null)
             return rectError;
 
@@ -239,7 +239,7 @@ public sealed class SaveArchiveService
         return null;
     }
 
-    private static string? ValidateScreenRect(ScreenPhysicalRectDto? dto, string name)
+    private static string? ValidateScreenRect(ScreenPhysicalRectDto? dto, string name, int minSizePx = CaptureSession.MinRoiSizePx)
     {
         if (dto is null)
             return $"缺少 {name}";
@@ -251,7 +251,7 @@ public sealed class SaveArchiveService
         if (rect.IsEmpty)
             return $"{name} 为空";
 
-        if (rect.Width < CaptureSession.MinRoiSizePx || rect.Height < CaptureSession.MinRoiSizePx)
+        if (rect.Width < minSizePx || rect.Height < minSizePx)
             return $"{name} 过小";
 
         return null;

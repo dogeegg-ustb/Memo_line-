@@ -131,10 +131,13 @@ public sealed class SaveArchiveServiceTests : IDisposable
         IntRect thumb = new(120, 120, 280, 280);
         var layout = NavigatorOcrService.ComputeOcrLayout(nav, thumb);
 
-        Assert.False(layout.PrimarySearchBandScreen.IsEmpty);
-        Assert.True(layout.PrimarySearchBandScreen.Top >= thumb.Bottom - 4
-                    || layout.PrimarySearchBandScreen.Height >= CaptureSession.MinRoiSizePx);
-        Assert.True(layout.LeftHalfSearchBandScreen.Width <= layout.PrimarySearchBandScreen.Width);
+        Assert.False(layout.ScaleSlotScreen.IsEmpty);
+        Assert.False(layout.RotationSlotScreen.IsEmpty);
+        Assert.True(layout.ScaleSlotScreen.Bottom <= layout.RotationSlotScreen.Top
+                    || layout.ScaleSlotScreen.Top < layout.RotationSlotScreen.Top);
+        Assert.True(layout.ScaleSlotScreen.Width <= nav.Width / 2 + 1);
+        Assert.True(layout.RotationSlotScreen.Top >= thumb.Bottom
+                    || layout.ScaleSlotScreen.Top >= thumb.Bottom - 4);
     }
 
     private InitSuccessBundle CreateValidBundle()

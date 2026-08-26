@@ -5,7 +5,6 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
-using System.Text;
 using System.Text.RegularExpressions;
 using ScreenCanvasTransform.Capture;
 using ScreenCanvasTransform.Models;
@@ -15,31 +14,37 @@ using Windows.Media.Ocr;
 namespace ScreenCanvasTransform.Ocr;
 
 /// <summary>
-/// Reads CSP navigator numbers in NavigatorRoi, below NavigatorThumbnailRoi.
-/// Among digit hits: upper = ScalePercent, lower = RotationDegrees.
+/// Reads CSP navigator scale/rotation from two partitioned numeric slots
+/// below the navigator thumbnail.
 /// </summary>
 public sealed class NavigatorOcrService
 {
     public static bool DebugEnabled { get; set; } = true;
 
+    private const int MinSlotSizePx = 8;
+    private const int Upscale = 6;
+    private const double LeftColumnFraction = 0.42;
+    private const double HorizontalInsetFraction = 0.10;
+    private const double VerticalInsetFraction = 0.14;
+
     private static readonly Regex NumberRegex = new(
         @"[-+]?\d+(?:[.,]\d+)?",
         RegexOptions.Compiled);
 
-    private static readonly Regex HasDigit = new(@"\d", RegexOptions.Compiled);
-
-    /// <summary>
-    /// Computes OCR search bands in screen space using the same rules as live OCR.
-    /// </summary>
     public static OcrLayoutScreen ComputeOcrLayout(IntRect navigatorPanelScreen, IntRect thumbnailScreen)
     {
-        IntRect primary = BelowThumbnailInsideNavigator(navigatorPanelScreen, thumbnailScreen);
-        IntRect leftHalf = new(
-            primary.Left,
-            primary.Top,
-            primary.Left + Math.Max(8, primary.Width / 2),
-            primary.Bottom);
-        return new OcrLayoutScreen(primary, leftHalf);
+        IntRect chrome = ChromeBand(navigatorPanelScreen, thumbnailScreen);
+        if (chrome.IsEmpty)
+            return new OcrLayoutScreen(chrome, chrome);
+
+        int colWidth = Math.Max(MinSlotSizePx, (int)Math.Round(chrome.Width * LeftColumnFraction));
+        IntRect leftCol = new(chrome.Left, chrome.Top, chrome.Left + colWidth, chrome.Bottom);
+
+        int midY = leftCol.Top + leftCol.Height / 2;
+        IntRect scaleBand = new(leftCol.Left, leftCol.Top, leftCol.Right, midY);
+        IntRect rotationBand = new(leftCol.Left, midY, leftCol.Right, leftCol.Bottom);
+
+        return new OcrLayoutScreen(Inset(scaleBand), Inset(rotationBand));
     }
 
     public async Task<NavigatorNumericReadingDto> ReadWithLayoutAsync(
@@ -47,39 +52,9 @@ public sealed class NavigatorOcrService
         OcrLayoutScreen layoutScreen,
         CancellationToken cancellationToken = default)
     {
-        IntRect search = session.ScreenToCapture(layoutScreen.PrimarySearchBandScreen).ClampTo(session.CaptureBounds);
-        IntRect leftHalf = session.ScreenToCapture(layoutScreen.LeftHalfSearchBandScreen).ClampTo(session.CaptureBounds);
-
-        if (search.Width < CaptureSession.MinRoiSizePx || search.Height < CaptureSession.MinRoiSizePx)
-            return Empty(session.CaptureId);
-
-        string debugDir = Path.Combine(Path.GetTempPath(), "sct_ocr_debug", session.CaptureId);
-        if (DebugEnabled)
-            Directory.CreateDirectory(debugDir);
-
-        var engine = OcrEngine.TryCreateFromUserProfileLanguages()
-                     ?? OcrEngine.TryCreateFromLanguage(new Windows.Globalization.Language("en-US"))
-                     ?? OcrEngine.TryCreateFromLanguage(new Windows.Globalization.Language("zh-Hans"));
-
-        if (engine is null)
-        {
-            Log(debugDir, "engine=null");
-            return Empty(session.CaptureId);
-        }
-
-        Log(debugDir,
-            $"layoutOcr primary={layoutScreen.PrimarySearchBandScreen} left={layoutScreen.LeftHalfSearchBandScreen}; " +
-            $"search={search}; leftHalf={leftHalf}");
-
-        var region = await RecognizeRegionAsync(
-                session, search, engine, debugDir, "layout_primary", cancellationToken)
-            .ConfigureAwait(false);
-
-        var leftRegion = await RecognizeRegionAsync(
-                session, leftHalf, engine, debugDir, "layout_left", cancellationToken)
-            .ConfigureAwait(false);
-
-        return BuildReadingFromHits(session.CaptureId, debugDir, region.Hits.Concat(leftRegion.Hits));
+        IntRect scaleSlot = session.ScreenToCapture(layoutScreen.ScaleSlotScreen).ClampTo(session.CaptureBounds);
+        IntRect rotationSlot = session.ScreenToCapture(layoutScreen.RotationSlotScreen).ClampTo(session.CaptureBounds);
+        return await ReadSlotsAsync(session, scaleSlot, rotationSlot, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<NavigatorNumericReadingDto> ReadAsync(
@@ -88,6 +63,18 @@ public sealed class NavigatorOcrService
         IntRect navigatorThumbnailRoiCapturePx,
         CancellationToken cancellationToken = default)
     {
+        var layout = ComputeOcrLayout(
+            session.CaptureToScreen(navigatorRoiCapturePx),
+            session.CaptureToScreen(navigatorThumbnailRoiCapturePx));
+        return await ReadWithLayoutAsync(session, layout, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<NavigatorNumericReadingDto> ReadSlotsAsync(
+        CaptureSession session,
+        IntRect scaleSlotCapture,
+        IntRect rotationSlotCapture,
+        CancellationToken cancellationToken)
+    {
         string debugDir = Path.Combine(Path.GetTempPath(), "sct_ocr_debug", session.CaptureId);
         if (DebugEnabled)
             Directory.CreateDirectory(debugDir);
@@ -102,90 +89,35 @@ public sealed class NavigatorOcrService
             return Empty(session.CaptureId);
         }
 
-        // Numbers live under the thumbnail, still inside the navigator panel.
-        IntRect search = BelowThumbnailInsideNavigator(
-            navigatorRoiCapturePx, navigatorThumbnailRoiCapturePx);
-        Log(debugDir,
-            $"engine={engine.RecognizerLanguage?.LanguageTag}; nav={navigatorRoiCapturePx}; " +
-            $"thumb={navigatorThumbnailRoiCapturePx}; search={search}");
+        Log(debugDir, $"slots scale={scaleSlotCapture} rot={rotationSlotCapture}");
 
-        if (search.Width < 8 || search.Height < 8)
+        var scaleHits = await RecognizeSlotAsync(
+                session, scaleSlotCapture, engine, debugDir, "scale", invert: true, cancellationToken)
+            .ConfigureAwait(false);
+        if (scaleHits.Count == 0)
         {
-            Log(debugDir, "search band empty/too small");
-            return Empty(session.CaptureId);
+            scaleHits = await RecognizeSlotAsync(
+                    session, scaleSlotCapture, engine, debugDir, "scale_raw", invert: false, cancellationToken)
+                .ConfigureAwait(false);
         }
 
-        var region = await RecognizeRegionAsync(
-                session, search, engine, debugDir, "below_thumb", cancellationToken)
+        var rotHits = await RecognizeSlotAsync(
+                session, rotationSlotCapture, engine, debugDir, "rotation", invert: true, cancellationToken)
             .ConfigureAwait(false);
-
-        // CSP puts scale/rotation on the left of the bottom control row — also OCR left half.
-        IntRect leftHalf = new(
-            search.Left,
-            search.Top,
-            search.Left + Math.Max(8, search.Width / 2),
-            search.Bottom);
-        var leftRegion = await RecognizeRegionAsync(
-                session, leftHalf, engine, debugDir, "below_thumb_left", cancellationToken)
-            .ConfigureAwait(false);
-
-        return BuildReadingFromHits(session.CaptureId, debugDir, region.Hits.Concat(leftRegion.Hits));
-    }
-
-    private static NavigatorNumericReadingDto BuildReadingFromHits(
-        string captureId,
-        string debugDir,
-        IEnumerable<Hit> mergedHitsEnumerable)
-    {
-        var mergedHits = mergedHitsEnumerable.ToList();
-
-        // Sort digit hits by Y (top → bottom). Upper = scale, lower = rotation.
-        var hits = mergedHits
-            .Where(h => TryParseNumber(h.Text, out _))
-            .GroupBy(h => $"{h.Text}@{(int)(h.CenterY / 6)}")
-            .Select(g => g.OrderBy(h => h.CenterX).First())
-            .OrderBy(h => h.CenterY)
-            .ThenBy(h => h.CenterX)
-            .ToList();
-
-        Log(debugDir, $"hits={hits.Count}: " +
-                       string.Join(" | ", hits.Select(h => $"'{h.Text}'@y={h.CenterY:F0}")));
-
-        bool scaleOk = false;
-        bool rotOk = false;
-        float scaleVal = 0, rotVal = 0;
-        string scaleRaw = "", rotRaw = "";
-
-        if (hits.Count >= 2)
+        if (rotHits.Count == 0)
         {
-            scaleOk = TryParseScale(hits[0].Text, out scaleVal);
-            scaleRaw = hits[0].Text;
-            rotOk = TryParseRotation(hits[^1].Text, out rotVal);
-            rotRaw = hits[^1].Text;
-            // If first parse failed as scale but looks numeric, still try raw float with looser gate.
-            if (!scaleOk && TryParseNumber(hits[0].Text, out float s0) && s0 > 0)
-            {
-                scaleVal = s0;
-                scaleOk = s0 >= 1f;
-                scaleRaw = hits[0].Text;
-            }
+            rotHits = await RecognizeSlotAsync(
+                    session, rotationSlotCapture, engine, debugDir, "rotation_raw", invert: false, cancellationToken)
+                .ConfigureAwait(false);
         }
-        else if (hits.Count == 1)
+
+        bool scaleOk = TryPickSlotValue(scaleHits, scaleSlotCapture, TryParseScale, out float scaleVal, out string scaleRaw);
+        bool rotOk = TryPickSlotValue(rotHits, rotationSlotCapture, TryParseRotation, out float rotVal, out string rotRaw);
+        if (!rotOk)
         {
-            // Single hit: prefer as scale if plausible; rotation defaults to 0.
-            if (TryParseScale(hits[0].Text, out scaleVal))
-            {
-                scaleOk = true;
-                scaleRaw = hits[0].Text;
-                rotOk = true;
-                rotVal = 0;
-                rotRaw = "0";
-            }
-            else if (TryParseRotation(hits[0].Text, out rotVal))
-            {
-                rotOk = true;
-                rotRaw = hits[0].Text;
-            }
+            rotOk = true;
+            rotVal = 0;
+            rotRaw = "0";
         }
 
         Log(debugDir,
@@ -200,48 +132,60 @@ public sealed class NavigatorOcrService
             RotationConfidence = rotOk ? 0.85f : 0,
             ScaleRawText = scaleRaw,
             RotationRawText = rotRaw,
-            SourceCaptureId = captureId,
+            SourceCaptureId = session.CaptureId,
             CapturedAt = DateTime.UtcNow
         };
     }
 
-    /// <summary>
-    /// Prefer strip below thumbnail inside navigator. If that strip is too short
-    /// (oversized thumbnail), expand upward to a minimum height so the control
-    /// row with scale/rotation remains inside the OCR band.
-    /// </summary>
-    private static IntRect BelowThumbnailInsideNavigator(IntRect nav, IntRect thumb)
+    private static IntRect ChromeBand(IntRect nav, IntRect thumb)
     {
         if (nav.IsEmpty)
             return nav;
 
-        int minH = Math.Max(72, nav.Height / 4);
-        int topFromThumb = Math.Max(nav.Top, thumb.Bottom - 4);
+        int minH = Math.Max(48, nav.Height / 5);
+        int topFromThumb = Math.Max(nav.Top, thumb.Bottom);
         int topMinBand = Math.Max(nav.Top, nav.Bottom - minH);
         int top = Math.Min(topFromThumb, topMinBand);
-        if (nav.Bottom - top < 8)
+        if (nav.Bottom - top < MinSlotSizePx)
             return new IntRect(nav.Left, nav.Top, nav.Left, nav.Top);
         return new IntRect(nav.Left, top, nav.Right, nav.Bottom);
     }
 
-    private readonly record struct Hit(string Text, double CenterY, double CenterX);
-
-    private sealed class RegionResult
+    private static IntRect Inset(IntRect rect)
     {
-        public List<Hit> Hits { get; init; } = new();
+        if (rect.IsEmpty)
+            return rect;
+
+        int dx = Math.Max(1, (int)Math.Round(rect.Width * HorizontalInsetFraction));
+        int dy = Math.Max(1, (int)Math.Round(rect.Height * VerticalInsetFraction));
+        int left = rect.Left + dx;
+        int top = rect.Top + dy;
+        int right = rect.Right - dx;
+        int bottom = rect.Bottom - dy;
+        if (right - left < MinSlotSizePx || bottom - top < MinSlotSizePx)
+            return rect;
+        return new IntRect(left, top, right, bottom);
     }
 
-    private static async Task<RegionResult> RecognizeRegionAsync(
+    private readonly record struct Hit(string Text, double CenterY, double CenterX);
+
+    private static async Task<List<Hit>> RecognizeSlotAsync(
         CaptureSession session,
-        IntRect bandCapture,
+        IntRect slotCapture,
         OcrEngine engine,
         string debugDir,
         string tag,
+        bool invert,
         CancellationToken cancellationToken)
     {
-        const int scale = 4;
-        int tw = Math.Max(8, bandCapture.Width * scale);
-        int th = Math.Max(8, bandCapture.Height * scale);
+        if (slotCapture.Width < MinSlotSizePx || slotCapture.Height < MinSlotSizePx)
+        {
+            Log(debugDir, $"{tag}: slot too small {slotCapture}");
+            return new List<Hit>();
+        }
+
+        int tw = Math.Max(8, slotCapture.Width * Upscale);
+        int th = Math.Max(8, slotCapture.Height * Upscale);
 
         using var crop = new Bitmap(tw, th, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(crop))
@@ -252,9 +196,12 @@ public sealed class NavigatorOcrService
             g.DrawImage(
                 session.FrozenCapture,
                 new Rectangle(0, 0, tw, th),
-                new Rectangle(bandCapture.Left, bandCapture.Top, bandCapture.Width, bandCapture.Height),
+                new Rectangle(slotCapture.Left, slotCapture.Top, slotCapture.Width, slotCapture.Height),
                 GraphicsUnit.Pixel);
         }
+
+        if (invert)
+            InvertInPlace(crop);
 
         if (DebugEnabled)
         {
@@ -288,28 +235,88 @@ public sealed class NavigatorOcrService
             foreach (OcrWord word in line.Words)
             {
                 string w = word.Text?.Trim() ?? "";
-                if (!HasDigit.IsMatch(w))
-                    continue;
-                // Keep only the numeric token(s) inside the word.
                 foreach (Match m in NumberRegex.Matches(w))
                 {
                     var rect = word.BoundingRect;
-                    double cx = bandCapture.Left + (rect.X + rect.Width * 0.5) / scale;
-                    double cy = bandCapture.Top + (rect.Y + rect.Height * 0.5) / scale;
+                    double cx = slotCapture.Left + (rect.X + rect.Width * 0.5) / Upscale;
+                    double cy = slotCapture.Top + (rect.Y + rect.Height * 0.5) / Upscale;
                     hits.Add(new Hit(m.Value, cy, cx));
                 }
             }
         }
 
-        // Merge near-duplicate tokens (same number read twice).
         hits = hits
             .GroupBy(h => h.Text + "@" + ((int)(h.CenterY / 8)))
             .Select(g => g.First())
             .ToList();
 
-        Log(debugDir, $"{tag}: full='{ocr.Text}' digitHits={hits.Count}");
-        return new RegionResult { Hits = hits };
+        Log(debugDir, $"{tag}: invert={invert} full='{ocr.Text}' digitHits={hits.Count}");
+        return hits;
     }
+
+    private static void InvertInPlace(Bitmap bitmap)
+    {
+        var data = bitmap.LockBits(
+            new Rectangle(0, 0, bitmap.Width, bitmap.Height),
+            ImageLockMode.ReadWrite,
+            PixelFormat.Format32bppArgb);
+        try
+        {
+            int stride = data.Stride;
+            int height = bitmap.Height;
+            byte[] row = new byte[stride];
+            for (int y = 0; y < height; y++)
+            {
+                Marshal.Copy(data.Scan0 + y * stride, row, 0, stride);
+                for (int x = 0; x < bitmap.Width; x++)
+                {
+                    int i = x * 4;
+                    row[i] = (byte)(255 - row[i]);
+                    row[i + 1] = (byte)(255 - row[i + 1]);
+                    row[i + 2] = (byte)(255 - row[i + 2]);
+                }
+                Marshal.Copy(row, 0, data.Scan0 + y * stride, stride);
+            }
+        }
+        finally
+        {
+            bitmap.UnlockBits(data);
+        }
+    }
+
+    private static bool TryPickSlotValue(
+        IReadOnlyList<Hit> hits,
+        IntRect slot,
+        TryParseSlot parse,
+        out float value,
+        out string raw)
+    {
+        value = 0;
+        raw = "";
+        if (hits.Count == 0)
+            return false;
+
+        double cx = (slot.Left + slot.Right) * 0.5;
+        double cy = (slot.Top + slot.Bottom) * 0.5;
+        var ordered = hits
+            .OrderBy(h => Math.Abs(h.CenterX - cx) + Math.Abs(h.CenterY - cy))
+            .ThenBy(h => h.CenterX)
+            .ToList();
+
+        foreach (var hit in ordered)
+        {
+            if (parse(hit.Text, out value))
+            {
+                raw = hit.Text;
+                return true;
+            }
+        }
+
+        raw = ordered[0].Text;
+        return false;
+    }
+
+    private delegate bool TryParseSlot(string raw, out float value);
 
     private static void Log(string dir, string msg)
     {

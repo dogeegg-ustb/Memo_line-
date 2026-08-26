@@ -30,14 +30,14 @@ public sealed class ScreenPhysicalRectDto
 
 public sealed class OcrLayoutDto
 {
-    public ScreenPhysicalRectDto PrimarySearchBandScreen { get; init; } = null!;
-    public ScreenPhysicalRectDto LeftHalfSearchBandScreen { get; init; } = null!;
+    public ScreenPhysicalRectDto ScaleSlotScreen { get; init; } = null!;
+    public ScreenPhysicalRectDto RotationSlotScreen { get; init; } = null!;
 }
 
-public readonly record struct OcrLayoutScreen(IntRect PrimarySearchBandScreen, IntRect LeftHalfSearchBandScreen)
+public readonly record struct OcrLayoutScreen(IntRect ScaleSlotScreen, IntRect RotationSlotScreen)
 {
     public static OcrLayoutScreen FromDto(OcrLayoutDto dto)
-        => new(dto.PrimarySearchBandScreen.ToIntRect(), dto.LeftHalfSearchBandScreen.ToIntRect());
+        => new(dto.ScaleSlotScreen.ToIntRect(), dto.RotationSlotScreen.ToIntRect());
 }
 
 public sealed class SaveArchiveProvenance

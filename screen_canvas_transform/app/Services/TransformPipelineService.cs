@@ -444,11 +444,12 @@ public sealed class TransformPipelineService
 
     private static IntRect DeriveNavigatorRoiForSolve(IntRect thumbnailScreen, OcrLayoutScreen ocrLayout)
     {
-        IntRect band = ocrLayout.PrimarySearchBandScreen;
-        int left = Math.Min(thumbnailScreen.Left, band.Left);
-        int top = Math.Min(thumbnailScreen.Top, band.Top);
-        int right = Math.Max(thumbnailScreen.Right, band.Right);
-        int bottom = Math.Max(thumbnailScreen.Bottom, band.Bottom);
+        IntRect scale = ocrLayout.ScaleSlotScreen;
+        IntRect rotation = ocrLayout.RotationSlotScreen;
+        int left = Math.Min(Math.Min(thumbnailScreen.Left, scale.Left), rotation.Left);
+        int top = Math.Min(Math.Min(thumbnailScreen.Top, scale.Top), rotation.Top);
+        int right = Math.Max(Math.Max(thumbnailScreen.Right, scale.Right), rotation.Right);
+        int bottom = Math.Max(Math.Max(thumbnailScreen.Bottom, scale.Bottom), rotation.Bottom);
         return new IntRect(left, top, right, bottom);
     }
 
@@ -459,14 +460,14 @@ public sealed class TransformPipelineService
 
         ValidateMappedRect(session, archive.SystemWorkspaceRoiScreen.ToIntRect(), "SystemWorkspaceRoiScreen");
         ValidateMappedRect(session, archive.SystemNavigatorThumbnailRoiScreen.ToIntRect(), "SystemNavigatorThumbnailRoiScreen");
-        ValidateMappedRect(session, archive.OcrLayout.PrimarySearchBandScreen.ToIntRect(), "OcrLayout.PrimarySearchBandScreen");
-        ValidateMappedRect(session, archive.OcrLayout.LeftHalfSearchBandScreen.ToIntRect(), "OcrLayout.LeftHalfSearchBandScreen");
+        ValidateMappedRect(session, archive.OcrLayout.ScaleSlotScreen.ToIntRect(), "OcrLayout.ScaleSlotScreen", minSizePx: 8);
+        ValidateMappedRect(session, archive.OcrLayout.RotationSlotScreen.ToIntRect(), "OcrLayout.RotationSlotScreen", minSizePx: 8);
     }
 
-    private static void ValidateMappedRect(CaptureSession session, IntRect screenRect, string name)
+    private static void ValidateMappedRect(CaptureSession session, IntRect screenRect, string name, int minSizePx = CaptureSession.MinRoiSizePx)
     {
         var mapped = session.ScreenToCapture(screenRect).ClampTo(session.CaptureBounds);
-        if (mapped.IsEmpty || mapped.Width < CaptureSession.MinRoiSizePx || mapped.Height < CaptureSession.MinRoiSizePx)
+        if (mapped.IsEmpty || mapped.Width < minSizePx || mapped.Height < minSizePx)
         {
             throw new PipelineFailureException(
                 TransformStage.ReacquiringEvidence,
