@@ -28,6 +28,60 @@ public sealed class NavigatorOcrService
 
     private static readonly Regex HasDigit = new(@"\d", RegexOptions.Compiled);
 
+    /// <summary>
+    /// Computes OCR search bands in screen space using the same rules as live OCR.
+    /// </summary>
+    public static OcrLayoutScreen ComputeOcrLayout(IntRect navigatorPanelScreen, IntRect thumbnailScreen)
+    {
+        IntRect primary = BelowThumbnailInsideNavigator(navigatorPanelScreen, thumbnailScreen);
+        IntRect leftHalf = new(
+            primary.Left,
+            primary.Top,
+            primary.Left + Math.Max(8, primary.Width / 2),
+            primary.Bottom);
+        return new OcrLayoutScreen(primary, leftHalf);
+    }
+
+    public async Task<NavigatorNumericReadingDto> ReadWithLayoutAsync(
+        CaptureSession session,
+        OcrLayoutScreen layoutScreen,
+        CancellationToken cancellationToken = default)
+    {
+        IntRect search = session.ScreenToCapture(layoutScreen.PrimarySearchBandScreen).ClampTo(session.CaptureBounds);
+        IntRect leftHalf = session.ScreenToCapture(layoutScreen.LeftHalfSearchBandScreen).ClampTo(session.CaptureBounds);
+
+        if (search.Width < CaptureSession.MinRoiSizePx || search.Height < CaptureSession.MinRoiSizePx)
+            return Empty(session.CaptureId);
+
+        string debugDir = Path.Combine(Path.GetTempPath(), "sct_ocr_debug", session.CaptureId);
+        if (DebugEnabled)
+            Directory.CreateDirectory(debugDir);
+
+        var engine = OcrEngine.TryCreateFromUserProfileLanguages()
+                     ?? OcrEngine.TryCreateFromLanguage(new Windows.Globalization.Language("en-US"))
+                     ?? OcrEngine.TryCreateFromLanguage(new Windows.Globalization.Language("zh-Hans"));
+
+        if (engine is null)
+        {
+            Log(debugDir, "engine=null");
+            return Empty(session.CaptureId);
+        }
+
+        Log(debugDir,
+            $"layoutOcr primary={layoutScreen.PrimarySearchBandScreen} left={layoutScreen.LeftHalfSearchBandScreen}; " +
+            $"search={search}; leftHalf={leftHalf}");
+
+        var region = await RecognizeRegionAsync(
+                session, search, engine, debugDir, "layout_primary", cancellationToken)
+            .ConfigureAwait(false);
+
+        var leftRegion = await RecognizeRegionAsync(
+                session, leftHalf, engine, debugDir, "layout_left", cancellationToken)
+            .ConfigureAwait(false);
+
+        return BuildReadingFromHits(session.CaptureId, debugDir, region.Hits.Concat(leftRegion.Hits));
+    }
+
     public async Task<NavigatorNumericReadingDto> ReadAsync(
         CaptureSession session,
         IntRect navigatorRoiCapturePx,
@@ -75,7 +129,15 @@ public sealed class NavigatorOcrService
                 session, leftHalf, engine, debugDir, "below_thumb_left", cancellationToken)
             .ConfigureAwait(false);
 
-        var mergedHits = region.Hits.Concat(leftRegion.Hits).ToList();
+        return BuildReadingFromHits(session.CaptureId, debugDir, region.Hits.Concat(leftRegion.Hits));
+    }
+
+    private static NavigatorNumericReadingDto BuildReadingFromHits(
+        string captureId,
+        string debugDir,
+        IEnumerable<Hit> mergedHitsEnumerable)
+    {
+        var mergedHits = mergedHitsEnumerable.ToList();
 
         // Sort digit hits by Y (top → bottom). Upper = scale, lower = rotation.
         var hits = mergedHits
@@ -138,7 +200,7 @@ public sealed class NavigatorOcrService
             RotationConfidence = rotOk ? 0.85f : 0,
             ScaleRawText = scaleRaw,
             RotationRawText = rotRaw,
-            SourceCaptureId = session.CaptureId,
+            SourceCaptureId = captureId,
             CapturedAt = DateTime.UtcNow
         };
     }

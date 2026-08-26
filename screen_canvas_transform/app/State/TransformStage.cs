@@ -22,5 +22,9 @@ public enum TransformStage
     ReacquiringEvidence = 15,
     TrackingUncertain = 16,
     TrackingLost = 17,
-    TrackingDegraded = 18
+    TrackingDegraded = 18,
+    SelectingSaveArchive = 20,
+    PersistingSaveArchive = 21,
+    LoadingSaveArchive = 22,
+    ArchiveRecomputeRequested = 23
 }

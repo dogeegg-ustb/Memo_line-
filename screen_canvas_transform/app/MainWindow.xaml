@@ -2,12 +2,14 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Screen ↔ Canvas Transform"
-        Height="360"
-        Width="640"
+        Height="480"
+        Width="720"
         WindowStartupLocation="CenterScreen"
-        ResizeMode="CanMinimize">
+        ResizeMode="CanMinimize"
+        Loaded="MainWindow_OnLoaded">
   <Grid Margin="20">
     <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
       <RowDefinition Height="Auto"/>
       <RowDefinition Height="*"/>
       <RowDefinition Height="Auto"/>
@@ -17,36 +19,71 @@
                Text="屏幕—画布坐标转换"
                FontSize="20"
                FontWeight="SemiBold"
-               Margin="0,0,0,12"/>
+               Margin="0,0,0,8"/>
 
-    <TextBlock x:Name="StatusText"
-               Grid.Row="1"
-               TextWrapping="Wrap"
-               VerticalAlignment="Top"
-               Text="就绪。先输入画布像素尺寸 → 冻结截图 → 框选 ROI → 求解 → 可用「重算」更新矩阵。"/>
+    <TextBlock Grid.Row="1"
+               Text="启动时选择存档，或新建存档走完整初始化。"
+               Margin="0,0,0,8"/>
 
-    <StackPanel Grid.Row="2"
-                Orientation="Horizontal"
-                HorizontalAlignment="Right"
-                Margin="0,16,0,0">
-      <Button x:Name="StartButton"
-              Content="开始初始化"
-              MinWidth="140"
-              Padding="12,8"
-              Margin="0,0,8,0"
-              Click="StartButton_OnClick"/>
-      <Button x:Name="RecomputeButton"
-              Content="重算"
-              MinWidth="100"
-              Padding="12,8"
-              Margin="0,0,8,0"
-              IsEnabled="False"
-              Click="RecomputeButton_OnClick"/>
-      <Button x:Name="HideOverlayButton"
-              Content="隐藏标记"
-              MinWidth="100"
-              Padding="12,8"
-              Click="HideOverlayButton_OnClick"/>
+    <GroupBox Grid.Row="2"
+              Header="几何锚点存档"
+              Padding="8">
+      <ListView x:Name="ArchiveListView"
+                MinHeight="160"
+                SelectionChanged="ArchiveListView_OnSelectionChanged">
+        <ListView.View>
+          <GridView>
+            <GridViewColumn Header="名称" Width="220" DisplayMemberBinding="{Binding DisplayName}"/>
+            <GridViewColumn Header="画布" Width="120" DisplayMemberBinding="{Binding CanvasSizeText}"/>
+            <GridViewColumn Header="创建时间" Width="160" DisplayMemberBinding="{Binding CreatedAtText}"/>
+            <GridViewColumn Header="状态" Width="120" DisplayMemberBinding="{Binding StatusText}"/>
+          </GridView>
+        </ListView.View>
+      </ListView>
+    </GroupBox>
+
+    <StackPanel Grid.Row="3"
+                Margin="0,12,0,0">
+      <TextBlock x:Name="StatusText"
+                 TextWrapping="Wrap"
+                 Margin="0,0,0,12"
+                 Text="就绪。请选择存档或新建存档。"/>
+
+      <StackPanel Orientation="Horizontal"
+                  HorizontalAlignment="Right">
+        <Button x:Name="LoadArchiveButton"
+                Content="从此存档开始"
+                MinWidth="140"
+                Padding="12,8"
+                Margin="0,0,8,0"
+                IsEnabled="False"
+                Click="LoadArchiveButton_OnClick"/>
+        <Button x:Name="StartButton"
+                Content="新建存档"
+                MinWidth="120"
+                Padding="12,8"
+                Margin="0,0,8,0"
+                Click="StartButton_OnClick"/>
+        <Button x:Name="DeleteArchiveButton"
+                Content="删除存档"
+                MinWidth="100"
+                Padding="12,8"
+                Margin="0,0,8,0"
+                IsEnabled="False"
+                Click="DeleteArchiveButton_OnClick"/>
+        <Button x:Name="RecomputeButton"
+                Content="重算"
+                MinWidth="100"
+                Padding="12,8"
+                Margin="0,0,8,0"
+                IsEnabled="False"
+                Click="RecomputeButton_OnClick"/>
+        <Button x:Name="HideOverlayButton"
+                Content="隐藏标记"
+                MinWidth="100"
+                Padding="12,8"
+                Click="HideOverlayButton_OnClick"/>
+      </StackPanel>
     </StackPanel>
   </Grid>
 </Window>

@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Threading;
 using ScreenCanvasTransform.Capture;
 using ScreenCanvasTransform.Diagnostics;
+using ScreenCanvasTransform.Models;
 using ScreenCanvasTransform.Services;
 using ScreenCanvasTransform.State;
 using ScreenCanvasTransform.Ui;
@@ -11,6 +13,7 @@ namespace ScreenCanvasTransform;
 public partial class MainWindow : Window
 {
     private readonly TransformPipelineService _pipeline = new();
+    private readonly SaveArchiveService _archiveService = new();
     // Distinct border colors: Workspace=green, Navigator=cyan, Thumbnail=magenta.
     private readonly RoiBorderOverlayWindow _workspaceBorder = RoiBorderOverlayWindow.CreateWorkspace();
     private readonly RoiBorderOverlayWindow _navigatorBorder = RoiBorderOverlayWindow.CreateNavigator();
@@ -18,6 +21,7 @@ public partial class MainWindow : Window
     private readonly MarkerOverlayWindow _markerOverlay = new();
     private CaptureSession? _activeSession;
     private PipelineResult? _lastResult;
+    private SaveArchive? _activeArchive;
     private bool _flowRunning;
     private bool _recomputePending;
 
@@ -34,8 +38,82 @@ public partial class MainWindow : Window
         };
     }
 
+    private void MainWindow_OnLoaded(object sender, RoutedEventArgs e)
+    {
+        SetStage(TransformStage.SelectingSaveArchive);
+        RefreshArchiveList();
+    }
+
+    private void RefreshArchiveList()
+    {
+        var items = _archiveService.ListArchives()
+            .OrderByDescending(a => a.CreatedAtUtc)
+            .Select(ArchiveListItem.FromSummary)
+            .ToList();
+
+        ArchiveListView.ItemsSource = items;
+        UpdateArchiveButtons();
+    }
+
+    private void ArchiveListView_OnSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        => UpdateArchiveButtons();
+
+    private void UpdateArchiveButtons()
+    {
+        if (ArchiveListView.SelectedItem is ArchiveListItem item && item.IsValid)
+        {
+            LoadArchiveButton.IsEnabled = !_flowRunning;
+            DeleteArchiveButton.IsEnabled = !_flowRunning;
+        }
+        else
+        {
+            LoadArchiveButton.IsEnabled = false;
+            DeleteArchiveButton.IsEnabled = ArchiveListView.SelectedItem is ArchiveListItem;
+        }
+    }
+
+    private async void LoadArchiveButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (ArchiveListView.SelectedItem is not ArchiveListItem item || !item.IsValid)
+            return;
+
+        SetStage(TransformStage.LoadingSaveArchive);
+        var load = _archiveService.TryLoad(item.ArchiveId);
+        if (!load.Success || load.Archive is null)
+        {
+            SetStatus($"无法加载存档：{load.Error}");
+            RefreshArchiveList();
+            return;
+        }
+
+        await RunArchiveRecomputeAsync(load.Archive);
+    }
+
     private async void StartButton_OnClick(object sender, RoutedEventArgs e)
         => await RunInitializationFlowAsync();
+
+    private void DeleteArchiveButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (ArchiveListView.SelectedItem is not ArchiveListItem item)
+            return;
+
+        if (_archiveService.TryDelete(item.ArchiveId))
+        {
+            if (string.Equals(_activeArchive?.ArchiveId, item.ArchiveId, StringComparison.Ordinal))
+            {
+                _activeArchive = null;
+                _lastResult = null;
+                RecomputeButton.IsEnabled = false;
+            }
+
+            SetStatus($"已删除存档：{item.DisplayName}");
+            RefreshArchiveList();
+        }
+        else
+        {
+            SetStatus("删除存档失败。");
+        }
+    }
 
     private void HideOverlayButton_OnClick(object sender, RoutedEventArgs e)
     {
@@ -58,6 +136,8 @@ public partial class MainWindow : Window
 
         _flowRunning = true;
         StartButton.IsEnabled = false;
+        LoadArchiveButton.IsEnabled = false;
+        DeleteArchiveButton.IsEnabled = false;
 
         try
         {
@@ -73,7 +153,6 @@ public partial class MainWindow : Window
                 sizeDialog.CanvasPixelWidth,
                 sizeDialog.CanvasPixelHeight);
 
-            // Architecture §5.1: hide overlays before capture.
             HideAllOverlays();
             SetStatus("正在隐藏窗口并冻结桌面截图…");
             Hide();
@@ -85,11 +164,11 @@ public partial class MainWindow : Window
 
             var session = CaptureSession.CreateFromVirtualScreen();
             _activeSession = session;
+            SetStage(TransformStage.CaptureFrozen);
             LiveDebugLog.Write(
                 $"[Capture] id={session.CaptureId} frame={session.FrozenCapture.Width}x{session.FrozenCapture.Height} " +
                 $"origin=({session.OriginX},{session.OriginY})");
 
-            // 1) Workspace user ROI
             SetStage(TransformStage.SelectingWorkspaceRoi);
             var wsRoi = new RoiSelectWindow(
                 session,
@@ -104,7 +183,6 @@ public partial class MainWindow : Window
                 return;
             }
 
-            // 2) Correct workspace immediately — failure ends init (no navigator stage).
             SetStage(TransformStage.DetectingWorkspace);
             SetStatus($"CaptureId={session.CaptureId}。正在纠正工作区…");
             var workspace = await Task.Run(() => _pipeline.DetectWorkspace(session)).ConfigureAwait(true);
@@ -122,13 +200,11 @@ public partial class MainWindow : Window
                 return;
             }
 
-            // Green border for corrected WorkspaceRoi
             _workspaceBorder.TryShowIfCaptureMatches(
                 workspace.RectScreenPhysicalPx,
                 session.CaptureId,
                 workspace.SourceCaptureId);
 
-            // 3) Navigator ROI only after workspace success
             Hide();
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             await Task.Delay(60);
@@ -149,11 +225,9 @@ public partial class MainWindow : Window
                 return;
             }
 
-            // Cyan border for user-adopted NavigatorRoi
             var navigatorScreen = session.CaptureToScreen(session.NavigatorRoiCapturePx.Value);
             _navigatorBorder.Show(navigatorScreen, session.CaptureId);
 
-            // 4) C-II thumbnail immediately — magenta border as soon as ROI is ready
             SetStage(TransformStage.DetectingNavigatorThumbnailCII);
             SetStatus($"CaptureId={session.CaptureId}。正在 C-II 生成导航器缩略图…");
             var thumbnail = await Task.Run(() => _pipeline.DetectNavigatorThumbnail(session, workspace))
@@ -171,7 +245,7 @@ public partial class MainWindow : Window
                 thumbnail.RectScreenPhysicalPx,
                 session.CaptureId,
                 thumbnail.SourceCaptureId);
-            SetStatus($"缩略图已标记（品红）。继续观测 / OCR / 求解…");
+            SetStatus("缩略图已标记（品红）。继续观测 / OCR / 求解…");
 
             var progress = new Progress<TransformStage>(SetStage);
             var result = await Task.Run(
@@ -180,40 +254,36 @@ public partial class MainWindow : Window
                         .ConfigureAwait(false))
                 .ConfigureAwait(true);
 
-            // Refresh borders from final snapshot
-            _thumbnailBorder.TryShowIfCaptureMatches(
-                result.NavigatorThumbnailRoiScreen,
-                session.CaptureId,
-                result.Snapshot.CaptureId);
+            ApplyResultOverlays(session, result);
 
-            // Keep workspace / navigator borders with final ROIs from snapshot
-            _workspaceBorder.TryShowIfCaptureMatches(
-                result.WorkspaceRoiScreen,
-                session.CaptureId,
-                result.Snapshot.CaptureId);
-            _navigatorBorder.TryShowIfCaptureMatches(
-                result.NavigatorRoiScreen,
-                session.CaptureId,
-                result.Snapshot.CaptureId);
+            SetStage(TransformStage.TrackingStable);
 
-            bool markerShown = _markerOverlay.TryShowIfGenerationMatches(
-                result.Snapshot.Marker,
-                result.Snapshot.CaptureId,
-                result.Snapshot.Generation,
-                session.CaptureId,
-                result.Snapshot.Generation);
+            SetStage(TransformStage.PersistingSaveArchive);
+            var persist = _archiveService.TryCreateFromInitSuccess(new InitSuccessBundle
+            {
+                Result = result,
+                InitCaptureId = session.CaptureId,
+                NavigatorPanelScreenAtInit = result.NavigatorRoiScreen
+            });
+
+            _lastResult = result;
+            _activeArchive = persist.Archive;
+            RecomputeButton.IsEnabled = true;
+            RefreshArchiveList();
 
             string path = result.Snapshot.UsedDirectWorkspacePath ? "直接工作区路径" : "导航器路径";
             string off = result.Snapshot.Marker.Offscreen != 0 ? "（MarkerOffscreen）" : "";
+            string persistNote = persist.Success
+                ? $" 已写入存档「{persist.Archive!.DisplayName}」。"
+                : $" 初始化几何成功但存档写入失败：{persist.Error}";
+
             SetStatus(
                 $"已发布 gen={result.Snapshot.Generation}，{path}，" +
                 $"scale={result.Snapshot.Numbers.ScalePercent:F1}% rel={result.Snapshot.RelativeScale:F3}，" +
                 $"rot={result.Snapshot.RotationDegrees:F1}°，conf={result.Snapshot.Confidence:F2}。" +
-                " 边框：绿=工作区 / 青=导航器 / 品红=缩略图。" +
-                (markerShown ? $" 橙色 L 已显示{off}。" : " 标记未显示。"));
+                persistNote +
+                (result.Snapshot.Marker.Offscreen != 0 ? $" 橙色 L 已显示{off}。" : " 标记已显示。"));
             SetStage(TransformStage.TrackingStable);
-            _lastResult = result;
-            RecomputeButton.IsEnabled = true;
         }
         catch (PipelineFailureException ex)
         {
@@ -251,6 +321,82 @@ public partial class MainWindow : Window
             }
             StartButton.IsEnabled = true;
             _flowRunning = false;
+            UpdateArchiveButtons();
+        }
+    }
+
+    private async Task RunArchiveRecomputeAsync(SaveArchive archive)
+    {
+        if (_flowRunning)
+            return;
+
+        _flowRunning = true;
+        _recomputePending = true;
+        LoadArchiveButton.IsEnabled = false;
+        StartButton.IsEnabled = false;
+        DeleteArchiveButton.IsEnabled = false;
+        RecomputeButton.IsEnabled = false;
+
+        try
+        {
+            HideAllOverlays();
+            SetStage(TransformStage.ArchiveRecomputeRequested);
+            Hide();
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            await Task.Delay(120);
+
+            _activeSession?.Dispose();
+            var session = CaptureSession.CreateFromVirtualScreen();
+            _activeSession = session;
+            SetStage(TransformStage.CaptureFrozen);
+
+            var progress = new Progress<TransformStage>(SetStage);
+            var result = await Task.Run(
+                    async () => await _pipeline.RecomputeFromArchiveAsync(session, archive, progress)
+                        .ConfigureAwait(false))
+                .ConfigureAwait(true);
+
+            Show();
+            Activate();
+
+            ApplyResultOverlays(session, result);
+
+            _lastResult = result;
+            _activeArchive = archive;
+            _archiveService.TryUpdateLastSuccessfulRecompute(archive, session.CaptureId);
+
+            SetStatus(
+                $"从存档「{archive.DisplayName}」重算完成 gen={result.Snapshot.Generation} " +
+                $"recompute={result.Snapshot.RecomputeGeneration}，" +
+                $"rot_geo={result.Snapshot.RotationDegreesGeometry:F1}°，" +
+                $"scale={result.Snapshot.ScalePercentOcrOrInjected:F1}%。");
+            SetStage(TransformStage.TrackingStable);
+        }
+        catch (PipelineFailureException ex)
+        {
+            _markerOverlay.Hide();
+            if (!IsVisible)
+            {
+                Show();
+                Activate();
+            }
+            SetStage(ex.Stage);
+            SetStatus(
+                $"从存档重算失败 stage={ex.Stage} status={ex.Status}：{ex.Message}。" +
+                " 请检查 CSP 窗口位置、缩放或导航器布局是否相对存档发生变化。");
+        }
+        finally
+        {
+            _recomputePending = false;
+            _flowRunning = false;
+            RecomputeButton.IsEnabled = _lastResult is not null;
+            StartButton.IsEnabled = true;
+            UpdateArchiveButtons();
+            if (!IsVisible)
+            {
+                Show();
+                Activate();
+            }
         }
     }
 
@@ -280,6 +426,7 @@ public partial class MainWindow : Window
             _activeSession?.Dispose();
             var session = CaptureSession.CreateFromVirtualScreen();
             _activeSession = session;
+            SetStage(TransformStage.CaptureFrozen);
 
             var progress = new Progress<TransformStage>(SetStage);
             var result = await Task.Run(
@@ -290,26 +437,16 @@ public partial class MainWindow : Window
             Show();
             Activate();
 
-            _workspaceBorder.TryShowIfCaptureMatches(
-                result.WorkspaceRoiScreen, session.CaptureId, result.Snapshot.CaptureId);
-            _navigatorBorder.TryShowIfCaptureMatches(
-                result.NavigatorRoiScreen, session.CaptureId, result.Snapshot.CaptureId);
-            _thumbnailBorder.TryShowIfCaptureMatches(
-                result.NavigatorThumbnailRoiScreen, session.CaptureId, result.Snapshot.CaptureId);
-
-            bool markerShown = _markerOverlay.TryShowIfGenerationMatches(
-                result.Snapshot.Marker,
-                result.Snapshot.CaptureId,
-                result.Snapshot.Generation,
-                session.CaptureId,
-                result.Snapshot.Generation);
+            ApplyResultOverlays(session, result);
 
             _lastResult = result;
+            if (_activeArchive is not null)
+                _archiveService.TryUpdateLastSuccessfulRecompute(_activeArchive, session.CaptureId);
+
             SetStatus(
                 $"重算完成 gen={result.Snapshot.Generation} recompute={result.Snapshot.RecomputeGeneration}，" +
                 $"rot_geo={result.Snapshot.RotationDegreesGeometry:F1}°，" +
-                $"scale={result.Snapshot.ScalePercentOcrOrInjected:F1}%。" +
-                (markerShown ? " 橙色 L 已更新。" : " 标记未显示。"));
+                $"scale={result.Snapshot.ScalePercentOcrOrInjected:F1}%。");
             SetStage(TransformStage.TrackingStable);
         }
         catch (PipelineFailureException ex)
@@ -336,7 +473,52 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ApplyResultOverlays(CaptureSession session, PipelineResult result)
+    {
+        _thumbnailBorder.TryShowIfCaptureMatches(
+            result.NavigatorThumbnailRoiScreen,
+            session.CaptureId,
+            result.Snapshot.CaptureId);
+
+        _workspaceBorder.TryShowIfCaptureMatches(
+            result.WorkspaceRoiScreen,
+            session.CaptureId,
+            result.Snapshot.CaptureId);
+
+        _navigatorBorder.TryShowIfCaptureMatches(
+            result.NavigatorRoiScreen,
+            session.CaptureId,
+            result.Snapshot.CaptureId);
+
+        _markerOverlay.TryShowIfGenerationMatches(
+            result.Snapshot.Marker,
+            result.Snapshot.CaptureId,
+            result.Snapshot.Generation,
+            session.CaptureId,
+            result.Snapshot.Generation);
+    }
+
     private void SetStage(TransformStage stage) => SetStatus($"阶段：{stage}");
 
     private void SetStatus(string text) => StatusText.Text = text;
+
+    private sealed class ArchiveListItem
+    {
+        public string ArchiveId { get; init; } = "";
+        public string DisplayName { get; init; } = "";
+        public string CanvasSizeText { get; init; } = "";
+        public string CreatedAtText { get; init; } = "";
+        public string StatusText { get; init; } = "";
+        public bool IsValid { get; init; }
+
+        public static ArchiveListItem FromSummary(SaveArchiveSummary summary) => new()
+        {
+            ArchiveId = summary.ArchiveId,
+            DisplayName = summary.DisplayName,
+            CanvasSizeText = $"{summary.CanvasPixelWidth} × {summary.CanvasPixelHeight}",
+            CreatedAtText = summary.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture),
+            StatusText = summary.IsValid ? "可用" : summary.ValidationError ?? "不可用",
+            IsValid = summary.IsValid
+        };
+    }
 }
