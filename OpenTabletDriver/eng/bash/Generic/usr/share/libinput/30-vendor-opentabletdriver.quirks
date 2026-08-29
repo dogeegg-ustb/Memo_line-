@@ -1,4 +1,0 @@
-[OpenTabletDriver Virtual Tablets]
-MatchName=OpenTabletDriver*
-AttrTabletSmoothing=0
-AttrPressureRange=2:1

@@ -106,9 +106,10 @@ public sealed class SaveArchiveService
         if (result.Background is null)
             return Fail("缺少 WorkspaceBackgroundModel");
 
-        var ocrLayout = NavigatorOcrService.ComputeOcrLayout(
-            bundle.NavigatorPanelScreenAtInit,
-            result.NavigatorThumbnailRoiScreen);
+        var ocrLayout = result.OcrLayoutUsed
+            ?? NavigatorOcrService.ComputeOcrLayout(
+                bundle.NavigatorPanelScreenAtInit,
+                result.NavigatorThumbnailRoiScreen);
 
         string archiveId = Guid.NewGuid().ToString("N");
         var archive = new SaveArchive

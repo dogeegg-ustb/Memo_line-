@@ -1,0 +1,2202 @@
+﻿"""Geometry and buffer helpers."""
+
+from __future__ import annotations
+
+from typing import Optional
+
+import numpy as np
+
+from .types import DetectionInput, DetectionStatus, IntRect, PixelFormat
+
+
+def is_cancelled(inp: DetectionInput) -> bool:
+    tok = inp.cancellation_token
+    return bool(tok and tok())
+
+
+def fail_status(status: DetectionStatus) -> DetectionStatus:
+    return status
+
+
+def normalize_user_roi(
+    roi: IntRect,
+    width: int,
+    height: int,
+    min_side: int,
+) -> tuple[Optional[IntRect], Optional[DetectionStatus]]:
+    if width <= 0 or height <= 0:
+        return None, DetectionStatus.INVALID_INPUT
+    clipped = roi.clamp(width, height)
+    if not clipped.is_valid():
+        return None, DetectionStatus.INVALID_INPUT
+    if clipped.width < min_side or clipped.height < min_side:
+        return None, DetectionStatus.ROI_TOO_SMALL
+    return clipped, None
+
+
+def buffer_to_bgra(
+    capture_buffer,
+    width: int,
+    height: int,
+    stride: int,
+    pixel_format: PixelFormat,
+) -> np.ndarray:
+    """Return contiguous HxWx4 uint8 BGRA view/copy."""
+    if isinstance(capture_buffer, np.ndarray):
+        arr = capture_buffer
+        if arr.ndim == 3 and arr.shape[0] == height and arr.shape[1] == width:
+            if arr.shape[2] == 4:
+                out = arr
+            elif arr.shape[2] == 3:
+                alpha = np.full((height, width, 1), 255, dtype=np.uint8)
+                out = np.concatenate([arr, alpha], axis=2)
+            else:
+                raise ValueError("Unsupported channel count")
+            if pixel_format in (PixelFormat.RGBA, PixelFormat.RGB):
+                out = out.copy()
+                out[..., [0, 2]] = out[..., [2, 0]]
+            elif not out.flags["C_CONTIGUOUS"]:
+                out = np.ascontiguousarray(out)
+            if out.dtype != np.uint8:
+                out = out.astype(np.uint8, copy=False)
+            if out.shape[2] == 3:
+                alpha = np.full((height, width, 1), 255, dtype=np.uint8)
+                out = np.concatenate([out, alpha], axis=2)
+            return out
+        if arr.ndim == 1 or (arr.ndim == 2 and arr.shape[0] == height):
+            capture_buffer = arr.tobytes() if hasattr(arr, "tobytes") else bytes(arr)
+
+    raw = np.frombuffer(capture_buffer, dtype=np.uint8)
+    row_bytes = stride if stride > 0 else width * 4
+    expected = row_bytes * height
+    if raw.size < expected:
+        raise ValueError("Capture buffer too small for stride/height")
+    if row_bytes == width * 4:
+        img = raw[:expected].reshape(height, width, 4).copy()
+    else:
+        img = np.empty((height, width, 4), dtype=np.uint8)
+        for y in range(height):
+            start = y * row_bytes
+            row = raw[start : start + width * 4]
+            if row.size < width * 4:
+                # odd stride with 3-channel packed is uncommon; pad
+                tmp = np.zeros(width * 4, dtype=np.uint8)
+                tmp[: row.size] = row
+                row = tmp
+            img[y] = row.reshape(width, 4)
+
+    if pixel_format in (PixelFormat.RGBA, PixelFormat.RGB):
+        img = img.copy()
+        img[..., [0, 2]] = img[..., [2, 0]]
+    return img
+
+
+def bgra_to_bgr(bgra: np.ndarray) -> np.ndarray:
+    return np.ascontiguousarray(bgra[..., :3])
+
+
+def scale_rect(rect: IntRect, scale: float, width: int, height: int) -> IntRect:
+    if scale == 1.0:
+        return rect.clamp(width, height)
+    inv = 1.0  # already in target space when scaling down source coords
+    l = int(math_floor(rect.left * scale))
+    t = int(math_floor(rect.top * scale))
+    r = int(math_ceil(rect.right * scale))
+    b = int(math_ceil(rect.bottom * scale))
+    return IntRect(l, t, r, b).clamp(width, height)
+
+
+def unscale_coord(v: float, scale: float) -> float:
+    if scale == 1.0:
+        return v
+    return v / scale
+
+
+def unscale_rect(rect: IntRect, scale: float, width: int, height: int) -> IntRect:
+    if scale == 1.0:
+        return rect.clamp(width, height)
+    l = int(round(rect.left / scale))
+    t = int(round(rect.top / scale))
+    r = int(round(rect.right / scale))
+    b = int(round(rect.bottom / scale))
+    return IntRect(l, t, r, b).clamp(width, height)
+
+
+def math_floor(x: float) -> int:
+    import math
+
+    return int(math.floor(x))
+
+
+def math_ceil(x: float) -> int:
+    import math
+
+    return int(math.ceil(x))
+
+
+def rect_iou(a: IntRect, b: IntRect) -> float:
+    xl = max(a.left, b.left)
+    xr = min(a.right, b.right)
+    yt = max(a.top, b.top)
+    yb = min(a.bottom, b.bottom)
+    inter = max(0, xr - xl) * max(0, yb - yt)
+    if inter <= 0:
+        return 0.0
+    union = a.area + b.area - inter
+    return inter / union if union > 0 else 0.0
+
+
+def median_mad(values: np.ndarray) -> tuple[float, float]:
+    if values.size == 0:
+        return 0.0, 0.0
+    med = float(np.median(values))
+    mad = float(np.median(np.abs(values - med)))
+    return med, mad * 1.4826
+
+
+def robust_mean(values: np.ndarray, z: float = 2.5) -> float:
+    if values.size == 0:
+        return 0.0
+    med, scale = median_mad(values)
+    if scale < 1e-6:
+        return med
+    mask = np.abs(values - med) <= z * scale
+    if not np.any(mask):
+        return med
+    return float(np.mean(values[mask]))
+
+"""Multi-depth background seed sampling inside user ROI.
+
+Samples along each side at several inset depths so workspace-background
+frames (between outer UI and inner canvas) are not missed. Edge-only
+sampling would preferentially hit UI chrome; deep-center sampling would
+preferentially hit canvas.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+from .config import DetectorConfig
+from .features import CanvasFeatureMaps
+from .types import IntRect, SeedPatch, SemanticSide
+
+
+# Inset ratios along ROI short/long axes: shallow 鈫?mid 鈫?deeper frame bands
+_BAND_RATIOS: tuple[float, ...] = (0.04, 0.09, 0.15, 0.22, 0.30)
+
+
+def sample_background_seeds(
+    features: CanvasFeatureMaps,
+    user_roi: IntRect,
+    cfg: DetectorConfig,
+    dpi_scale: float,
+) -> list[SeedPatch]:
+    h, w = features.height, features.width
+    short = min(user_roi.width, user_roi.height)
+    size = cfg.seed_size_px(dpi_scale, short)
+    half = size // 2
+    seeds: list[SeedPatch] = []
+    seed_id = 0
+    n = cfg.seeds_per_side
+
+    def _patch_stats(cx: int, cy: int) -> tuple[tuple[float, float, float], float, float] | None:
+        x0 = max(0, cx - half)
+        y0 = max(0, cy - half)
+        x1 = min(w, x0 + size)
+        y1 = min(h, y0 + size)
+        if x1 - x0 < size // 2 or y1 - y0 < size // 2:
+            return None
+        lab = features.lab[y0:y1, x0:x1]
+        g = features.gradient_magnitude[y0:y1, x0:x1]
+        v = features.local_variance[y0:y1, x0:x1]
+        thr = float(np.percentile(g, 70)) if g.size else 0.0
+        grad_density = float(np.mean(g > thr)) if g.size else 1.0
+        local_var = float(np.median(v)) if v.size else 1e9
+        mean_lab = (
+            float(np.median(lab[..., 0])),
+            float(np.median(lab[..., 1])),
+            float(np.median(lab[..., 2])),
+        )
+        return mean_lab, grad_density, local_var
+
+    def _reject(grad_d: float, local_var: float, cx: int, cy: int) -> str:
+        rcx = (user_roi.left + user_roi.right) * 0.5
+        rcy = (user_roi.top + user_roi.bottom) * 0.5
+        dx = abs(cx - rcx) / max(user_roi.width * 0.5, 1.0)
+        dy = abs(cy - rcy) / max(user_roi.height * 0.5, 1.0)
+        # Hard-exclude deep center (canvas body)
+        if max(dx, dy) < cfg.seed_center_exclude_ratio * 0.55:
+            return "too_central"
+        if grad_d > cfg.seed_max_grad_density:
+            return "high_gradient"
+        if local_var > cfg.seed_max_local_var:
+            return "high_variance"
+        return ""
+
+    points: list[tuple[SemanticSide, int, int]] = []
+
+    for ratio in _BAND_RATIOS:
+        inset_x = max(half + 1, int(round(user_roi.width * ratio)))
+        inset_y = max(half + 1, int(round(user_roi.height * ratio)))
+        if inset_x * 2 >= user_roi.width - size or inset_y * 2 >= user_roi.height - size:
+            continue
+
+        xs = np.linspace(
+            user_roi.left + inset_x,
+            user_roi.right - inset_x - 1,
+            n,
+            dtype=np.int32,
+        )
+        ys = np.linspace(
+            user_roi.top + inset_y,
+            user_roi.bottom - inset_y - 1,
+            n,
+            dtype=np.int32,
+        )
+
+        y_top = user_roi.top + inset_y
+        y_bot = user_roi.bottom - inset_y - 1
+        x_left = user_roi.left + inset_x
+        x_right = user_roi.right - inset_x - 1
+
+        for x in xs:
+            points.append((SemanticSide.TOP, int(x), y_top))
+            points.append((SemanticSide.BOTTOM, int(x), y_bot))
+        for y in ys:
+            points.append((SemanticSide.LEFT, x_left, int(y)))
+            points.append((SemanticSide.RIGHT, x_right, int(y)))
+
+        # Corner samples of this band
+        points.append((SemanticSide.TOP, x_left, y_top))
+        points.append((SemanticSide.TOP, x_right, y_top))
+        points.append((SemanticSide.BOTTOM, x_left, y_bot))
+        points.append((SemanticSide.BOTTOM, x_right, y_bot))
+
+    # Deduplicate while preserving order
+    seen: set[tuple[int, int]] = set()
+    for side, cx, cy in points:
+        key = (cx, cy)
+        if key in seen:
+            continue
+        seen.add(key)
+        if not (0 <= cx < w and 0 <= cy < h):
+            continue
+        if not user_roi.contains_point(cx, cy):
+            continue
+        stats = _patch_stats(cx, cy)
+        if stats is None:
+            seeds.append(SeedPatch(seed_id, side, cx, cy, size, (0.0, 0.0, 0.0), False, "oob"))
+            seed_id += 1
+            continue
+        mean_lab, grad_d, local_var = stats
+        reason = _reject(grad_d, local_var, cx, cy)
+        seeds.append(
+            SeedPatch(
+                seed_id,
+                side,
+                cx,
+                cy,
+                size,
+                mean_lab,
+                accepted=reason == "",
+                reject_reason=reason,
+            )
+        )
+        seed_id += 1
+
+    return seeds
+
+"""Robust multi-candidate workspace-background appearance estimation."""
+
+from __future__ import annotations
+
+from typing import Sequence
+
+import numpy as np
+
+from .config import DetectorConfig
+from .features import delta_e76_pixels
+from .geometry import median_mad
+from .types import BackgroundAppearanceModel, IntRect, SeedPatch, SemanticSide
+
+
+def estimate_background_models(
+    seeds: Sequence[SeedPatch],
+    cfg: DetectorConfig,
+    user_roi: IntRect | None = None,
+) -> list[BackgroundAppearanceModel]:
+    accepted = [s for s in seeds if s.accepted]
+    if len(accepted) < cfg.min_seed_accept_count:
+        rejected = [s for s in seeds if not s.accepted and s.reject_reason != "oob"]
+        rejected.sort(key=lambda s: 0 if s.reject_reason == "too_central" else 1)
+        need = cfg.min_seed_accept_count - len(accepted)
+        accepted = list(accepted) + rejected[:need]
+
+    if len(accepted) < 3:
+        return []
+
+    labs = np.array([s.mean_lab for s in accepted], dtype=np.float32)
+    clusters = _cluster_labs(labs, cfg.max_background_clusters, cfg.strong_delta_e_max)
+
+    models: list[BackgroundAppearanceModel] = []
+    for cid, idxs in enumerate(clusters):
+        if len(idxs) < 2:
+            continue
+        pts = labs[idxs]
+        center = (
+            float(np.median(pts[:, 0])),
+            float(np.median(pts[:, 1])),
+            float(np.median(pts[:, 2])),
+        )
+        de = delta_e76_pixels(pts, center)
+        _, scale = median_mad(de)
+        scale = max(scale, cfg.mad_scale_floor)
+        strong = float(np.clip(2.5 * scale, cfg.strong_delta_e_min, cfg.strong_delta_e_max))
+        weak = float(np.clip(4.0 * scale, cfg.weak_delta_e_min, cfg.weak_delta_e_max))
+        weak = max(weak, strong + 2.0)
+
+        member_seeds = [accepted[i] for i in idxs]
+        sides = {s.side for s in member_seeds}
+        coverage = len(sides) / 4.0
+
+        # Frame / ring preference: mid-inset seeds beat pure outer UI and pure canvas
+        frame_score = _frame_support_score(member_seeds, user_roi)
+        # Color stability: prefer tight Lab clusters
+        stability = float(np.clip(1.0 - scale / 12.0, 0.0, 1.0))
+
+        conf = (
+            0.25 * min(1.0, len(idxs) / max(cfg.min_seed_accept_count, 1))
+            + 0.25 * coverage
+            + 0.35 * frame_score
+            + 0.15 * stability
+        )
+        if coverage < cfg.min_spatial_coverage and len(idxs) < cfg.min_seed_accept_count + 2:
+            conf *= 0.7
+
+        models.append(
+            BackgroundAppearanceModel(
+                center_lab=center,
+                robust_scale=scale,
+                strong_delta_e=strong,
+                weak_delta_e=weak,
+                accepted_seed_ids=[s.seed_id for s in member_seeds],
+                spatial_coverage=coverage,
+                confidence=float(np.clip(conf, 0.0, 1.0)),
+                cluster_id=cid,
+            )
+        )
+
+    # Prefer frame-like mid-band clusters over sheer seed count
+    models.sort(
+        key=lambda m: (m.confidence, m.spatial_coverage, -m.robust_scale),
+        reverse=True,
+    )
+    return models
+
+
+def _frame_support_score(seeds: Sequence[SeedPatch], user_roi: IntRect | None) -> float:
+    """Score how well seeds look like a workspace-bg frame (not UI rim / canvas core)."""
+    if not seeds:
+        return 0.0
+    if user_roi is None or user_roi.width < 8 or user_roi.height < 8:
+        # Fallback: prefer multi-side coverage
+        return len({s.side for s in seeds}) / 4.0
+
+    rw = max(user_roi.width, 1)
+    rh = max(user_roi.height, 1)
+    depths: list[float] = []
+    side_hits = {s: 0 for s in SemanticSide}
+    for s in seeds:
+        # Normalized inset depth from nearest ROI edge in [0, 0.5]
+        d_left = (s.x - user_roi.left) / rw
+        d_right = (user_roi.right - 1 - s.x) / rw
+        d_top = (s.y - user_roi.top) / rh
+        d_bottom = (user_roi.bottom - 1 - s.y) / rh
+        depth = min(d_left, d_right, d_top, d_bottom)
+        depths.append(depth)
+        side_hits[s.side] += 1
+
+    depths_a = np.asarray(depths, dtype=np.float64)
+    # Ideal workspace-bg frame sits roughly in 0.05鈥?.28 of ROI (between UI and canvas)
+    in_band = float(np.mean((depths_a >= 0.05) & (depths_a <= 0.30)))
+    # Penalize exclusive extreme rim (<0.04) 鈥?typical UI chrome
+    rim_only = float(np.mean(depths_a < 0.04))
+    # Penalize deep interior (>0.32) 鈥?typical canvas body
+    deep = float(np.mean(depths_a > 0.32))
+    multi = sum(1 for v in side_hits.values() if v > 0) / 4.0
+    score = 0.45 * in_band + 0.30 * multi + 0.25 * (1.0 - 0.6 * rim_only - 0.8 * deep)
+    return float(np.clip(score, 0.0, 1.0))
+
+
+def _cluster_labs(
+    labs: np.ndarray,
+    max_clusters: int,
+    merge_thresh: float,
+) -> list[list[int]]:
+    n = labs.shape[0]
+    clusters: list[list[int]] = []
+    order = np.lexsort((labs[:, 2], labs[:, 1], labs[:, 0]))
+    for i in order:
+        i = int(i)
+        best_c = -1
+        best_d = 1e9
+        for cidx, members in enumerate(clusters):
+            center = np.median(labs[members], axis=0)
+            d = float(np.linalg.norm(labs[i] - center))
+            if d < best_d:
+                best_d = d
+                best_c = cidx
+        if best_c >= 0 and best_d <= merge_thresh and len(clusters) >= 1:
+            clusters[best_c].append(i)
+        elif len(clusters) < max_clusters:
+            clusters.append([i])
+        else:
+            clusters[best_c].append(i)
+    return clusters
+
+"""Background similarity and barrier masks."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+
+from .config import DetectorConfig
+from .features import CanvasFeatureMaps, delta_e76
+from .types import BackgroundAppearanceModel, IntRect
+
+
+@dataclass(slots=True)
+class BackgroundSimilarity:
+    similarity: np.ndarray  # float32 HxW [0,1]
+    strong_mask: np.ndarray  # bool
+    weak_mask: np.ndarray
+    barrier_mask: np.ndarray
+
+
+def build_similarity(
+    features: CanvasFeatureMaps,
+    model: BackgroundAppearanceModel,
+    search_roi: IntRect,
+    cfg: DetectorConfig,
+) -> BackgroundSimilarity:
+    h, w = features.height, features.width
+    # Compute only inside search ROI for speed
+    y0, y1 = search_roi.top, search_roi.bottom
+    x0, x1 = search_roi.left, search_roi.right
+
+    lab_roi = features.lab[y0:y1, x0:x1]
+    de = delta_e76(lab_roi, model.center_lab)
+    # Continuous similarity from strong/weak thresholds
+    sim_roi = np.clip(1.0 - de / max(model.weak_delta_e, 1e-3), 0.0, 1.0).astype(np.float32)
+
+    g = features.gradient_magnitude[y0:y1, x0:x1]
+    v = features.local_variance[y0:y1, x0:x1]
+    g_thr = float(np.percentile(g, cfg.barrier_grad_percentile))
+    v_thr = float(np.percentile(v, cfg.barrier_var_percentile))
+    # Down-weight high gradient / variance
+    weight = np.ones_like(sim_roi, dtype=np.float32)
+    weight *= np.clip(1.0 - (g / max(g_thr * 1.5, 1e-3)), 0.15, 1.0)
+    weight *= np.clip(1.0 - (v / max(v_thr * 1.5, 1e-3)), 0.15, 1.0)
+    sim_roi = sim_roi * weight
+
+    barrier_roi = (g >= g_thr) & (v >= v_thr * 0.5)
+
+    similarity = np.zeros((h, w), dtype=np.float32)
+    strong = np.zeros((h, w), dtype=bool)
+    weak = np.zeros((h, w), dtype=bool)
+    barrier = np.zeros((h, w), dtype=bool)
+
+    similarity[y0:y1, x0:x1] = sim_roi
+    strong[y0:y1, x0:x1] = sim_roi >= cfg.strong_sim_threshold
+    weak[y0:y1, x0:x1] = sim_roi >= cfg.weak_sim_threshold
+    barrier[y0:y1, x0:x1] = barrier_roi
+
+    return BackgroundSimilarity(similarity, strong, weak, barrier)
+
+"""Seeded 4-connected background region growing (OpenCV-accelerated)."""
+
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass
+
+import cv2
+import numpy as np
+
+from .config import DetectorConfig
+from .similarity import BackgroundSimilarity
+from .types import IntRect, SeedPatch, SemanticSide, SIDE_INDEX
+
+
+@dataclass(slots=True)
+class GrownBackground:
+    mask: np.ndarray  # bool HxW
+    source_label: np.ndarray  # int8 HxW, 0=none, 1..4 = sides
+    pixel_count: int
+    bbox_fill_ratio: float = 1.0
+    hole_score: float = 0.0
+    touches_search_border: float = 0.0
+
+
+def grow_background(
+    seeds: list[SeedPatch],
+    model_seed_ids: set[int],
+    similarity: BackgroundSimilarity,
+    search_roi: IntRect,
+    cfg: DetectorConfig,
+) -> GrownBackground | None:
+    h, w = similarity.similarity.shape
+    x0, x1 = search_roi.left, search_roi.right
+    y0, y1 = search_roi.top, search_roi.bottom
+    if x1 <= x0 + 2 or y1 <= y0 + 2:
+        return None
+
+    start_seeds = [
+        s
+        for s in seeds
+        if s.accepted and s.seed_id in model_seed_ids and search_roi.contains_point(s.x, s.y)
+    ]
+    if not start_seeds:
+        start_seeds = [
+            s for s in seeds if s.seed_id in model_seed_ids and search_roi.contains_point(s.x, s.y)
+        ]
+    if not start_seeds:
+        return None
+
+    strong = similarity.strong_mask
+    weak = similarity.weak_mask
+    barrier = similarity.barrier_mask
+
+    # Growable: weak similarity, stopped by sustained barriers unless strong
+    growable = weak.copy()
+    growable[barrier & ~strong] = False
+    growable[:y0, :] = False
+    growable[y1:, :] = False
+    growable[:, :x0] = False
+    growable[:, x1:] = False
+
+    # Bridge 鈮?grow_gap_bridge_px isolated noise without filling large canvas holes
+    gap = max(0, min(cfg.grow_gap_bridge_px, 2))
+    sub = growable[y0:y1, x0:x1]
+    if gap > 0 and sub.size:
+        k = 2 * gap + 1
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k, k))
+        closed = cv2.morphologyEx(sub.astype(np.uint8), cv2.MORPH_CLOSE, kernel)
+        # Only keep closed pixels that stay within weak band after bridging
+        weak_sub = weak[y0:y1, x0:x1]
+        strong_sub = strong[y0:y1, x0:x1]
+        bridged = (closed > 0) & (weak_sub | strong_sub)
+        growable[y0:y1, x0:x1] = bridged
+
+    # Drop seeds that are not growable
+    valid_seeds = [s for s in start_seeds if growable[s.y, s.x]]
+    if not valid_seeds:
+        return None
+
+    nlab, labels = cv2.connectedComponents(growable.astype(np.uint8), connectivity=4)
+    if nlab <= 1:
+        return None
+
+    keep_labels: set[int] = set()
+    label_sides: dict[int, list[int]] = {}
+    for s in valid_seeds:
+        lid = int(labels[s.y, s.x])
+        if lid <= 0:
+            continue
+        keep_labels.add(lid)
+        label_sides.setdefault(lid, []).append(SIDE_INDEX[s.side] + 1)
+
+    if not keep_labels:
+        return None
+
+    mask = np.zeros((h, w), dtype=bool)
+    source = np.zeros((h, w), dtype=np.int8)
+    count = 0
+    max_pixels = int((x1 - x0) * (y1 - y0) * cfg.max_grown_fraction)
+
+    for lid in keep_labels:
+        comp = labels == lid
+        c = int(np.count_nonzero(comp))
+        if count + c > max_pixels:
+            # Keep largest seed-touched components first
+            continue
+        mask |= comp
+        maj = Counter(label_sides.get(lid, [1])).most_common(1)[0][0]
+        source[comp] = maj
+        count += c
+
+    if count < 16:
+        return None
+
+    ys, xs = np.nonzero(mask)
+    bx0, bx1 = int(xs.min()), int(xs.max()) + 1
+    by0, by1 = int(ys.min()), int(ys.max()) + 1
+    bbox_area = max(1, (bx1 - bx0) * (by1 - by0))
+    fill_ratio = float(count) / float(bbox_area)
+    hole_score = float(np.clip(1.0 - fill_ratio, 0.0, 1.0))
+
+    # Fraction of search-roi border pixels that are grown (UI chrome leaks)
+    border_hits = 0
+    border_tot = 0
+    for y in (y0, y1 - 1):
+        if 0 <= y < h:
+            row = mask[y, x0:x1]
+            border_hits += int(np.count_nonzero(row))
+            border_tot += row.size
+    for x in (x0, x1 - 1):
+        if 0 <= x < w:
+            col = mask[y0:y1, x]
+            border_hits += int(np.count_nonzero(col))
+            border_tot += col.size
+    touch = border_hits / max(border_tot, 1)
+
+    return GrownBackground(
+        mask=mask,
+        source_label=source,
+        pixel_count=count,
+        bbox_fill_ratio=fill_ratio,
+        hole_score=hole_score,
+        touches_search_border=float(touch),
+    )
+
+
+def model_geometry_plausible(grown: GrownBackground, cfg: DetectorConfig) -> bool:
+    """Hard filter: workspace bg is typically a frame/L/bands with a canvas hole.
+
+    Solid fills that hug the search border are usually UI chrome.
+    Solid fills that do not hug the border are usually the canvas itself.
+    """
+    # Large hole / frame 鈫?good
+    if grown.hole_score >= cfg.min_bg_hole_score:
+        return True
+    # Thin bands may have moderate fill if bbox is tight around strips
+    if grown.bbox_fill_ratio <= cfg.max_bg_bbox_fill_ratio and grown.touches_search_border < 0.55:
+        return True
+    # Solid + heavy search-border contact 鈫?UI
+    if grown.touches_search_border >= cfg.max_bg_search_border_touch:
+        return False
+    # Solid interior blob 鈫?likely canvas
+    if grown.bbox_fill_ratio >= 0.85 and grown.hole_score < 0.12:
+        return False
+    return grown.hole_score >= cfg.min_bg_hole_score * 0.5
+
+"""Extract directional boundary termination evidence from grown background."""
+
+from __future__ import annotations
+
+from typing import Sequence
+
+import numpy as np
+
+from .config import DetectorConfig
+from .features import CanvasFeatureMaps
+from .grower import GrownBackground
+from .similarity import BackgroundSimilarity
+from .types import BoundaryPoint, IntRect, SemanticSide
+
+
+def extract_boundary_points(
+    grown: GrownBackground,
+    similarity: BackgroundSimilarity,
+    features: CanvasFeatureMaps,
+    search_roi: IntRect,
+    cfg: DetectorConfig,
+) -> dict[SemanticSide, list[BoundaryPoint]]:
+    """From connected background, find inward termination points per semantic side.
+
+    Left side: for each row, leftmost background pixel's left edge (canvas left).
+    Actually: workspace background surrounds canvas. Growing from ROI periphery,
+    background is OUTSIDE the canvas. Termination going inward = canvas edge.
+
+    For LEFT semantic side of canvas: scan each row left鈫抮ight within search ROI,
+    find transition from background to non-background (first inward exit from bg
+    when coming from left? Wait.
+
+    Architecture: "鎸夊洓涓柟鍚戜粠宸茶繛鎺ヨ儗鏅悜鍐呮彁鍙栫粓姝㈢偣"
+    Background is peripheral. Canvas is the hole / interior non-bg region.
+    From left: walk rightward through bg; termination = last bg before non-bg
+    when approaching canvas from left 鈫?that x is near left canvas edge.
+
+    So for LEFT: per row y, find contiguous bg from left; the rightmost bg pixel
+    of the left strip before hitting interior = candidate left edge.
+    Simpler robust approach: for each row, find all bg鈫抧onbg transitions going
+    left-to-right; take the first strong transition that has bg on left.
+    """
+    mask = grown.mask
+    labels = grown.source_label
+    sim = similarity.similarity
+    gmag = features.gradient_magnitude
+    var = features.local_variance
+    gx = features.gradient_x
+    gy = features.gradient_y
+
+    x0, x1 = search_roi.left, search_roi.right
+    y0, y1 = search_roi.top, search_roi.bottom
+    roi_mask = mask[y0:y1, x0:x1]
+    if not np.any(roi_mask):
+        return {s: [] for s in SemanticSide}
+
+    # Precompute interior non-bg inside search
+    out: dict[SemanticSide, list[BoundaryPoint]] = {s: [] for s in SemanticSide}
+
+    # Vectorized-ish per-row/col scans using numpy
+    sub = mask[y0:y1, x0:x1]
+    lab_sub = labels[y0:y1, x0:x1]
+    sim_sub = sim[y0:y1, x0:x1]
+    g_sub = gmag[y0:y1, x0:x1]
+    v_sub = var[y0:y1, x0:x1]
+    gx_sub = gx[y0:y1, x0:x1]
+    gy_sub = gy[y0:y1, x0:x1]
+    hh, ww = sub.shape
+
+    # Filter thresholds for content interference
+    var_cut = float(np.percentile(v_sub[sub], 92)) if np.any(sub) else 1e9
+
+    # LEFT: bg True then False when scanning L鈫扲
+    for yi in range(hh):
+        row = sub[yi]
+        if not row.any() or row.all():
+            continue
+        # find transitions 1鈫?
+        prev = row[:-1]
+        nxt = row[1:]
+        edges = np.where(prev & ~nxt)[0]
+        for xi in edges:
+            # require some bg run to the left
+            left_run = 0
+            j = xi
+            while j >= 0 and row[j]:
+                left_run += 1
+                j -= 1
+            if left_run < 2:
+                continue
+            # require non-bg depth to the right
+            right_run = 0
+            j = xi + 1
+            while j < ww and not row[j]:
+                right_run += 1
+                j += 1
+            if right_run < 2:
+                continue
+            if v_sub[yi, xi] > var_cut and g_sub[yi, xi] < float(np.median(g_sub)):
+                continue
+            sb = float(sim_sub[yi, max(0, xi - 1)])
+            sa = float(sim_sub[yi, min(ww - 1, xi + 1)])
+            if sb < 0.3 or sa > 0.75:
+                continue
+            w = float(min(1.0, left_run / 8.0) * min(1.0, (sb - sa + 0.5)))
+            w *= float(np.clip(abs(gx_sub[yi, xi]) / (abs(gx_sub[yi, xi]) + abs(gy_sub[yi, xi]) + 1e-3), 0.2, 1.0))
+            if w < 0.12:
+                continue
+            out[SemanticSide.LEFT].append(
+                BoundaryPoint(
+                    x=x0 + int(xi),
+                    y=y0 + yi,
+                    direction=SemanticSide.LEFT,
+                    source_side=int(lab_sub[yi, xi]),
+                    similarity_before=sb,
+                    similarity_after=sa,
+                    directional_gradient=float(abs(gx_sub[yi, xi])),
+                    local_variance=float(v_sub[yi, xi]),
+                    weight=w,
+                )
+            )
+
+    # RIGHT: bg True then False scanning R鈫扡 鈮?False鈫扵rue scanning L鈫扲 near right strip
+    for yi in range(hh):
+        row = sub[yi]
+        if not row.any() or row.all():
+            continue
+        prev = row[:-1]
+        nxt = row[1:]
+        # nonbg 鈫?bg going L鈫扲 means entering right background from canvas
+        edges = np.where(~prev & nxt)[0]
+        for xi in edges:
+            # xi is last canvas pixel; edge at xi+1 is first bg
+            edge_x = xi + 1
+            right_run = 0
+            j = edge_x
+            while j < ww and row[j]:
+                right_run += 1
+                j += 1
+            if right_run < 2:
+                continue
+            left_run = 0
+            j = edge_x - 1
+            while j >= 0 and not row[j]:
+                left_run += 1
+                j -= 1
+            if left_run < 2:
+                continue
+            if v_sub[yi, edge_x] > var_cut and g_sub[yi, edge_x] < float(np.median(g_sub)):
+                continue
+            sb = float(sim_sub[yi, min(ww - 1, edge_x)])
+            sa = float(sim_sub[yi, max(0, edge_x - 1)])
+            if sb < 0.3 or sa > 0.75:
+                continue
+            w = float(min(1.0, right_run / 8.0) * min(1.0, (sb - sa + 0.5)))
+            w *= float(np.clip(abs(gx_sub[yi, edge_x]) / (abs(gx_sub[yi, edge_x]) + abs(gy_sub[yi, edge_x]) + 1e-3), 0.2, 1.0))
+            if w < 0.12:
+                continue
+            out[SemanticSide.RIGHT].append(
+                BoundaryPoint(
+                    x=x0 + int(edge_x),
+                    y=y0 + yi,
+                    direction=SemanticSide.RIGHT,
+                    source_side=int(lab_sub[yi, min(edge_x, ww - 1)]),
+                    similarity_before=sb,
+                    similarity_after=sa,
+                    directional_gradient=float(abs(gx_sub[yi, edge_x])),
+                    local_variance=float(v_sub[yi, edge_x]),
+                    weight=w,
+                )
+            )
+
+    # TOP
+    for xi in range(ww):
+        col = sub[:, xi]
+        if not col.any() or col.all():
+            continue
+        prev = col[:-1]
+        nxt = col[1:]
+        edges = np.where(prev & ~nxt)[0]
+        for yi in edges:
+            up_run = 0
+            j = yi
+            while j >= 0 and col[j]:
+                up_run += 1
+                j -= 1
+            if up_run < 2:
+                continue
+            down_run = 0
+            j = yi + 1
+            while j < hh and not col[j]:
+                down_run += 1
+                j += 1
+            if down_run < 2:
+                continue
+            if v_sub[yi, xi] > var_cut and g_sub[yi, xi] < float(np.median(g_sub)):
+                continue
+            sb = float(sim_sub[max(0, yi - 1), xi])
+            sa = float(sim_sub[min(hh - 1, yi + 1), xi])
+            if sb < 0.3 or sa > 0.75:
+                continue
+            w = float(min(1.0, up_run / 8.0) * min(1.0, (sb - sa + 0.5)))
+            w *= float(np.clip(abs(gy_sub[yi, xi]) / (abs(gx_sub[yi, xi]) + abs(gy_sub[yi, xi]) + 1e-3), 0.2, 1.0))
+            if w < 0.12:
+                continue
+            out[SemanticSide.TOP].append(
+                BoundaryPoint(
+                    x=x0 + xi,
+                    y=y0 + int(yi),
+                    direction=SemanticSide.TOP,
+                    source_side=int(lab_sub[yi, xi]),
+                    similarity_before=sb,
+                    similarity_after=sa,
+                    directional_gradient=float(abs(gy_sub[yi, xi])),
+                    local_variance=float(v_sub[yi, xi]),
+                    weight=w,
+                )
+            )
+
+    # BOTTOM
+    for xi in range(ww):
+        col = sub[:, xi]
+        if not col.any() or col.all():
+            continue
+        prev = col[:-1]
+        nxt = col[1:]
+        edges = np.where(~prev & nxt)[0]
+        for yi in edges:
+            edge_y = yi + 1
+            down_run = 0
+            j = edge_y
+            while j < hh and col[j]:
+                down_run += 1
+                j += 1
+            if down_run < 2:
+                continue
+            up_run = 0
+            j = edge_y - 1
+            while j >= 0 and not col[j]:
+                up_run += 1
+                j -= 1
+            if up_run < 2:
+                continue
+            if v_sub[edge_y, xi] > var_cut and g_sub[edge_y, xi] < float(np.median(g_sub)):
+                continue
+            sb = float(sim_sub[min(hh - 1, edge_y), xi])
+            sa = float(sim_sub[max(0, edge_y - 1), xi])
+            if sb < 0.3 or sa > 0.75:
+                continue
+            w = float(min(1.0, down_run / 8.0) * min(1.0, (sb - sa + 0.5)))
+            w *= float(np.clip(abs(gy_sub[edge_y, xi]) / (abs(gx_sub[edge_y, xi]) + abs(gy_sub[edge_y, xi]) + 1e-3), 0.2, 1.0))
+            if w < 0.12:
+                continue
+            out[SemanticSide.BOTTOM].append(
+                BoundaryPoint(
+                    x=x0 + xi,
+                    y=y0 + int(edge_y),
+                    direction=SemanticSide.BOTTOM,
+                    source_side=int(lab_sub[min(edge_y, hh - 1), xi]),
+                    similarity_before=sb,
+                    similarity_after=sa,
+                    directional_gradient=float(abs(gy_sub[edge_y, xi])),
+                    local_variance=float(v_sub[edge_y, xi]),
+                    weight=w,
+                )
+            )
+
+    # Suppress isolated points: keep only points near others along the side
+    for side in list(out.keys()):
+        out[side] = _suppress_isolated(out[side], side, min_neighbors=2, radius=6)
+
+    return out
+
+
+def _suppress_isolated(
+    points: list[BoundaryPoint],
+    side: SemanticSide,
+    min_neighbors: int,
+    radius: int,
+) -> list[BoundaryPoint]:
+    if len(points) < 3:
+        return []
+    coords = np.array(
+        [(p.y if side in (SemanticSide.LEFT, SemanticSide.RIGHT) else p.x) for p in points],
+        dtype=np.int32,
+    )
+    kept: list[BoundaryPoint] = []
+    for i, p in enumerate(points):
+        d = np.abs(coords - coords[i])
+        if int(np.sum(d <= radius)) - 1 >= min_neighbors:
+            kept.append(p)
+    return kept
+
+"""Complete side and endpoint detection from boundary evidence."""
+
+from __future__ import annotations
+
+from typing import Sequence
+
+import numpy as np
+
+from .config import DetectorConfig
+from .geometry import median_mad, robust_mean
+from .types import (
+    BoundaryPoint,
+    CompleteSide,
+    Endpoint,
+    IntRect,
+    Orientation,
+    SemanticSide,
+)
+
+
+def detect_complete_sides(
+    boundary_points: dict[SemanticSide, list[BoundaryPoint]],
+    search_roi: IntRect,
+    capture_w: int,
+    capture_h: int,
+    cfg: DetectorConfig,
+    dpi_scale: float,
+) -> list[CompleteSide]:
+    safety = cfg.safety_band_px(dpi_scale, min(search_roi.width, search_roi.height))
+    sides: list[CompleteSide] = []
+    for semantic in SemanticSide:
+        pts = boundary_points.get(semantic, [])
+        side = _fit_side(pts, semantic, search_roi, capture_w, capture_h, cfg, safety)
+        if side is not None:
+            sides.append(side)
+    return sides
+
+
+def _fit_side(
+    pts: Sequence[BoundaryPoint],
+    semantic: SemanticSide,
+    search_roi: IntRect,
+    capture_w: int,
+    capture_h: int,
+    cfg: DetectorConfig,
+    safety: int,
+) -> CompleteSide | None:
+    if len(pts) < 8:
+        return None
+
+    vertical = semantic in (SemanticSide.LEFT, SemanticSide.RIGHT)
+    orientation = Orientation.VERTICAL if vertical else Orientation.HORIZONTAL
+
+    fixed_arr = np.array([p.x if vertical else p.y for p in pts], dtype=np.float64)
+    along_arr = np.array([p.y if vertical else p.x for p in pts], dtype=np.float64)
+    weights = np.array([max(p.weight, 1e-3) for p in pts], dtype=np.float64)
+
+    # Weighted histogram peak for fixed coordinate
+    fixed, mad, peak_weight = _weighted_peak(fixed_arr, weights, cfg.histogram_bin_px)
+    if peak_weight < cfg.side_peak_min_weight_ratio * float(np.sum(weights)):
+        return None
+
+    inliers = np.abs(fixed_arr - fixed) <= max(cfg.max_coordinate_mad_px, 1.5 * mad + 1.0)
+    if int(np.sum(inliers)) < 6:
+        return None
+
+    along_in = along_arr[inliers]
+    w_in = weights[inliers]
+    order = np.argsort(along_in)
+    along_sorted = along_in[order]
+    w_sorted = w_in[order]
+
+    # Coverage along expected span inside search ROI
+    if vertical:
+        span_lo, span_hi = search_roi.top, search_roi.bottom
+        expected = max(1, span_hi - span_lo)
+    else:
+        span_lo, span_hi = search_roi.left, search_roi.right
+        expected = max(1, span_hi - span_lo)
+
+    start = float(along_sorted[0])
+    end = float(along_sorted[-1])
+    # Tighten to dense support: trim low-density tails
+    start, end = _dense_span(along_sorted, w_sorted)
+    span = end - start
+    if span < cfg.min_side_span_ratio * expected:
+        return None
+
+    # Coverage: weighted unique bins / span
+    bins = np.round(along_sorted).astype(np.int32)
+    uniq = np.unique(bins[(bins >= start) & (bins <= end)])
+    coverage = float(len(uniq) / max(span, 1.0))
+    if coverage < cfg.min_side_coverage:
+        return None
+
+    transition = float(
+        np.average(
+            [p.similarity_before - p.similarity_after for p, keep in zip(pts, inliers) if keep],
+        )
+    )
+    transition = float(np.clip((transition + 0.2) / 0.8, 0.0, 1.0))
+    outside = float(
+        np.average([p.similarity_before for p, keep in zip(pts, inliers) if keep])
+    )
+    if transition < cfg.min_transition_score or outside < cfg.min_outside_bg_score:
+        return None
+
+    # Endpoints
+    ep_start = _make_endpoint(
+        semantic, fixed, start, True, pts, inliers, search_roi, capture_w, capture_h, safety, cfg
+    )
+    ep_end = _make_endpoint(
+        semantic, fixed, end, False, pts, inliers, search_roi, capture_w, capture_h, safety, cfg
+    )
+    if ep_start is None or ep_end is None:
+        return None
+
+    is_truncated = ep_start.is_truncated or ep_end.is_truncated
+    if is_truncated:
+        # Still return for diagnostics but MUST NOT enter complete set 鈥?mark truncated
+        pass
+
+    if ep_start.score < cfg.min_endpoint_score or ep_end.score < cfg.min_endpoint_score:
+        return None
+
+    return CompleteSide(
+        orientation=orientation,
+        semantic_side=semantic,
+        fixed_coordinate=float(fixed),
+        start_coordinate=float(min(start, end)),
+        end_coordinate=float(max(start, end)),
+        start_endpoint=ep_start,
+        end_endpoint=ep_end,
+        coverage=coverage,
+        coordinate_mad=float(mad),
+        transition_score=transition,
+        outside_background_score=outside,
+        endpoint_scores=(ep_start.score, ep_end.score),
+        is_truncated=is_truncated,
+        supporting_sample_ids=list(range(int(np.sum(inliers)))),
+    )
+
+
+def _weighted_peak(
+    values: np.ndarray, weights: np.ndarray, bin_px: float
+) -> tuple[float, float, float]:
+    lo = float(np.min(values))
+    hi = float(np.max(values))
+    if hi - lo < 1e-6:
+        return lo, 0.0, float(np.sum(weights))
+    nb = max(1, int(np.ceil((hi - lo) / max(bin_px, 0.5))) + 1)
+    edges = np.linspace(lo, hi + 1e-6, nb + 1)
+    hist, _ = np.histogram(values, bins=edges, weights=weights)
+    peak_i = int(np.argmax(hist))
+    peak_val = 0.5 * (edges[peak_i] + edges[peak_i + 1])
+    # Refine with inliers near peak
+    near = np.abs(values - peak_val) <= 2.0
+    if np.any(near):
+        peak_val = float(np.average(values[near], weights=weights[near]))
+        _, mad = median_mad(values[near])
+    else:
+        mad = float(np.std(values))
+    return peak_val, mad, float(hist[peak_i])
+
+
+def _dense_span(along_sorted: np.ndarray, weights: np.ndarray) -> tuple[float, float]:
+    if along_sorted.size < 4:
+        return float(along_sorted[0]), float(along_sorted[-1])
+    # Cumulative weight; take central 90% mass
+    w = weights / max(float(np.sum(weights)), 1e-9)
+    cdf = np.cumsum(w)
+    i0 = int(np.searchsorted(cdf, 0.05))
+    i1 = int(np.searchsorted(cdf, 0.95))
+    i1 = min(max(i1, i0 + 1), along_sorted.size - 1)
+    return float(along_sorted[i0]), float(along_sorted[i1])
+
+
+def _make_endpoint(
+    semantic: SemanticSide,
+    fixed: float,
+    along: float,
+    is_start: bool,
+    pts: Sequence[BoundaryPoint],
+    inliers: np.ndarray,
+    search_roi: IntRect,
+    capture_w: int,
+    capture_h: int,
+    safety: int,
+    cfg: DetectorConfig,
+) -> Endpoint | None:
+    vertical = semantic in (SemanticSide.LEFT, SemanticSide.RIGHT)
+    if vertical:
+        x, y = fixed, along
+    else:
+        x, y = along, fixed
+
+    # Truncation against search ROI / capture borders
+    truncated = False
+    if vertical:
+        if along <= search_roi.top + safety or along >= search_roi.bottom - 1 - safety:
+            truncated = True
+        if along <= safety or along >= capture_h - 1 - safety:
+            truncated = True
+        if fixed <= search_roi.left + safety or fixed >= search_roi.right - 1 - safety:
+            # fixed on left/right near search bound can also mean incomplete observation
+            if semantic == SemanticSide.LEFT and fixed <= search_roi.left + safety:
+                truncated = True
+            if semantic == SemanticSide.RIGHT and fixed >= search_roi.right - 1 - safety:
+                truncated = True
+    else:
+        if along <= search_roi.left + safety or along >= search_roi.right - 1 - safety:
+            truncated = True
+        if along <= safety or along >= capture_w - 1 - safety:
+            truncated = True
+        if fixed <= search_roi.top + safety or fixed >= search_roi.bottom - 1 - safety:
+            if semantic == SemanticSide.TOP and fixed <= search_roi.top + safety:
+                truncated = True
+            if semantic == SemanticSide.BOTTOM and fixed >= search_roi.bottom - 1 - safety:
+                truncated = True
+
+    # Local support near endpoint
+    along_vals = np.array([p.y if vertical else p.x for p in pts], dtype=np.float64)
+    near = inliers & (np.abs(along_vals - along) <= 4.0)
+    if int(np.sum(near)) < 2:
+        score = 0.15
+    else:
+        near_pts = [p for p, k in zip(pts, near) if k]
+        score = float(np.mean([p.weight for p in near_pts]))
+        # Corner topology: expect orthogonal evidence 鈥?approximate via variance of fixed
+        score = float(np.clip(score * 1.2, 0.0, 1.0))
+
+    return Endpoint(x=float(x), y=float(y), score=score, is_truncated=truncated)
+
+
+def complete_sides_only(sides: Sequence[CompleteSide]) -> list[CompleteSide]:
+    """Complete sides eligible for A/B/C-L/C-II (non-truncated)."""
+    return [s for s in sides if not s.is_truncated]
+
+"""Enumerate A / B / C-L / C-II rectangle hypotheses."""
+
+from __future__ import annotations
+
+from itertools import combinations
+from typing import Sequence
+
+import numpy as np
+
+from .config import DetectorConfig
+from .types import (
+    CompleteSide,
+    EvidenceGrade,
+    IntRect,
+    Orientation,
+    RectangleHypothesis,
+    SemanticSide,
+)
+
+
+def build_hypotheses(
+    complete_sides: Sequence[CompleteSide],
+    search_roi: IntRect,
+    user_roi: IntRect,
+    cfg: DetectorConfig,
+    weak_support_fn,
+) -> list[RectangleHypothesis]:
+    """Enumerate all grades then return list for unified scoring.
+
+    weak_support_fn(semantic_side, fixed_coord, start, end) -> coverage float
+    """
+    sides = {s.semantic_side: s for s in complete_sides if not s.is_truncated}
+    hyps: list[RectangleHypothesis] = []
+
+    hyps.extend(_hypotheses_a(sides, cfg))
+    hyps.extend(_hypotheses_b(sides, search_roi, cfg, weak_support_fn))
+    hyps.extend(_hypotheses_c_l(sides, search_roi, cfg, weak_support_fn))
+    hyps.extend(_hypotheses_c_ii(sides, cfg))
+
+    # Filter hard geometry
+    filtered: list[RectangleHypothesis] = []
+    for h in hyps:
+        r = h.rect
+        if r.width < cfg.min_canvas_side_px or r.height < cfg.min_canvas_side_px:
+            continue
+        if r.area < cfg.min_canvas_area_px:
+            continue
+        if not search_roi.contains_point(r.left, r.top) and not (
+            search_roi.left <= r.left < search_roi.right
+            and search_roi.top <= r.top < search_roi.bottom
+        ):
+            # Allow rect inside search; edges should be within search
+            pass
+        if r.left < search_roi.left or r.right > search_roi.right:
+            continue
+        if r.top < search_roi.top or r.bottom > search_roi.bottom:
+            continue
+        # Must contain user ROI interior anchor
+        if not r.intersects_interior(user_roi, inset=max(1, min(user_roi.width, user_roi.height) // 10)):
+            # softer: center of user ROI inside candidate
+            if not r.contains_point(
+                (user_roi.left + user_roi.right) // 2,
+                (user_roi.top + user_roi.bottom) // 2,
+            ):
+                continue
+        filtered.append(h)
+    return filtered
+
+
+def _rect_from_sides(
+    left: float | None,
+    top: float | None,
+    right: float | None,
+    bottom: float | None,
+) -> IntRect | None:
+    if None in (left, top, right, bottom):
+        return None
+    l, t, r, b = int(round(left)), int(round(top)), int(round(right)), int(round(bottom))
+    if l >= r or t >= b:
+        return None
+    return IntRect(l, t, r, b)
+
+
+def _hypotheses_a(sides: dict[SemanticSide, CompleteSide], cfg: DetectorConfig) -> list[RectangleHypothesis]:
+    need = [SemanticSide.LEFT, SemanticSide.TOP, SemanticSide.RIGHT, SemanticSide.BOTTOM]
+    if not all(s in sides for s in need):
+        return []
+    l, t, r, b = (
+        sides[SemanticSide.LEFT].fixed_coordinate,
+        sides[SemanticSide.TOP].fixed_coordinate,
+        sides[SemanticSide.RIGHT].fixed_coordinate,
+        sides[SemanticSide.BOTTOM].fixed_coordinate,
+    )
+    # Corner closure: horizontal ends vs vertical fixed etc.
+    err = 0.0
+    for hs, vs, use_start in (
+        (SemanticSide.TOP, SemanticSide.LEFT, True),
+        (SemanticSide.TOP, SemanticSide.RIGHT, False),
+        (SemanticSide.BOTTOM, SemanticSide.LEFT, True),
+        (SemanticSide.BOTTOM, SemanticSide.RIGHT, False),
+    ):
+        hside = sides[hs]
+        vside = sides[vs]
+        h_along = hside.start_coordinate if use_start else hside.end_coordinate
+        # For top: along is x; vertical fixed is x
+        err = max(err, abs(h_along - vside.fixed_coordinate))
+        v_along = vside.start_coordinate if (hs == SemanticSide.TOP) else vside.end_coordinate
+        err = max(err, abs(v_along - hside.fixed_coordinate))
+    if err > cfg.corner_closure_tol_px * 2:
+        # soft check with spans containing corners
+        if not (
+            sides[SemanticSide.TOP].start_coordinate - cfg.corner_closure_tol_px
+            <= l
+            <= sides[SemanticSide.TOP].end_coordinate + cfg.corner_closure_tol_px
+        ):
+            return []
+    rect = _rect_from_sides(l, t, r, b)
+    if rect is None:
+        return []
+    return [
+        RectangleHypothesis(
+            rect=rect,
+            grade=EvidenceGrade.A,
+            observed_sides=list(need),
+            inferred_sides=[],
+            score=0.0,
+            confidence=0.0,
+            side_refs={s.value: sides[s] for s in need},
+        )
+    ]
+
+
+def _hypotheses_b(
+    sides: dict[SemanticSide, CompleteSide],
+    search_roi: IntRect,
+    cfg: DetectorConfig,
+    weak_support_fn,
+) -> list[RectangleHypothesis]:
+    hyps: list[RectangleHypothesis] = []
+    all_sides = list(SemanticSide)
+    for missing in all_sides:
+        present = [s for s in all_sides if s != missing]
+        if not all(s in sides for s in present):
+            continue
+        # Need at least one adjacent pair
+        coords = {
+            SemanticSide.LEFT: sides[SemanticSide.LEFT].fixed_coordinate if SemanticSide.LEFT in sides else None,
+            SemanticSide.TOP: sides[SemanticSide.TOP].fixed_coordinate if SemanticSide.TOP in sides else None,
+            SemanticSide.RIGHT: sides[SemanticSide.RIGHT].fixed_coordinate if SemanticSide.RIGHT in sides else None,
+            SemanticSide.BOTTOM: sides[SemanticSide.BOTTOM].fixed_coordinate if SemanticSide.BOTTOM in sides else None,
+        }
+        # Infer missing from opposite span endpoints of adjacent sides
+        if missing == SemanticSide.LEFT:
+            # left from top/bottom start
+            cands = []
+            if SemanticSide.TOP in sides:
+                cands.append(sides[SemanticSide.TOP].start_coordinate)
+            if SemanticSide.BOTTOM in sides:
+                cands.append(sides[SemanticSide.BOTTOM].start_coordinate)
+            if not cands:
+                continue
+            coords[SemanticSide.LEFT] = float(np.median(cands))
+            start = coords[SemanticSide.TOP] if coords[SemanticSide.TOP] is not None else search_roi.top
+            end = coords[SemanticSide.BOTTOM] if coords[SemanticSide.BOTTOM] is not None else search_roi.bottom
+        elif missing == SemanticSide.RIGHT:
+            cands = []
+            if SemanticSide.TOP in sides:
+                cands.append(sides[SemanticSide.TOP].end_coordinate)
+            if SemanticSide.BOTTOM in sides:
+                cands.append(sides[SemanticSide.BOTTOM].end_coordinate)
+            if not cands:
+                continue
+            coords[SemanticSide.RIGHT] = float(np.median(cands))
+            start = coords[SemanticSide.TOP] or search_roi.top
+            end = coords[SemanticSide.BOTTOM] or search_roi.bottom
+        elif missing == SemanticSide.TOP:
+            cands = []
+            if SemanticSide.LEFT in sides:
+                cands.append(sides[SemanticSide.LEFT].start_coordinate)
+            if SemanticSide.RIGHT in sides:
+                cands.append(sides[SemanticSide.RIGHT].start_coordinate)
+            coords[SemanticSide.TOP] = float(np.median(cands))
+            start = coords[SemanticSide.LEFT] or search_roi.left
+            end = coords[SemanticSide.RIGHT] or search_roi.right
+        else:
+            cands = []
+            if SemanticSide.LEFT in sides:
+                cands.append(sides[SemanticSide.LEFT].end_coordinate)
+            if SemanticSide.RIGHT in sides:
+                cands.append(sides[SemanticSide.RIGHT].end_coordinate)
+            coords[SemanticSide.BOTTOM] = float(np.median(cands))
+            start = coords[SemanticSide.LEFT] or search_roi.left
+            end = coords[SemanticSide.RIGHT] or search_roi.right
+
+        fixed = coords[missing]
+        weak = weak_support_fn(missing, fixed, min(start, end), max(start, end))
+        if weak < cfg.weak_inferred_min_coverage:
+            continue
+        rect = _rect_from_sides(
+            coords[SemanticSide.LEFT],
+            coords[SemanticSide.TOP],
+            coords[SemanticSide.RIGHT],
+            coords[SemanticSide.BOTTOM],
+        )
+        if rect is None:
+            continue
+        hyps.append(
+            RectangleHypothesis(
+                rect=rect,
+                grade=EvidenceGrade.B,
+                observed_sides=present,
+                inferred_sides=[missing],
+                score=0.0,
+                confidence=0.0,
+                side_refs={s.value: sides[s] for s in present},
+            )
+        )
+    return hyps
+
+
+def _hypotheses_c_l(
+    sides: dict[SemanticSide, CompleteSide],
+    search_roi: IntRect,
+    cfg: DetectorConfig,
+    weak_support_fn,
+) -> list[RectangleHypothesis]:
+    hyps: list[RectangleHypothesis] = []
+    # Adjacent pairs: L-T, T-R, R-B, B-L
+    adjacent = [
+        (SemanticSide.LEFT, SemanticSide.TOP),
+        (SemanticSide.TOP, SemanticSide.RIGHT),
+        (SemanticSide.RIGHT, SemanticSide.BOTTOM),
+        (SemanticSide.BOTTOM, SemanticSide.LEFT),
+    ]
+    for a, b in adjacent:
+        if a not in sides or b not in sides:
+            continue
+        sa, sb = sides[a], sides[b]
+        if sa.orientation == sb.orientation:
+            continue
+        # Shared corner endpoint
+        corner = _shared_corner(sa, sb, cfg.corner_closure_tol_px)
+        if corner is None:
+            continue
+        # Both other endpoints complete (already in CompleteSide)
+        left = top = right = bottom = None
+        observed = [a, b]
+        # Determine rect from L-shape spans
+        if a == SemanticSide.LEFT and b == SemanticSide.TOP:
+            left = sa.fixed_coordinate
+            top = sb.fixed_coordinate
+            right = sb.end_coordinate
+            bottom = sa.end_coordinate
+            # shared should be near (left, top)
+        elif a == SemanticSide.TOP and b == SemanticSide.RIGHT:
+            top = sa.fixed_coordinate
+            right = sb.fixed_coordinate
+            left = sa.start_coordinate
+            bottom = sb.end_coordinate
+        elif a == SemanticSide.RIGHT and b == SemanticSide.BOTTOM:
+            right = sa.fixed_coordinate
+            bottom = sb.fixed_coordinate
+            left = sb.start_coordinate
+            top = sa.start_coordinate
+        elif a == SemanticSide.BOTTOM and b == SemanticSide.LEFT:
+            bottom = sa.fixed_coordinate
+            left = sb.fixed_coordinate
+            right = sa.end_coordinate
+            top = sb.start_coordinate
+        else:
+            continue
+
+        rect = _rect_from_sides(left, top, right, bottom)
+        if rect is None:
+            continue
+
+        # Weak verify two inferred sides
+        inferred = [s for s in SemanticSide if s not in observed]
+        ok = True
+        for inf in inferred:
+            if inf == SemanticSide.LEFT:
+                fixed, lo, hi = rect.left, rect.top, rect.bottom
+            elif inf == SemanticSide.RIGHT:
+                fixed, lo, hi = rect.right, rect.top, rect.bottom
+            elif inf == SemanticSide.TOP:
+                fixed, lo, hi = rect.top, rect.left, rect.right
+            else:
+                fixed, lo, hi = rect.bottom, rect.left, rect.right
+            if weak_support_fn(inf, float(fixed), float(lo), float(hi)) < cfg.weak_inferred_min_coverage:
+                ok = False
+                break
+        if not ok:
+            continue
+        hyps.append(
+            RectangleHypothesis(
+                rect=rect,
+                grade=EvidenceGrade.C_L,
+                observed_sides=observed,
+                inferred_sides=inferred,
+                score=0.0,
+                confidence=0.0,
+                side_refs={a.value: sa, b.value: sb},
+            )
+        )
+    return hyps
+
+
+def _shared_corner(sa: CompleteSide, sb: CompleteSide, tol: float) -> tuple[float, float] | None:
+    """Find shared high-confidence endpoint between horizontal and vertical side."""
+    ends_a = [sa.start_endpoint, sa.end_endpoint]
+    ends_b = [sb.start_endpoint, sb.end_endpoint]
+    best = None
+    best_d = 1e9
+    for ea in ends_a:
+        for eb in ends_b:
+            d = abs(ea.x - eb.x) + abs(ea.y - eb.y)
+            if d < best_d:
+                best_d = d
+                best = ((ea.x + eb.x) * 0.5, (ea.y + eb.y) * 0.5, (ea.score + eb.score) * 0.5)
+    if best is None or best_d > tol * 2:
+        return None
+    if best[2] < 0.3:
+        return None
+    return best[0], best[1]
+
+
+def _hypotheses_c_ii(sides: dict[SemanticSide, CompleteSide], cfg: DetectorConfig) -> list[RectangleHypothesis]:
+    hyps: list[RectangleHypothesis] = []
+    pairs = [
+        (SemanticSide.LEFT, SemanticSide.RIGHT),
+        (SemanticSide.TOP, SemanticSide.BOTTOM),
+    ]
+    for a, b in pairs:
+        if a not in sides or b not in sides:
+            continue
+        sa, sb = sides[a], sides[b]
+        if sa.orientation != sb.orientation:
+            continue
+        # Endpoint alignment
+        if abs(sa.start_coordinate - sb.start_coordinate) > cfg.c_ii_endpoint_align_tol_px:
+            continue
+        if abs(sa.end_coordinate - sb.end_coordinate) > cfg.c_ii_endpoint_align_tol_px:
+            continue
+        len_a, len_b = sa.span, sb.span
+        if abs(len_a - len_b) > max(cfg.c_ii_length_abs_tol_px, cfg.c_ii_length_rel_tol * max(len_a, len_b)):
+            continue
+        if a in (SemanticSide.LEFT, SemanticSide.RIGHT):
+            left = min(sa.fixed_coordinate, sb.fixed_coordinate)
+            right = max(sa.fixed_coordinate, sb.fixed_coordinate)
+            top = float(np.median([sa.start_coordinate, sb.start_coordinate]))
+            bottom = float(np.median([sa.end_coordinate, sb.end_coordinate]))
+        else:
+            top = min(sa.fixed_coordinate, sb.fixed_coordinate)
+            bottom = max(sa.fixed_coordinate, sb.fixed_coordinate)
+            left = float(np.median([sa.start_coordinate, sb.start_coordinate]))
+            right = float(np.median([sa.end_coordinate, sb.end_coordinate]))
+        rect = _rect_from_sides(left, top, right, bottom)
+        if rect is None:
+            continue
+        hyps.append(
+            RectangleHypothesis(
+                rect=rect,
+                grade=EvidenceGrade.C_II,
+                observed_sides=[a, b],
+                inferred_sides=[],
+                score=0.0,
+                confidence=0.0,
+                side_refs={a.value: sa, b.value: sb},
+            )
+        )
+    return hyps
+
+"""Candidate scoring and hard rejection."""
+
+from __future__ import annotations
+
+from typing import Sequence
+
+import numpy as np
+
+from .config import DetectorConfig
+from .geometry import rect_iou
+from .types import (
+    CompleteSide,
+    EvidenceGrade,
+    RectangleHypothesis,
+    SemanticSide,
+)
+
+
+def score_hypothesis(
+    hyp: RectangleHypothesis,
+    complete_sides: Sequence[CompleteSide],
+    cfg: DetectorConfig,
+) -> float:
+    sides_by = {s.semantic_side: s for s in complete_sides}
+    c_out = c_trans = c_cov = c_end = 0.0
+    n = 0
+    for side in hyp.observed_sides:
+        s = sides_by.get(side) or hyp.side_refs.get(side.value)
+        if s is None:
+            continue
+        c_out += s.outside_background_score
+        c_trans += s.transition_score
+        c_cov += s.coverage
+        c_end += float(np.mean(s.endpoint_scores))
+        n += 1
+    if n == 0:
+        return 0.0
+    c_out /= n
+    c_trans /= n
+    c_cov /= n
+    c_end /= n
+
+    # Closure / uniformity proxies
+    r = hyp.rect
+    aspect = r.width / max(r.height, 1)
+    c_uniform = 1.0 - min(0.5, abs(np.log(max(aspect, 1e-3))) * 0.15)
+    if hyp.grade == EvidenceGrade.A:
+        c_closure = 1.0
+    elif hyp.grade == EvidenceGrade.B:
+        c_closure = 0.85
+    elif hyp.grade == EvidenceGrade.C_L:
+        c_closure = 0.75
+    else:
+        c_closure = 0.8
+
+    p_var = float(np.mean([sides_by[s].coordinate_mad for s in hyp.observed_sides if s in sides_by] or [1.0]))
+    p_var = float(np.clip(p_var / 4.0, 0.0, 1.0))
+
+    s = (
+        cfg.weight_outside * c_out
+        + cfg.weight_transition * c_trans
+        + cfg.weight_coverage * c_cov
+        + cfg.weight_endpoint * c_end
+        + cfg.weight_closure * c_closure
+        + cfg.weight_uniformity * c_uniform
+        - cfg.weight_variance_penalty * p_var
+    )
+    # Normalize roughly to [0,1]
+    denom = (
+        cfg.weight_outside
+        + cfg.weight_transition
+        + cfg.weight_coverage
+        + cfg.weight_endpoint
+        + cfg.weight_closure
+        + cfg.weight_uniformity
+    )
+    score = float(np.clip(s / max(denom, 1e-6), 0.0, 1.0))
+    hyp.score = score
+    hyp.confidence = float(
+        np.clip(
+            0.35 * score
+            + 0.25 * c_end
+            + 0.20 * c_trans
+            + 0.20 * c_out,
+            0.0,
+            1.0,
+        )
+    )
+    return score
+
+
+def select_best_hypothesis(
+    hyps: list[RectangleHypothesis],
+    complete_sides: Sequence[CompleteSide],
+    cfg: DetectorConfig,
+) -> tuple[RectangleHypothesis | None, str, float]:
+    if not hyps:
+        return None, "no_hypotheses", 0.0
+
+    for h in hyps:
+        score_hypothesis(h, complete_sides, cfg)
+
+    ranked = sorted(hyps, key=lambda h: h.score, reverse=True)
+    best = ranked[0]
+    if best.score < cfg.min_accept_score:
+        return None, "score_below_threshold", 0.0
+
+    margin = 1.0
+    if len(ranked) >= 2:
+        second = ranked[1]
+        margin = best.score - second.score
+        iou = rect_iou(best.rect, second.rect)
+        if margin < cfg.ambiguity_score_margin and iou < cfg.ambiguity_iou_max:
+            return None, "AmbiguousCandidates", margin
+
+    return best, "", margin
+
+"""Full-resolution joint outer-boundary refinement for workspace rect."""
+
+from __future__ import annotations
+
+import numpy as np
+
+from .config import DetectorConfig
+from .features import CanvasFeatureMaps, delta_e76
+from .types import BackgroundAppearanceModel, IntRect
+
+
+def refine_rectangle(
+    coarse: IntRect,
+    features: CanvasFeatureMaps,
+    model: BackgroundAppearanceModel,
+    cfg: DetectorConfig,
+    dpi_scale: float,
+) -> IntRect | None:
+    """Refine each outer edge: inside鈮坵orkspace bg, outside鈮燽g."""
+    h, w = features.height, features.width
+    radius = cfg.refine_radius_px(dpi_scale, min(h, w))
+    strip = cfg.refine_strip_half_width_px
+
+    left = _refine_vertical_edge(
+        features, model, coarse.top, coarse.bottom, coarse.left, -1, radius, strip, w, h, cfg
+    )
+    right = _refine_vertical_edge(
+        features, model, coarse.top, coarse.bottom, coarse.right, +1, radius, strip, w, h, cfg
+    )
+    top = _refine_horizontal_edge(
+        features, model, coarse.left, coarse.right, coarse.top, -1, radius, strip, w, h, cfg
+    )
+    bottom = _refine_horizontal_edge(
+        features, model, coarse.left, coarse.right, coarse.bottom, +1, radius, strip, w, h, cfg
+    )
+
+    if None in (left, right, top, bottom):
+        return None
+
+    max_shift = cfg.refine_max_shift_px
+    if abs(left - coarse.left) > max_shift:
+        left = coarse.left + int(np.sign(left - coarse.left) * max_shift)
+    if abs(right - coarse.right) > max_shift:
+        right = coarse.right + int(np.sign(right - coarse.right) * max_shift)
+    if abs(top - coarse.top) > max_shift:
+        top = coarse.top + int(np.sign(top - coarse.top) * max_shift)
+    if abs(bottom - coarse.bottom) > max_shift:
+        bottom = coarse.bottom + int(np.sign(bottom - coarse.bottom) * max_shift)
+
+    if left >= right - 2 or top >= bottom - 2:
+        return None
+    if left < 0 or top < 0 or right > w or bottom > h:
+        return None
+    return IntRect(int(left), int(top), int(right), int(bottom))
+
+
+def _subsample_span(a0: int, a1: int, max_samples: int = 48) -> np.ndarray:
+    n = a1 - a0
+    if n <= max_samples:
+        return np.arange(a0, a1, dtype=np.int32)
+    return np.linspace(a0, a1 - 1, max_samples, dtype=np.int32)
+
+
+def _refine_vertical_edge(
+    features: CanvasFeatureMaps,
+    model: BackgroundAppearanceModel,
+    y0: int,
+    y1: int,
+    x_init: int,
+    outward_sign: int,
+    radius: int,
+    strip: int,
+    w: int,
+    h: int,
+    cfg: DetectorConfig,
+) -> int | None:
+    y0 = max(0, y0)
+    y1 = min(h, y1)
+    if y1 - y0 < 4:
+        return None
+    ys = _subsample_span(y0, y1)
+    best_x = x_init
+    best_cost = -1e9
+    costs: list[tuple[int, float]] = []
+    weak = max(model.weak_delta_e, 1e-3)
+
+    for dx in range(-radius, radius + 1):
+        x = x_init + dx
+        if x < 1 or x >= w - 1:
+            continue
+        if outward_sign < 0:
+            xo0, xo1 = max(0, x - strip), x
+            xi0, xi1 = x, min(w, x + strip)
+        else:
+            xo0, xo1 = x, min(w, x + strip)
+            xi0, xi1 = max(0, x - strip), x
+        if xo1 <= xo0 or xi1 <= xi0:
+            continue
+
+        outside = features.lab[ys[:, None], np.arange(xo0, xo1)[None, :]]
+        inside = features.lab[ys[:, None], np.arange(xi0, xi1)[None, :]]
+        # Flatten last dims for delta_e
+        de_out = delta_e76(outside.reshape(-1, outside.shape[-1]).reshape(outside.shape), model.center_lab)
+        de_in = delta_e76(inside.reshape(-1, inside.shape[-1]).reshape(inside.shape), model.center_lab)
+        out_diff = float(np.mean(np.clip(de_out / weak, 0, 1)))
+        in_sim = float(np.mean(np.clip(1.0 - de_in / weak, 0, 1)))
+
+        g = np.abs(features.gradient_x[ys, x])
+        g_med = float(np.median(g)) if g.size else 0.0
+        g_score = float(np.mean(g > g_med)) if g.size else 0.0
+        trans = out_diff * 0.45 + in_sim * 0.40 + g_score * 0.25
+        costs.append((x, trans))
+        if trans > best_cost:
+            best_cost = trans
+            best_x = x
+
+    if not costs:
+        return None
+
+    costs.sort(key=lambda t: t[1], reverse=True)
+    if len(costs) >= 2:
+        x1, c1 = costs[0]
+        for x2, c2 in costs[1:6]:
+            if abs(x2 - x1) <= cfg.border_double_peak_gap_px and c2 > c1 * 0.85:
+                if outward_sign < 0:
+                    best_x = min(x1, x2)
+                else:
+                    best_x = max(x1, x2)
+                break
+    return int(best_x)
+
+
+def _refine_horizontal_edge(
+    features: CanvasFeatureMaps,
+    model: BackgroundAppearanceModel,
+    x0: int,
+    x1: int,
+    y_init: int,
+    outward_sign: int,
+    radius: int,
+    strip: int,
+    w: int,
+    h: int,
+    cfg: DetectorConfig,
+) -> int | None:
+    x0 = max(0, x0)
+    x1 = min(w, x1)
+    if x1 - x0 < 4:
+        return None
+    xs = _subsample_span(x0, x1)
+    best_y = y_init
+    best_cost = -1e9
+    costs: list[tuple[int, float]] = []
+    weak = max(model.weak_delta_e, 1e-3)
+
+    for dy in range(-radius, radius + 1):
+        y = y_init + dy
+        if y < 1 or y >= h - 1:
+            continue
+        if outward_sign < 0:
+            yo0, yo1 = max(0, y - strip), y
+            yi0, yi1 = y, min(h, y + strip)
+        else:
+            yo0, yo1 = y, min(h, y + strip)
+            yi0, yi1 = max(0, y - strip), y
+        if yo1 <= yo0 or yi1 <= yi0:
+            continue
+
+        outside = features.lab[np.arange(yo0, yo1)[:, None], xs[None, :]]
+        inside = features.lab[np.arange(yi0, yi1)[:, None], xs[None, :]]
+        de_out = delta_e76(outside, model.center_lab)
+        de_in = delta_e76(inside, model.center_lab)
+        out_diff = float(np.mean(np.clip(de_out / weak, 0, 1)))
+        in_sim = float(np.mean(np.clip(1.0 - de_in / weak, 0, 1)))
+        g = np.abs(features.gradient_y[y, xs])
+        g_med = float(np.median(g)) if g.size else 0.0
+        g_score = float(np.mean(g > g_med)) if g.size else 0.0
+        trans = out_diff * 0.45 + in_sim * 0.40 + g_score * 0.25
+        costs.append((y, trans))
+        if trans > best_cost:
+            best_cost = trans
+            best_y = y
+
+    if not costs:
+        return None
+    costs.sort(key=lambda t: t[1], reverse=True)
+    if len(costs) >= 2:
+        y1, c1 = costs[0]
+        for y2, c2 in costs[1:6]:
+            if abs(y2 - y1) <= cfg.border_double_peak_gap_px and c2 > c1 * 0.85:
+                if outward_sign < 0:
+                    best_y = min(y1, y2)
+                else:
+                    best_y = max(y1, y2)
+                break
+    return int(best_y)
+
+"""Independent resampled validation of refined rectangles."""
+
+from __future__ import annotations
+
+from typing import Sequence
+
+import numpy as np
+
+from .config import DetectorConfig
+from .features import CanvasFeatureMaps, delta_e76
+from .refine import refine_rectangle
+from .types import (
+    BackgroundAppearanceModel,
+    EvidenceGrade,
+    IntRect,
+    RectangleHypothesis,
+    SemanticSide,
+)
+
+
+def validate_rectangle(
+    rect: IntRect,
+    hyp: RectangleHypothesis,
+    features: CanvasFeatureMaps,
+    model: BackgroundAppearanceModel,
+    grown_mask: np.ndarray | None,
+    cfg: DetectorConfig,
+    rng: np.random.Generator,
+) -> tuple[bool, dict, float]:
+    metrics: dict = {}
+    h, w = features.height, features.width
+
+    outside_scores = []
+    transition_scores = []
+    for side in SemanticSide:
+        o, t = _side_metrics(rect, side, features, model, cfg, rng)
+        outside_scores.append(o)
+        transition_scores.append(t)
+        metrics[f"{side.value}_outside"] = o
+        metrics[f"{side.value}_transition"] = t
+
+    mean_out = float(np.mean(outside_scores))
+    mean_tr = float(np.mean(transition_scores))
+    metrics["mean_outside"] = mean_out
+    metrics["mean_transition"] = mean_tr
+
+    if mean_out < cfg.validate_min_outside_score:
+        return False, metrics, 0.0
+    if mean_tr < cfg.validate_min_transition:
+        return False, metrics, 0.0
+
+    # Corners local topology
+    corner_ok = _validate_corners(rect, features, model, cfg)
+    metrics["corners_ok"] = corner_ok
+    if not corner_ok:
+        return False, metrics, 0.0
+
+    # Interior must not be same unbounded connected bg domain
+    if grown_mask is not None:
+        # Sample interior; should be mostly non-grown-bg
+        xs = rng.integers(rect.left + 2, max(rect.left + 3, rect.right - 2), size=32)
+        ys = rng.integers(rect.top + 2, max(rect.top + 3, rect.bottom - 2), size=32)
+        interior_bg = float(np.mean(grown_mask[ys, xs])) if xs.size else 1.0
+        metrics["interior_bg_fraction"] = interior_bg
+        if interior_bg > 0.55:
+            return False, metrics, 0.0
+
+    # Local optima under 卤1/卤2 perturbation
+    base_score = 0.5 * mean_out + 0.5 * mean_tr
+    for pert in cfg.validate_perturbation_px:
+        worse = 0
+        total = 0
+        for side in SemanticSide:
+            for sign in (-1, 1):
+                shifted = _shift_side(rect, side, sign * pert, w, h)
+                if shifted is None:
+                    continue
+                o, t = [], []
+                for s2 in SemanticSide:
+                    oo, tt = _side_metrics(shifted, s2, features, model, cfg, rng)
+                    o.append(oo)
+                    t.append(tt)
+                sc = 0.5 * float(np.mean(o)) + 0.5 * float(np.mean(t))
+                total += 1
+                if sc < base_score - cfg.validate_local_optima_margin:
+                    worse += 1
+        # Majority of perturbations should not improve significantly
+        metrics[f"pert_{pert}_worse_ratio"] = worse / max(total, 1)
+        if total > 0 and (worse / total) < 0.35:
+            # Many perturbations equal/better 鈫?not local optimum
+            return False, metrics, 0.0
+
+    conf = float(
+        np.clip(
+            0.4 * mean_out + 0.35 * mean_tr + 0.25 * hyp.confidence,
+            0.0,
+            1.0,
+        )
+    )
+    metrics["confidence"] = conf
+    return True, metrics, conf
+
+
+def _side_metrics(
+    rect: IntRect,
+    side: SemanticSide,
+    features: CanvasFeatureMaps,
+    model: BackgroundAppearanceModel,
+    cfg: DetectorConfig,
+    rng: np.random.Generator,
+) -> tuple[float, float]:
+    h, w = features.height, features.width
+    n = cfg.validate_sample_count
+    # Stratified samples along side, offset from fit samples by +1 pattern
+    if side in (SemanticSide.LEFT, SemanticSide.RIGHT):
+        ys = np.linspace(rect.top + 1, rect.bottom - 2, n, dtype=np.int32)
+        # Independent offset: use odd indices shifted
+        ys = np.unique(np.clip(ys + (np.arange(len(ys)) % 3) - 1, 0, h - 1))
+        x = rect.left if side == SemanticSide.LEFT else rect.right - 1
+        x = int(np.clip(x, 1, w - 2))
+        if side == SemanticSide.LEFT:
+            out_labs = features.lab[ys, x - 1]
+            in_labs = features.lab[ys, min(w - 1, x + 1)]
+            g = np.abs(features.gradient_x[ys, x])
+        else:
+            out_labs = features.lab[ys, min(w - 1, x + 1)]
+            in_labs = features.lab[ys, max(0, x - 1)]
+            g = np.abs(features.gradient_x[ys, x])
+    else:
+        xs = np.linspace(rect.left + 1, rect.right - 2, n, dtype=np.int32)
+        xs = np.unique(np.clip(xs + (np.arange(len(xs)) % 3) - 1, 0, w - 1))
+        y = rect.top if side == SemanticSide.TOP else rect.bottom - 1
+        y = int(np.clip(y, 1, h - 2))
+        if side == SemanticSide.TOP:
+            out_labs = features.lab[y - 1, xs]
+            in_labs = features.lab[min(h - 1, y + 1), xs]
+            g = np.abs(features.gradient_y[y, xs])
+        else:
+            out_labs = features.lab[min(h - 1, y + 1), xs]
+            in_labs = features.lab[max(0, y - 1), xs]
+            g = np.abs(features.gradient_y[y, xs])
+
+    de_out = np.sqrt(np.sum((out_labs - np.asarray(model.center_lab, dtype=np.float32)) ** 2, axis=-1))
+    de_in = np.sqrt(np.sum((in_labs - np.asarray(model.center_lab, dtype=np.float32)) ** 2, axis=-1))
+    out_score = float(np.mean(np.clip(1.0 - de_out / max(model.weak_delta_e, 1e-3), 0, 1)))
+    in_diff = float(np.mean(np.clip(de_in / max(model.strong_delta_e, 1e-3), 0, 1)))
+    g_score = float(np.mean(g >= np.median(g))) if g.size else 0.0
+    transition = float(np.clip(0.5 * in_diff + 0.3 * (1.0 - out_score + out_score) * 0.5 + 0.2 * g_score, 0, 1))
+    # clearer: outside high sim + inside dissimilar
+    transition = float(np.clip(0.55 * out_score + 0.45 * in_diff, 0, 1))
+    return out_score, transition
+
+
+def _validate_corners(
+    rect: IntRect,
+    features: CanvasFeatureMaps,
+    model: BackgroundAppearanceModel,
+    cfg: DetectorConfig,
+) -> bool:
+    h, w = features.height, features.width
+    corners = [
+        (rect.left, rect.top),
+        (rect.right - 1, rect.top),
+        (rect.left, rect.bottom - 1),
+        (rect.right - 1, rect.bottom - 1),
+    ]
+    ok = 0
+    for x, y in corners:
+        if not (1 <= x < w - 1 and 1 <= y < h - 1):
+            continue
+        # Outside diagonal sample should be more bg-like than inside
+        ox = x - 2 if x == rect.left else x + 2
+        oy = y - 2 if y == rect.top else y + 2
+        ix = x + 2 if x == rect.left else x - 2
+        iy = y + 2 if y == rect.top else y - 2
+        ox, oy = int(np.clip(ox, 0, w - 1)), int(np.clip(oy, 0, h - 1))
+        ix, iy = int(np.clip(ix, 0, w - 1)), int(np.clip(iy, 0, h - 1))
+        de_o = float(np.linalg.norm(features.lab[oy, ox] - model.center_lab))
+        de_i = float(np.linalg.norm(features.lab[iy, ix] - model.center_lab))
+        if de_o + 1.0 < de_i:
+            ok += 1
+    return ok >= 3
+
+
+def _shift_side(rect: IntRect, side: SemanticSide, delta: int, w: int, h: int) -> IntRect | None:
+    l, t, r, b = rect.left, rect.top, rect.right, rect.bottom
+    if side == SemanticSide.LEFT:
+        l += delta
+    elif side == SemanticSide.RIGHT:
+        r += delta
+    elif side == SemanticSide.TOP:
+        t += delta
+    else:
+        b += delta
+    if l >= r - 1 or t >= b - 1:
+        return None
+    if l < 0 or t < 0 or r > w or b > h:
+        return None
+    return IntRect(l, t, r, b)
+
+"""Frozen capture session contract for workspace detection + overlay binding."""
+
+from __future__ import annotations
+
+import time
+import uuid
+from dataclasses import dataclass, field
+from typing import Optional, Sequence
+
+import numpy as np
+
+from .types import DetectionOutput, DetectionStatus, IntRect, PixelFormat
+
+
+@dataclass(slots=True)
+class MonitorDescriptor:
+    left: int
+    top: int
+    right: int
+    bottom: int
+    dpi_scale_x: float = 1.0
+    dpi_scale_y: float = 1.0
+    name: str = ""
+
+
+@dataclass(slots=True)
+class CaptureToScreenTransform:
+    """CapturePx 鈫?virtual-desktop physical px: add origin."""
+
+    origin_x: int = 0
+    origin_y: int = 0
+
+    def to_screen(self, rect: IntRect) -> IntRect:
+        return IntRect(
+            rect.left + self.origin_x,
+            rect.top + self.origin_y,
+            rect.right + self.origin_x,
+            rect.bottom + self.origin_y,
+        )
+
+
+@dataclass(slots=True)
+class WorkspaceCaptureSession:
+    """Frozen screenshot session. Detection MUST use this same buffer."""
+
+    capture_id: str
+    captured_at: float
+    virtual_screen_bounds_physical_px: IntRect
+    monitor_descriptors: list[MonitorDescriptor]
+    frozen_capture_bgra: np.ndarray
+    user_roi_capture_px: Optional[IntRect] = None
+    capture_to_screen: CaptureToScreenTransform = field(default_factory=CaptureToScreenTransform)
+    active: bool = True
+
+    @property
+    def width(self) -> int:
+        return int(self.frozen_capture_bgra.shape[1])
+
+    @property
+    def height(self) -> int:
+        return int(self.frozen_capture_bgra.shape[0])
+
+    def set_user_roi(self, roi: IntRect) -> None:
+        self.user_roi_capture_px = roi.clamp(self.width, self.height)
+
+    def invalidate(self) -> None:
+        self.active = False
+
+
+def begin_capture_session(
+    frozen_bgra: np.ndarray,
+    *,
+    origin_x: int = 0,
+    origin_y: int = 0,
+    monitors: Sequence[MonitorDescriptor] | None = None,
+    capture_id: str | None = None,
+) -> WorkspaceCaptureSession:
+    h, w = frozen_bgra.shape[:2]
+    mons = list(monitors) if monitors else [
+        MonitorDescriptor(origin_x, origin_y, origin_x + w, origin_y + h)
+    ]
+    return WorkspaceCaptureSession(
+        capture_id=capture_id or uuid.uuid4().hex,
+        captured_at=time.time(),
+        virtual_screen_bounds_physical_px=IntRect(origin_x, origin_y, origin_x + w, origin_y + h),
+        monitor_descriptors=mons,
+        frozen_capture_bgra=np.ascontiguousarray(frozen_bgra),
+        capture_to_screen=CaptureToScreenTransform(origin_x, origin_y),
+    )
+
+
+def result_matches_session(out: DetectionOutput, session: WorkspaceCaptureSession) -> bool:
+    if not session.active:
+        return False
+    if out.status != DetectionStatus.OK:
+        return False
+    if out.source_capture_id and out.source_capture_id != session.capture_id:
+        return False
+    return True
+

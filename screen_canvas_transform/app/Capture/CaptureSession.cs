@@ -10,7 +10,8 @@ public enum RoiKind
 }
 
 /// <summary>
-/// One frozen virtual-desktop capture session bound by CaptureId.
+/// One frozen capture session bound by CaptureId.
+/// Frame is virtual-desktop sized but only CLIP STUDIO PAINT UI-thread windows are painted.
 /// WorkspaceUserRoi and NavigatorRoi are distinct objects (architecture §2/§5).
 /// </summary>
 public sealed class CaptureSession : IDisposable
@@ -53,10 +54,13 @@ public sealed class CaptureSession : IDisposable
         DpiY = dpiY;
     }
 
-    public static CaptureSession CreateFromVirtualScreen()
+    /// <summary>
+    /// Freeze only CLIP STUDIO PAINT UI-thread windows into a virtual-desktop-sized frame.
+    /// </summary>
+    public static CaptureSession CreateFromClipStudioWindows()
     {
         var bounds = ScreenCapture.GetVirtualScreenBoundsPhysical();
-        var bitmap = ScreenCapture.CaptureVirtualScreen();
+        var bitmap = ClipStudioCapture.CaptureThreadWindows();
 
         float dpiX = 96f;
         float dpiY = 96f;
@@ -78,6 +82,9 @@ public sealed class CaptureSession : IDisposable
             dpiX,
             dpiY);
     }
+
+    /// <summary>Backward-compatible alias — now captures CSP thread windows, not the full desktop.</summary>
+    public static CaptureSession CreateFromVirtualScreen() => CreateFromClipStudioWindows();
 
     public IntRect CaptureBounds => IntRect.FromXYWH(0, 0, FrozenCapture.Width, FrozenCapture.Height);
 
@@ -105,6 +112,20 @@ public sealed class CaptureSession : IDisposable
 
         error = string.Empty;
         return true;
+    }
+
+    /// <summary>Clear a user ROI so the same session can re-select that stage.</summary>
+    public void ClearRoi(RoiKind kind)
+    {
+        switch (kind)
+        {
+            case RoiKind.WorkspaceUser:
+                WorkspaceUserRoiCapturePx = null;
+                break;
+            case RoiKind.Navigator:
+                NavigatorRoiCapturePx = null;
+                break;
+        }
     }
 
     public IntRect CaptureToScreen(IntRect capturePx)

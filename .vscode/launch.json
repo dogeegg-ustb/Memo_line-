@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug ScreenCanvasTransform",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-sct-debug",
+      "program": "${workspaceFolder}/screen_canvas_transform/app/bin/x64/Debug/net8.0-windows10.0.19041.0/win-x64/ScreenCanvasTransform.exe",
+      "cwd": "${workspaceFolder}/screen_canvas_transform/app/bin/x64/Debug/net8.0-windows10.0.19041.0/win-x64",
+      "console": "externalTerminal",
+      "stopAtEntry": false,
+      "justMyCode": false,
+      "env": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    },
+    {
+      "name": "Attach ScreenCanvasTransform",
+      "type": "coreclr",
+      "request": "attach",
+      "processName": "ScreenCanvasTransform"
+    }
+  ]
+}

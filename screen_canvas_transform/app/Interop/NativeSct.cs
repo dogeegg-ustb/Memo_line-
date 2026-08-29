@@ -314,11 +314,11 @@ public static class NativeSct
         public string SnapshotId;
 
         public ulong Generation;
+        public ulong RecomputeGeneration;
 
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
         public string CaptureId;
 
-        public ulong RecomputeGeneration;
         public int CanvasPixelWidth;
         public int CanvasPixelHeight;
         public SctIntRect WorkspaceRoi;

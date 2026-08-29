@@ -7,8 +7,9 @@ using ScreenCanvasTransform.Interop;
 namespace ScreenCanvasTransform.Ui;
 
 /// <summary>
-/// Transparent orange L-marker at CanvasTopLeft, click-through, no-activate.
-/// Arm endpoints come from native marker geometry (canvas ε projected to screen).
+/// Transparent pale-orange L-marker at CanvasTopLeft, click-through, no-activate.
+/// Outer edges flush with the canvas corner; filled with sharp right angles only
+/// (no round caps / fillets). Arm endpoints come from native marker geometry.
 /// </summary>
 public sealed class MarkerOverlayWindow : IDisposable
 {
@@ -33,8 +34,9 @@ public sealed class MarkerOverlayWindow : IDisposable
 
     private static readonly IntPtr WindowClassAtom;
     private static readonly WndProcDelegate WndProcKeepAlive = StaticWndProc;
+    /// <summary>Transparent pale orange fill (no opaque outline).</summary>
     private static readonly System.Drawing.Color MarkerColor =
-        System.Drawing.Color.FromArgb(220, 255, 140, 0);
+        System.Drawing.Color.FromArgb(110, 255, 170, 80);
 
     private IntPtr _hwnd;
     private string? _boundCaptureId;
@@ -80,19 +82,37 @@ public sealed class MarkerOverlayWindow : IDisposable
         EnforceMinArm(ref xx, ref xy, ax, ay);
         EnforceMinArm(ref yx, ref yy, ax, ay);
 
-        int left = (int)Math.Floor(Math.Min(ax, Math.Min(xx, yx))) - Pad;
-        int top = (int)Math.Floor(Math.Min(ay, Math.Min(xy, yy))) - Pad;
-        int right = (int)Math.Ceiling(Math.Max(ax, Math.Max(xx, yx))) + Pad;
-        int bottom = (int)Math.Ceiling(Math.Max(ay, Math.Max(xy, yy))) + Pad;
+        float strokePx = marker.TargetStrokeDisplayPx > 0 ? marker.TargetStrokeDisplayPx : 3f;
+        float thickness = Math.Max(4f, strokePx);
+        var screenPoly = BuildFlushLPolygon(
+            (float)ax, (float)ay,
+            (float)xx, (float)xy,
+            (float)yx, (float)yy,
+            thickness);
+
+        float minX = screenPoly[0].X, maxX = screenPoly[0].X;
+        float minY = screenPoly[0].Y, maxY = screenPoly[0].Y;
+        for (int i = 1; i < screenPoly.Length; i++)
+        {
+            minX = Math.Min(minX, screenPoly[i].X);
+            maxX = Math.Max(maxX, screenPoly[i].X);
+            minY = Math.Min(minY, screenPoly[i].Y);
+            maxY = Math.Max(maxY, screenPoly[i].Y);
+        }
+
+        int left = (int)Math.Floor(minX) - Pad;
+        int top = (int)Math.Floor(minY) - Pad;
+        int right = (int)Math.Ceiling(maxX) + Pad;
+        int bottom = (int)Math.Ceiling(maxY) + Pad;
         int w = Math.Max(MinMarkerWindowPx, right - left);
         int h = Math.Max(MinMarkerWindowPx, bottom - top);
 
         // Keep the projected anchor inside the enlarged bitmap when a very small
         // or off-screen transform produces a window smaller than the marker arms.
-        if (ax - left < Pad || ay - top < Pad || xx - left < Pad || yy - top < Pad)
+        if (ax - left < Pad || ay - top < Pad)
         {
-            left = (int)Math.Floor(Math.Min(ax, Math.Min(xx, yx))) - Pad;
-            top = (int)Math.Floor(Math.Min(ay, Math.Min(xy, yy))) - Pad;
+            left = (int)Math.Floor(minX) - Pad;
+            top = (int)Math.Floor(minY) - Pad;
             right = Math.Max(right, left + MinMarkerWindowPx);
             bottom = Math.Max(bottom, top + MinMarkerWindowPx);
             w = Math.Max(MinMarkerWindowPx, right - left);
@@ -113,8 +133,7 @@ public sealed class MarkerOverlayWindow : IDisposable
         float yEndX = (float)(yx - left);
         float yEndY = (float)(yy - top);
 
-        UpdateLayeredContent(w, h, oX, oY, xEndX, xEndY, yEndX, yEndY,
-            marker.TargetStrokeDisplayPx > 0 ? marker.TargetStrokeDisplayPx : 3f);
+        UpdateLayeredContent(w, h, oX, oY, xEndX, xEndY, yEndX, yEndY, strokePx);
         ShowWindow(_hwnd, SwShowNoActivate);
     }
 
@@ -169,6 +188,59 @@ public sealed class MarkerOverlayWindow : IDisposable
         endY = ay + dy * s;
     }
 
+    /// <summary>
+    /// Sharp L whose outer edges lie on O→X and O→Y (flush with canvas corner),
+    /// thickness inset along the opposite arm direction. All corners are right angles.
+    /// </summary>
+    private static PointF[] BuildFlushLPolygon(
+        float oX, float oY,
+        float xEndX, float xEndY,
+        float yEndX, float yEndY,
+        float thickness)
+    {
+        float ax = xEndX - oX;
+        float ay = xEndY - oY;
+        float bx = yEndX - oX;
+        float by = yEndY - oY;
+        float aLen = MathF.Sqrt(ax * ax + ay * ay);
+        float bLen = MathF.Sqrt(bx * bx + by * by);
+        if (aLen < 1e-3f || bLen < 1e-3f)
+        {
+            // Degenerate fallback: axis-aligned L at origin of local bitmap.
+            float t = thickness;
+            return
+            [
+                new PointF(oX, oY),
+                new PointF(oX + MinArmScreenPx, oY),
+                new PointF(oX + MinArmScreenPx, oY + t),
+                new PointF(oX + t, oY + t),
+                new PointF(oX + t, oY + MinArmScreenPx),
+                new PointF(oX, oY + MinArmScreenPx)
+            ];
+        }
+
+        float ux = ax / aLen;
+        float uy = ay / aLen;
+        float vx = bx / bLen;
+        float vy = by / bLen;
+        float tU = thickness * ux;
+        float tV = thickness * uy;
+        // Inset along the other arm unit so outer edges stay on the canvas axes.
+        float iU = thickness * vx;
+        float iV = thickness * vy;
+
+        // Outer corner O, along X arm, inner step, inner corner, along Y arm back to O.
+        return
+        [
+            new PointF(oX, oY),
+            new PointF(xEndX, xEndY),
+            new PointF(xEndX + iU, xEndY + iV),
+            new PointF(oX + tU + iU, oY + tV + iV),
+            new PointF(yEndX + tU, yEndY + tV),
+            new PointF(yEndX, yEndY)
+        ];
+    }
+
     private void EnsureWindow()
     {
         if (_hwnd != IntPtr.Zero)
@@ -201,22 +273,15 @@ public sealed class MarkerOverlayWindow : IDisposable
         using (var g = Graphics.FromImage(bmp))
         {
             g.Clear(System.Drawing.Color.Transparent);
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            float visibleStroke = Math.Max(5f, strokePx);
-            using var halo = new System.Drawing.Pen(System.Drawing.Color.FromArgb(230, 90, 35, 0), visibleStroke + 6f)
-            {
-                StartCap = LineCap.Round,
-                EndCap = LineCap.Round
-            };
-            using var pen = new System.Drawing.Pen(MarkerColor, visibleStroke)
-            {
-                StartCap = LineCap.Round,
-                EndCap = LineCap.Round
-            };
-            g.DrawLine(halo, oX, oY, xEndX, xEndY);
-            g.DrawLine(halo, oX, oY, yEndX, yEndY);
-            g.DrawLine(pen, oX, oY, xEndX, xEndY);
-            g.DrawLine(pen, oX, oY, yEndX, yEndY);
+            // Pixel-aligned fill only — no anti-alias soft edges or round caps.
+            g.SmoothingMode = SmoothingMode.None;
+            g.PixelOffsetMode = PixelOffsetMode.None;
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+
+            float thickness = Math.Max(4f, strokePx);
+            var lPoly = BuildFlushLPolygon(oX, oY, xEndX, xEndY, yEndX, yEndY, thickness);
+            using var brush = new SolidBrush(MarkerColor);
+            g.FillPolygon(brush, lPoly);
         }
 
         PremultiplyAlpha(bmp);

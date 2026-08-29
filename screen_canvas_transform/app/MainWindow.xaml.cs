@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Threading;
 using ScreenCanvasTransform.Capture;
+using ScreenCanvasTransform.Detection;
 using ScreenCanvasTransform.Diagnostics;
 using ScreenCanvasTransform.Models;
 using ScreenCanvasTransform.Services;
@@ -117,16 +118,22 @@ public partial class MainWindow : Window
 
     private void HideOverlayButton_OnClick(object sender, RoutedEventArgs e)
     {
-        HideAllOverlays();
-        SetStatus("已隐藏覆盖层。");
+        // 只隐藏 ROI 框；橙色 L 标记始终保留，便于对照画布角。
+        HideRoiBorders();
+        SetStatus("已隐藏区域标记（橙色 L 仍保留）。");
+    }
+
+    private void HideRoiBorders()
+    {
+        _workspaceBorder.Hide();
+        _navigatorBorder.Hide();
+        _thumbnailBorder.Hide();
     }
 
     private void HideAllOverlays()
     {
         _markerOverlay.Hide();
-        _workspaceBorder.Hide();
-        _navigatorBorder.Hide();
-        _thumbnailBorder.Hide();
+        HideRoiBorders();
     }
 
     private async Task RunInitializationFlowAsync()
@@ -141,6 +148,7 @@ public partial class MainWindow : Window
 
         try
         {
+            // —— 阶段 1：输入画布像素（取消 = 整段退出）——
             var sizeDialog = new CanvasSizeInputDialog();
             bool? sizeOk = sizeDialog.ShowDialog();
             if (sizeOk != true)
@@ -154,105 +162,32 @@ public partial class MainWindow : Window
                 sizeDialog.CanvasPixelHeight);
 
             HideAllOverlays();
-            SetStatus("正在隐藏窗口并冻结桌面截图…");
-            Hide();
-            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
-            await Task.Delay(120);
 
-            _activeSession?.Dispose();
-            _activeSession = null;
+            // —— 冻结截图：失败则重载截图（保留已确认尺寸）——
+            CaptureSession session = await CaptureFrozenSessionWithReloadAsync().ConfigureAwait(true);
 
-            var session = CaptureSession.CreateFromVirtualScreen();
             _activeSession = session;
             SetStage(TransformStage.CaptureFrozen);
             LiveDebugLog.Write(
                 $"[Capture] id={session.CaptureId} frame={session.FrozenCapture.Width}x{session.FrozenCapture.Height} " +
-                $"origin=({session.OriginX},{session.OriginY})");
+                $"origin=({session.OriginX},{session.OriginY}) source=ClipStudioThreadWindows");
 
-            SetStage(TransformStage.SelectingWorkspaceRoi);
-            var wsRoi = new RoiSelectWindow(
-                session,
-                RoiKind.WorkspaceUser,
-                "拖拽框选工作区粗略范围 · Enter 确认 · Esc 取消");
-            bool? wsOk = wsRoi.ShowDialog();
-            if (wsOk != true || session.WorkspaceUserRoiCapturePx is null)
-            {
-                Show();
-                Activate();
-                SetStatus("已取消工作区框选。");
-                return;
-            }
-
-            SetStage(TransformStage.DetectingWorkspace);
-            SetStatus($"CaptureId={session.CaptureId}。正在纠正工作区…");
-            var workspace = await Task.Run(() => _pipeline.DetectWorkspace(session)).ConfigureAwait(true);
-
-            Show();
-            Activate();
-
-            if (!workspace.Success || workspace.Background is null)
-            {
-                HideAllOverlays();
-                SetStage(TransformStage.DetectingWorkspace);
-                SetStatus(
-                    $"工作区标记失败，初始化结束。{workspace.StatusName} — {workspace.Message} " +
-                    $"(CaptureId={session.CaptureId})");
-                return;
-            }
+            // —— 阶段 2：粗选工作区 + 纠正；检测失败则同帧重选；Esc = 整段退出 ——
+            DetectOutcome workspace = await SelectAndDetectWorkspaceUntilSuccessAsync(session)
+                .ConfigureAwait(true);
+            if (workspace.Background is null)
+                return; // Esc 退出（状态文案已写）
 
             _workspaceBorder.TryShowIfCaptureMatches(
                 workspace.RectScreenPhysicalPx,
                 session.CaptureId,
                 workspace.SourceCaptureId);
 
-            Hide();
-            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
-            await Task.Delay(60);
-
-            SetStage(TransformStage.SelectingNavigatorRoi);
-            var navRoi = new RoiSelectWindow(
-                session,
-                RoiKind.Navigator,
-                "拖拽框选完整导航器面板（直接采用，不做外边界纠正）· Enter 确认 · Esc 取消");
-            bool? navOk = navRoi.ShowDialog();
-
-            Show();
-            Activate();
-
-            if (navOk != true || session.NavigatorRoiCapturePx is null)
-            {
-                SetStatus("已取消导航器框选。工作区绿框仍保留。");
-                return;
-            }
-
-            var navigatorScreen = session.CaptureToScreen(session.NavigatorRoiCapturePx.Value);
-            _navigatorBorder.Show(navigatorScreen, session.CaptureId);
-
-            SetStage(TransformStage.DetectingNavigatorThumbnailCII);
-            SetStatus($"CaptureId={session.CaptureId}。正在 C-II 生成导航器缩略图…");
-            var thumbnail = await Task.Run(() => _pipeline.DetectNavigatorThumbnail(session, workspace))
+            // —— 阶段 3：粗选导航器 + C-II/观测/OCR/求解；失败均回到粗选导航器；Esc = 整段退出 ——
+            PipelineResult? result = await SelectNavigatorAndSolveUntilSuccessAsync(session, workspace)
                 .ConfigureAwait(true);
-            if (!thumbnail.Success)
-            {
-                _thumbnailBorder.Hide();
-                SetStatus(
-                    $"缩略图标记失败。{thumbnail.StatusName} — {thumbnail.Message} " +
-                    $"(CaptureId={session.CaptureId})");
-                return;
-            }
-
-            _thumbnailBorder.TryShowIfCaptureMatches(
-                thumbnail.RectScreenPhysicalPx,
-                session.CaptureId,
-                thumbnail.SourceCaptureId);
-            SetStatus("缩略图已标记（品红）。继续观测 / OCR / 求解…");
-
-            var progress = new Progress<TransformStage>(SetStage);
-            var result = await Task.Run(
-                    async () => await _pipeline.ContinueAfterThumbnailAsync(
-                            session, workspace, thumbnail, progress)
-                        .ConfigureAwait(false))
-                .ConfigureAwait(true);
+            if (result is null)
+                return; // Esc 退出
 
             ApplyResultOverlays(session, result);
 
@@ -285,23 +220,6 @@ public partial class MainWindow : Window
                 (result.Snapshot.Marker.Offscreen != 0 ? $" 橙色 L 已显示{off}。" : " 标记已显示。"));
             SetStage(TransformStage.TrackingStable);
         }
-        catch (PipelineFailureException ex)
-        {
-            _markerOverlay.Hide();
-            _thumbnailBorder.Hide();
-            if (!IsVisible)
-            {
-                Show();
-                Activate();
-            }
-            SetStage(ex.Stage);
-            SetStatus(
-                $"失败 stage={ex.Stage} status={ex.Status}：{ex.Message} " +
-                $"(CaptureId={ex.CaptureId}, gen={ex.Generation})" +
-                (ex.Stage == TransformStage.ReadingNavigatorNumbers
-                    ? $"  OCR调试: %TEMP%\\sct_ocr_debug\\{ex.CaptureId}"
-                    : ""));
-        }
         catch (Exception ex)
         {
             HideAllOverlays();
@@ -322,6 +240,198 @@ public partial class MainWindow : Window
             StartButton.IsEnabled = true;
             _flowRunning = false;
             UpdateArchiveButtons();
+        }
+    }
+
+    /// <summary>Hide main window and freeze CSP; on failure reload capture until success.</summary>
+    private async Task<CaptureSession> CaptureFrozenSessionWithReloadAsync()
+    {
+        while (true)
+        {
+            SetStatus("正在隐藏窗口并冻结 CLIP STUDIO PAINT 窗口截图…");
+            Hide();
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            await Task.Delay(120);
+
+            _activeSession?.Dispose();
+            _activeSession = null;
+
+            try
+            {
+                return CaptureSession.CreateFromClipStudioWindows();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Show();
+                Activate();
+                SetStatus($"截图失败，将重新截图：{ex.Message}");
+                MessageBox.Show(
+                    this,
+                    $"{ex.Message}\n\n将重新尝试截图。",
+                    "截图失败",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Stage 2 loop: select workspace ROI → detect. Detect failure retries selection on same frame.
+    /// Esc cancels the entire initialization (returns a failed outcome with null Background).
+    /// </summary>
+    private async Task<DetectOutcome> SelectAndDetectWorkspaceUntilSuccessAsync(CaptureSession session)
+    {
+        while (true)
+        {
+            session.ClearRoi(RoiKind.WorkspaceUser);
+            _workspaceBorder.Hide();
+
+            Hide();
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            await Task.Delay(60);
+
+            SetStage(TransformStage.SelectingWorkspaceRoi);
+            var wsRoi = new RoiSelectWindow(
+                session,
+                RoiKind.WorkspaceUser,
+                "拖拽框选工作区粗略范围（仅显示 CSP 窗口）· Enter 确认 · Esc 退出初始化");
+            bool? wsOk = wsRoi.ShowDialog();
+            if (wsOk != true || session.WorkspaceUserRoiCapturePx is null)
+            {
+                Show();
+                Activate();
+                SetStatus("已退出初始化（Esc / 取消工作区框选）。");
+                return new DetectOutcome
+                {
+                    Success = false,
+                    StatusName = "Cancelled",
+                    Message = "用户取消工作区框选",
+                    SourceCaptureId = session.CaptureId
+                };
+            }
+
+            SetStage(TransformStage.DetectingWorkspace);
+            SetStatus($"CaptureId={session.CaptureId}。正在纠正工作区…");
+            var workspace = await Task.Run(() => _pipeline.DetectWorkspace(session)).ConfigureAwait(true);
+
+            if (workspace.Success && workspace.Background is not null)
+                return workspace;
+
+            Show();
+            Activate();
+            SetStage(TransformStage.DetectingWorkspace);
+            SetStatus(
+                $"工作区标记失败，将重新框选工作区。{workspace.StatusName} — {workspace.Message} " +
+                $"(CaptureId={session.CaptureId})");
+            MessageBox.Show(
+                this,
+                $"工作区纠正失败：{workspace.StatusName} — {workspace.Message}\n\n将重新框选工作区。",
+                "工作区失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Stage 3 loop: select navigator → C-II → observe/OCR/solve.
+    /// Any failure returns to navigator selection; workspace green border is kept.
+    /// Esc cancels the entire initialization (returns null).
+    /// </summary>
+    private async Task<PipelineResult?> SelectNavigatorAndSolveUntilSuccessAsync(
+        CaptureSession session,
+        DetectOutcome workspace)
+    {
+        while (true)
+        {
+            session.ClearRoi(RoiKind.Navigator);
+            _navigatorBorder.Hide();
+            _thumbnailBorder.Hide();
+            _markerOverlay.Hide();
+
+            Hide();
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            await Task.Delay(60);
+
+            SetStage(TransformStage.SelectingNavigatorRoi);
+            var navRoi = new RoiSelectWindow(
+                session,
+                RoiKind.Navigator,
+                "拖拽框选完整导航器面板（仅显示 CSP 窗口，直接采用）· Enter 确认 · Esc 退出初始化");
+            bool? navOk = navRoi.ShowDialog();
+
+            if (navOk != true || session.NavigatorRoiCapturePx is null)
+            {
+                Show();
+                Activate();
+                SetStatus("已退出初始化（Esc / 取消导航器框选）。工作区绿框仍保留。");
+                return null;
+            }
+
+            var navigatorScreen = session.CaptureToScreen(session.NavigatorRoiCapturePx.Value);
+            _navigatorBorder.Show(navigatorScreen, session.CaptureId);
+
+            Show();
+            Activate();
+
+            try
+            {
+                SetStage(TransformStage.DetectingNavigatorThumbnailCII);
+                SetStatus($"CaptureId={session.CaptureId}。正在 C-II 生成导航器缩略图…");
+                var thumbnail = await Task.Run(() => _pipeline.DetectNavigatorThumbnail(session, workspace))
+                    .ConfigureAwait(true);
+                if (!thumbnail.Success)
+                {
+                    _thumbnailBorder.Hide();
+                    SetStatus(
+                        $"缩略图标记失败，将重新框选导航器。{thumbnail.StatusName} — {thumbnail.Message} " +
+                        $"(CaptureId={session.CaptureId})");
+                    MessageBox.Show(
+                        this,
+                        $"缩略图失败：{thumbnail.StatusName} — {thumbnail.Message}\n\n将重新框选导航器。",
+                        "导航器阶段失败",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    continue;
+                }
+
+                _thumbnailBorder.TryShowIfCaptureMatches(
+                    thumbnail.RectScreenPhysicalPx,
+                    session.CaptureId,
+                    thumbnail.SourceCaptureId);
+                SetStatus("缩略图已标记（品红）。继续观测 / OCR / 求解…");
+
+                var progress = new Progress<TransformStage>(SetStage);
+                return await Task.Run(
+                        async () => await _pipeline.ContinueAfterThumbnailAsync(
+                                session, workspace, thumbnail, progress)
+                            .ConfigureAwait(false))
+                    .ConfigureAwait(true);
+            }
+            catch (PipelineFailureException ex)
+            {
+                _markerOverlay.Hide();
+                _thumbnailBorder.Hide();
+                _navigatorBorder.Hide();
+                if (!IsVisible)
+                {
+                    Show();
+                    Activate();
+                }
+
+                SetStage(ex.Stage);
+                string ocrHint = ex.Stage == TransformStage.ReadingNavigatorNumbers
+                    ? $"  OCR调试: %TEMP%\\sct_ocr_debug\\{ex.CaptureId}"
+                    : "";
+                SetStatus(
+                    $"失败 stage={ex.Stage} status={ex.Status}：{ex.Message} " +
+                    $"(CaptureId={ex.CaptureId}, gen={ex.Generation})。将重新框选导航器。{ocrHint}");
+                MessageBox.Show(
+                    this,
+                    $"stage={ex.Stage}\n{ex.Message}\n\n将重新框选导航器。",
+                    "导航器阶段失败",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
         }
     }
 
@@ -346,7 +456,19 @@ public partial class MainWindow : Window
             await Task.Delay(120);
 
             _activeSession?.Dispose();
-            var session = CaptureSession.CreateFromVirtualScreen();
+            CaptureSession session;
+            try
+            {
+                session = CaptureSession.CreateFromClipStudioWindows();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Show();
+                Activate();
+                SetStatus(ex.Message);
+                return;
+            }
+
             _activeSession = session;
             SetStage(TransformStage.CaptureFrozen);
 
@@ -424,14 +546,37 @@ public partial class MainWindow : Window
             await Task.Delay(120);
 
             _activeSession?.Dispose();
-            var session = CaptureSession.CreateFromVirtualScreen();
+            CaptureSession session;
+            try
+            {
+                session = CaptureSession.CreateFromClipStudioWindows();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Show();
+                Activate();
+                SetStatus(ex.Message);
+                return;
+            }
+
             _activeSession = session;
             SetStage(TransformStage.CaptureFrozen);
 
             var progress = new Progress<TransformStage>(SetStage);
+            // Prefer bound archive anchors when present so session recompute cannot drift from archive.
             var result = await Task.Run(
-                    async () => await _pipeline.RecomputeAsync(session, _lastResult, progress)
-                        .ConfigureAwait(false))
+                    async () =>
+                    {
+                        if (_activeArchive is not null)
+                        {
+                            return await _pipeline.RecomputeFromArchiveAsync(
+                                    session, _activeArchive, progress)
+                                .ConfigureAwait(false);
+                        }
+
+                        return await _pipeline.RecomputeAsync(session, _lastResult, progress)
+                            .ConfigureAwait(false);
+                    })
                 .ConfigureAwait(true);
 
             Show();
@@ -458,7 +603,11 @@ public partial class MainWindow : Window
                 Activate();
             }
             SetStage(ex.Stage);
-            SetStatus($"重算失败 stage={ex.Stage} status={ex.Status}：{ex.Message}");
+            SetStatus(
+                $"重算失败 stage={ex.Stage} status={ex.Status}：{ex.Message}" +
+                (ex.EvidenceSummary is "MissingOcrLayoutOrAnchors"
+                    ? "。请从存档开始或重新初始化。"
+                    : ""));
         }
         finally
         {

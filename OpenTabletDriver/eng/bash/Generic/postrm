@@ -1,7 +1,0 @@
-#!/bin/sh
-
-set -e
-
-if udevadm control --reload-rules; then
-     udevadm trigger && udevadm settle -t 15 || true
-fi

@@ -135,7 +135,7 @@ public sealed class SaveArchiveServiceTests : IDisposable
         Assert.False(layout.RotationSlotScreen.IsEmpty);
         Assert.True(layout.ScaleSlotScreen.Bottom <= layout.RotationSlotScreen.Top
                     || layout.ScaleSlotScreen.Top < layout.RotationSlotScreen.Top);
-        Assert.True(layout.ScaleSlotScreen.Width <= nav.Width / 2 + 1);
+        Assert.True(layout.ScaleSlotScreen.Width <= nav.Width * 0.42 + 2);
         Assert.True(layout.RotationSlotScreen.Top >= thumb.Bottom
                     || layout.ScaleSlotScreen.Top >= thumb.Bottom - 4);
     }

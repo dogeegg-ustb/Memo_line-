@@ -43,6 +43,92 @@ public sealed class PipelineResult
     public IntRect NavigatorThumbnailRoiScreen { get; init; }
     public WorkspaceBackgroundModel Background { get; init; } = null!;
     public TransformStage Stage { get; init; }
+    /// <summary>OCR slots that succeeded during init (preferred when persisting archive).</summary>
+    public OcrLayoutScreen? OcrLayoutUsed { get; init; }
+}
+
+/// <summary>
+/// Frozen system anchors for recompute. Coordinates are ScreenPhysicalPx.
+/// Recompute MUST inject these as-is; MUST NOT rediscover via DetectWorkspace / C-II.
+/// </summary>
+public sealed class RecomputeAnchorSet
+{
+    public int CanvasPixelWidth { get; init; }
+    public int CanvasPixelHeight { get; init; }
+    public IntRect SystemWorkspaceRoiScreen { get; init; }
+    public WorkspaceBackgroundModel WorkspaceBackgroundModel { get; init; } = null!;
+    public IntRect SystemNavigatorThumbnailRoiScreen { get; init; }
+    public OcrLayoutScreen OcrLayout { get; init; }
+
+    public static RecomputeAnchorSet FromArchive(SaveArchive archive)
+        => new()
+        {
+            CanvasPixelWidth = archive.CanvasPixelWidth,
+            CanvasPixelHeight = archive.CanvasPixelHeight,
+            SystemWorkspaceRoiScreen = archive.SystemWorkspaceRoiScreen.ToIntRect(),
+            WorkspaceBackgroundModel = archive.Background,
+            SystemNavigatorThumbnailRoiScreen = archive.SystemNavigatorThumbnailRoiScreen.ToIntRect(),
+            OcrLayout = OcrLayoutScreen.FromDto(archive.OcrLayout)
+        };
+
+    /// <summary>
+    /// Session recompute anchors from last verified pipeline result.
+    /// Requires <see cref="PipelineResult.OcrLayoutUsed"/>; does not use panel-level NavigatorRoi.
+    /// <paramref name="canvasPixelWidth"/>/<paramref name="canvasPixelHeight"/> come from pipeline memory.
+    /// </summary>
+    public static bool TryFromSession(
+        PipelineResult previous,
+        int canvasPixelWidth,
+        int canvasPixelHeight,
+        out RecomputeAnchorSet? anchors,
+        out string error)
+    {
+        anchors = null;
+        error = "";
+
+        if (previous.OcrLayoutUsed is not OcrLayoutScreen layout)
+        {
+            error = "会话缺少已固化的 OcrLayout，请从存档开始或重新初始化";
+            return false;
+        }
+
+        if (previous.Background is null)
+        {
+            error = "会话缺少 WorkspaceBackgroundModel";
+            return false;
+        }
+
+        if (previous.NavigatorThumbnailRoiScreen.IsEmpty
+            || previous.NavigatorThumbnailRoiScreen.Width < CaptureSession.MinRoiSizePx
+            || previous.NavigatorThumbnailRoiScreen.Height < CaptureSession.MinRoiSizePx)
+        {
+            error = "会话缺少有效的系统缩略图矩形 NavigatorThumbnailRoiScreen";
+            return false;
+        }
+
+        int canvasW = canvasPixelWidth > 0
+            ? canvasPixelWidth
+            : previous.Snapshot?.CanvasPixelWidth ?? 0;
+        int canvasH = canvasPixelHeight > 0
+            ? canvasPixelHeight
+            : previous.Snapshot?.CanvasPixelHeight ?? 0;
+        if (canvasW <= 0 || canvasH <= 0)
+        {
+            error = "会话缺少有效的画布像素尺寸";
+            return false;
+        }
+
+        anchors = new RecomputeAnchorSet
+        {
+            CanvasPixelWidth = canvasW,
+            CanvasPixelHeight = canvasH,
+            SystemWorkspaceRoiScreen = previous.WorkspaceRoiScreen,
+            WorkspaceBackgroundModel = previous.Background,
+            SystemNavigatorThumbnailRoiScreen = previous.NavigatorThumbnailRoiScreen,
+            OcrLayout = layout
+        };
+        return true;
+    }
 }
 
 /// <summary>
@@ -225,6 +311,7 @@ public sealed class TransformPipelineService
 
         progress?.Report(TransformStage.ReadingNavigatorNumbers);
         NavigatorNumericReadingDto numbers;
+        OcrLayoutScreen? ocrLayoutUsed = fixedOcrLayout;
         if (fixedOcrLayout is OcrLayoutScreen layout)
         {
             numbers = await _ocr.ReadWithLayoutAsync(session, layout, cancellationToken)
@@ -232,9 +319,11 @@ public sealed class TransformPipelineService
         }
         else
         {
-            numbers = await _ocr.ReadAsync(
+            var ocrAttempt = await _ocr.ReadAsync(
                     session, navigatorRoiCapture, thumbnailCapture, cancellationToken)
                 .ConfigureAwait(false);
+            numbers = ocrAttempt.Numbers;
+            ocrLayoutUsed = ocrAttempt.LayoutUsed;
         }
         if (numbers.ScaleConfidence < 0.2f || numbers.ScalePercent <= 0)
         {
@@ -338,12 +427,14 @@ public sealed class TransformPipelineService
             NavigatorRoiScreen = navigatorRoiScreen,
             NavigatorThumbnailRoiScreen = thumbnailScreen,
             Background = background,
-            Stage = TransformStage.TrackingStable
+            Stage = TransformStage.TrackingStable,
+            OcrLayoutUsed = ocrLayoutUsed
         };
     }
 
     /// <summary>
-    /// Explicit recompute: fresh capture, same screen ROIs and canvas pixel size, full evidence re-solve.
+    /// Session recompute: map verified system anchors → same <see cref="RecomputeCoreAsync"/> as archive.
+    /// MUST NOT run C-II / DetectWorkspace / derive OCR layout.
     /// </summary>
     public async Task<PipelineResult> RecomputeAsync(
         CaptureSession session,
@@ -352,44 +443,26 @@ public sealed class TransformPipelineService
         CancellationToken cancellationToken = default)
     {
         progress?.Report(TransformStage.RecomputeRequested);
-        RecomputeGeneration++;
-        Generation++;
 
-        progress?.Report(TransformStage.ReacquiringEvidence);
-
-        var workspace = new DetectOutcome
-        {
-            Success = true,
-            RectCapturePx = session.ScreenToCapture(previous.WorkspaceRoiScreen),
-            RectScreenPhysicalPx = previous.WorkspaceRoiScreen,
-            Background = previous.Background,
-            SourceCaptureId = session.CaptureId,
-            Confidence = 1f
-        };
-
-        if (!session.TrySetRoi(RoiKind.Navigator, session.ScreenToCapture(previous.NavigatorRoiScreen), out string navErr))
-            throw Fail(TransformStage.ReacquiringEvidence, 103, navErr, session, Generation);
-
-        var thumbnail = await Task.Run(() => DetectNavigatorThumbnail(session, workspace), cancellationToken)
-            .ConfigureAwait(false);
-        if (!thumbnail.Success)
+        if (!RecomputeAnchorSet.TryFromSession(
+                previous, CanvasPixelWidth, CanvasPixelHeight, out var anchors, out string error)
+            || anchors is null)
         {
             throw Fail(
-                TransformStage.DetectingNavigatorThumbnailCII,
-                thumbnail.Status == 0 ? 104 : thumbnail.Status,
-                thumbnail.Message,
+                TransformStage.ReacquiringEvidence,
+                107,
+                error,
                 session,
                 Generation,
-                thumbnail.SourceRevision,
-                "NavigatorThumbnailCiiFailed");
+                evidenceSummary: "MissingOcrLayoutOrAnchors");
         }
 
-        return await ContinueAfterThumbnailAsync(session, workspace, thumbnail, progress, cancellationToken)
+        return await RecomputeCoreAsync(session, anchors, progress, cancellationToken)
             .ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Archive recompute: fresh capture, archive system anchors, fixed OcrLayout, no user ROI.
+    /// Archive recompute: archive system anchors → same <see cref="RecomputeCoreAsync"/> as session.
     /// </summary>
     public async Task<PipelineResult> RecomputeFromArchiveAsync(
         CaptureSession session,
@@ -398,27 +471,44 @@ public sealed class TransformPipelineService
         CancellationToken cancellationToken = default)
     {
         progress?.Report(TransformStage.ArchiveRecomputeRequested);
-        ValidateArchiveForSession(session, archive);
+        var anchors = RecomputeAnchorSet.FromArchive(archive);
+        return await RecomputeCoreAsync(session, anchors, progress, cancellationToken)
+            .ConfigureAwait(false);
+    }
 
-        CanvasPixelWidth = archive.CanvasPixelWidth;
-        CanvasPixelHeight = archive.CanvasPixelHeight;
+    /// <summary>
+    /// Shared recompute core: inject frozen anchors, refresh evidence, re-solve. No detection.
+    /// </summary>
+    public async Task<PipelineResult> RecomputeCoreAsync(
+        CaptureSession session,
+        RecomputeAnchorSet anchors,
+        IProgress<TransformStage>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateAnchorsOnCapture(session, anchors);
+
+        CanvasPixelWidth = anchors.CanvasPixelWidth;
+        CanvasPixelHeight = anchors.CanvasPixelHeight;
 
         RecomputeGeneration++;
         Generation++;
 
         progress?.Report(TransformStage.ReacquiringEvidence);
 
+        var workspaceScreen = anchors.SystemWorkspaceRoiScreen;
+        var thumbnailScreen = anchors.SystemNavigatorThumbnailRoiScreen;
+        var ocrLayout = anchors.OcrLayout;
+
         var workspace = new DetectOutcome
         {
             Success = true,
-            RectCapturePx = session.ScreenToCapture(archive.SystemWorkspaceRoiScreen.ToIntRect()),
-            RectScreenPhysicalPx = archive.SystemWorkspaceRoiScreen.ToIntRect(),
-            Background = archive.Background,
+            RectCapturePx = session.ScreenToCapture(workspaceScreen),
+            RectScreenPhysicalPx = workspaceScreen,
+            Background = anchors.WorkspaceBackgroundModel,
             SourceCaptureId = session.CaptureId,
-            Confidence = archive.Background.Confidence
+            Confidence = anchors.WorkspaceBackgroundModel.Confidence
         };
 
-        var thumbnailScreen = archive.SystemNavigatorThumbnailRoiScreen.ToIntRect();
         var thumbnail = new DetectOutcome
         {
             Success = true,
@@ -428,7 +518,6 @@ public sealed class TransformPipelineService
             Confidence = 1f
         };
 
-        var ocrLayout = OcrLayoutScreen.FromDto(archive.OcrLayout);
         IntRect navigatorRoiScreen = DeriveNavigatorRoiForSolve(thumbnailScreen, ocrLayout);
 
         return await ContinueAfterThumbnailAsync(
@@ -453,15 +542,15 @@ public sealed class TransformPipelineService
         return new IntRect(left, top, right, bottom);
     }
 
-    private static void ValidateArchiveForSession(CaptureSession session, SaveArchive archive)
+    private static void ValidateAnchorsOnCapture(CaptureSession session, RecomputeAnchorSet anchors)
     {
-        if (archive.CanvasPixelWidth <= 0 || archive.CanvasPixelHeight <= 0)
-            throw new ArgumentOutOfRangeException(nameof(archive), "存档画布尺寸无效");
+        if (anchors.CanvasPixelWidth <= 0 || anchors.CanvasPixelHeight <= 0)
+            throw new ArgumentOutOfRangeException(nameof(anchors), "锚点画布尺寸无效");
 
-        ValidateMappedRect(session, archive.SystemWorkspaceRoiScreen.ToIntRect(), "SystemWorkspaceRoiScreen");
-        ValidateMappedRect(session, archive.SystemNavigatorThumbnailRoiScreen.ToIntRect(), "SystemNavigatorThumbnailRoiScreen");
-        ValidateMappedRect(session, archive.OcrLayout.ScaleSlotScreen.ToIntRect(), "OcrLayout.ScaleSlotScreen", minSizePx: 8);
-        ValidateMappedRect(session, archive.OcrLayout.RotationSlotScreen.ToIntRect(), "OcrLayout.RotationSlotScreen", minSizePx: 8);
+        ValidateMappedRect(session, anchors.SystemWorkspaceRoiScreen, "SystemWorkspaceRoiScreen");
+        ValidateMappedRect(session, anchors.SystemNavigatorThumbnailRoiScreen, "SystemNavigatorThumbnailRoiScreen");
+        ValidateMappedRect(session, anchors.OcrLayout.ScaleSlotScreen, "OcrLayout.ScaleSlotScreen", minSizePx: 8);
+        ValidateMappedRect(session, anchors.OcrLayout.RotationSlotScreen, "OcrLayout.RotationSlotScreen", minSizePx: 8);
     }
 
     private static void ValidateMappedRect(CaptureSession session, IntRect screenRect, string name, int minSizePx = CaptureSession.MinRoiSizePx)
@@ -472,7 +561,7 @@ public sealed class TransformPipelineService
             throw new PipelineFailureException(
                 TransformStage.ReacquiringEvidence,
                 107,
-                $"存档 {name} 映射到当前截图后无效",
+                $"{name} 映射到当前截图后无效（请检查 CSP 窗口位置/缩放/布局是否相对存档变化）",
                 session.CaptureId,
                 0);
         }

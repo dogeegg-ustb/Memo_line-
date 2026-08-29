@@ -23,21 +23,32 @@ public sealed class NavigatorOcrService
 
     private const int MinSlotSizePx = 8;
     private const int Upscale = 6;
-    private const double LeftColumnFraction = 0.42;
+    public const double LeftColumnFractionMin = 0.42;
+    public const double LeftColumnFractionMax = 0.62;
+    public const double LeftColumnFractionStep = 0.05;
     private const double HorizontalInsetFraction = 0.10;
     private const double VerticalInsetFraction = 0.14;
 
+    /// <summary>Only numeric tokens (optional sign / decimal). Units like % ° are stripped before parse.</summary>
     private static readonly Regex NumberRegex = new(
         @"[-+]?\d+(?:[.,]\d+)?",
         RegexOptions.Compiled);
 
-    public static OcrLayoutScreen ComputeOcrLayout(IntRect navigatorPanelScreen, IntRect thumbnailScreen)
+    private static readonly Regex DigitsOnlyTokenRegex = new(
+        @"^[-+]?\d+(?:[.,]\d+)?$",
+        RegexOptions.Compiled);
+
+    public static OcrLayoutScreen ComputeOcrLayout(
+        IntRect navigatorPanelScreen,
+        IntRect thumbnailScreen,
+        double leftColumnFraction = LeftColumnFractionMin)
     {
         IntRect chrome = ChromeBand(navigatorPanelScreen, thumbnailScreen);
         if (chrome.IsEmpty)
             return new OcrLayoutScreen(chrome, chrome);
 
-        int colWidth = Math.Max(MinSlotSizePx, (int)Math.Round(chrome.Width * LeftColumnFraction));
+        double fraction = Math.Clamp(leftColumnFraction, LeftColumnFractionMin, LeftColumnFractionMax);
+        int colWidth = Math.Max(MinSlotSizePx, (int)Math.Round(chrome.Width * fraction));
         IntRect leftCol = new(chrome.Left, chrome.Top, chrome.Left + colWidth, chrome.Bottom);
 
         int midY = leftCol.Top + leftCol.Height / 2;
@@ -57,16 +68,58 @@ public sealed class NavigatorOcrService
         return await ReadSlotsAsync(session, scaleSlot, rotationSlot, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<NavigatorNumericReadingDto> ReadAsync(
+    /// <summary>
+    /// Tries left-column fractions from 42% to 62% in 5% steps until scale OCR succeeds.
+    /// </summary>
+    public async Task<NavigatorOcrAttemptResult> ReadAsync(
         CaptureSession session,
         IntRect navigatorRoiCapturePx,
         IntRect navigatorThumbnailRoiCapturePx,
         CancellationToken cancellationToken = default)
     {
-        var layout = ComputeOcrLayout(
-            session.CaptureToScreen(navigatorRoiCapturePx),
-            session.CaptureToScreen(navigatorThumbnailRoiCapturePx));
-        return await ReadWithLayoutAsync(session, layout, cancellationToken).ConfigureAwait(false);
+        var navScreen = session.CaptureToScreen(navigatorRoiCapturePx);
+        var thumbScreen = session.CaptureToScreen(navigatorThumbnailRoiCapturePx);
+
+        string debugDir = Path.Combine(Path.GetTempPath(), "sct_ocr_debug", session.CaptureId);
+        if (DebugEnabled)
+            Directory.CreateDirectory(debugDir);
+
+        NavigatorNumericReadingDto? last = null;
+        OcrLayoutScreen lastLayout = default;
+        double lastFraction = LeftColumnFractionMin;
+
+        for (double fraction = LeftColumnFractionMin;
+             fraction <= LeftColumnFractionMax + 1e-9;
+             fraction = Math.Round(fraction + LeftColumnFractionStep, 2, MidpointRounding.AwayFromZero))
+        {
+            var layout = ComputeOcrLayout(navScreen, thumbScreen, fraction);
+            Log(debugDir, $"try leftColumnFraction={fraction:F2} scale={layout.ScaleSlotScreen} rot={layout.RotationSlotScreen}");
+
+            var numbers = await ReadWithLayoutAsync(session, layout, cancellationToken).ConfigureAwait(false);
+            last = numbers;
+            lastLayout = layout;
+            lastFraction = fraction;
+
+            if (numbers.ScaleConfidence >= 0.2f && numbers.ScalePercent > 0)
+            {
+                Log(debugDir, $"accepted leftColumnFraction={fraction:F2}");
+                return new NavigatorOcrAttemptResult
+                {
+                    Numbers = numbers,
+                    LayoutUsed = layout,
+                    LeftColumnFractionUsed = fraction
+                };
+            }
+
+            Log(debugDir, $"reject leftColumnFraction={fraction:F2} scaleRaw='{numbers.ScaleRawText}'");
+        }
+
+        return new NavigatorOcrAttemptResult
+        {
+            Numbers = last ?? Empty(session.CaptureId),
+            LayoutUsed = lastLayout,
+            LeftColumnFractionUsed = lastFraction
+        };
     }
 
     private static async Task<NavigatorNumericReadingDto> ReadSlotsAsync(
@@ -345,6 +398,8 @@ public sealed class NavigatorOcrService
         if (string.IsNullOrWhiteSpace(raw))
             return false;
         string token = raw.Replace(',', '.').Trim();
+        if (!DigitsOnlyTokenRegex.IsMatch(token))
+            return false;
         return float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
     }
 
@@ -366,4 +421,11 @@ public sealed class NavigatorOcrService
             return false;
         return value is >= -720f and <= 720f;
     }
+}
+
+public sealed class NavigatorOcrAttemptResult
+{
+    public required NavigatorNumericReadingDto Numbers { get; init; }
+    public required OcrLayoutScreen LayoutUsed { get; init; }
+    public double LeftColumnFractionUsed { get; init; }
 }

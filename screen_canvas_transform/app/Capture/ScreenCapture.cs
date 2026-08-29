@@ -6,7 +6,8 @@ using ScreenCanvasTransform.Models;
 namespace ScreenCanvasTransform.Capture;
 
 /// <summary>
-/// Captures the full Windows virtual desktop (all monitors), including negative origins.
+/// Virtual-desktop metrics and legacy full-desktop capture helpers.
+/// Live pipeline capture uses <see cref="ClipStudioCapture"/> instead.
 /// </summary>
 public static class ScreenCapture
 {

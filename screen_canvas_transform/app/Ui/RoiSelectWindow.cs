@@ -17,7 +17,8 @@ using DrawingPixelFormat = System.Drawing.Imaging.PixelFormat;
 namespace ScreenCanvasTransform.Ui;
 
 /// <summary>
-/// Fullscreen borderless ROI selector on a FROZEN bitmap.
+/// Fullscreen borderless ROI selector on a FROZEN bitmap
+/// (virtual-desktop sized; only CLIP STUDIO PAINT thread windows are painted).
 /// Esc cancels; Enter or mouse-release confirms when ROI >= 32px.
 /// </summary>
 public sealed class RoiSelectWindow : Window
