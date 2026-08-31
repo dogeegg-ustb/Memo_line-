@@ -178,9 +178,13 @@ public sealed class RoiSelectWindow : Window
         if (!_session.TrySetRoi(_kind, captureRoi, out _))
             return false;
 
-        _confirmedRoi = _kind == RoiKind.WorkspaceUser
-            ? _session.WorkspaceUserRoiCapturePx
-            : _session.NavigatorRoiCapturePx;
+        _confirmedRoi = _kind switch
+        {
+            RoiKind.WorkspaceUser => _session.WorkspaceUserRoiCapturePx,
+            RoiKind.Navigator => _session.NavigatorRoiCapturePx,
+            RoiKind.OcrNumbers => _session.OcrNumbersRoiCapturePx,
+            _ => null
+        };
         return true;
     }
 

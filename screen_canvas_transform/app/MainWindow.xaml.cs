@@ -5,6 +5,7 @@ using ScreenCanvasTransform.Capture;
 using ScreenCanvasTransform.Detection;
 using ScreenCanvasTransform.Diagnostics;
 using ScreenCanvasTransform.Models;
+using ScreenCanvasTransform.Ocr;
 using ScreenCanvasTransform.Services;
 using ScreenCanvasTransform.State;
 using ScreenCanvasTransform.Ui;
@@ -350,6 +351,7 @@ public partial class MainWindow : Window
         while (true)
         {
             session.ClearRoi(RoiKind.Navigator);
+            session.ClearRoi(RoiKind.OcrNumbers);
             _navigatorBorder.Hide();
             _thumbnailBorder.Hide();
             _markerOverlay.Hide();
@@ -405,12 +407,69 @@ public partial class MainWindow : Window
                     thumbnail.RectScreenPhysicalPx,
                     session.CaptureId,
                     thumbnail.SourceCaptureId);
-                SetStatus("缩略图已标记（品红）。继续观测 / OCR / 求解…");
+                SetStatus("缩略图已标记（品红）。请框选导航器左侧数字区（上=缩放%、下=旋转°）…");
+
+                OcrLayoutScreen? ocrLayout = null;
+                while (ocrLayout is null)
+                {
+                    session.ClearRoi(RoiKind.OcrNumbers);
+                    Hide();
+                    await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                    await Task.Delay(60);
+
+                    SetStage(TransformStage.SelectingOcrNumbers);
+                    var ocrRoi = new RoiSelectWindow(
+                        session,
+                        RoiKind.OcrNumbers,
+                        "框选左侧数字大块（宁宽勿窄：上半缩放%、下半旋转°）· Enter 确认 · Esc 退出初始化");
+                    bool? ocrOk = ocrRoi.ShowDialog();
+                    if (ocrOk != true || session.OcrNumbersRoiCapturePx is null)
+                    {
+                        Show();
+                        Activate();
+                        SetStatus("已退出初始化（Esc / 取消 OCR 框选）。");
+                        return null;
+                    }
+
+                    var regionScreen = session.CaptureToScreen(session.OcrNumbersRoiCapturePx.Value);
+                    Show();
+                    Activate();
+                    SetStage(TransformStage.ReadingNavigatorNumbers);
+                    SetStatus("正在 OCR 验证框选区域能否读出缩放数字…");
+
+                    var probe = await Task.Run(
+                            async () => await new NavigatorOcrService()
+                                .TryReadUserRegionAsync(session, regionScreen)
+                                .ConfigureAwait(false))
+                        .ConfigureAwait(true);
+
+                    if (!probe.Ok)
+                    {
+                        SetStatus(
+                            $"OCR 未能读出缩放数字（raw='{probe.Numbers.ScaleRawText}'）。请把左侧数字区框大一点再试。" +
+                            $" 调试: %TEMP%\\sct_ocr_debug\\{session.CaptureId}");
+                        MessageBox.Show(
+                            this,
+                            $"未能在框选区域读出缩放数字。\n原始文本：'{probe.Numbers.ScaleRawText}'\n\n" +
+                            "请框选缩略图下方左侧整块数字区（宁宽勿窄），再试一次。",
+                            "OCR 框选失败",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                        continue;
+                    }
+
+                    ocrLayout = probe.Layout;
+                    SetStatus(
+                        $"OCR 框选成功：scale={probe.Numbers.ScalePercent:F1}% " +
+                        $"rot={probe.Numbers.RotationDegrees:F1}°。继续观测 / 求解…");
+                }
 
                 var progress = new Progress<TransformStage>(SetStage);
+                var layoutForPipeline = ocrLayout.Value;
                 return await Task.Run(
                         async () => await _pipeline.ContinueAfterThumbnailAsync(
-                                session, workspace, thumbnail, progress)
+                                session, workspace, thumbnail, progress,
+                                fixedOcrLayout: layoutForPipeline)
                             .ConfigureAwait(false))
                     .ConfigureAwait(true);
             }

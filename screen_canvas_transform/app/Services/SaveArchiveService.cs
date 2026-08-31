@@ -11,7 +11,7 @@ public sealed class InitSuccessBundle
 {
     public required PipelineResult Result { get; init; }
     public required string InitCaptureId { get; init; }
-    /// <summary>Navigator panel screen rect at init — used only to compute OcrLayout, not persisted.</summary>
+    /// <summary>Navigator panel screen rect at init (diagnostics / legacy; OCR layout comes from user box).</summary>
     public required IntRect NavigatorPanelScreenAtInit { get; init; }
 }
 
@@ -106,10 +106,8 @@ public sealed class SaveArchiveService
         if (result.Background is null)
             return Fail("缺少 WorkspaceBackgroundModel");
 
-        var ocrLayout = result.OcrLayoutUsed
-            ?? NavigatorOcrService.ComputeOcrLayout(
-                bundle.NavigatorPanelScreenAtInit,
-                result.NavigatorThumbnailRoiScreen);
+        if (result.OcrLayoutUsed is not OcrLayoutScreen ocrLayout)
+            return Fail("缺少用户框选并验证通过的 OcrLayout，禁止落盘");
 
         string archiveId = Guid.NewGuid().ToString("N");
         var archive = new SaveArchive

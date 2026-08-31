@@ -6,7 +6,9 @@ namespace ScreenCanvasTransform.Capture;
 public enum RoiKind
 {
     WorkspaceUser,
-    Navigator
+    Navigator,
+    /// <summary>User-selected left chrome block for scale/rotation OCR.</summary>
+    OcrNumbers
 }
 
 /// <summary>
@@ -38,6 +40,9 @@ public sealed class CaptureSession : IDisposable
 
     /// <summary>User navigator panel ROI in capture pixels — adopted directly, never border-corrected.</summary>
     public IntRect? NavigatorRoiCapturePx { get; private set; }
+
+    /// <summary>User OCR numbers region (left chrome block) in capture pixels.</summary>
+    public IntRect? OcrNumbersRoiCapturePx { get; private set; }
 
     public CaptureSession(
         string captureId,
@@ -105,6 +110,9 @@ public sealed class CaptureSession : IDisposable
             case RoiKind.Navigator:
                 NavigatorRoiCapturePx = clamped;
                 break;
+            case RoiKind.OcrNumbers:
+                OcrNumbersRoiCapturePx = clamped;
+                break;
             default:
                 error = "未知 ROI 类型。";
                 return false;
@@ -124,6 +132,9 @@ public sealed class CaptureSession : IDisposable
                 break;
             case RoiKind.Navigator:
                 NavigatorRoiCapturePx = null;
+                break;
+            case RoiKind.OcrNumbers:
+                OcrNumbersRoiCapturePx = null;
                 break;
         }
     }

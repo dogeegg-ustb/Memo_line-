@@ -125,19 +125,20 @@ public sealed class SaveArchiveServiceTests : IDisposable
     }
 
     [Fact]
-    public void OcrLayout_MatchesNavigatorServiceRules()
+    public void OcrLayout_FromUserRegion_SplitsTopScaleBottomRotation()
     {
-        IntRect nav = new(100, 100, 300, 500);
-        IntRect thumb = new(120, 120, 280, 280);
-        var layout = NavigatorOcrService.ComputeOcrLayout(nav, thumb);
+        IntRect region = new(100, 200, 280, 360);
+        var layout = NavigatorOcrService.LayoutFromUserRegion(region);
 
         Assert.False(layout.ScaleSlotScreen.IsEmpty);
         Assert.False(layout.RotationSlotScreen.IsEmpty);
+        Assert.Equal(region.Left, layout.ScaleSlotScreen.Left);
+        Assert.Equal(region.Right, layout.ScaleSlotScreen.Right);
+        Assert.Equal(region.Left, layout.RotationSlotScreen.Left);
+        Assert.Equal(region.Right, layout.RotationSlotScreen.Right);
         Assert.True(layout.ScaleSlotScreen.Bottom <= layout.RotationSlotScreen.Top
-                    || layout.ScaleSlotScreen.Top < layout.RotationSlotScreen.Top);
-        Assert.True(layout.ScaleSlotScreen.Width <= nav.Width * 0.42 + 2);
-        Assert.True(layout.RotationSlotScreen.Top >= thumb.Bottom
-                    || layout.ScaleSlotScreen.Top >= thumb.Bottom - 4);
+                    || layout.ScaleSlotScreen.Bottom == layout.RotationSlotScreen.Top);
+        Assert.Equal(region.Width, layout.ScaleSlotScreen.Width);
     }
 
     private InitSuccessBundle CreateValidBundle()
@@ -145,7 +146,7 @@ public sealed class SaveArchiveServiceTests : IDisposable
         IntRect workspace = new(10, 10, 900, 700);
         IntRect navigator = new(920, 100, 1100, 700);
         IntRect thumb = new(940, 120, 1080, 260);
-        var layout = NavigatorOcrService.ComputeOcrLayout(navigator, thumb);
+        var layout = NavigatorOcrService.LayoutFromUserRegion(new IntRect(940, 280, 1040, 400));
 
         return new InitSuccessBundle
         {
@@ -157,6 +158,7 @@ public sealed class SaveArchiveServiceTests : IDisposable
                 WorkspaceRoiScreen = workspace,
                 NavigatorRoiScreen = navigator,
                 NavigatorThumbnailRoiScreen = thumb,
+                OcrLayoutUsed = layout,
                 Background = new WorkspaceBackgroundModel
                 {
                     CenterLabL = 50,

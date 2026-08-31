@@ -204,7 +204,8 @@ public sealed class RecomputePipelineTests
         IntRect ws = workspace ?? new(10, 10, 900, 700);
         IntRect panel = navigatorPanel ?? new(920, 100, 1100, 700);
         IntRect thumb = thumbnail ?? new(940, 120, 1080, 260);
-        OcrLayoutScreen layout = ocrLayout ?? NavigatorOcrService.ComputeOcrLayout(panel, thumb);
+        OcrLayoutScreen layout = ocrLayout
+            ?? NavigatorOcrService.LayoutFromUserRegion(new IntRect(panel.Left, thumb.Bottom, panel.Left + panel.Width / 2, panel.Bottom));
 
         return new PipelineResult
         {
@@ -229,7 +230,8 @@ public sealed class RecomputePipelineTests
         IntRect workspace = new(10, 10, 900, 700);
         IntRect panel = new(920, 100, 1100, 700);
         IntRect thumb = new(940, 120, 1080, 260);
-        var layout = NavigatorOcrService.ComputeOcrLayout(panel, thumb);
+        var layout = NavigatorOcrService.LayoutFromUserRegion(
+            new IntRect(panel.Left, thumb.Bottom, panel.Left + panel.Width / 2, panel.Bottom));
 
         return new SaveArchive
         {

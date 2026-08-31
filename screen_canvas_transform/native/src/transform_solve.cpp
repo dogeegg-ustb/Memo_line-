@@ -200,13 +200,8 @@ SolveResult SolveTransform(const SolveInput& in) {
                      "rotation reading invalid", in);
   }
 
-  if (in.numbers.rotation_confidence >= 0.2f) {
-    const double ocr_rot = in.numbers.rotation_degrees;
-    if (std::abs(NormalizeAngleDeg(rotation_geometry - ocr_rot)) > kRotationAxisToleranceDeg) {
-      return FailSolve(Stage::SolvingTransform, FailStatus::RotationGeometryConflict,
-                       "OCR rotation conflicts with geometry", in);
-    }
-  }
+  // Geometry is rotation authority. OCR rotation is diagnostic only — never fail the
+  // solve on OCR↔geometry mismatch (viewport may be incomplete / no red frame).
 
   TransformSnapshot snap;
   CopyStr(snap.capture_id, sizeof(snap.capture_id), in.capture_id);

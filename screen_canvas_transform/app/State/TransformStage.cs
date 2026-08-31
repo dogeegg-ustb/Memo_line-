@@ -9,6 +9,7 @@ public enum TransformStage
     DetectingWorkspace = 3,
     SelectingNavigatorRoi = 4,
     DetectingNavigatorThumbnailCII = 5,
+    SelectingOcrNumbers = 24,
     ObservingWorkspaceCanvas = 6,
     ObservingNavigatorCanvas = 7,
     ReadingNavigatorNumbers = 8,

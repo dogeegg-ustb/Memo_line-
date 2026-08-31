@@ -319,11 +319,13 @@ public sealed class TransformPipelineService
         }
         else
         {
-            var ocrAttempt = await _ocr.ReadAsync(
-                    session, navigatorRoiCapture, thumbnailCapture, cancellationToken)
-                .ConfigureAwait(false);
-            numbers = ocrAttempt.Numbers;
-            ocrLayoutUsed = ocrAttempt.LayoutUsed;
+            throw Fail(
+                TransformStage.ReadingNavigatorNumbers,
+                107,
+                "缺少固化 OcrLayout（初始化须用户框选数字区；重算须来自存档）",
+                session,
+                gen,
+                evidenceSummary: "MissingFixedOcrLayout");
         }
         if (numbers.ScaleConfidence < 0.2f || numbers.ScalePercent <= 0)
         {
