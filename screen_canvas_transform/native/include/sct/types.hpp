@@ -228,6 +228,12 @@ struct RedFrameEvidence {
   ViewportCompletionPattern completion_pattern = ViewportCompletionPattern::FourCompleteEdges;
 };
 
+struct CompleteEdgeCapture {
+  Vec2 p0{};  // CapturePx endpoints of a confirmed complete red edge
+  Vec2 p1{};
+  int workspace_edge = 0;  // L/T/R/B bit
+};
+
 struct NavigatorViewportFrame {
   Vec2 origin_top_left_displayed{};  // o_v
   Vec2 axis_x_displayed{};           // a_x
@@ -239,6 +245,8 @@ struct NavigatorViewportFrame {
   int completion_strategy = 0;  // ViewportCompletionPattern encoding
   float confidence = 0.f;
   RedFrameEvidence red_evidence{};
+  CompleteEdgeCapture complete_edges[4]{};
+  int complete_edge_export_count = 0;
 };
 
 struct MarkerGeometry {

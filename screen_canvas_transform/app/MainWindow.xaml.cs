@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private readonly RoiBorderOverlayWindow _navigatorBorder = RoiBorderOverlayWindow.CreateNavigator();
     private readonly RoiBorderOverlayWindow _thumbnailBorder = RoiBorderOverlayWindow.CreateNavigatorThumbnail();
     private readonly MarkerOverlayWindow _markerOverlay = new();
+    private readonly CompleteEdgeOverlayWindow _completeEdgeOverlay = new();
     private CaptureSession? _activeSession;
     private PipelineResult? _lastResult;
     private SaveArchive? _activeArchive;
@@ -32,6 +33,7 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _markerOverlay.Dispose();
+            _completeEdgeOverlay.Dispose();
             _workspaceBorder.Dispose();
             _navigatorBorder.Dispose();
             _thumbnailBorder.Dispose();
@@ -133,6 +135,7 @@ public partial class MainWindow : Window
     private void HideAllOverlays()
     {
         _markerOverlay.Hide();
+        _completeEdgeOverlay.Hide();
         HideRoiBorders();
     }
 
@@ -207,18 +210,21 @@ public partial class MainWindow : Window
             RefreshArchiveList();
 
             string path = result.Snapshot.UsedDirectWorkspacePath ? "直接工作区路径" : "导航器路径";
+            string viewportPath = FormatViewportCompletionPath(result.Snapshot);
             string off = result.Snapshot.Marker.Offscreen != 0 ? "（MarkerOffscreen）" : "";
             string persistNote = persist.Success
                 ? $" 已写入存档「{persist.Archive!.DisplayName}」。"
                 : $" 初始化几何成功但存档写入失败：{persist.Error}";
 
             SetStatus(
-                $"已发布 gen={result.Snapshot.Generation}，{path}，" +
+                $"已发布 gen={result.Snapshot.Generation}，{path}，补全={viewportPath}，" +
                 $"scale={result.Snapshot.Numbers.ScalePercent:F1}% rel={result.Snapshot.RelativeScale:F3}，" +
                 $"rot={result.Snapshot.RotationDegrees:F1}°，conf={result.Snapshot.Confidence:F2}。" +
                 persistNote +
                 (result.Snapshot.Marker.Offscreen != 0 ? $" 橙色 L 已显示{off}。" : " 标记已显示。"));
-            SetStage(TransformStage.TrackingStable);
+            LiveDebugLog.Write(
+                $"[结果] 补全={viewportPath} gen={result.Snapshot.Generation} path={path}");
+            // Do not SetStage after this — it would overwrite the completion path.
         }
         catch (Exception ex)
         {
@@ -347,6 +353,7 @@ public partial class MainWindow : Window
             _navigatorBorder.Hide();
             _thumbnailBorder.Hide();
             _markerOverlay.Hide();
+            _completeEdgeOverlay.Hide();
 
             Hide();
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
@@ -410,6 +417,7 @@ public partial class MainWindow : Window
             catch (PipelineFailureException ex)
             {
                 _markerOverlay.Hide();
+                _completeEdgeOverlay.Hide();
                 _thumbnailBorder.Hide();
                 _navigatorBorder.Hide();
                 if (!IsVisible)
@@ -487,16 +495,24 @@ public partial class MainWindow : Window
             _activeArchive = archive;
             _archiveService.TryUpdateLastSuccessfulRecompute(archive, session.CaptureId);
 
+            int completeEdges = result.Snapshot.ConfirmedCompleteEdgeCount;
             SetStatus(
                 $"从存档「{archive.DisplayName}」重算完成 gen={result.Snapshot.Generation} " +
                 $"recompute={result.Snapshot.RecomputeGeneration}，" +
+                $"完整边={completeEdges}，" +
+                $"补全={FormatViewportCompletionPath(result.Snapshot)}，" +
                 $"rot_geo={result.Snapshot.RotationDegreesGeometry:F1}°，" +
                 $"scale={result.Snapshot.ScalePercentOcrOrInjected:F1}%。");
-            SetStage(TransformStage.TrackingStable);
+            LiveDebugLog.Write(
+                $"[重算] 存档「{archive.DisplayName}」识别到 {completeEdges} 条完整边 " +
+                $"补全={FormatViewportCompletionPath(result.Snapshot)} " +
+                $"gen={result.Snapshot.Generation} recompute={result.Snapshot.RecomputeGeneration}");
+            // Keep status text; SetStage(TrackingStable) would wipe 补全=.
         }
         catch (PipelineFailureException ex)
         {
             _markerOverlay.Hide();
+            _completeEdgeOverlay.Hide();
             if (!IsVisible)
             {
                 Show();
@@ -588,15 +604,23 @@ public partial class MainWindow : Window
             if (_activeArchive is not null)
                 _archiveService.TryUpdateLastSuccessfulRecompute(_activeArchive, session.CaptureId);
 
+            int completeEdges = result.Snapshot.ConfirmedCompleteEdgeCount;
             SetStatus(
                 $"重算完成 gen={result.Snapshot.Generation} recompute={result.Snapshot.RecomputeGeneration}，" +
+                $"完整边={completeEdges}，" +
+                $"补全={FormatViewportCompletionPath(result.Snapshot)}，" +
                 $"rot_geo={result.Snapshot.RotationDegreesGeometry:F1}°，" +
                 $"scale={result.Snapshot.ScalePercentOcrOrInjected:F1}%。");
-            SetStage(TransformStage.TrackingStable);
+            LiveDebugLog.Write(
+                $"[重算] 识别到 {completeEdges} 条完整边 " +
+                $"补全={FormatViewportCompletionPath(result.Snapshot)} " +
+                $"gen={result.Snapshot.Generation} recompute={result.Snapshot.RecomputeGeneration}");
+            // Keep status text; SetStage(TrackingStable) would wipe 补全=.
         }
         catch (PipelineFailureException ex)
         {
             _markerOverlay.Hide();
+            _completeEdgeOverlay.Hide();
             if (!IsVisible)
             {
                 Show();
@@ -622,6 +646,28 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Human-readable viewport completion path: 0.0 / 0.1 / 0.2 / 1.0 / 2.0 / 2.1 / 3.0 / 4.0.
+    /// </summary>
+    private static string FormatViewportCompletionPath(TransformSnapshotDto snapshot)
+    {
+        if (snapshot.UsedDirectWorkspacePath)
+            return "0.0（直接工作区，跳过红框补全）";
+
+        return snapshot.ViewportCompletionStrategy switch
+        {
+            0 => "0.0",
+            1 => "0.1",
+            2 => "0.2",
+            10 => "1.0",
+            20 => "2.0",
+            21 => "2.1",
+            30 => "3.0",
+            40 => "4.0",
+            var code => $"未知({code})"
+        };
+    }
+
     private void ApplyResultOverlays(CaptureSession session, PipelineResult result)
     {
         _thumbnailBorder.TryShowIfCaptureMatches(
@@ -645,6 +691,37 @@ public partial class MainWindow : Window
             result.Snapshot.Generation,
             session.CaptureId,
             result.Snapshot.Generation);
+
+        ApplyCompleteEdgeOverlay(session, result.Snapshot);
+    }
+
+    private void ApplyCompleteEdgeOverlay(CaptureSession session, TransformSnapshotDto snapshot)
+    {
+        int count = snapshot.ConfirmedCompleteEdgeCount;
+        LiveDebugLog.Write($"[完整边] 识别到 {count} 条完整边 CaptureId={snapshot.CaptureId}");
+
+        if (count <= 0 || snapshot.CompleteEdges.Length == 0)
+        {
+            _completeEdgeOverlay.Hide();
+            return;
+        }
+
+        int originX = session.OriginX;
+        int originY = session.OriginY;
+        var screenEdges = new List<(double X0, double Y0, double X1, double Y1)>(snapshot.CompleteEdges.Length);
+        foreach (var e in snapshot.CompleteEdges)
+        {
+            screenEdges.Add((
+                e.P0CaptureX + originX,
+                e.P0CaptureY + originY,
+                e.P1CaptureX + originX,
+                e.P1CaptureY + originY));
+        }
+
+        _completeEdgeOverlay.TryShowIfCaptureMatches(
+            screenEdges,
+            session.CaptureId,
+            snapshot.CaptureId);
     }
 
     private void SetStage(TransformStage stage) => SetStatus($"阶段：{stage}");

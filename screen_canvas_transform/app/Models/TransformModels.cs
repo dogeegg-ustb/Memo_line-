@@ -106,6 +106,24 @@ public sealed class NavigatorNumericReadingDto
     };
 }
 
+public sealed class CompleteEdgeDto
+{
+    public double P0CaptureX { get; init; }
+    public double P0CaptureY { get; init; }
+    public double P1CaptureX { get; init; }
+    public double P1CaptureY { get; init; }
+    public int WorkspaceEdge { get; init; }
+
+    public static CompleteEdgeDto FromNative(NativeSct.SctCompleteEdge e) => new()
+    {
+        P0CaptureX = e.P0Capture.X,
+        P0CaptureY = e.P0Capture.Y,
+        P1CaptureX = e.P1Capture.X,
+        P1CaptureY = e.P1Capture.Y,
+        WorkspaceEdge = e.WorkspaceEdge
+    };
+}
+
 public sealed class TransformSnapshotDto
 {
     public int Status { get; init; }
@@ -133,6 +151,11 @@ public sealed class TransformSnapshotDto
     public NativeSct.SctMarkerGeometry Marker { get; init; }
     public float Confidence { get; init; }
     public bool UsedDirectWorkspacePath { get; init; }
+    /// <summary>ViewportCompletionPattern encoding: 0=0.0/direct, 1=0.1, 2=0.2, 10=1.0, 20=2.0, 21=2.1, 30=3.0, 40=4.0.</summary>
+    public int ViewportCompletionStrategy { get; init; }
+    /// <summary>Confirmed complete red-frame edges from viewport completion (0–4).</summary>
+    public int ConfirmedCompleteEdgeCount { get; init; }
+    public CompleteEdgeDto[] CompleteEdges { get; init; } = Array.Empty<CompleteEdgeDto>();
     public string SourceRevision { get; init; } = "";
     public int CoordinateConventionVersion { get; init; }
     public string FailureMessage { get; init; } = "";
@@ -176,10 +199,29 @@ public sealed class TransformSnapshotDto
         Marker = s.Marker,
         Confidence = s.Confidence,
         UsedDirectWorkspacePath = s.UsedDirectWorkspacePath != 0,
+        ViewportCompletionStrategy = s.Viewport.CompletionStrategy,
+        ConfirmedCompleteEdgeCount = s.Viewport.ConfirmedCompleteEdgeCount,
+        CompleteEdges = ExtractCompleteEdges(s.Viewport),
         SourceRevision = s.SourceRevision ?? "",
         CoordinateConventionVersion = s.CoordinateConventionVersion,
         FailureMessage = s.Failure.Message ?? "",
         FailureStatus = s.Failure.Status,
         Raw = s
     };
+
+    private static CompleteEdgeDto[] ExtractCompleteEdges(NativeSct.SctViewportFrame v)
+    {
+        int n = Math.Clamp(v.ConfirmedCompleteEdgeCount, 0, 4);
+        if (n == 0)
+            return Array.Empty<CompleteEdgeDto>();
+
+        var edges = new NativeSct.SctCompleteEdge[]
+        {
+            v.CompleteEdge0, v.CompleteEdge1, v.CompleteEdge2, v.CompleteEdge3
+        };
+        var list = new CompleteEdgeDto[n];
+        for (int i = 0; i < n; i++)
+            list[i] = CompleteEdgeDto.FromNative(edges[i]);
+        return list;
+    }
 }

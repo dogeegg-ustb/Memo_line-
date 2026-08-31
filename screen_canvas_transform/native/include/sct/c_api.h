@@ -16,7 +16,7 @@ extern "C" {
 #define SCT_API
 #endif
 
-#define SCT_API_VERSION 2
+#define SCT_API_VERSION 3
 #define SCT_COORD_CONVENTION_VERSION 1
 #define SCT_SOURCE_REVISION "sct-embedded-wb"
 
@@ -157,6 +157,13 @@ typedef struct SctViewportRequest {
   float dpi_scale;
 } SctViewportRequest;
 
+typedef struct SctCompleteEdge {
+  SctVec2 p0_capture;
+  SctVec2 p1_capture;
+  int workspace_edge;
+  int reserved;
+} SctCompleteEdge;
+
 typedef struct SctViewportFrame {
   int status;
   SctVec2 origin_top_left_displayed;
@@ -169,6 +176,8 @@ typedef struct SctViewportFrame {
   int completion_strategy;
   float confidence;
   char message[128];
+  int confirmed_complete_edge_count;
+  SctCompleteEdge complete_edges[4];
 } SctViewportFrame;
 
 typedef struct SctNumericReading {

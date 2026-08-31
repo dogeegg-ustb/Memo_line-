@@ -331,6 +331,19 @@ SCT_API int sct_complete_viewport_frame(const SctViewportRequest* req, SctViewpo
   out->completion_strategy = r.frame.completion_strategy;
   out->confidence = r.frame.confidence;
   CopyStrC(out->message, sizeof(out->message), r.message);
+  out->confirmed_complete_edge_count = r.frame.red_evidence.confirmed_complete_edge_count;
+  const int nce = r.frame.complete_edge_export_count < 4 ? r.frame.complete_edge_export_count : 4;
+  for (int i = 0; i < nce; ++i) {
+    out->complete_edges[i].p0_capture = {r.frame.complete_edges[i].p0.x,
+                                         r.frame.complete_edges[i].p0.y};
+    out->complete_edges[i].p1_capture = {r.frame.complete_edges[i].p1.x,
+                                         r.frame.complete_edges[i].p1.y};
+    out->complete_edges[i].workspace_edge = r.frame.complete_edges[i].workspace_edge;
+    out->complete_edges[i].reserved = 0;
+  }
+  for (int i = nce; i < 4; ++i) {
+    out->complete_edges[i] = {};
+  }
   return out->status;
 }
 
@@ -379,6 +392,18 @@ SCT_API int sct_solve_transform(const SctSolveRequest* req, SctTransformSnapshot
   in.viewport.visible_edge_count = req->viewport.visible_edge_count;
   in.viewport.completion_strategy = req->viewport.completion_strategy;
   in.viewport.confidence = req->viewport.confidence;
+  in.viewport.red_evidence.confirmed_complete_edge_count =
+      req->viewport.confirmed_complete_edge_count;
+  in.viewport.complete_edge_export_count = 0;
+  for (int i = 0; i < 4; ++i) {
+    if (i >= req->viewport.confirmed_complete_edge_count) break;
+    auto& ce = in.viewport.complete_edges[in.viewport.complete_edge_export_count++];
+    ce.p0 = {req->viewport.complete_edges[i].p0_capture.x,
+             req->viewport.complete_edges[i].p0_capture.y};
+    ce.p1 = {req->viewport.complete_edges[i].p1_capture.x,
+             req->viewport.complete_edges[i].p1_capture.y};
+    ce.workspace_edge = req->viewport.complete_edges[i].workspace_edge;
+  }
   in.previous_scale_percent = req->previous_scale_percent;
   in.initial_scale_percent = req->initial_scale_percent;
   in.injected_scale_percent = req->injected_scale_percent;
@@ -409,6 +434,25 @@ SCT_API int sct_solve_transform(const SctSolveRequest* req, SctTransformSnapshot
   out->viewport.width = s.viewport.width;
   out->viewport.height = s.viewport.height;
   out->viewport.confidence = s.viewport.confidence;
+  out->viewport.completion_strategy = s.viewport.completion_strategy;
+  out->viewport.visible_edge_count = s.viewport.visible_edge_count;
+  out->viewport.confirmed_complete_edge_count =
+      s.viewport.red_evidence.confirmed_complete_edge_count;
+  {
+    const int nce = s.viewport.complete_edge_export_count < 4
+                        ? s.viewport.complete_edge_export_count
+                        : 4;
+    for (int i = 0; i < nce; ++i) {
+      out->viewport.complete_edges[i].p0_capture = {s.viewport.complete_edges[i].p0.x,
+                                                    s.viewport.complete_edges[i].p0.y};
+      out->viewport.complete_edges[i].p1_capture = {s.viewport.complete_edges[i].p1.x,
+                                                    s.viewport.complete_edges[i].p1.y};
+      out->viewport.complete_edges[i].workspace_edge =
+          s.viewport.complete_edges[i].workspace_edge;
+      out->viewport.complete_edges[i].reserved = 0;
+    }
+    for (int i = nce; i < 4; ++i) out->viewport.complete_edges[i] = {};
+  }
   out->scale_reference = s.scale_reference;
   out->relative_scale = s.relative_scale;
   out->cumulative_relative_scale = s.cumulative_relative_scale;

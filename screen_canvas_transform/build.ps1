@@ -80,6 +80,7 @@ Write-Host "DLL: $(Join-Path $exe.DirectoryName 'ScreenCanvasNative.dll')"
 # Native contract tests
 $testSrc = Join-Path $Native "tests\contract_tests.cpp"
 $testObjs = @(
+  (Join-Path $Build "viewport_frame.obj"),
   (Join-Path $Build "transform_solve.obj"),
   (Join-Path $Build "workspace_canvas_relation.obj"),
   (Join-Path $Build "geometry.obj")

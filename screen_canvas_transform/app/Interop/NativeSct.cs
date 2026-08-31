@@ -202,6 +202,15 @@ public static class NativeSct
         public float DpiScale;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SctCompleteEdge
+    {
+        public SctVec2 P0Capture;
+        public SctVec2 P1Capture;
+        public int WorkspaceEdge;
+        public int Reserved;
+    }
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
     public struct SctViewportFrame
     {
@@ -221,6 +230,13 @@ public static class NativeSct
 
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
         public string Message;
+
+        public int ConfirmedCompleteEdgeCount;
+
+        public SctCompleteEdge CompleteEdge0;
+        public SctCompleteEdge CompleteEdge1;
+        public SctCompleteEdge CompleteEdge2;
+        public SctCompleteEdge CompleteEdge3;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
