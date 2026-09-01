@@ -1,14 +1,15 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.Drawing.Text;
 using System.Runtime.InteropServices;
 using ScreenCanvasTransform.Models;
 
 namespace ScreenCanvasTransform.Ui;
 
 /// <summary>
-/// Click-through overlay that draws confirmed complete red-frame edges in blue
-/// (CapturePx endpoints converted to ScreenPhysicalPx by the caller).
+/// Click-through overlay that draws observed red-frame edges (solid=complete, dashed=partial)
+/// with workspace-edge labels (左/右/上/下). Endpoints are ScreenPhysicalPx from caller.
 /// </summary>
 public sealed class CompleteEdgeOverlayWindow : IDisposable
 {
@@ -29,9 +30,20 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
     private const uint SwpNoCopyBits = 0x0100;
     private const int StrokeThickness = 3;
     private const int Pad = 8;
+    private const int LabelOffsetPx = 10;
+    private const float LabelFontSizePx = 15f;
+
+    private static readonly System.Drawing.Color PartialEdgeColor =
+        System.Drawing.Color.FromArgb(200, 80, 170, 255);
 
     private static readonly System.Drawing.Color EdgeColor =
         System.Drawing.Color.FromArgb(230, 30, 120, 255);
+
+    private static readonly System.Drawing.Color LabelFillColor =
+        System.Drawing.Color.FromArgb(255, 255, 230, 80);
+
+    private static readonly System.Drawing.Color LabelOutlineColor =
+        System.Drawing.Color.FromArgb(220, 20, 20, 20);
 
     private static readonly IntPtr WindowClassAtom;
     private static readonly WndProcDelegate WndProcKeepAlive = StaticWndProc;
@@ -62,11 +74,10 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
 
     public string? BoundCaptureId => _boundCaptureId;
 
-    /// <summary>
-    /// <paramref name="screenEdges"/> are endpoint pairs in ScreenPhysicalPx:
-    /// (x0,y0,x1,y1) per edge.
-    /// </summary>
-    public void Show(IReadOnlyList<(double X0, double Y0, double X1, double Y1)> screenEdges, string captureId)
+    public readonly record struct LabeledScreenEdge(
+        double X0, double Y0, double X1, double Y1, int WorkspaceEdge, bool IsComplete);
+
+    public void Show(IReadOnlyList<LabeledScreenEdge> screenEdges, string captureId)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (string.IsNullOrWhiteSpace(captureId))
@@ -78,6 +89,7 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
             return;
         }
 
+        using var font = CreateLabelFont();
         double minX = double.PositiveInfinity, minY = double.PositiveInfinity;
         double maxX = double.NegativeInfinity, maxY = double.NegativeInfinity;
         foreach (var e in screenEdges)
@@ -86,6 +98,15 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
             minY = Math.Min(minY, Math.Min(e.Y0, e.Y1));
             maxX = Math.Max(maxX, Math.Max(e.X0, e.X1));
             maxY = Math.Max(maxY, Math.Max(e.Y0, e.Y1));
+
+            if (WorkspaceEdgeBits.ToLabel(e.WorkspaceEdge) is not null)
+            {
+                var labelBounds = LabelBoundsScreen(e, font);
+                minX = Math.Min(minX, labelBounds.Left);
+                minY = Math.Min(minY, labelBounds.Top);
+                maxX = Math.Max(maxX, labelBounds.Right);
+                maxY = Math.Max(maxY, labelBounds.Bottom);
+            }
         }
 
         if (!double.IsFinite(minX) || !double.IsFinite(minY) ||
@@ -108,23 +129,20 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
         SetWindowPos(_hwnd, (IntPtr)HwndTopMost, left, top, w, h,
             SwpNoActivate | SwpShowWindow | SwpNoCopyBits);
 
-        var local = new (float X0, float Y0, float X1, float Y1)[screenEdges.Count];
+        var local = new LabeledScreenEdge[screenEdges.Count];
         for (int i = 0; i < screenEdges.Count; i++)
         {
             var e = screenEdges[i];
-            local[i] = (
-                (float)(e.X0 - left),
-                (float)(e.Y0 - top),
-                (float)(e.X1 - left),
-                (float)(e.Y1 - top));
+            local[i] = new LabeledScreenEdge(
+                e.X0 - left, e.Y0 - top, e.X1 - left, e.Y1 - top, e.WorkspaceEdge, e.IsComplete);
         }
 
-        UpdateLayeredContent(w, h, local);
+        UpdateLayeredContent(w, h, local, font);
         ShowWindow(_hwnd, SwShowNoActivate);
     }
 
     public bool TryShowIfCaptureMatches(
-        IReadOnlyList<(double X0, double Y0, double X1, double Y1)> screenEdges,
+        IReadOnlyList<LabeledScreenEdge> screenEdges,
         string expectedCaptureId,
         string resultCaptureId)
     {
@@ -159,6 +177,63 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    private static Font CreateLabelFont()
+    {
+        try
+        {
+            return new Font("Microsoft YaHei UI", LabelFontSizePx, FontStyle.Bold, GraphicsUnit.Pixel);
+        }
+        catch
+        {
+            return new Font(FontFamily.GenericSansSerif, LabelFontSizePx, FontStyle.Bold,
+                GraphicsUnit.Pixel);
+        }
+    }
+
+    private static RectangleF LabelBoundsScreen(LabeledScreenEdge edge, Font font)
+    {
+        string? text = WorkspaceEdgeBits.ToLabel(edge.WorkspaceEdge);
+        if (text is null)
+            return RectangleF.Empty;
+
+        using var measureBmp = new Bitmap(1, 1, PixelFormat.Format32bppArgb);
+        using var measureG = Graphics.FromImage(measureBmp);
+        measureG.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+        SizeF size = measureG.MeasureString(text, font);
+        PointF origin = LabelOrigin(
+            (float)edge.X0, (float)edge.Y0, (float)edge.X1, (float)edge.Y1,
+            edge.WorkspaceEdge, size);
+        return new RectangleF(origin.X, origin.Y, size.Width, size.Height);
+    }
+
+    private static PointF LabelOrigin(
+        float x0, float y0, float x1, float y1, int workspaceEdge, SizeF textSize)
+    {
+        float mx = (x0 + x1) * 0.5f;
+        float my = (y0 + y1) * 0.5f;
+        float left = Math.Min(x0, x1);
+        float right = Math.Max(x0, x1);
+        float top = Math.Min(y0, y1);
+        float bottom = Math.Max(y0, y1);
+
+        return workspaceEdge switch
+        {
+            WorkspaceEdgeBits.Left => new PointF(
+                left - LabelOffsetPx - textSize.Width,
+                my - textSize.Height * 0.5f),
+            WorkspaceEdgeBits.Right => new PointF(
+                right + LabelOffsetPx,
+                my - textSize.Height * 0.5f),
+            WorkspaceEdgeBits.Top => new PointF(
+                mx - textSize.Width * 0.5f,
+                top - LabelOffsetPx - textSize.Height),
+            WorkspaceEdgeBits.Bottom => new PointF(
+                mx - textSize.Width * 0.5f,
+                bottom + LabelOffsetPx),
+            _ => new PointF(mx - textSize.Width * 0.5f, my - textSize.Height * 0.5f)
+        };
+    }
+
     private void EnsureWindow()
     {
         if (_hwnd != IntPtr.Zero)
@@ -180,10 +255,7 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
             throw new InvalidOperationException("无法创建完整边覆盖层窗口。");
     }
 
-    private void UpdateLayeredContent(
-        int width,
-        int height,
-        (float X0, float Y0, float X1, float Y1)[] localEdges)
+    private void UpdateLayeredContent(int width, int height, LabeledScreenEdge[] localEdges, Font font)
     {
         using var bmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(bmp))
@@ -191,11 +263,34 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
             g.Clear(System.Drawing.Color.Transparent);
             g.SmoothingMode = SmoothingMode.None;
             g.PixelOffsetMode = PixelOffsetMode.None;
-            using var pen = new System.Drawing.Pen(EdgeColor, StrokeThickness);
-            pen.StartCap = LineCap.Flat;
-            pen.EndCap = LineCap.Flat;
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+
+            using var solidPen = new System.Drawing.Pen(EdgeColor, StrokeThickness);
+            solidPen.StartCap = LineCap.Flat;
+            solidPen.EndCap = LineCap.Flat;
+            using var dashedPen = new System.Drawing.Pen(PartialEdgeColor, StrokeThickness);
+            dashedPen.StartCap = LineCap.Flat;
+            dashedPen.EndCap = LineCap.Flat;
+            dashedPen.DashStyle = DashStyle.Dash;
             foreach (var e in localEdges)
-                g.DrawLine(pen, e.X0, e.Y0, e.X1, e.Y1);
+            {
+                var pen = e.IsComplete ? solidPen : dashedPen;
+                g.DrawLine(pen, (float)e.X0, (float)e.Y0, (float)e.X1, (float)e.Y1);
+            }
+
+            using var fillBrush = new SolidBrush(LabelFillColor);
+            using var outlineBrush = new SolidBrush(LabelOutlineColor);
+            foreach (var e in localEdges)
+            {
+                string? text = WorkspaceEdgeBits.ToLabel(e.WorkspaceEdge);
+                if (text is null)
+                    continue;
+
+                SizeF textSize = g.MeasureString(text, font);
+                PointF origin = LabelOrigin(
+                    (float)e.X0, (float)e.Y0, (float)e.X1, (float)e.Y1, e.WorkspaceEdge, textSize);
+                DrawOutlinedText(g, text, font, origin, outlineBrush, fillBrush);
+            }
         }
 
         PremultiplyAlpha(bmp);
@@ -205,7 +300,7 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
         IntPtr hBitmap = bmp.GetHbitmap(System.Drawing.Color.FromArgb(0, 0, 0, 0));
         IntPtr old = SelectObject(memDc, hBitmap);
 
-        var size = new SizeStruct { Cx = width, Cy = height };
+        var windowSize = new SizeStruct { Cx = width, Cy = height };
         var pointSource = new PointStruct { X = 0, Y = 0 };
         GetWindowRect(_hwnd, out var wr);
         var topLeft = new PointStruct { X = wr.Left, Y = wr.Top };
@@ -217,12 +312,28 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
             AlphaFormat = AcSrcAlpha
         };
 
-        UpdateLayeredWindow(_hwnd, screenDc, ref topLeft, ref size, memDc, ref pointSource, 0, ref blend, UlwAlpha);
+        UpdateLayeredWindow(_hwnd, screenDc, ref topLeft, ref windowSize, memDc, ref pointSource, 0, ref blend, UlwAlpha);
 
         SelectObject(memDc, old);
         DeleteObject(hBitmap);
         DeleteDC(memDc);
         ReleaseDC(IntPtr.Zero, screenDc);
+    }
+
+    private static void DrawOutlinedText(
+        Graphics g,
+        string text,
+        Font font,
+        PointF origin,
+        Brush outline,
+        Brush fill)
+    {
+        const float d = 1.25f;
+        g.DrawString(text, font, outline, origin.X - d, origin.Y);
+        g.DrawString(text, font, outline, origin.X + d, origin.Y);
+        g.DrawString(text, font, outline, origin.X, origin.Y - d);
+        g.DrawString(text, font, outline, origin.X, origin.Y + d);
+        g.DrawString(text, font, fill, origin, StringFormat.GenericDefault);
     }
 
     private static unsafe void PremultiplyAlpha(Bitmap bmp)

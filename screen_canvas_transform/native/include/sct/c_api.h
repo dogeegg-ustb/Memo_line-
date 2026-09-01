@@ -164,6 +164,13 @@ typedef struct SctCompleteEdge {
   int reserved;
 } SctCompleteEdge;
 
+typedef struct SctRedFrameEdge {
+  SctVec2 p0_capture;
+  SctVec2 p1_capture;
+  int workspace_edge;
+  int is_complete;
+} SctRedFrameEdge;
+
 typedef struct SctViewportFrame {
   int status;
   SctVec2 origin_top_left_displayed;
@@ -178,6 +185,8 @@ typedef struct SctViewportFrame {
   char message[128];
   int confirmed_complete_edge_count;
   SctCompleteEdge complete_edges[4];
+  int observed_red_edge_count;
+  SctRedFrameEdge observed_red_edges[8];
 } SctViewportFrame;
 
 typedef struct SctNumericReading {

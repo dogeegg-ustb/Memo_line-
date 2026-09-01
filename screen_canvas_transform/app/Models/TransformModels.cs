@@ -106,6 +106,24 @@ public sealed class NavigatorNumericReadingDto
     };
 }
 
+/// <summary>Workspace-edge bit flags from native viewport completion (L/T/R/B).</summary>
+public static class WorkspaceEdgeBits
+{
+    public const int Left = 1;
+    public const int Top = 2;
+    public const int Right = 4;
+    public const int Bottom = 8;
+
+    public static string? ToLabel(int workspaceEdge) => workspaceEdge switch
+    {
+        Left => "左",
+        Top => "上",
+        Right => "右",
+        Bottom => "下",
+        _ => null
+    };
+}
+
 public sealed class CompleteEdgeDto
 {
     public double P0CaptureX { get; init; }
@@ -121,6 +139,26 @@ public sealed class CompleteEdgeDto
         P1CaptureX = e.P1Capture.X,
         P1CaptureY = e.P1Capture.Y,
         WorkspaceEdge = e.WorkspaceEdge
+    };
+}
+
+public sealed class RedFrameEdgeDto
+{
+    public double P0CaptureX { get; init; }
+    public double P0CaptureY { get; init; }
+    public double P1CaptureX { get; init; }
+    public double P1CaptureY { get; init; }
+    public int WorkspaceEdge { get; init; }
+    public bool IsComplete { get; init; }
+
+    public static RedFrameEdgeDto FromNative(NativeSct.SctRedFrameEdge e) => new()
+    {
+        P0CaptureX = e.P0Capture.X,
+        P0CaptureY = e.P0Capture.Y,
+        P1CaptureX = e.P1Capture.X,
+        P1CaptureY = e.P1Capture.Y,
+        WorkspaceEdge = e.WorkspaceEdge,
+        IsComplete = e.IsComplete != 0
     };
 }
 
@@ -156,6 +194,9 @@ public sealed class TransformSnapshotDto
     /// <summary>Confirmed complete red-frame edges from viewport completion (0–4).</summary>
     public int ConfirmedCompleteEdgeCount { get; init; }
     public CompleteEdgeDto[] CompleteEdges { get; init; } = Array.Empty<CompleteEdgeDto>();
+    /// <summary>All observed red-frame edges in the winning group (complete or partial).</summary>
+    public int ObservedRedEdgeCount { get; init; }
+    public RedFrameEdgeDto[] ObservedRedEdges { get; init; } = Array.Empty<RedFrameEdgeDto>();
     public string SourceRevision { get; init; } = "";
     public int CoordinateConventionVersion { get; init; }
     public string FailureMessage { get; init; } = "";
@@ -202,6 +243,8 @@ public sealed class TransformSnapshotDto
         ViewportCompletionStrategy = s.Viewport.CompletionStrategy,
         ConfirmedCompleteEdgeCount = s.Viewport.ConfirmedCompleteEdgeCount,
         CompleteEdges = ExtractCompleteEdges(s.Viewport),
+        ObservedRedEdgeCount = s.Viewport.ObservedRedEdgeCount,
+        ObservedRedEdges = ExtractObservedRedEdges(s.Viewport),
         SourceRevision = s.SourceRevision ?? "",
         CoordinateConventionVersion = s.CoordinateConventionVersion,
         FailureMessage = s.Failure.Message ?? "",
@@ -222,6 +265,23 @@ public sealed class TransformSnapshotDto
         var list = new CompleteEdgeDto[n];
         for (int i = 0; i < n; i++)
             list[i] = CompleteEdgeDto.FromNative(edges[i]);
+        return list;
+    }
+
+    private static RedFrameEdgeDto[] ExtractObservedRedEdges(NativeSct.SctViewportFrame v)
+    {
+        int n = Math.Clamp(v.ObservedRedEdgeCount, 0, 8);
+        if (n == 0)
+            return Array.Empty<RedFrameEdgeDto>();
+
+        var edges = new NativeSct.SctRedFrameEdge[]
+        {
+            v.ObservedRedEdge0, v.ObservedRedEdge1, v.ObservedRedEdge2, v.ObservedRedEdge3,
+            v.ObservedRedEdge4, v.ObservedRedEdge5, v.ObservedRedEdge6, v.ObservedRedEdge7
+        };
+        var list = new RedFrameEdgeDto[n];
+        for (int i = 0; i < n; i++)
+            list[i] = RedFrameEdgeDto.FromNative(edges[i]);
         return list;
     }
 }

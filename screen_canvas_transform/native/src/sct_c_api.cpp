@@ -21,6 +21,34 @@ void CopyStrC(char* dst, size_t n, const char* s) {
   std::snprintf(dst, n, "%s", s ? s : "");
 }
 
+void CopyViewportRedEdgesToC(const sct::NavigatorViewportFrame& frame, SctViewportFrame* out) {
+  if (!out) return;
+  out->confirmed_complete_edge_count = frame.red_evidence.confirmed_complete_edge_count;
+  const int nce = frame.complete_edge_export_count < 4 ? frame.complete_edge_export_count : 4;
+  for (int i = 0; i < nce; ++i) {
+    out->complete_edges[i].p0_capture = {frame.complete_edges[i].p0.x,
+                                         frame.complete_edges[i].p0.y};
+    out->complete_edges[i].p1_capture = {frame.complete_edges[i].p1.x,
+                                         frame.complete_edges[i].p1.y};
+    out->complete_edges[i].workspace_edge = frame.complete_edges[i].workspace_edge;
+    out->complete_edges[i].reserved = 0;
+  }
+  for (int i = nce; i < 4; ++i) out->complete_edges[i] = {};
+
+  const int noe = frame.observed_red_edge_export_count < 8 ? frame.observed_red_edge_export_count
+                                                           : 8;
+  out->observed_red_edge_count = noe;
+  for (int i = 0; i < noe; ++i) {
+    out->observed_red_edges[i].p0_capture = {frame.observed_red_edges[i].p0.x,
+                                             frame.observed_red_edges[i].p0.y};
+    out->observed_red_edges[i].p1_capture = {frame.observed_red_edges[i].p1.x,
+                                             frame.observed_red_edges[i].p1.y};
+    out->observed_red_edges[i].workspace_edge = frame.observed_red_edges[i].workspace_edge;
+    out->observed_red_edges[i].is_complete = frame.observed_red_edges[i].is_complete;
+  }
+  for (int i = noe; i < 8; ++i) out->observed_red_edges[i] = {};
+}
+
 wb::BackgroundModel FromC(const SctBackgroundModel& m) {
   wb::BackgroundModel b;
   b.center_lab = {m.center_lab_l, m.center_lab_a, m.center_lab_b};
@@ -331,19 +359,7 @@ SCT_API int sct_complete_viewport_frame(const SctViewportRequest* req, SctViewpo
   out->completion_strategy = r.frame.completion_strategy;
   out->confidence = r.frame.confidence;
   CopyStrC(out->message, sizeof(out->message), r.message);
-  out->confirmed_complete_edge_count = r.frame.red_evidence.confirmed_complete_edge_count;
-  const int nce = r.frame.complete_edge_export_count < 4 ? r.frame.complete_edge_export_count : 4;
-  for (int i = 0; i < nce; ++i) {
-    out->complete_edges[i].p0_capture = {r.frame.complete_edges[i].p0.x,
-                                         r.frame.complete_edges[i].p0.y};
-    out->complete_edges[i].p1_capture = {r.frame.complete_edges[i].p1.x,
-                                         r.frame.complete_edges[i].p1.y};
-    out->complete_edges[i].workspace_edge = r.frame.complete_edges[i].workspace_edge;
-    out->complete_edges[i].reserved = 0;
-  }
-  for (int i = nce; i < 4; ++i) {
-    out->complete_edges[i] = {};
-  }
+  CopyViewportRedEdgesToC(r.frame, out);
   return out->status;
 }
 
@@ -404,6 +420,18 @@ SCT_API int sct_solve_transform(const SctSolveRequest* req, SctTransformSnapshot
              req->viewport.complete_edges[i].p1_capture.y};
     ce.workspace_edge = req->viewport.complete_edges[i].workspace_edge;
   }
+  in.viewport.observed_red_edge_export_count = 0;
+  const int noe_in = req->viewport.observed_red_edge_count < 8 ? req->viewport.observed_red_edge_count
+                                                               : 8;
+  for (int i = 0; i < noe_in; ++i) {
+    auto& oe = in.viewport.observed_red_edges[in.viewport.observed_red_edge_export_count++];
+    oe.p0 = {req->viewport.observed_red_edges[i].p0_capture.x,
+             req->viewport.observed_red_edges[i].p0_capture.y};
+    oe.p1 = {req->viewport.observed_red_edges[i].p1_capture.x,
+             req->viewport.observed_red_edges[i].p1_capture.y};
+    oe.workspace_edge = req->viewport.observed_red_edges[i].workspace_edge;
+    oe.is_complete = req->viewport.observed_red_edges[i].is_complete;
+  }
   in.previous_scale_percent = req->previous_scale_percent;
   in.initial_scale_percent = req->initial_scale_percent;
   in.injected_scale_percent = req->injected_scale_percent;
@@ -436,23 +464,7 @@ SCT_API int sct_solve_transform(const SctSolveRequest* req, SctTransformSnapshot
   out->viewport.confidence = s.viewport.confidence;
   out->viewport.completion_strategy = s.viewport.completion_strategy;
   out->viewport.visible_edge_count = s.viewport.visible_edge_count;
-  out->viewport.confirmed_complete_edge_count =
-      s.viewport.red_evidence.confirmed_complete_edge_count;
-  {
-    const int nce = s.viewport.complete_edge_export_count < 4
-                        ? s.viewport.complete_edge_export_count
-                        : 4;
-    for (int i = 0; i < nce; ++i) {
-      out->viewport.complete_edges[i].p0_capture = {s.viewport.complete_edges[i].p0.x,
-                                                    s.viewport.complete_edges[i].p0.y};
-      out->viewport.complete_edges[i].p1_capture = {s.viewport.complete_edges[i].p1.x,
-                                                    s.viewport.complete_edges[i].p1.y};
-      out->viewport.complete_edges[i].workspace_edge =
-          s.viewport.complete_edges[i].workspace_edge;
-      out->viewport.complete_edges[i].reserved = 0;
-    }
-    for (int i = nce; i < 4; ++i) out->viewport.complete_edges[i] = {};
-  }
+  CopyViewportRedEdgesToC(s.viewport, &out->viewport);
   out->scale_reference = s.scale_reference;
   out->relative_scale = s.relative_scale;
   out->cumulative_relative_scale = s.cumulative_relative_scale;

@@ -588,6 +588,31 @@ bool IsSubsetIndices(const std::vector<int>& sub, const std::vector<int>& super)
 }
 
 // 对单组做 pattern 补全；失败则 completed_ok=false（淘汰，不硬编矩形）。
+void ExportGroupRedEdges(NavigatorViewportFrame& frame, const std::vector<ObservedEdge>& edges,
+                         const wb::IntRect& roi) {
+  auto abs_x = [&](double lx) { return roi.left + lx + 0.5; };
+  auto abs_y = [&](double ly) { return roi.top + ly + 0.5; };
+  frame.complete_edge_export_count = 0;
+  frame.observed_red_edge_export_count = 0;
+  for (const auto& e : edges) {
+    const Vec2 p0{abs_x(e.seg.x0), abs_y(e.seg.y0)};
+    const Vec2 p1{abs_x(e.seg.x1), abs_y(e.seg.y1)};
+    if (frame.observed_red_edge_export_count < kMaxObservedRedEdgeExport) {
+      auto& oe = frame.observed_red_edges[frame.observed_red_edge_export_count++];
+      oe.p0 = p0;
+      oe.p1 = p1;
+      oe.workspace_edge = e.workspace_edge;
+      oe.is_complete = e.complete ? 1 : 0;
+    }
+    if (e.complete && frame.complete_edge_export_count < 4) {
+      auto& ce = frame.complete_edges[frame.complete_edge_export_count++];
+      ce.p0 = p0;
+      ce.p1 = p1;
+      ce.workspace_edge = e.workspace_edge;
+    }
+  }
+}
+
 bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
                           const wb::IntRect& roi, int rw, int rh) {
   AnnotateGroupRightAngles(g.edges);
@@ -638,16 +663,6 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
   const auto& wcr = in.workspace_canvas_relation;
   auto abs_x = [&](double lx) { return roi.left + lx + 0.5; };
   auto abs_y = [&](double ly) { return roi.top + ly + 0.5; };
-
-  frame.complete_edge_export_count = 0;
-  for (const auto& e : g.edges) {
-    if (!e.complete) continue;
-    if (frame.complete_edge_export_count >= 4) break;
-    auto& ce = frame.complete_edges[frame.complete_edge_export_count++];
-    ce.p0 = {abs_x(e.seg.x0), abs_y(e.seg.y0)};
-    ce.p1 = {abs_x(e.seg.x1), abs_y(e.seg.y1)};
-    ce.workspace_edge = e.workspace_edge;
-  }
 
   auto finish_ok = [&](int conf_edges) -> bool {
     SetCorners(frame);
@@ -1149,7 +1164,8 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
     }
   }
 
-  // F. 仅发布目标组
+  // F. 仅发布目标组（导出最终 workspace_edge 指派后的全部观测红边）
+  ExportGroupRedEdges(target->frame, target->edges, roi);
   ViewportCompletionResult r;
   r.status = FailStatus::Ok;
   r.frame = target->frame;

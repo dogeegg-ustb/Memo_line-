@@ -211,6 +211,15 @@ public static class NativeSct
         public int Reserved;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SctRedFrameEdge
+    {
+        public SctVec2 P0Capture;
+        public SctVec2 P1Capture;
+        public int WorkspaceEdge;
+        public int IsComplete;
+    }
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
     public struct SctViewportFrame
     {
@@ -237,6 +246,15 @@ public static class NativeSct
         public SctCompleteEdge CompleteEdge1;
         public SctCompleteEdge CompleteEdge2;
         public SctCompleteEdge CompleteEdge3;
+        public int ObservedRedEdgeCount;
+        public SctRedFrameEdge ObservedRedEdge0;
+        public SctRedFrameEdge ObservedRedEdge1;
+        public SctRedFrameEdge ObservedRedEdge2;
+        public SctRedFrameEdge ObservedRedEdge3;
+        public SctRedFrameEdge ObservedRedEdge4;
+        public SctRedFrameEdge ObservedRedEdge5;
+        public SctRedFrameEdge ObservedRedEdge6;
+        public SctRedFrameEdge ObservedRedEdge7;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]

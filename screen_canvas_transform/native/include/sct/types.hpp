@@ -234,6 +234,15 @@ struct CompleteEdgeCapture {
   int workspace_edge = 0;  // L/T/R/B bit
 };
 
+struct ObservedRedEdgeCapture {
+  Vec2 p0{};
+  Vec2 p1{};
+  int workspace_edge = 0;
+  int is_complete = 0;
+};
+
+constexpr int kMaxObservedRedEdgeExport = 8;
+
 struct NavigatorViewportFrame {
   Vec2 origin_top_left_displayed{};  // o_v
   Vec2 axis_x_displayed{};           // a_x
@@ -247,6 +256,8 @@ struct NavigatorViewportFrame {
   RedFrameEvidence red_evidence{};
   CompleteEdgeCapture complete_edges[4]{};
   int complete_edge_export_count = 0;
+  ObservedRedEdgeCapture observed_red_edges[kMaxObservedRedEdgeExport]{};
+  int observed_red_edge_export_count = 0;
 };
 
 struct MarkerGeometry {

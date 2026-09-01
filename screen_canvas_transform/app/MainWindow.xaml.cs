@@ -756,10 +756,12 @@ public partial class MainWindow : Window
 
     private void ApplyCompleteEdgeOverlay(CaptureSession session, TransformSnapshotDto snapshot)
     {
-        int count = snapshot.ConfirmedCompleteEdgeCount;
-        LiveDebugLog.Write($"[完整边] 识别到 {count} 条完整边 CaptureId={snapshot.CaptureId}");
+        int observedCount = snapshot.ObservedRedEdgeCount;
+        LiveDebugLog.Write(
+            $"[红框边] 识别到 {observedCount} 条观测边，完整边={snapshot.ConfirmedCompleteEdgeCount} " +
+            $"CaptureId={snapshot.CaptureId}");
 
-        if (count <= 0 || snapshot.CompleteEdges.Length == 0)
+        if (observedCount <= 0 || snapshot.ObservedRedEdges.Length == 0)
         {
             _completeEdgeOverlay.Hide();
             return;
@@ -767,14 +769,16 @@ public partial class MainWindow : Window
 
         int originX = session.OriginX;
         int originY = session.OriginY;
-        var screenEdges = new List<(double X0, double Y0, double X1, double Y1)>(snapshot.CompleteEdges.Length);
-        foreach (var e in snapshot.CompleteEdges)
+        var screenEdges = new List<CompleteEdgeOverlayWindow.LabeledScreenEdge>(snapshot.ObservedRedEdges.Length);
+        foreach (var e in snapshot.ObservedRedEdges)
         {
-            screenEdges.Add((
+            screenEdges.Add(new CompleteEdgeOverlayWindow.LabeledScreenEdge(
                 e.P0CaptureX + originX,
                 e.P0CaptureY + originY,
                 e.P1CaptureX + originX,
-                e.P1CaptureY + originY));
+                e.P1CaptureY + originY,
+                e.WorkspaceEdge,
+                e.IsComplete));
         }
 
         _completeEdgeOverlay.TryShowIfCaptureMatches(
