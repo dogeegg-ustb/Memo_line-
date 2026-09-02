@@ -16,9 +16,8 @@ public partial class MainWindow : Window
 {
     private readonly TransformPipelineService _pipeline = new();
     private readonly SaveArchiveService _archiveService = new();
-    // Distinct border colors: Workspace=green, Navigator=cyan, Thumbnail=magenta.
+    // Distinct border colors: Workspace=green, Thumbnail=magenta.
     private readonly RoiBorderOverlayWindow _workspaceBorder = RoiBorderOverlayWindow.CreateWorkspace();
-    private readonly RoiBorderOverlayWindow _navigatorBorder = RoiBorderOverlayWindow.CreateNavigator();
     private readonly RoiBorderOverlayWindow _thumbnailBorder = RoiBorderOverlayWindow.CreateNavigatorThumbnail();
     private readonly MarkerOverlayWindow _markerOverlay = new();
     private readonly CompleteEdgeOverlayWindow _completeEdgeOverlay = new();
@@ -36,7 +35,6 @@ public partial class MainWindow : Window
             _markerOverlay.Dispose();
             _completeEdgeOverlay.Dispose();
             _workspaceBorder.Dispose();
-            _navigatorBorder.Dispose();
             _thumbnailBorder.Dispose();
             _activeSession?.Dispose();
         };
@@ -129,7 +127,6 @@ public partial class MainWindow : Window
     private void HideRoiBorders()
     {
         _workspaceBorder.Hide();
-        _navigatorBorder.Hide();
         _thumbnailBorder.Hide();
     }
 
@@ -352,7 +349,6 @@ public partial class MainWindow : Window
         {
             session.ClearRoi(RoiKind.Navigator);
             session.ClearRoi(RoiKind.OcrNumbers);
-            _navigatorBorder.Hide();
             _thumbnailBorder.Hide();
             _markerOverlay.Hide();
             _completeEdgeOverlay.Hide();
@@ -375,9 +371,6 @@ public partial class MainWindow : Window
                 SetStatus("已退出初始化（Esc / 取消导航器框选）。工作区绿框仍保留。");
                 return null;
             }
-
-            var navigatorScreen = session.CaptureToScreen(session.NavigatorRoiCapturePx.Value);
-            _navigatorBorder.Show(navigatorScreen, session.CaptureId);
 
             Show();
             Activate();
@@ -478,7 +471,6 @@ public partial class MainWindow : Window
                 _markerOverlay.Hide();
                 _completeEdgeOverlay.Hide();
                 _thumbnailBorder.Hide();
-                _navigatorBorder.Hide();
                 if (!IsVisible)
                 {
                     Show();
@@ -736,11 +728,6 @@ public partial class MainWindow : Window
 
         _workspaceBorder.TryShowIfCaptureMatches(
             result.WorkspaceRoiScreen,
-            session.CaptureId,
-            result.Snapshot.CaptureId);
-
-        _navigatorBorder.TryShowIfCaptureMatches(
-            result.NavigatorRoiScreen,
             session.CaptureId,
             result.Snapshot.CaptureId);
 

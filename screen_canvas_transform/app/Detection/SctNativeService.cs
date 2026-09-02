@@ -196,7 +196,9 @@ public sealed class SctNativeService
         CaptureSession session,
         IntRect thumbnailRoiCapturePx,
         IntRect navigatorCanvasBoundsCapturePx,
-        NativeSct.SctWorkspaceCanvasRelation workspaceCanvasRelation)
+        NativeSct.SctWorkspaceCanvasRelation workspaceCanvasRelation,
+        float displayRotationDegrees = 0f,
+        float displayRotationConfidence = 0f)
     {
         return WithLockedFrame(session, (scan0, stride) =>
         {
@@ -209,7 +211,9 @@ public sealed class SctNativeService
                 ThumbnailRoi = NativeSct.SctIntRect.From(thumbnailRoiCapturePx),
                 NavigatorCanvasBounds = NativeSct.SctIntRect.From(navigatorCanvasBoundsCapturePx),
                 WorkspaceCanvasRelation = workspaceCanvasRelation,
-                DpiScale = Math.Max(session.DpiX, session.DpiY) / 96f
+                DpiScale = Math.Max(session.DpiX, session.DpiY) / 96f,
+                DisplayRotationDegrees = displayRotationDegrees,
+                DisplayRotationConfidence = displayRotationConfidence
             };
 
             var result = new NativeSct.SctViewportFrame { Message = "" };

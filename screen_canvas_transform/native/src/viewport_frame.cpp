@@ -339,8 +339,8 @@ void AnnotateGroupRightAngles(std::vector<ObservedEdge>& group_edges) {
   }
 }
 
-// 组内指派至多一套 L/T/R/B。
-bool AssignGroupWorkspaceEdges(std::vector<ObservedEdge>& edges) {
+// 遗留：组内局部排序定 L/T/R/B（仅无切割边时回退；禁止作为切割对应主路径）。
+bool AssignGroupWorkspaceEdgesLegacy(std::vector<ObservedEdge>& edges) {
   std::vector<ObservedEdge*> verts, hors;
   for (auto& e : edges) {
     e.workspace_edge = 0;
@@ -360,7 +360,7 @@ bool AssignGroupWorkspaceEdges(std::vector<ObservedEdge>& edges) {
     verts[0]->workspace_edge = kEdgeL;
     verts[1]->workspace_edge = kEdgeR;
   } else if (verts.size() == 1) {
-    verts[0]->workspace_edge = kEdgeL;  // 单竖直边：占位 L，pattern 路径再按几何解释
+    verts[0]->workspace_edge = kEdgeL;
   }
   if (hors.size() == 2) {
     if (hors[1]->coord - hors[0]->coord < kMinViewportSidePx) return false;
@@ -372,13 +372,328 @@ bool AssignGroupWorkspaceEdges(std::vector<ObservedEdge>& edges) {
   return true;
 }
 
+// 枚举可行性：仅检查平行对边间距，不写入角色。
+bool GroupEdgeCardinalityOk(const std::vector<ObservedEdge>& edges) {
+  int n_v = 0, n_h = 0;
+  double v0 = 0, v1 = 0, h0 = 0, h1 = 0;
+  bool have_v0 = false, have_h0 = false;
+  for (const auto& e : edges) {
+    if (e.seg.horizontal) {
+      if (n_h == 0) {
+        h0 = e.coord;
+        have_h0 = true;
+      } else if (n_h == 1) {
+        h1 = e.coord;
+      }
+      ++n_h;
+    } else {
+      if (n_v == 0) {
+        v0 = e.coord;
+        have_v0 = true;
+      } else if (n_v == 1) {
+        v1 = e.coord;
+      }
+      ++n_v;
+    }
+  }
+  if (n_v > 2 || n_h > 2) return false;
+  if (n_v == 2 && std::abs(v1 - v0) < kMinViewportSidePx) return false;
+  if (n_h == 2 && std::abs(h1 - h0) < kMinViewportSidePx) return false;
+  (void)have_v0;
+  (void)have_h0;
+  return true;
+}
+
+constexpr int kEdgeOrder[4] = {kEdgeL, kEdgeT, kEdgeR, kEdgeB};
+
+int EdgeBitIndex(int bit) {
+  for (int i = 0; i < 4; ++i)
+    if (kEdgeOrder[i] == bit) return i;
+  return -1;
+}
+
+// 显示顺时针 q*90° 时：屏幕侧 S 上出现的画布语义边 = order[(idx(S) - q) mod 4]。
+int SemanticRoleAtScreenSide(int screen_side_bit, int quarters_cw) {
+  const int idx = EdgeBitIndex(screen_side_bit);
+  if (idx < 0) return 0;
+  const int q = ((quarters_cw % 4) + 4) % 4;
+  return kEdgeOrder[(idx - q + 4) % 4];
+}
+
+int OppositeEdge(int bit) {
+  switch (bit) {
+    case kEdgeL:
+      return kEdgeR;
+    case kEdgeR:
+      return kEdgeL;
+    case kEdgeT:
+      return kEdgeB;
+    case kEdgeB:
+      return kEdgeT;
+    default:
+      return 0;
+  }
+}
+
+int NearestQuarter(double degrees) {
+  double n = std::fmod(degrees, 360.0);
+  if (n < 0) n += 360.0;
+  int q = static_cast<int>(std::lround(n / 90.0)) % 4;
+  if (q < 0) q += 4;
+  return q;
+}
+
+// 已知显示旋转类时：按屏幕几何左/上/右/下映射 0° 语义角色（无 crop 时的主路径）。
+bool AssignEdgesByDisplayRotation(std::vector<ObservedEdge>& edges, int quarters_cw, int rw,
+                                  int rh) {
+  if (quarters_cw < 0) return false;
+  std::vector<ObservedEdge*> verts, hors;
+  for (auto& e : edges) {
+    e.workspace_edge = 0;
+    if (e.seg.horizontal)
+      hors.push_back(&e);
+    else
+      verts.push_back(&e);
+  }
+  if (verts.size() > 2 || hors.size() > 2) return false;
+  std::sort(verts.begin(), verts.end(),
+            [](const ObservedEdge* a, const ObservedEdge* b) { return a->coord < b->coord; });
+  std::sort(hors.begin(), hors.end(),
+            [](const ObservedEdge* a, const ObservedEdge* b) { return a->coord < b->coord; });
+
+  if (verts.size() == 2) {
+    if (verts[1]->coord - verts[0]->coord < kMinViewportSidePx) return false;
+    verts[0]->workspace_edge = SemanticRoleAtScreenSide(kEdgeL, quarters_cw);
+    verts[1]->workspace_edge = SemanticRoleAtScreenSide(kEdgeR, quarters_cw);
+  } else if (verts.size() == 1) {
+    const int screen_side = verts[0]->coord < rw * 0.5 ? kEdgeL : kEdgeR;
+    verts[0]->workspace_edge = SemanticRoleAtScreenSide(screen_side, quarters_cw);
+  }
+
+  if (hors.size() == 2) {
+    if (hors[1]->coord - hors[0]->coord < kMinViewportSidePx) return false;
+    hors[0]->workspace_edge = SemanticRoleAtScreenSide(kEdgeT, quarters_cw);
+    hors[1]->workspace_edge = SemanticRoleAtScreenSide(kEdgeB, quarters_cw);
+  } else if (hors.size() == 1) {
+    const int screen_side = hors[0]->coord < rh * 0.5 ? kEdgeT : kEdgeB;
+    hors[0]->workspace_edge = SemanticRoleAtScreenSide(screen_side, quarters_cw);
+  }
+
+  if (verts.empty() && hors.empty()) return false;
+  return true;
+}
+
+int ResolveDisplayQuarter(float rotation_degrees, float rotation_confidence) {
+  if (rotation_confidence < 0.2f) return -1;
+  return NearestQuarter(rotation_degrees);
+}
+
+// 红边是否与缩略图显示画布相交（局部 ROI 坐标）。
+bool EdgeIntersectsCanvasLocal(const ObservedEdge& e, const wb::IntRect& canvas_local) {
+  if (!canvas_local.valid()) return false;
+  if (e.seg.horizontal) {
+    const double y = e.coord;
+    if (y < canvas_local.top - 0.5 || y > canvas_local.bottom - 0.5) return false;
+    const double x0 = std::min(e.seg.x0, e.seg.x1);
+    const double x1 = std::max(e.seg.x0, e.seg.x1);
+    const double ox0 = std::max(x0, static_cast<double>(canvas_local.left));
+    const double ox1 = std::min(x1, static_cast<double>(canvas_local.right));
+    return ox1 - ox0 > 0.5;
+  }
+  const double x = e.coord;
+  if (x < canvas_local.left - 0.5 || x > canvas_local.right - 0.5) return false;
+  const double y0 = std::min(e.seg.y0, e.seg.y1);
+  const double y1 = std::max(e.seg.y0, e.seg.y1);
+  const double oy0 = std::max(y0, static_cast<double>(canvas_local.top));
+  const double oy1 = std::min(y1, static_cast<double>(canvas_local.bottom));
+  return oy1 - oy0 > 0.5;
+}
+
+enum class CropAssignResult { Applied, NotApplicable, Ambiguous, Failed };
+
+// 在切割边集合中，按 0° 语义角色选取几何极值边（T=最上横边…），避免 interior_ok 与旋转后几何冲突。
+ObservedEdge* PickCuttingEdgeForSemanticRole(const std::vector<ObservedEdge*>& cutting,
+                                              int sem_role) {
+  std::vector<ObservedEdge*> pool;
+  for (ObservedEdge* ep : cutting) {
+    if (ep->workspace_edge != 0) continue;
+    if (sem_role == kEdgeL || sem_role == kEdgeR) {
+      if (!ep->seg.horizontal) pool.push_back(ep);
+    } else if (sem_role == kEdgeT || sem_role == kEdgeB) {
+      if (ep->seg.horizontal) pool.push_back(ep);
+    }
+  }
+  if (pool.empty()) return nullptr;
+  if (pool.size() == 1) return pool[0];
+
+  ObservedEdge* best = nullptr;
+  for (ObservedEdge* ep : pool) {
+    if (!best) {
+      best = ep;
+      continue;
+    }
+    const bool pick_min = (sem_role == kEdgeL || sem_role == kEdgeT);
+    if (pick_min ? ep->coord < best->coord : ep->coord > best->coord) best = ep;
+  }
+  return best;
+}
+
+// 切割对应主路径：C_w ↔ C_v；角仅定旋转类；禁止 ROI 中线 / 纯组内排序定案。
+CropAssignResult AssignEdgesByCropCorrespondence(std::vector<ObservedEdge>& edges,
+                                                 int canvas_crop_sides,
+                                                 const wb::IntRect& canvas_local,
+                                                 float rotation_degrees,
+                                                 float rotation_confidence) {
+  if (canvas_crop_sides == 0) return CropAssignResult::NotApplicable;
+
+  std::vector<ObservedEdge*> cutting;
+  for (auto& e : edges) {
+    e.workspace_edge = 0;
+    if (EdgeIntersectsCanvasLocal(e, canvas_local)) cutting.push_back(&e);
+  }
+  if (cutting.empty()) return CropAssignResult::Failed;
+
+  std::vector<int> crop_bits;
+  for (int bit : {kEdgeL, kEdgeT, kEdgeR, kEdgeB}) {
+    if (canvas_crop_sides & bit) crop_bits.push_back(bit);
+  }
+  if (crop_bits.empty()) return CropAssignResult::NotApplicable;
+
+  auto try_quarters = [&](int q, std::vector<ObservedEdge>& work, bool* saw_ambiguous) -> bool {
+    if (saw_ambiguous) *saw_ambiguous = false;
+    for (auto& e : work) e.workspace_edge = 0;
+
+    std::vector<ObservedEdge*> cutting_local;
+    for (auto& e : work) {
+      if (EdgeIntersectsCanvasLocal(e, canvas_local)) cutting_local.push_back(&e);
+    }
+    if (cutting_local.empty()) return false;
+
+    // 每个 C_w 须在 C_v 上找到唯一切割边（谁切↔谁切 → 0° 语义角色）。
+    std::vector<ObservedEdge*> crop_matched;
+    crop_matched.reserve(crop_bits.size());
+    for (int cb : crop_bits) {
+      const int sem = SemanticRoleAtScreenSide(cb, q);
+      ObservedEdge* match = PickCuttingEdgeForSemanticRole(cutting_local, sem);
+      if (!match) return false;
+      if (match->workspace_edge != 0) {
+        if (saw_ambiguous) *saw_ambiguous = true;
+        return false;
+      }
+      match->workspace_edge = sem;
+      crop_matched.push_back(match);
+    }
+
+    // 多切割边同屏侧冲突：仅校验本次 C_w↔C_v 直接指派，不含传播边。
+    const double ccx = 0.5 * (canvas_local.left + canvas_local.right);
+    const double ccy = 0.5 * (canvas_local.top + canvas_local.bottom);
+    const double side_tol = static_cast<double>(kGroupCornerTolPx);
+    ObservedEdge* by_crop_side[4] = {nullptr, nullptr, nullptr, nullptr};
+    for (size_t i = 0; i < crop_bits.size(); ++i) {
+      const int idx = EdgeBitIndex(crop_bits[i]);
+      if (idx >= 0 && idx < 4) by_crop_side[idx] = crop_matched[i];
+    }
+    if (by_crop_side[0] && by_crop_side[2]) {
+      if (by_crop_side[0]->coord > ccx + side_tol && by_crop_side[2]->coord > ccx + side_tol)
+        return false;
+      if (by_crop_side[0]->coord < ccx - side_tol && by_crop_side[2]->coord < ccx - side_tol)
+        return false;
+    }
+    if (by_crop_side[1] && by_crop_side[3]) {
+      if (by_crop_side[1]->coord > ccy + side_tol && by_crop_side[3]->coord > ccy + side_tol)
+        return false;
+      if (by_crop_side[1]->coord < ccy - side_tol && by_crop_side[3]->coord < ccy - side_tol)
+        return false;
+    }
+
+    // §5.3 传播：由已赋值切割边推对边；未赋值的平行对按旋转类套屏侧语义
+    std::vector<ObservedEdge*> all_v, all_h;
+    for (auto& e : work) {
+      if (e.seg.horizontal)
+        all_h.push_back(&e);
+      else
+        all_v.push_back(&e);
+    }
+    std::sort(all_v.begin(), all_v.end(),
+              [](const ObservedEdge* a, const ObservedEdge* b) { return a->coord < b->coord; });
+    std::sort(all_h.begin(), all_h.end(),
+              [](const ObservedEdge* a, const ObservedEdge* b) { return a->coord < b->coord; });
+
+    auto propagate_pair = [](std::vector<ObservedEdge*>& pair) -> bool {
+      if (pair.size() != 2) return true;
+      ObservedEdge* a = pair[0];
+      ObservedEdge* b = pair[1];
+      if (a->workspace_edge && b->workspace_edge) {
+        return b->workspace_edge == OppositeEdge(a->workspace_edge);
+      }
+      if (a->workspace_edge && !b->workspace_edge) {
+        b->workspace_edge = OppositeEdge(a->workspace_edge);
+        return b->workspace_edge != 0;
+      }
+      if (b->workspace_edge && !a->workspace_edge) {
+        a->workspace_edge = OppositeEdge(b->workspace_edge);
+        return a->workspace_edge != 0;
+      }
+      return true;  // 均未赋值：留给旋转类套用
+    };
+    if (!propagate_pair(all_v)) return false;
+    if (!propagate_pair(all_h)) return false;
+
+    if (all_v.size() == 2 && all_v[0]->workspace_edge == 0 && all_v[1]->workspace_edge == 0) {
+      const int lo = SemanticRoleAtScreenSide(kEdgeL, q);
+      all_v[0]->workspace_edge = lo;
+      all_v[1]->workspace_edge = OppositeEdge(lo);
+    }
+    if (all_h.size() == 2 && all_h[0]->workspace_edge == 0 && all_h[1]->workspace_edge == 0) {
+      const int lo = SemanticRoleAtScreenSide(kEdgeT, q);
+      all_h[0]->workspace_edge = lo;
+      all_h[1]->workspace_edge = OppositeEdge(lo);
+    }
+
+    return true;
+  };
+
+  std::vector<int> candidates;
+  if (rotation_confidence >= 0.2f) {
+    candidates.push_back(NearestQuarter(rotation_degrees));
+  } else {
+    // 角不可用：离散 0/90/180/270 候选；多解则歧义
+    for (int q = 0; q < 4; ++q) candidates.push_back(q);
+  }
+
+  int success_q = -1;
+  std::vector<ObservedEdge> best;
+  bool any_role_ambiguous = false;
+  for (int q : candidates) {
+    auto trial = edges;
+    bool q_ambiguous = false;
+    if (!try_quarters(q, trial, &q_ambiguous)) {
+      if (q_ambiguous) any_role_ambiguous = true;
+      continue;
+    }
+    if (success_q >= 0 && success_q != q) {
+      return CropAssignResult::Ambiguous;
+    }
+    if (success_q < 0) {
+      success_q = q;
+      best = std::move(trial);
+    }
+  }
+
+  if (success_q < 0 && any_role_ambiguous) return CropAssignResult::Ambiguous;
+  if (success_q < 0) return CropAssignResult::Failed;
+  edges = std::move(best);
+  return CropAssignResult::Applied;
+}
+
 ObservedEdge* FindEdge(std::vector<ObservedEdge>& edges, int mask) {
   for (auto& e : edges)
     if (e.workspace_edge == mask) return &e;
   return nullptr;
 }
 
-bool GroupSpatialGeometryOk(const std::vector<ObservedEdge>& edges, double max_w, double max_h) {
+bool GroupSpatialGeometryOk(const std::vector<ObservedEdge>& edges, double max_w, double max_h,
+                            const wb::IntRect& canvas_local) {
   if (edges.empty() || edges.size() > 4) return false;
   int n_v = 0, n_h = 0;
   for (const auto& e : edges) {
@@ -389,7 +704,7 @@ bool GroupSpatialGeometryOk(const std::vector<ObservedEdge>& edges, double max_w
   }
   if (n_v > 2 || n_h > 2) return false;
 
-  // 平行对边
+  // 平行对边：仅当两条均为切割边时才校验间距（非切割外框边不得与切割边拼成平行对）
   std::vector<const ObservedEdge*> verts, hors;
   for (const auto& e : edges) {
     if (e.seg.horizontal)
@@ -398,10 +713,14 @@ bool GroupSpatialGeometryOk(const std::vector<ObservedEdge>& edges, double max_w
       verts.push_back(&e);
   }
   if (verts.size() == 2) {
-    if (!ParallelPairOk(*verts[0], *verts[1], max_w)) return false;
+    const bool a_cut = EdgeIntersectsCanvasLocal(*verts[0], canvas_local);
+    const bool b_cut = EdgeIntersectsCanvasLocal(*verts[1], canvas_local);
+    if (a_cut && b_cut && !ParallelPairOk(*verts[0], *verts[1], max_w)) return false;
   }
   if (hors.size() == 2) {
-    if (!ParallelPairOk(*hors[0], *hors[1], max_h)) return false;
+    const bool a_cut = EdgeIntersectsCanvasLocal(*hors[0], canvas_local);
+    const bool b_cut = EdgeIntersectsCanvasLocal(*hors[1], canvas_local);
+    if (a_cut && b_cut && !ParallelPairOk(*hors[0], *hors[1], max_h)) return false;
   }
 
   // 正交邻接：凡同时存在的相邻角色边必须空间相近；
@@ -570,6 +889,7 @@ struct GroupCandidate {
   int confirmed_corners = 0;
   bool touches_background = false;
   bool completed_ok = false;
+  bool used_crop_correspondence = false;
   ViewportCompletionPattern pattern = ViewportCompletionPattern::FourCompleteEdges;
   NavigatorViewportFrame frame{};
 };
@@ -614,9 +934,38 @@ void ExportGroupRedEdges(NavigatorViewportFrame& frame, const std::vector<Observ
 }
 
 bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
-                          const wb::IntRect& roi, int rw, int rh) {
+                          const wb::IntRect& roi, int rw, int rh,
+                          bool* used_crop_correspondence) {
   AnnotateGroupRightAngles(g.edges);
-  if (!AssignGroupWorkspaceEdges(g.edges)) return false;
+
+  wb::IntRect canvas_abs = in.navigator_canvas_bounds.Clamp(in.width, in.height);
+  if (!canvas_abs.valid()) canvas_abs = roi;
+  const wb::IntRect canvas_local{
+      canvas_abs.left - roi.left, canvas_abs.top - roi.top,
+      canvas_abs.right - roi.left, canvas_abs.bottom - roi.top};
+
+  const int crop_sides = in.workspace_canvas_relation.canvas_crop_sides;
+  bool crop_path = false;
+  bool rotation_path = false;
+  if (crop_sides != 0) {
+    const CropAssignResult cr = AssignEdgesByCropCorrespondence(
+        g.edges, crop_sides, canvas_local, in.display_rotation_degrees,
+        in.display_rotation_confidence);
+    if (cr != CropAssignResult::Applied) return false;
+    crop_path = true;
+    g.used_crop_correspondence = true;
+    if (used_crop_correspondence) *used_crop_correspondence = true;
+  } else {
+    const int q =
+        ResolveDisplayQuarter(in.display_rotation_degrees, in.display_rotation_confidence);
+    if (q >= 0 && AssignEdgesByDisplayRotation(g.edges, q, rw, rh)) {
+      rotation_path = true;
+    } else if (!AssignGroupWorkspaceEdgesLegacy(g.edges)) {
+      return false;
+    }
+  }
+
+  const bool use_geom_placement = crop_path || rotation_path;
 
   g.complete_count = 0;
   g.partial_count = 0;
@@ -706,19 +1055,41 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
     return false;
   };
 
+  auto recover_h = [&](const ObservedEdge& e, double& w, double& h) -> bool {
+    if (recover_size_from_horizontal(e, w, h)) return true;
+    if (!use_geom_placement) return false;
+    h = std::max(EdgeLen(e), 8.0);
+    w = std::max(h * aspect, 8.0);
+    return true;
+  };
+  auto recover_v = [&](const ObservedEdge& e, double& w, double& h) -> bool {
+    if (recover_size_from_vertical(e, w, h)) return true;
+    if (!use_geom_placement) return false;
+    w = std::max(EdgeLen(e), 8.0);
+    h = std::max(w / aspect, 8.0);
+    return true;
+  };
+
   auto place_vertical_edge = [&](const ObservedEdge& e, double w, double h) {
     const double cy = abs_y(0.5 * (e.seg.y0 + e.seg.y1));
-    const bool is_left = (e.workspace_edge == kEdgeL) ||
-                         (e.workspace_edge == 0 && e.coord < rw * 0.5);
-    frame.origin_top_left_displayed = {is_left ? abs_x(e.coord) : abs_x(e.coord) - w, cy - h * 0.5};
+    // 显示 AABB 的几何左右：切割路径用内侧朝向画布；遗留路径用角色/中线
+    const bool is_geom_left =
+        use_geom_placement ? (0.5 * (canvas_local.left + canvas_local.right) > e.coord)
+                           : ((e.workspace_edge == kEdgeL) ||
+                              (e.workspace_edge == 0 && e.coord < rw * 0.5));
+    frame.origin_top_left_displayed = {
+        is_geom_left ? abs_x(e.coord) : abs_x(e.coord) - w, cy - h * 0.5};
     frame.axis_x_displayed = {w, 0};
     frame.axis_y_displayed = {0, h};
   };
   auto place_horizontal_edge = [&](const ObservedEdge& e, double w, double h) {
     const double cx = abs_x(0.5 * (e.seg.x0 + e.seg.x1));
-    const bool is_top = (e.workspace_edge == kEdgeT) ||
-                        (e.workspace_edge == 0 && e.coord < rh * 0.5);
-    frame.origin_top_left_displayed = {cx - w * 0.5, is_top ? abs_y(e.coord) : abs_y(e.coord) - h};
+    const bool is_geom_top =
+        use_geom_placement ? (0.5 * (canvas_local.top + canvas_local.bottom) > e.coord)
+                           : ((e.workspace_edge == kEdgeT) ||
+                              (e.workspace_edge == 0 && e.coord < rh * 0.5));
+    frame.origin_top_left_displayed = {
+        cx - w * 0.5, is_geom_top ? abs_y(e.coord) : abs_y(e.coord) - h};
     frame.axis_x_displayed = {w, 0};
     frame.axis_y_displayed = {0, h};
   };
@@ -728,46 +1099,81 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
   ObservedEdge* T = FindEdge(g.edges, kEdgeT);
   ObservedEdge* B = FindEdge(g.edges, kEdgeB);
 
-  // 单边时 Assign 固定为 L/T；若几何上更像 R/B，按 ROI 中线改指派。
-  if (n_v == 1 && L && !R) {
-    if (L->coord >= rw * 0.5) {
-      L->workspace_edge = kEdgeR;
-      R = L;
-      L = nullptr;
+  // 语义角色可能因旋转与几何左右对调；拼显示矩形一律用几何 min/max。
+  auto geom_span_from_roles = [&](double& left, double& right, double& top,
+                                  double& bottom) {
+    if (L && R) {
+      left = std::min(L->coord, R->coord);
+      right = std::max(L->coord, R->coord);
     }
-  }
-  if (n_h == 1 && T && !B) {
-    if (T->coord >= rh * 0.5) {
-      T->workspace_edge = kEdgeB;
-      B = T;
-      T = nullptr;
+    if (T && B) {
+      top = std::min(T->coord, B->coord);
+      bottom = std::max(T->coord, B->coord);
+    }
+  };
+
+  // 遗留回退：单边占位 L/T 后按 ROI 中线改指派。切割/旋转路径 MUST NOT 走此分支。
+  if (!use_geom_placement) {
+    if (n_v == 1 && L && !R) {
+      if (L->coord >= rw * 0.5) {
+        L->workspace_edge = kEdgeR;
+        R = L;
+        L = nullptr;
+      }
+    }
+    if (n_h == 1 && T && !B) {
+      if (T->coord >= rh * 0.5) {
+        T->workspace_edge = kEdgeB;
+        B = T;
+        T = nullptr;
+      }
     }
   }
 
   if (g.complete_count >= 4 && L && R && T && B && L->complete && R->complete && T->complete &&
       B->complete) {
     set_pattern(ViewportCompletionPattern::FourCompleteEdges);
-    return complete_from_ltrb(L->coord, R->coord, T->coord, B->coord);
+    double left = 0, right = 0, top = 0, bottom = 0;
+    geom_span_from_roles(left, right, top, bottom);
+    return complete_from_ltrb(left, right, top, bottom);
   }
 
   if (g.complete_count == 3) {
     set_pattern(ViewportCompletionPattern::ThreeCompleteEdges);
     if (L && R && T && B) {
-      double left = L->coord, right = R->coord, top = T->coord, bottom = B->coord;
+      double left = 0, right = 0, top = 0, bottom = 0;
+      geom_span_from_roles(left, right, top, bottom);
+      auto replace_role_side = [&](ObservedEdge* missing, bool vertical) {
+        if (vertical) {
+          if (missing->coord <= std::max(L->coord, R->coord) &&
+              missing->coord >= std::min(L->coord, R->coord) - 1e-6) {
+            // missing 在当前 span 的某一端
+          }
+          if (std::abs(missing->coord - left) <= std::abs(missing->coord - right))
+            left = right - (bottom - top) * aspect;
+          else
+            right = left + (bottom - top) * aspect;
+        } else {
+          if (std::abs(missing->coord - top) <= std::abs(missing->coord - bottom))
+            top = bottom - (right - left) / aspect;
+          else
+            bottom = top + (right - left) / aspect;
+        }
+      };
       if (!L->complete && R->complete && T->complete && B->complete) {
-        left = right - (bottom - top) * aspect;
+        replace_role_side(L, true);
         return complete_from_ltrb(left, right, top, bottom);
       }
       if (L->complete && !R->complete && T->complete && B->complete) {
-        right = left + (bottom - top) * aspect;
+        replace_role_side(R, true);
         return complete_from_ltrb(left, right, top, bottom);
       }
       if (L->complete && R->complete && !T->complete && B->complete) {
-        top = bottom - (right - left) / aspect;
+        replace_role_side(T, false);
         return complete_from_ltrb(left, right, top, bottom);
       }
       if (L->complete && R->complete && T->complete && !B->complete) {
-        bottom = top + (right - left) / aspect;
+        replace_role_side(B, false);
         return complete_from_ltrb(left, right, top, bottom);
       }
     }
@@ -777,33 +1183,41 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
   if (g.complete_count == 2) {
     if (L && R && L->complete && R->complete && !(T && T->complete) && !(B && B->complete)) {
       set_pattern(ViewportCompletionPattern::TwoParallelCompleteEdges);
-      const double w_local = R->coord - L->coord;
+      const double left = std::min(L->coord, R->coord);
+      const double right = std::max(L->coord, R->coord);
+      const double w_local = right - left;
       const double h_local = w_local / aspect;
       double cy = 0.5 * (std::min(L->seg.y0, R->seg.y0) + std::max(L->seg.y1, R->seg.y1));
-      frame.origin_top_left_displayed = {abs_x(L->coord), abs_y(cy - h_local * 0.5)};
-      frame.axis_x_displayed = {abs_x(R->coord) - abs_x(L->coord), 0};
+      frame.origin_top_left_displayed = {abs_x(left), abs_y(cy - h_local * 0.5)};
+      frame.axis_x_displayed = {abs_x(right) - abs_x(left), 0};
       frame.axis_y_displayed = {0, h_local};
-      const double len_l = EdgeLen(*L);
-      const double len_r = EdgeLen(*R);
-      if (std::abs(len_l - h_local) > std::max(8.0, 0.35 * h_local) &&
-          std::abs(len_r - h_local) > std::max(8.0, 0.35 * h_local)) {
-        return false;
+      if (!crop_path) {
+        const double len_l = EdgeLen(*L);
+        const double len_r = EdgeLen(*R);
+        if (std::abs(len_l - h_local) > std::max(8.0, 0.35 * h_local) &&
+            std::abs(len_r - h_local) > std::max(8.0, 0.35 * h_local)) {
+          return false;
+        }
       }
       return finish_ok(2);
     }
     if (T && B && T->complete && B->complete && !(L && L->complete) && !(R && R->complete)) {
       set_pattern(ViewportCompletionPattern::TwoParallelCompleteEdges);
-      const double h_local = B->coord - T->coord;
+      const double top = std::min(T->coord, B->coord);
+      const double bottom = std::max(T->coord, B->coord);
+      const double h_local = bottom - top;
       const double w_local = h_local * aspect;
       double cx = 0.5 * (std::min(T->seg.x0, B->seg.x0) + std::max(T->seg.x1, B->seg.x1));
-      frame.origin_top_left_displayed = {abs_x(cx - w_local * 0.5), abs_y(T->coord)};
+      frame.origin_top_left_displayed = {abs_x(cx - w_local * 0.5), abs_y(top)};
       frame.axis_x_displayed = {w_local, 0};
-      frame.axis_y_displayed = {0, abs_y(B->coord) - abs_y(T->coord)};
-      const double len_t = EdgeLen(*T);
-      const double len_b = EdgeLen(*B);
-      if (std::abs(len_t - w_local) > std::max(8.0, 0.35 * w_local) &&
-          std::abs(len_b - w_local) > std::max(8.0, 0.35 * w_local)) {
-        return false;
+      frame.axis_y_displayed = {0, abs_y(bottom) - abs_y(top)};
+      if (!crop_path) {
+        const double len_t = EdgeLen(*T);
+        const double len_b = EdgeLen(*B);
+        if (std::abs(len_t - w_local) > std::max(8.0, 0.35 * w_local) &&
+            std::abs(len_b - w_local) > std::max(8.0, 0.35 * w_local)) {
+          return false;
+        }
       }
       return finish_ok(2);
     }
@@ -830,8 +1244,12 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
         else
           w = w2;
       }
-      const bool left = (p.a->workspace_edge == kEdgeL);
-      const bool top = (p.b->workspace_edge == kEdgeT);
+      const bool left =
+          use_geom_placement ? (0.5 * (canvas_local.left + canvas_local.right) > vx)
+                             : (p.a->workspace_edge == kEdgeL);
+      const bool top =
+          use_geom_placement ? (0.5 * (canvas_local.top + canvas_local.bottom) > hy)
+                             : (p.b->workspace_edge == kEdgeT);
       const double ox = left ? abs_x(vx) : abs_x(vx) - w;
       const double oy = top ? abs_y(hy) : abs_y(hy) - h;
       frame.origin_top_left_displayed = {ox, oy};
@@ -850,16 +1268,47 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
         e = &ed;
         break;
       }
+    if (!e && use_geom_placement) {
+      for (auto& ed : g.edges)
+        if (ed.workspace_edge != 0) {
+          e = &ed;
+          break;
+        }
+    }
     if (!e) return false;
     double w = 0, h = 0;
     if (e->seg.horizontal) {
-      if (!recover_size_from_horizontal(*e, w, h)) return false;
+      if (!recover_h(*e, w, h)) return false;
       place_horizontal_edge(*e, w, h);
     } else {
-      if (!recover_size_from_vertical(*e, w, h)) return false;
+      if (!recover_v(*e, w, h)) return false;
       place_vertical_edge(*e, w, h);
     }
     return finish_ok(1);
+  }
+
+  // 无完整直角边时：切割/旋转路径仍可用已指派切割边补全视口
+  if (g.complete_count == 0 && use_geom_placement) {
+    const ObservedEdge* anchor = nullptr;
+    for (const auto& ed : g.edges)
+      if (ed.workspace_edge != 0) {
+        anchor = &ed;
+        break;
+      }
+    if (anchor) {
+      set_pattern(g.edges.size() >= 2 && n_h > 0 && n_v > 0
+                      ? ViewportCompletionPattern::IntersectingSegmentsNoCompleteEdge
+                      : ViewportCompletionPattern::ParallelSegmentsNoCompleteEdge);
+      double w = 0, h = 0;
+      if (anchor->seg.horizontal) {
+        if (!recover_h(*anchor, w, h)) return false;
+        place_horizontal_edge(*anchor, w, h);
+      } else {
+        if (!recover_v(*anchor, w, h)) return false;
+        place_vertical_edge(*anchor, w, h);
+      }
+      return finish_ok(0);
+    }
   }
 
   // complete_count == 0 → 0.1 or 0.2
@@ -871,10 +1320,10 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
       if (EdgeLen(e) > EdgeLen(*best)) best = &e;
     double w = 0, h = 0;
     if (best->seg.horizontal) {
-      if (!recover_size_from_horizontal(*best, w, h)) return false;
+      if (!recover_h(*best, w, h)) return false;
       place_horizontal_edge(*best, w, h);
     } else {
-      if (!recover_size_from_vertical(*best, w, h)) return false;
+      if (!recover_v(*best, w, h)) return false;
       place_vertical_edge(*best, w, h);
     }
     if (g.edges.size() >= 2 && !best->seg.horizontal) {
@@ -884,7 +1333,7 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
           other = &e;
           break;
         }
-      if (other) {
+      if (other && !crop_path) {
         const double span = std::abs(other->coord - best->coord);
         if (span > 4.0 && std::abs(span - w) > std::max(10.0, 0.4 * w)) return false;
       }
@@ -896,7 +1345,7 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
           other = &e;
           break;
         }
-      if (other) {
+      if (other && !crop_path) {
         const double span = std::abs(other->coord - best->coord);
         if (span > 4.0 && std::abs(span - h) > std::max(10.0, 0.4 * h)) return false;
       }
@@ -936,9 +1385,13 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
       w = w2;
   }
 
-  const bool left = (v->workspace_edge == kEdgeL) || (v->workspace_edge == 0 && v->coord < rw * 0.5);
+  const bool left =
+      use_geom_placement ? (0.5 * (canvas_local.left + canvas_local.right) > v->coord)
+                         : ((v->workspace_edge == kEdgeL) || (v->workspace_edge == 0 && v->coord < rw * 0.5));
   const bool top =
-      (hz->workspace_edge == kEdgeT) || (hz->workspace_edge == 0 && hz->coord < rh * 0.5);
+      use_geom_placement ? (0.5 * (canvas_local.top + canvas_local.bottom) > hz->coord)
+                         : ((hz->workspace_edge == kEdgeT) ||
+                            (hz->workspace_edge == 0 && hz->coord < rh * 0.5));
   frame.origin_top_left_displayed = {left ? abs_x(v->coord) : abs_x(v->coord) - w,
                                      top ? abs_y(hz->coord) : abs_y(hz->coord) - h};
   frame.axis_x_displayed = {w, 0};
@@ -956,7 +1409,8 @@ int PopCountBits(unsigned m) {
 }
 
 std::vector<GroupCandidate> EnumerateMaximalGroups(const std::vector<ObservedEdge>& pool,
-                                                   double max_w, double max_h) {
+                                                   double max_w, double max_h,
+                                                   const wb::IntRect& canvas_local) {
   const int n = static_cast<int>(pool.size());
   std::vector<std::vector<int>> raw;
   // 枚举至多 2 竖直 + 2 水平的子集
@@ -973,10 +1427,8 @@ std::vector<GroupCandidate> EnumerateMaximalGroups(const std::vector<ObservedEdg
     std::vector<ObservedEdge> edges;
     edges.reserve(idx.size());
     for (int i : idx) edges.push_back(pool[i]);
-    if (!GroupSpatialGeometryOk(edges, max_w, max_h)) return;
-    // 指派可行性（几何）
-    auto tmp = edges;
-    if (!AssignGroupWorkspaceEdges(tmp)) return;
+    if (!GroupSpatialGeometryOk(edges, max_w, max_h, canvas_local)) return;
+    if (!GroupEdgeCardinalityOk(edges)) return;
     for (auto& existing : raw) {
       if (IndicesEqualSorted(existing, idx)) return;
     }
@@ -1091,6 +1543,9 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
 
   wb::IntRect canvas = in.navigator_canvas_bounds.Clamp(in.width, in.height);
   if (!canvas.valid()) canvas = roi;
+  const wb::IntRect canvas_local{
+      canvas.left - roi.left, canvas.top - roi.top,
+      canvas.right - roi.left, canvas.bottom - roi.top};
   const bool has_chrome =
       canvas.left > roi.left || canvas.top > roi.top || canvas.right < roi.right ||
       canvas.bottom < roi.bottom;
@@ -1101,7 +1556,7 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
       static_cast<double>(std::max(1, std::min(canvas.bottom, roi.bottom) - std::max(canvas.top, roi.top)));
 
   // B. 枚举合法极大 RedFrameEdgeGroup
-  auto groups = EnumerateMaximalGroups(pool, nav_w_local, nav_h_local);
+  auto groups = EnumerateMaximalGroups(pool, nav_w_local, nav_h_local, canvas_local);
   if (groups.empty()) {
     return Fail(FailStatus::AmbiguousViewportGeometry, "no valid red frame edge group");
   }
@@ -1116,7 +1571,7 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
   // C+D. 组内直角 → 完整边 → pattern 补全
   std::vector<GroupCandidate*> survivors;
   for (auto& g : groups) {
-    if (!CompleteGroupPattern(g, in, roi, rw, rh)) continue;
+    if (!CompleteGroupPattern(g, in, roi, rw, rh, nullptr)) continue;
     // 背景粘着：用补全后矩形框定义外侧
     const double left = g.frame.origin_top_left_displayed.x - roi.left - 0.5;
     const double top = g.frame.origin_top_left_displayed.y - roi.top - 0.5;
@@ -1169,9 +1624,18 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
   ViewportCompletionResult r;
   r.status = FailStatus::Ok;
   r.frame = target->frame;
-  std::snprintf(r.message, sizeof(r.message), "ok pattern=%d complete=%d segs=%d groups=%d",
-                r.frame.completion_strategy, target->complete_count,
-                static_cast<int>(target->edges.size()), static_cast<int>(survivors.size()));
+  r.used_crop_correspondence = target->used_crop_correspondence;
+  if (target->used_crop_correspondence) {
+    std::snprintf(r.message, sizeof(r.message),
+                  "ok crop_correspondence pattern=%d complete=%d segs=%d groups=%d",
+                  r.frame.completion_strategy, target->complete_count,
+                  static_cast<int>(target->edges.size()), static_cast<int>(survivors.size()));
+  } else {
+    std::snprintf(r.message, sizeof(r.message),
+                  "ok legacy_group_sort pattern=%d complete=%d segs=%d groups=%d",
+                  r.frame.completion_strategy, target->complete_count,
+                  static_cast<int>(target->edges.size()), static_cast<int>(survivors.size()));
+  }
   return r;
 }
 

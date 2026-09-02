@@ -344,6 +344,8 @@ SCT_API int sct_complete_viewport_frame(const SctViewportRequest* req, SctViewpo
                                 req->navigator_canvas_bounds.bottom};
   in.workspace_canvas_relation = FromCRel(req->workspace_canvas_relation);
   in.dpi_scale = req->dpi_scale;
+  in.display_rotation_degrees = req->display_rotation_degrees;
+  in.display_rotation_confidence = req->display_rotation_confidence;
   auto r = sct::CompleteViewportFrame(in);
   out->status = static_cast<int>(r.status);
   out->origin_top_left_displayed = {r.frame.origin_top_left_displayed.x,

@@ -155,6 +155,8 @@ typedef struct SctViewportRequest {
   SctIntRect navigator_canvas_bounds;
   SctWorkspaceCanvasRelation workspace_canvas_relation;
   float dpi_scale;
+  float display_rotation_degrees;
+  float display_rotation_confidence;
 } SctViewportRequest;
 
 typedef struct SctCompleteEdge {

@@ -381,6 +381,243 @@ void TestNoBackgroundTheoryTieMustFail() {
          "|M|>=2 must fail, no smaller-error pick");
 }
 
+// ---- 切割边对应契约 ----
+
+constexpr int kTestEdgeL = 1;
+constexpr int kTestEdgeT = 2;
+constexpr int kTestEdgeR = 4;
+constexpr int kTestEdgeB = 8;
+
+int FindExportedEdgeRole(const sct::NavigatorViewportFrame& f, double x0, double y0, double x1,
+                         double y1) {
+  auto near = [](double a, double b) { return std::abs(a - b) < 3.0; };
+  for (int i = 0; i < f.observed_red_edge_export_count; ++i) {
+    const auto& e = f.observed_red_edges[i];
+    const bool match =
+        (near(e.p0.x, x0) && near(e.p0.y, y0) && near(e.p1.x, x1) && near(e.p1.y, y1)) ||
+        (near(e.p0.x, x1) && near(e.p0.y, y1) && near(e.p1.x, x0) && near(e.p1.y, y0));
+    if (match) return e.workspace_edge;
+  }
+  // 水平/竖直段：按中线近似匹配
+  const bool want_h = std::abs(y0 - y1) < 1.0;
+  for (int i = 0; i < f.observed_red_edge_export_count; ++i) {
+    const auto& e = f.observed_red_edges[i];
+    const bool is_h = std::abs(e.p0.y - e.p1.y) < 2.0;
+    if (want_h != is_h) continue;
+    if (want_h) {
+      const double y = 0.5 * (e.p0.y + e.p1.y);
+      if (near(y, y0)) return e.workspace_edge;
+    } else {
+      const double x = 0.5 * (e.p0.x + e.p1.x);
+      if (near(x, x0)) return e.workspace_edge;
+    }
+  }
+  return -1;
+}
+
+void TestCropCorrespondence180BottomMapsToTop() {
+  // 工作区 Bottom 切割 + 显示 180° → 穿插画布的红上沿应得 T，不得标成屏幕同侧 B
+  constexpr int W = 160;
+  constexpr int H = 140;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
+  wb::IntRect thumb{5, 5, 155, 135};
+  wb::IntRect canvas{20, 20, 140, 120};
+  FillRect(buf, stride, canvas.left, canvas.top, canvas.right, canvas.bottom, 210, 210, 210);
+  constexpr int L = 40, T = 35, R = 110, B = 95;
+  DrawRedRect1px(buf, stride, L, T, R, B, 0, 0, 220);
+  auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.navigator_canvas_bounds = canvas;
+  in.workspace_canvas_relation.canvas_crop_sides = kTestEdgeB;
+  in.workspace_canvas_relation.occluded_canvas_edges = kTestEdgeB;
+  in.display_rotation_degrees = 180.f;
+  in.display_rotation_confidence = 0.9f;
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "180+bottom crop ok");
+  Expect(out.used_crop_correspondence, "180+bottom used crop correspondence");
+  const int top_role = FindExportedEdgeRole(out.frame, L + 0.5, T + 0.5, R + 0.5, T + 0.5);
+  Expect(top_role == kTestEdgeT, "180+bottom: red top edge labeled T (not B)");
+  const int bot_role = FindExportedEdgeRole(out.frame, L + 0.5, B + 0.5, R + 0.5, B + 0.5);
+  Expect(bot_role == kTestEdgeB, "180+bottom: red bottom propagated to B");
+}
+
+void TestNonCuttingRedEdgeExcludedFromCropMatch() {
+  // 画布外下方的红边不进入切割对应；仅穿插画布的上沿参与
+  constexpr int W = 160;
+  constexpr int H = 150;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
+  wb::IntRect thumb{5, 5, 155, 145};
+  wb::IntRect canvas{25, 25, 130, 90};  // 画布偏上
+  FillRect(buf, stride, canvas.left, canvas.top, canvas.right, canvas.bottom, 210, 210, 210);
+  constexpr int L = 45, T = 40, R = 105;
+  DrawRedVLine(buf, stride, L, T, 85, 0, 0, 220);
+  DrawRedVLine(buf, stride, R, T, 85, 0, 0, 220);
+  DrawRedHLine(buf, stride, T, L, R, 0, 0, 220);
+  // 非切割：完全在画布下方
+  DrawRedHLine(buf, stride, 120, L, R, 0, 0, 220);
+  auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.navigator_canvas_bounds = canvas;
+  in.workspace_canvas_relation.canvas_crop_sides = kTestEdgeB;
+  in.display_rotation_degrees = 180.f;
+  in.display_rotation_confidence = 0.9f;
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "non-cutting scenario completes");
+  Expect(out.used_crop_correspondence, "non-cutting scenario used crop path");
+  const int top_role = FindExportedEdgeRole(out.frame, L + 0.5, T + 0.5, R + 0.5, T + 0.5);
+  Expect(top_role == kTestEdgeT, "cutting top gets T from Bottom@180");
+  const int outside_role = FindExportedEdgeRole(out.frame, L + 0.5, 120.5, R + 0.5, 120.5);
+  // 传播后可为 B，但不得被当成切割对应的「工作区底边同名」主判定来源；
+  // 关键：若被导出，角色须与传播一致（B），且 top 已是 T。
+  if (outside_role >= 0) {
+    Expect(outside_role == kTestEdgeB, "non-cutting edge only via propagate → B");
+  }
+}
+
+void TestCropFourPairsDirectLtrb() {
+  constexpr int W = 160;
+  constexpr int H = 140;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
+  wb::IntRect thumb{5, 5, 155, 135};
+  wb::IntRect canvas{15, 15, 145, 125};
+  FillRect(buf, stride, canvas.left, canvas.top, canvas.right, canvas.bottom, 210, 210, 210);
+  constexpr int L = 40, T = 35, R = 110, B = 95;
+  DrawRedRect1px(buf, stride, L, T, R, B, 0, 0, 220);
+  auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.navigator_canvas_bounds = canvas;
+  in.workspace_canvas_relation.canvas_crop_sides =
+      kTestEdgeL | kTestEdgeT | kTestEdgeR | kTestEdgeB;
+  in.display_rotation_degrees = 0.f;
+  in.display_rotation_confidence = 0.9f;
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "four-pair crop ok");
+  Expect(out.used_crop_correspondence, "four-pair used crop");
+  Expect(FindExportedEdgeRole(out.frame, L + 0.5, T + 0.5, R + 0.5, T + 0.5) == kTestEdgeT,
+         "four-pair top=T");
+  Expect(FindExportedEdgeRole(out.frame, L + 0.5, B + 0.5, R + 0.5, B + 0.5) == kTestEdgeB,
+         "four-pair bottom=B");
+  Expect(FindExportedEdgeRole(out.frame, L + 0.5, T + 0.5, L + 0.5, B + 0.5) == kTestEdgeL,
+         "four-pair left=L");
+  Expect(FindExportedEdgeRole(out.frame, R + 0.5, T + 0.5, R + 0.5, B + 0.5) == kTestEdgeR,
+         "four-pair right=R");
+}
+
+void TestCropOnePairPropagates() {
+  // 仅 Bottom 切割 + 0° → 底边得 B，其余由传播得 L/T/R
+  constexpr int W = 160;
+  constexpr int H = 140;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
+  wb::IntRect thumb{5, 5, 155, 135};
+  wb::IntRect canvas{15, 15, 145, 125};
+  FillRect(buf, stride, canvas.left, canvas.top, canvas.right, canvas.bottom, 210, 210, 210);
+  constexpr int L = 40, T = 35, R = 110, B = 95;
+  DrawRedRect1px(buf, stride, L, T, R, B, 0, 0, 220);
+  auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.navigator_canvas_bounds = canvas;
+  in.workspace_canvas_relation.canvas_crop_sides = kTestEdgeB;
+  in.display_rotation_degrees = 0.f;
+  in.display_rotation_confidence = 0.9f;
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "one-pair propagate ok");
+  Expect(out.used_crop_correspondence, "one-pair used crop");
+  Expect(FindExportedEdgeRole(out.frame, L + 0.5, B + 0.5, R + 0.5, B + 0.5) == kTestEdgeB,
+         "one-pair bottom=B");
+  Expect(FindExportedEdgeRole(out.frame, L + 0.5, T + 0.5, R + 0.5, T + 0.5) == kTestEdgeT,
+         "one-pair top propagated T");
+  Expect(FindExportedEdgeRole(out.frame, L + 0.5, T + 0.5, L + 0.5, B + 0.5) == kTestEdgeL,
+         "one-pair left propagated L");
+  Expect(FindExportedEdgeRole(out.frame, R + 0.5, T + 0.5, R + 0.5, B + 0.5) == kTestEdgeR,
+         "one-pair right propagated R");
+}
+
+void TestCropConflictAmbiguous() {
+  // 两条竖直红边都在画布中心左侧 → L/R 双切割无法唯一对应 → 失败
+  constexpr int W = 160;
+  constexpr int H = 120;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
+  wb::IntRect thumb{5, 5, 155, 115};
+  wb::IntRect canvas{20, 20, 140, 100};
+  FillRect(buf, stride, canvas.left, canvas.top, canvas.right, canvas.bottom, 210, 210, 210);
+  // 两条竖边都在中心（x=80）左侧
+  DrawRedVLine(buf, stride, 40, 30, 90, 0, 0, 220);
+  DrawRedVLine(buf, stride, 55, 30, 90, 0, 0, 220);
+  DrawRedHLine(buf, stride, 30, 40, 55, 0, 0, 220);
+  DrawRedHLine(buf, stride, 90, 40, 55, 0, 0, 220);
+  auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.navigator_canvas_bounds = canvas;
+  in.workspace_canvas_relation.canvas_crop_sides = kTestEdgeL | kTestEdgeR;
+  in.display_rotation_degrees = 0.f;
+  in.display_rotation_confidence = 0.9f;
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::AmbiguousViewportGeometry,
+         "crop L+R with both edges left-of-center → ambiguous");
+}
+
+void TestPartial180SingleCuttingHorizontal() {
+  // 视口非完整四边：仅上沿穿插画布（180°+底裁切典型场景），不得 no group completed
+  constexpr int W = 160;
+  constexpr int H = 150;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
+  wb::IntRect thumb{5, 5, 155, 145};
+  wb::IntRect canvas{25, 25, 130, 90};
+  FillRect(buf, stride, canvas.left, canvas.top, canvas.right, canvas.bottom, 210, 210, 210);
+  constexpr int L = 45, T = 40, R = 105, B_out = 120;
+  DrawRedVLine(buf, stride, L, T, 115, 0, 0, 220);
+  DrawRedVLine(buf, stride, R, T, 115, 0, 0, 220);
+  DrawRedHLine(buf, stride, T, L, R, 0, 0, 220);
+  DrawRedHLine(buf, stride, B_out, L, R, 0, 0, 220);
+  auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.navigator_canvas_bounds = canvas;
+  in.workspace_canvas_relation.canvas_crop_sides = kTestEdgeB;
+  in.display_rotation_degrees = 180.f;
+  in.display_rotation_confidence = 0.9f;
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "partial 180 single cutting horizontal ok");
+  Expect(out.used_crop_correspondence, "partial 180 uses crop");
+  const int top_role = FindExportedEdgeRole(out.frame, L + 0.5, T + 0.5, R + 0.5, T + 0.5);
+  Expect(top_role == kTestEdgeT, "partial 180: cutting top is T");
+}
+
+void TestFourEdges180RotationLabelsWithoutCrop() {
+  constexpr int W = 120;
+  constexpr int H = 100;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 255);
+  constexpr int L = 20, T = 15, R = 80, B = 70;
+  DrawRedRect1px(buf, stride, L, T, R, B, 0, 0, 220);
+  wb::IntRect thumb{10, 10, 110, 90};
+  auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.workspace_canvas_relation.canvas_crop_sides = 0;
+  in.display_rotation_degrees = 180.f;
+  in.display_rotation_confidence = 0.9f;
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "4-edge 180 rotation ok");
+  Expect(!out.used_crop_correspondence, "4-edge 180 no crop path");
+  Expect(FindExportedEdgeRole(out.frame, L + 0.5, T + 0.5, R + 0.5, T + 0.5) == kTestEdgeB,
+         "180 no crop: screen-top geom → B");
+  Expect(FindExportedEdgeRole(out.frame, L + 0.5, B + 0.5, R + 0.5, B + 0.5) == kTestEdgeT,
+         "180 no crop: screen-bottom geom → T");
+}
+
+void TestNoWorkspaceCropDoesNotForceCropPath() {
+  constexpr int W = 120;
+  constexpr int H = 100;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 255);
+  constexpr int L = 20, T = 15, R = 80, B = 70;
+  DrawRedRect1px(buf, stride, L, T, R, B, 0, 0, 220);
+  wb::IntRect thumb{10, 10, 110, 90};
+  auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.workspace_canvas_relation.canvas_crop_sides = 0;
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "no-crop still ok");
+  Expect(!out.used_crop_correspondence, "no-crop must not force crop path");
+}
+
 }  // namespace
 
 int main() {
@@ -397,6 +634,14 @@ int main() {
   TestMultipleGroupsTouchBackgroundMustFail();
   TestNoBackgroundTheoryAmbiguousMustFail();
   TestNoBackgroundTheoryTieMustFail();
+  TestCropCorrespondence180BottomMapsToTop();
+  TestNonCuttingRedEdgeExcludedFromCropMatch();
+  TestCropFourPairsDirectLtrb();
+  TestCropOnePairPropagates();
+  TestCropConflictAmbiguous();
+  TestPartial180SingleCuttingHorizontal();
+  TestFourEdges180RotationLabelsWithoutCrop();
+  TestNoWorkspaceCropDoesNotForceCropPath();
   if (g_failures == 0) {
     std::printf("OK: all contract tests passed\n");
     return 0;

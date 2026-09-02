@@ -71,13 +71,6 @@ public sealed class RoiBorderOverlayWindow : IDisposable
             "ScreenCanvasWorkspaceRoiBorder",
             System.Drawing.Color.FromArgb(230, 72, 199, 92));
 
-    /// <summary>User NavigatorRoi (adopted directly) — cyan.</summary>
-    public static RoiBorderOverlayWindow CreateNavigator()
-        => new(
-            "ScreenCanvasTransform.NavigatorRoiBorder",
-            "ScreenCanvasNavigatorRoiBorder",
-            System.Drawing.Color.FromArgb(230, 40, 180, 255));
-
     /// <summary>NavigatorThumbnailRoi from C-II — magenta.</summary>
     public static RoiBorderOverlayWindow CreateNavigatorThumbnail()
         => new(

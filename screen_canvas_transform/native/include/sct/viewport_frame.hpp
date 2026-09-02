@@ -25,12 +25,16 @@ struct ViewportCompletionInput {
   wb::IntRect navigator_canvas_bounds{};
   WorkspaceCanvasRelation workspace_canvas_relation{};
   float dpi_scale = 1.f;
+  // 显示角：仅用于切割对应路径的逆向旋转加速（不得单独判边）。
+  float display_rotation_degrees = 0.f;
+  float display_rotation_confidence = 0.f;
 };
 
 struct ViewportCompletionResult {
   FailStatus status = FailStatus::Ok;
   NavigatorViewportFrame frame{};
   char message[128] = {};
+  bool used_crop_correspondence = false;
 };
 
 ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in);

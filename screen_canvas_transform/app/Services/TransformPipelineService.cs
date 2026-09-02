@@ -360,7 +360,9 @@ public sealed class TransformPipelineService
                 session,
                 thumbnailCapture,
                 navCanvasCapture,
-                wsRelation);
+                wsRelation,
+                numbers.RotationDegrees,
+                numbers.RotationConfidence);
 
             if (viewport.Status != NativeSct.StatusOk)
             {

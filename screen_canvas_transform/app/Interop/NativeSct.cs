@@ -200,6 +200,8 @@ public static class NativeSct
         public SctIntRect NavigatorCanvasBounds;
         public SctWorkspaceCanvasRelation WorkspaceCanvasRelation;
         public float DpiScale;
+        public float DisplayRotationDegrees;
+        public float DisplayRotationConfidence;
     }
 
     [StructLayout(LayoutKind.Sequential)]
