@@ -754,19 +754,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        int originX = session.OriginX;
-        int originY = session.OriginY;
-        var screenEdges = new List<CompleteEdgeOverlayWindow.LabeledScreenEdge>(snapshot.ObservedRedEdges.Length);
-        foreach (var e in snapshot.ObservedRedEdges)
-        {
-            screenEdges.Add(new CompleteEdgeOverlayWindow.LabeledScreenEdge(
-                e.P0CaptureX + originX,
-                e.P0CaptureY + originY,
-                e.P1CaptureX + originX,
-                e.P1CaptureY + originY,
-                e.WorkspaceEdge,
-                e.IsComplete));
-        }
+        var screenEdges = ViewportCorrespondenceMapper.MapObservedEdges(snapshot, session);
+        string correspondence = ViewportCorrespondenceMapper.FormatCorrespondenceLog(
+            screenEdges,
+            snapshot.Numbers.RotationDegrees,
+            snapshot.Numbers.RotationConfidence);
+        LiveDebugLog.Write($"[视口对应] {correspondence}");
 
         _completeEdgeOverlay.TryShowIfCaptureMatches(
             screenEdges,
