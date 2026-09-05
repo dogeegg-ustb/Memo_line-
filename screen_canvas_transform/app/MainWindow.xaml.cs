@@ -755,10 +755,14 @@ public partial class MainWindow : Window
         }
 
         var screenEdges = ViewportCorrespondenceMapper.MapObservedEdges(snapshot, session);
+        int assignedRoles = 0;
+        foreach (var e in snapshot.ObservedRedEdges)
+        {
+            if (ViewportCorrespondenceMapper.IsSingleEdgeRole(e.WorkspaceEdge))
+                ++assignedRoles;
+        }
         string correspondence = ViewportCorrespondenceMapper.FormatCorrespondenceLog(
-            screenEdges,
-            snapshot.Numbers.RotationDegrees,
-            snapshot.Numbers.RotationConfidence);
+            screenEdges, assignedRoles, snapshot.RotationDegreesGeometry);
         LiveDebugLog.Write($"[视口对应] {correspondence}");
 
         _completeEdgeOverlay.TryShowIfCaptureMatches(

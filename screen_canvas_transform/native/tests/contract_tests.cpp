@@ -1,11 +1,14 @@
+#include "sct/canvas_observe.hpp"
 #include "sct/transform_solve.hpp"
 #include "sct/types.hpp"
 #include "sct/viewport_frame.hpp"
 #include "sct/workspace_canvas_relation.hpp"
+#include "wb/color.hpp"
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -416,7 +419,7 @@ int FindExportedEdgeRole(const sct::NavigatorViewportFrame& f, double x0, double
 }
 
 void TestCropCorrespondence180BottomMapsToTop() {
-  // 工作区 Bottom 切割 + 显示 180° → 穿插画布的红上沿应得 T，不得标成屏幕同侧 B
+  // 工作区 Bottom 切割 + 显示 180° → 红上沿是对应边，标签仍是 B（下），不得负负得正标成 T
   constexpr int W = 160;
   constexpr int H = 140;
   constexpr int stride = W * 4;
@@ -436,9 +439,9 @@ void TestCropCorrespondence180BottomMapsToTop() {
   Expect(out.status == sct::FailStatus::Ok, "180+bottom crop ok");
   Expect(out.used_crop_correspondence, "180+bottom used crop correspondence");
   const int top_role = FindExportedEdgeRole(out.frame, L + 0.5, T + 0.5, R + 0.5, T + 0.5);
-  Expect(top_role == kTestEdgeT, "180+bottom: red top edge labeled T (not B)");
+  Expect(top_role == kTestEdgeB, "180+bottom: red top edge labeled B (workspace crop)");
   const int bot_role = FindExportedEdgeRole(out.frame, L + 0.5, B + 0.5, R + 0.5, B + 0.5);
-  Expect(bot_role == kTestEdgeB, "180+bottom: red bottom propagated to B");
+  Expect(bot_role == kTestEdgeT, "180+bottom: red bottom propagated to T");
 }
 
 void TestNonCuttingRedEdgeExcludedFromCropMatch() {
@@ -465,12 +468,12 @@ void TestNonCuttingRedEdgeExcludedFromCropMatch() {
   Expect(out.status == sct::FailStatus::Ok, "non-cutting scenario completes");
   Expect(out.used_crop_correspondence, "non-cutting scenario used crop path");
   const int top_role = FindExportedEdgeRole(out.frame, L + 0.5, T + 0.5, R + 0.5, T + 0.5);
-  Expect(top_role == kTestEdgeT, "cutting top gets T from Bottom@180");
+  Expect(top_role == kTestEdgeB, "cutting top gets B (workspace Bottom @180)");
   const int outside_role = FindExportedEdgeRole(out.frame, L + 0.5, 120.5, R + 0.5, 120.5);
   // 传播后可为 B，但不得被当成切割对应的「工作区底边同名」主判定来源；
   // 关键：若被导出，角色须与传播一致（B），且 top 已是 T。
   if (outside_role >= 0) {
-    Expect(outside_role == kTestEdgeB, "non-cutting edge only via propagate → B");
+    Expect(outside_role == kTestEdgeT, "non-cutting edge only via propagate -> T");
   }
 }
 
@@ -579,7 +582,7 @@ void TestPartial180SingleCuttingHorizontal() {
   Expect(out.status == sct::FailStatus::Ok, "partial 180 single cutting horizontal ok");
   Expect(out.used_crop_correspondence, "partial 180 uses crop");
   const int top_role = FindExportedEdgeRole(out.frame, L + 0.5, T + 0.5, R + 0.5, T + 0.5);
-  Expect(top_role == kTestEdgeT, "partial 180: cutting top is T");
+  Expect(top_role == kTestEdgeB, "partial 180: cutting top labeled B (workspace Bottom)");
 }
 
 void TestFourEdges180RotationLabelsWithoutCrop() {
@@ -618,10 +621,90 @@ void TestNoWorkspaceCropDoesNotForceCropPath() {
   Expect(!out.used_crop_correspondence, "no-crop must not force crop path");
 }
 
+void DrawRedLine(std::vector<uint8_t>& buf, int stride, int w, int h, double x0, double y0,
+                 double x1, double y1, uint8_t rb, uint8_t rg, uint8_t rr) {
+  const double dx = x1 - x0, dy = y1 - y0;
+  const int n = static_cast<int>(std::ceil(std::hypot(dx, dy)));
+  for (int i = 0; i <= n; ++i) {
+    const double t = n ? static_cast<double>(i) / n : 0.0;
+    const int x = static_cast<int>(std::lround(x0 + t * dx));
+    const int y = static_cast<int>(std::lround(y0 + t * dy));
+    if (x >= 0 && y >= 0 && x < w && y < h) PutBgra(buf, stride, x, y, rb, rg, rr);
+  }
+}
+
+void TestViewportRotatedRectangleRelativeOrthogonal() {
+  constexpr int W = 200;
+  constexpr int H = 180;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 255);
+  const double cx = 100, cy = 90, hw = 45, hh = 30;
+  const double ang = 25.0 * 3.141592653589793 / 180.0;
+  const double c = std::cos(ang), s = std::sin(ang);
+  auto C = [&](double lx, double ly) {
+    return std::pair<double, double>{cx + lx * c - ly * s, cy + lx * s + ly * c};
+  };
+  const auto tl = C(-hw, -hh), tr = C(hw, -hh), br = C(hw, hh), bl = C(-hw, hh);
+  DrawRedLine(buf, stride, W, H, tl.first, tl.second, tr.first, tr.second, 0, 0, 220);
+  DrawRedLine(buf, stride, W, H, tr.first, tr.second, br.first, br.second, 0, 0, 220);
+  DrawRedLine(buf, stride, W, H, br.first, br.second, bl.first, bl.second, 0, 0, 220);
+  DrawRedLine(buf, stride, W, H, bl.first, bl.second, tl.first, tl.second, 0, 0, 220);
+  wb::IntRect thumb{20, 20, 180, 160};
+  auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.display_rotation_degrees = 25.f;
+  in.display_rotation_confidence = 1.f;
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "rotated 25° red rect must complete");
+  Expect(out.frame.red_evidence.confirmed_complete_edge_count == 4,
+         "rotated rect has 4 complete edges");
+  Expect(out.frame.width > 70.f && out.frame.width < 110.f, "rotated width near 90");
+  Expect(out.frame.height > 45.f && out.frame.height < 80.f, "rotated height near 60");
+  const bool skewed =
+      std::abs(out.frame.axis_x_displayed.y) > 8.0 || std::abs(out.frame.axis_y_displayed.x) > 8.0;
+  Expect(skewed, "rotated frame axes are not screen-axis-aligned");
+}
+
+void TestFourSidesCompleteRequiresOutwardBackground() {
+  constexpr int W = 200, H = 160;
+  const int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 0);
+  // Workspace BG dark gray; white canvas inset on all sides.
+  FillRect(buf, stride, 0, 0, W, H, 45, 45, 45);
+  FillRect(buf, stride, 40, 30, 120, 130, 255, 255, 255);
+
+  wb::BackgroundModel model;
+  model.center_lab = wb::BgrToLab(45, 45, 45);
+  model.strong_delta_e = 6.f;
+  model.weak_delta_e = 12.f;
+
+  auto ok = sct::ObserveCanvasExcludingBackground(buf.data(), W, H, stride, {0, 0, W, H}, 0, 0,
+                                                  model);
+  Expect(!ok.ambiguous, "surrounded canvas observation not ambiguous");
+  Expect(ok.four_sides_complete, "inset canvas with BG on all sides → four_sides_complete");
+
+  // Right side butts the ROI rim (no outward BG band) → must NOT be complete.
+  FillRect(buf, stride, 0, 0, W, H, 45, 45, 45);
+  FillRect(buf, stride, 40, 30, W, 130, 255, 255, 255);
+  auto cropped = sct::ObserveCanvasExcludingBackground(buf.data(), W, H, stride, {0, 0, W, H}, 0,
+                                                       0, model);
+  Expect(!cropped.four_sides_complete, "canvas touching ROI rim → not four_sides_complete");
+
+  // Inset from ROI but right exterior is mostly non-BG (red), with only a 1px BG gap
+  // so the white canvas stays a separate component. depth≥2 → support < threshold.
+  FillRect(buf, stride, 0, 0, W, H, 45, 45, 45);
+  FillRect(buf, stride, 40, 30, 120, 130, 255, 255, 255);
+  FillRect(buf, stride, 121, 30, 180, 130, 200, 40, 40);
+  auto fake = sct::ObserveCanvasExcludingBackground(buf.data(), W, H, stride, {0, 0, W, H}, 0, 0,
+                                                    model);
+  Expect(!fake.four_sides_complete,
+         "inset alone is not enough: outward band must match workspace BG");
+}
+
 }  // namespace
 
 int main() {
   TestWorkspaceCanvasRelationBuild();
+  TestFourSidesCompleteRequiresOutwardBackground();
   TestViewportRedFourEdgesGeometryStable();
   TestViewportRedSoftAaAndGapRecall();
   TestViewportPattern01ParallelNoComplete();
@@ -642,6 +725,7 @@ int main() {
   TestPartial180SingleCuttingHorizontal();
   TestFourEdges180RotationLabelsWithoutCrop();
   TestNoWorkspaceCropDoesNotForceCropPath();
+  TestViewportRotatedRectangleRelativeOrthogonal();
   if (g_failures == 0) {
     std::printf("OK: all contract tests passed\n");
     return 0;

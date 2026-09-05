@@ -166,13 +166,58 @@ CanvasObservation ObserveCanvasExcludingBackground(
     if (out.boundary_support[s] >= 0.55f) out.visible_edges_mask |= (1 << s);
   }
 
-  // Completeness: edges not touching ROI rim (visible canvas edge inside workspace).
+  // Outward workspace-background support: sample a band just outside each canvas
+  // AABB edge (toward ROI interior, away from canvas). Uses the same weak-ΔE
+  // non_bg mask so "四周都是工作区背景色" is color evidence, not merely inset.
+  constexpr float kOutwardBgMin = 0.55f;
+  auto outward_bg_support = [&](int side) -> float {
+    const int depth = std::clamp(std::min(bw, bh) / 40, 2, 8);
+    int hit = 0, total = 0;
+    if (side == 0) {  // left → sample x in [minx-depth, minx)
+      if (minx < depth) return 0.f;
+      for (int y = miny; y <= maxy; ++y) {
+        for (int dx = 1; dx <= depth; ++dx) {
+          ++total;
+          if (!non_bg[static_cast<size_t>(y) * rw + (minx - dx)]) ++hit;
+        }
+      }
+    } else if (side == 1) {  // top
+      if (miny < depth) return 0.f;
+      for (int x = minx; x <= maxx; ++x) {
+        for (int dy = 1; dy <= depth; ++dy) {
+          ++total;
+          if (!non_bg[static_cast<size_t>(miny - dy) * rw + x]) ++hit;
+        }
+      }
+    } else if (side == 2) {  // right
+      if (maxx + depth >= rw) return 0.f;
+      for (int y = miny; y <= maxy; ++y) {
+        for (int dx = 1; dx <= depth; ++dx) {
+          ++total;
+          if (!non_bg[static_cast<size_t>(y) * rw + (maxx + dx)]) ++hit;
+        }
+      }
+    } else {  // bottom
+      if (maxy + depth >= rh) return 0.f;
+      for (int x = minx; x <= maxx; ++x) {
+        for (int dy = 1; dy <= depth; ++dy) {
+          ++total;
+          if (!non_bg[static_cast<size_t>(maxy + dy) * rw + x]) ++hit;
+        }
+      }
+    }
+    return total > 0 ? static_cast<float>(hit) / static_cast<float>(total) : 0.f;
+  };
+
+  // Completeness: each side is a visible canvas edge, inset from ROI rim, AND
+  // backed by workspace-background color outside the canvas.
   int complete = 0;
   const int band = 2;
-  if ((out.visible_edges_mask & 1) && minx > band) ++complete;
-  if ((out.visible_edges_mask & 2) && miny > band) ++complete;
-  if ((out.visible_edges_mask & 4) && maxx < rw - 1 - band) ++complete;
-  if ((out.visible_edges_mask & 8) && maxy < rh - 1 - band) ++complete;
+  const bool inset[4] = {minx > band, miny > band, maxx < rw - 1 - band, maxy < rh - 1 - band};
+  for (int s = 0; s < 4; ++s) {
+    if (((out.visible_edges_mask >> s) & 1) == 0 || !inset[s]) continue;
+    if (outward_bg_support(s) >= kOutwardBgMin) ++complete;
+  }
   out.four_sides_complete = (complete == 4) && fill_ratio >= 0.35f;
 
   out.confidence = std::clamp(0.35f * fill_ratio + 0.15f * complete +

@@ -8,8 +8,10 @@ using ScreenCanvasTransform.Models;
 namespace ScreenCanvasTransform.Ui;
 
 /// <summary>
-/// Click-through overlay that draws observed red-frame edges (solid=complete, dashed=partial)
-/// with workspace-edge labels (左/右/上/下). Endpoints are ScreenPhysicalPx from caller.
+/// Click-through overlay: observed red-frame edges (solid=complete, dashed=partial)
+/// with workspace-edge labels (左/右/上/下) placed on each edge midpoint along the outward
+/// normal (perpendicular to the viewport border). Labels use system workspace_edge roles.
+/// Endpoints are ScreenPhysicalPx from caller.
 /// </summary>
 public sealed class CompleteEdgeOverlayWindow : IDisposable
 {
@@ -90,6 +92,20 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
         }
 
         using var font = CreateLabelFont();
+        float frameCx = 0f, frameCy = 0f;
+        int midCount = 0;
+        foreach (var e in screenEdges)
+        {
+            frameCx += (float)(e.X0 + e.X1) * 0.5f;
+            frameCy += (float)(e.Y0 + e.Y1) * 0.5f;
+            ++midCount;
+        }
+        if (midCount > 0)
+        {
+            frameCx /= midCount;
+            frameCy /= midCount;
+        }
+
         double minX = double.PositiveInfinity, minY = double.PositiveInfinity;
         double maxX = double.NegativeInfinity, maxY = double.NegativeInfinity;
         foreach (var e in screenEdges)
@@ -101,7 +117,7 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
 
             if (WorkspaceEdgeBits.ToLabel(e.WorkspaceEdge) is not null)
             {
-                var labelBounds = LabelBoundsScreen(e, font);
+                var labelBounds = LabelBoundsScreen(e, font, frameCx, frameCy);
                 minX = Math.Min(minX, labelBounds.Left);
                 minY = Math.Min(minY, labelBounds.Top);
                 maxX = Math.Max(maxX, labelBounds.Right);
@@ -190,7 +206,8 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
         }
     }
 
-    private static RectangleF LabelBoundsScreen(LabeledScreenEdge edge, Font font)
+    private static RectangleF LabelBoundsScreen(
+        LabeledScreenEdge edge, Font font, float frameCenterX, float frameCenterY)
     {
         string? text = WorkspaceEdgeBits.ToLabel(edge.WorkspaceEdge);
         if (text is null)
@@ -200,38 +217,39 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
         using var measureG = Graphics.FromImage(measureBmp);
         measureG.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         SizeF size = measureG.MeasureString(text, font);
-        PointF origin = LabelOrigin(
+        PointF origin = LabelOriginOutsideEdge(
             (float)edge.X0, (float)edge.Y0, (float)edge.X1, (float)edge.Y1,
-            edge.WorkspaceEdge, size);
+            frameCenterX, frameCenterY, size);
         return new RectangleF(origin.X, origin.Y, size.Width, size.Height);
     }
 
-    private static PointF LabelOrigin(
-        float x0, float y0, float x1, float y1, int workspaceEdge, SizeF textSize)
+    /// <summary>
+    /// 字不转：只把标签放到边中点外侧（沿边法向）。文字内容来自边的 workspace_edge。
+    /// </summary>
+    private static PointF LabelOriginOutsideEdge(
+        float x0, float y0, float x1, float y1,
+        float frameCenterX, float frameCenterY, SizeF textSize)
     {
         float mx = (x0 + x1) * 0.5f;
         float my = (y0 + y1) * 0.5f;
-        float left = Math.Min(x0, x1);
-        float right = Math.Max(x0, x1);
-        float top = Math.Min(y0, y1);
-        float bottom = Math.Max(y0, y1);
-
-        return workspaceEdge switch
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float len = MathF.Sqrt(dx * dx + dy * dy);
+        float nx = 0f, ny = -1f;
+        if (len >= 1e-3f)
         {
-            WorkspaceEdgeBits.Left => new PointF(
-                left - LabelOffsetPx - textSize.Width,
-                my - textSize.Height * 0.5f),
-            WorkspaceEdgeBits.Right => new PointF(
-                right + LabelOffsetPx,
-                my - textSize.Height * 0.5f),
-            WorkspaceEdgeBits.Top => new PointF(
-                mx - textSize.Width * 0.5f,
-                top - LabelOffsetPx - textSize.Height),
-            WorkspaceEdgeBits.Bottom => new PointF(
-                mx - textSize.Width * 0.5f,
-                bottom + LabelOffsetPx),
-            _ => new PointF(mx - textSize.Width * 0.5f, my - textSize.Height * 0.5f)
-        };
+            nx = -dy / len;
+            ny = dx / len;
+            if ((mx - frameCenterX) * nx + (my - frameCenterY) * ny < 0f)
+            {
+                nx = -nx;
+                ny = -ny;
+            }
+        }
+        float offset = LabelOffsetPx + Math.Max(textSize.Width, textSize.Height) * 0.25f;
+        return new PointF(
+            mx + nx * offset - textSize.Width * 0.5f,
+            my + ny * offset - textSize.Height * 0.5f);
     }
 
     private void EnsureWindow()
@@ -261,9 +279,21 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
         using (var g = Graphics.FromImage(bmp))
         {
             g.Clear(System.Drawing.Color.Transparent);
-            g.SmoothingMode = SmoothingMode.None;
-            g.PixelOffsetMode = PixelOffsetMode.None;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+
+            float frameCx = 0f, frameCy = 0f;
+            foreach (var e in localEdges)
+            {
+                frameCx += (float)(e.X0 + e.X1) * 0.5f;
+                frameCy += (float)(e.Y0 + e.Y1) * 0.5f;
+            }
+            if (localEdges.Length > 0)
+            {
+                frameCx /= localEdges.Length;
+                frameCy /= localEdges.Length;
+            }
 
             using var solidPen = new System.Drawing.Pen(EdgeColor, StrokeThickness);
             solidPen.StartCap = LineCap.Flat;
@@ -287,8 +317,9 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
                     continue;
 
                 SizeF textSize = g.MeasureString(text, font);
-                PointF origin = LabelOrigin(
-                    (float)e.X0, (float)e.Y0, (float)e.X1, (float)e.Y1, e.WorkspaceEdge, textSize);
+                PointF origin = LabelOriginOutsideEdge(
+                    (float)e.X0, (float)e.Y0, (float)e.X1, (float)e.Y1,
+                    frameCx, frameCy, textSize);
                 DrawOutlinedText(g, text, font, origin, outlineBrush, fillBrush);
             }
         }

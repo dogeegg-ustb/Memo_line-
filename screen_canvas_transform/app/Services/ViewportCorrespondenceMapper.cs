@@ -5,7 +5,8 @@ using ScreenCanvasTransform.Ui;
 namespace ScreenCanvasTransform.Services;
 
 /// <summary>
-/// 流水线末端：用 OCR 显示角做逆向旋转（屏侧几何 → 0° 语义 L/T/R/B），输出视口对应标签。
+/// 视口边标签：优先使用 native 已指派的 workspace_edge（系统对每条边的语义认知）。
+/// MUST NOT 在流水线末端再用 OCR 角给文字单独「转圈」覆盖边状态。
 /// </summary>
 public static class ViewportCorrespondenceMapper
 {
@@ -34,7 +35,13 @@ public static class ViewportCorrespondenceMapper
         _ => -1
     };
 
-    /// <summary>显示顺时针 q×90° 时，屏侧 S 上的画布语义边。</summary>
+    public static bool IsSingleEdgeRole(int workspaceEdge) =>
+        workspaceEdge == WorkspaceEdgeBits.Left
+        || workspaceEdge == WorkspaceEdgeBits.Top
+        || workspaceEdge == WorkspaceEdgeBits.Right
+        || workspaceEdge == WorkspaceEdgeBits.Bottom;
+
+    /// <summary>显示顺时针 q×90° 时，屏侧 S 上的画布语义边（仅无无边角色时的回退）。</summary>
     public static int CanonicalRoleFromScreenSide(int screenSideBit, int quartersCw)
     {
         int idx = BitIndex(screenSideBit);
@@ -50,18 +57,27 @@ public static class ViewportCorrespondenceMapper
         return midX < centerX ? WorkspaceEdgeBits.Left : WorkspaceEdgeBits.Right;
     }
 
+    /// <summary>
+    /// 有系统边角色则直接用；否则用几何旋转角（非 OCR）把屏侧映到语义边。
+    /// </summary>
     public static CompleteEdgeOverlayWindow.LabeledScreenEdge MapScreenEdge(
         double screenX0, double screenY0, double screenX1, double screenY1,
-        bool isComplete, float ocrRotationDegrees, float ocrRotationConfidence,
+        bool isComplete, int assignedWorkspaceEdge,
+        float geometryRotationDegrees, float geometryRotationConfidence,
         double canvasCenterScreenX, double canvasCenterScreenY)
     {
-        double mx = 0.5 * (screenX0 + screenX1);
-        double my = 0.5 * (screenY0 + screenY1);
-        bool horizontal = Math.Abs(screenY1 - screenY0) <= Math.Abs(screenX1 - screenX0);
-        int screenSide = InferScreenSide(mx, my, canvasCenterScreenX, canvasCenterScreenY, horizontal);
-        int workspaceEdge = ocrRotationConfidence >= 0.2f
-            ? CanonicalRoleFromScreenSide(screenSide, NearestQuarter(ocrRotationDegrees))
-            : screenSide;
+        int workspaceEdge = assignedWorkspaceEdge;
+        if (!IsSingleEdgeRole(workspaceEdge))
+        {
+            double mx = 0.5 * (screenX0 + screenX1);
+            double my = 0.5 * (screenY0 + screenY1);
+            bool horizontal = Math.Abs(screenY1 - screenY0) <= Math.Abs(screenX1 - screenX0);
+            int screenSide = InferScreenSide(mx, my, canvasCenterScreenX, canvasCenterScreenY, horizontal);
+            workspaceEdge = geometryRotationConfidence >= 0.2f
+                ? CanonicalRoleFromScreenSide(screenSide, NearestQuarter(geometryRotationDegrees))
+                : screenSide;
+        }
+
         return new CompleteEdgeOverlayWindow.LabeledScreenEdge(
             screenX0, screenY0, screenX1, screenY1, workspaceEdge, isComplete);
     }
@@ -91,8 +107,9 @@ public static class ViewportCorrespondenceMapper
 
         int ox = session.OriginX;
         int oy = session.OriginY;
-        float rot = snapshot.Numbers.RotationDegrees;
-        float rotConf = snapshot.Numbers.RotationConfidence;
+        // 回退角用几何权威，禁止 OCR 读数驱动标签
+        float rot = snapshot.RotationDegreesGeometry;
+        float rotConf = float.IsFinite(rot) ? 1f : 0f;
 
         var list = new List<CompleteEdgeOverlayWindow.LabeledScreenEdge>(snapshot.ObservedRedEdges.Length);
         foreach (var e in snapshot.ObservedRedEdges)
@@ -100,17 +117,16 @@ public static class ViewportCorrespondenceMapper
             list.Add(MapScreenEdge(
                 e.P0CaptureX + ox, e.P0CaptureY + oy,
                 e.P1CaptureX + ox, e.P1CaptureY + oy,
-                e.IsComplete, rot, rotConf, cx, cy));
+                e.IsComplete, e.WorkspaceEdge, rot, rotConf, cx, cy));
         }
         return list;
     }
 
     public static string FormatCorrespondenceLog(
         IReadOnlyList<CompleteEdgeOverlayWindow.LabeledScreenEdge> edges,
-        float ocrRotationDegrees, float ocrRotationConfidence)
+        int assignedRoleCount, float geometryRotationDegrees)
     {
         if (edges.Count == 0) return "视口对应：无观测边";
-        int q = ocrRotationConfidence >= 0.2f ? NearestQuarter(ocrRotationDegrees) : -1;
         var parts = new List<string>(edges.Count);
         foreach (var e in edges)
         {
@@ -119,7 +135,9 @@ public static class ViewportCorrespondenceMapper
             double my = 0.5 * (e.Y0 + e.Y1);
             parts.Add($"{label ?? "?"}@({mx:F0},{my:F0})");
         }
-        string rotNote = q >= 0 ? $"逆旋q={q} OCR={ocrRotationDegrees:F1}°" : "OCR角不可用，用屏侧几何";
-        return $"视口对应[{rotNote}]：{string.Join("，", parts)}";
+        string src = assignedRoleCount > 0
+            ? $"边状态×{assignedRoleCount}"
+            : $"几何回退 geo={geometryRotationDegrees:F1}°";
+        return $"视口对应[{src}]：{string.Join("，", parts)}";
     }
 }

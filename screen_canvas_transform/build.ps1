@@ -83,7 +83,9 @@ $testObjs = @(
   (Join-Path $Build "viewport_frame.obj"),
   (Join-Path $Build "transform_solve.obj"),
   (Join-Path $Build "workspace_canvas_relation.obj"),
-  (Join-Path $Build "geometry.obj")
+  (Join-Path $Build "geometry.obj"),
+  (Join-Path $Build "canvas_observe.obj"),
+  (Join-Path $Build "color.obj")
 )
 & cl.exe @common /c $testSrc /Fo"$Build\contract_tests.obj"
 if ($LASTEXITCODE -ne 0) { throw "contract test compile failed" }

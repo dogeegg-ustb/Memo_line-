@@ -320,7 +320,7 @@ F. 仅发布目标组的 NavigatorViewportFrame 与 CompleteEdge 导出
 ## 8. 坐标与数据流硬约束
 
 1. 红段、成组、直角、完整边、补全结果均在 CapturePx（或与现实现一致的缩略图局部再映射回 CapturePx）中表达；发布前 MUST 与现有 `NavigatorViewportFrame` 坐标约定一致。
-2. 背景粘着检测 MUST 使用与当前帧相同的冻结截图与同一 `NavigatorThumbnailRoi`。
+2. 背景粘着检测 MUST 使用与当前帧相同的冻结截图与同一 `NavigatorThumbnailRoi`。d
 3. `(W_nav, H_nav)` MUST 与当前 `WorkspaceCanvasRelation`、当前导航器画布边界同源；CaptureId / SourceRevision 不一致时 MUST 失败，不得混帧。
 4. C# 侧覆盖层显示的完整边 MUST 只来自最终目标组导出，不得把淘汰组的边画上去。
 
