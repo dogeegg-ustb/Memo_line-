@@ -3,6 +3,7 @@
 #include "wb/color.hpp"
 #include "wb/features.hpp"
 #include "wb/validate.hpp"
+#include <algorithm>
 #include <cstdio>
 #include <cmath>
 #include <vector>
@@ -11,6 +12,7 @@
 
 namespace {
 int failures = 0;
+double max_workspace_canvas_boundary_error = 0.0;
 void Check(bool ok, const char* name) {
   if (!ok) { ++failures; std::printf("FAIL: %s\n", name); }
 }
@@ -40,6 +42,13 @@ void WorkspaceCase(wb::IntRect canvas, wb::IntRect user, const char* name, int s
               out.workspace_capture.right,out.workspace_capture.bottom,out.message.c_str());
   Check(out.status==wb::Status::Ok,name);
   if(out.status==wb::Status::Ok) {
+    const double boundary_error = std::max({
+        std::abs(double(out.workspace_capture.left - expected.left)),
+        std::abs(double(out.workspace_capture.top - expected.top)),
+        std::abs(double(out.workspace_capture.right - expected.right)),
+        std::abs(double(out.workspace_capture.bottom - expected.bottom))});
+    max_workspace_canvas_boundary_error =
+        std::max(max_workspace_canvas_boundary_error, boundary_error);
     Check(Near(out.workspace_capture,expected),"correct workspace outer bounds");
     Check(out.workspace_screen.left==out.workspace_capture.left-1920 &&
           out.workspace_screen.top==out.workspace_capture.top-100,"capture-to-screen origin");
@@ -139,6 +148,7 @@ int main(int argc, char** argv) {
     WorkspaceCase({100,80,560,420},roi,"L background");
   }
   WorkspaceCase({310,230,330,250},{95,75,545,405},"downsampled small canvas",3);
-  std::printf("Workspace regression failures: %d\n",failures);
+  std::printf("Workspace regression failures: %d; max_workspace_canvas_boundary_error=%.6f\n",
+              failures, max_workspace_canvas_boundary_error);
   return failures?1:0;
 }

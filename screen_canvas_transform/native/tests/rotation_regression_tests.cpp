@@ -1,5 +1,6 @@
 #include "sct/viewport_frame.hpp"
 #include "sct/transform_solve.hpp"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -7,6 +8,8 @@
 
 namespace {
 int failures = 0;
+double max_frame_geometry_error = 0.0;
+double max_transform_screen_error = 0.0;
 void Check(bool ok, const char* message, double angle) {
   if (!ok) { ++failures; std::printf("FAIL angle=%.1f %s\n", angle, message); }
 }
@@ -38,12 +41,19 @@ void Test(double angle, bool clipped) {
   auto out=sct::CompleteViewportFrame(in);
   Check(out.status==sct::FailStatus::Ok,clipped?"U completion":"rectangle completion",angle);
   if(out.status!=sct::FailStatus::Ok) {std::printf("  %s\n",out.message);return;}
-  Check(std::hypot(out.frame.origin_top_left_displayed.x-corners[0].x-0.5,
-                   out.frame.origin_top_left_displayed.y-corners[0].y-0.5)<2,
+  const double origin_error = std::hypot(out.frame.origin_top_left_displayed.x-corners[0].x-0.5,
+                                         out.frame.origin_top_left_displayed.y-corners[0].y-0.5);
+  max_frame_geometry_error = std::max(max_frame_geometry_error, origin_error);
+  Check(origin_error < 2,
         "directed origin",angle);
-  Check(std::hypot(out.frame.axis_x_displayed.x-c*width,out.frame.axis_x_displayed.y-s*width)<2,
+  const double x_error = std::hypot(out.frame.axis_x_displayed.x-c*width,
+                                    out.frame.axis_x_displayed.y-s*width);
+  const double y_error = std::hypot(out.frame.axis_y_displayed.x+s*height,
+                                    out.frame.axis_y_displayed.y-c*height);
+  max_frame_geometry_error = std::max(max_frame_geometry_error, std::max(x_error, y_error));
+  Check(x_error<2,
         "directed X",angle);
-  Check(std::hypot(out.frame.axis_y_displayed.x+s*height,out.frame.axis_y_displayed.y-c*height)<2,
+  Check(y_error<2,
         "directed Y",angle);
   sct::SolveInput solve;
   std::snprintf(solve.capture_id,sizeof(solve.capture_id),"raster-to-screen");
@@ -61,7 +71,9 @@ void Test(double angle, bool clipped) {
                     100+(-s*dx+c*dy)*600/height};
     auto got=result.snapshot.canvas_to_screen.Apply({u,v});
     // Rasterization uncertainty is magnified by the thumbnail-to-screen scale.
-    Check(std::hypot(want.x-got.x,want.y-got.y)<20,"raster absolute position",angle);
+    const double error = std::hypot(want.x-got.x,want.y-got.y);
+    max_transform_screen_error = std::max(max_transform_screen_error, error);
+    Check(error<20,"raster absolute position",angle);
   }
 }
 void TwoSideObliqueTest(double angle) {
@@ -230,6 +242,8 @@ int main() {
     Test(a,false);Test(a,true);MatrixTest(a);
   }
   for(double a:{5.,25.,-30.,45.,60.,135.,-135.}) TwoSideObliqueTest(a);
-  std::printf("Rotation regression failures: %d\n",failures);
+  std::printf("Rotation regression failures: %d; max_frame_geometry_error=%.6f; "
+              "max_transform_screen_error=%.6f\n",
+              failures, max_frame_geometry_error, max_transform_screen_error);
   return failures?1:0;
 }

@@ -5,6 +5,7 @@
 #include "sct/workspace_canvas_relation.hpp"
 #include "wb/color.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -14,6 +15,7 @@
 namespace {
 
 int g_failures = 0;
+double g_max_navigator_canvas_boundary_error = 0.0;
 
 void Expect(bool cond, const char* msg) {
   if (!cond) {
@@ -190,12 +192,13 @@ void TestViewportPattern02IntersectingNoComplete() {
          "0.2 origin near L corner x");
   Expect(std::abs(out.frame.origin_top_left_displayed.y - (Y + 0.5)) < 2.0,
          "0.2 origin near L corner y");
-  // The two clipped axes imply slightly different raw scales after raster
-  // extraction.  0.2 must fit one common scale from both observations instead
-  // of silently taking the vertical edge first (which produces a visibly
-  // different, taller frame).
-  Expect(std::abs(out.frame.width - 100.5) < 4.0 &&
-             std::abs(out.frame.height - 75.4) < 4.0,
+  // The independent centerline spans are 45 and 40 px. With 400×300 px of
+  // visible workspace contact, the symmetric common-scale fit is 0.12, hence
+  // a 96×72 px workspace viewport. The old expectation included the dilation
+  // halo and therefore encoded the bug this test is meant to catch.
+  std::printf("PRECISION 0.2 width=%.6f height=%.6f\n", out.frame.width, out.frame.height);
+  Expect(std::abs(out.frame.width - 96.0) < 1.0 &&
+             std::abs(out.frame.height - 72.0) < 1.0,
          "0.2 recovers size from both orthogonal segment lengths");
 }
 
@@ -329,6 +332,79 @@ void TestViewportPattern01FallsBackWhenVisibleCanvasExactRecoveryIsUnavailable()
   Expect(std::abs(out.frame.width - 112.5) < 3.0 &&
              std::abs(out.frame.height - 84.375) < 3.0,
          "0.1 divides red-on-canvas pixels by displayed-canvas/workspace ratio");
+}
+
+void TestRawStrokeEndpointsAndSubpixelCenter() {
+  // Independent fixture: the viewport is a single horizontal fragment whose
+  // true centerline spans [30.0, 110.0] in capture-pixel coordinates.  The
+  // displayed canvas covers exactly half of the workspace width, so the
+  // recovered workspace viewport width is 160 px.  A one-pixel gap is
+  // intentional: the detector must use dilation to find the candidate but
+  // raw pixels to measure the final endpoints.
+  constexpr int W = 180;
+  constexpr int H = 140;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 255);
+  constexpr int y = 42;
+  constexpr int x0 = 30;
+  constexpr int x1 = 110;
+  for (int x = x0; x <= x1; ++x) {
+    if (x == 70) continue;
+    // Alpha-blended red over white: the two pixel centers carry 0.75 and 0.25
+    // coverage, giving a known centerline at 42.75.
+    PutBgra(buf, stride, x, y, 64, 64, 229);
+    const uint8_t b = 191, g = 191, r = 246;
+    PutBgra(buf, stride, x, y + 1, b, g, r);
+  }
+
+  auto in = MakeViewportInput(buf, W, H, stride, {5, 5, 175, 135});
+  in.navigator_canvas_bounds = {10, 10, 170, 130};
+  in.workspace_canvas_relation.workspace_roi = {0, 0, 800, 600};
+  in.workspace_canvas_relation.visible_canvas_bounds_workspace_local = {200, 150, 600, 450};
+  in.workspace_canvas_relation.visible_canvas_workspace_fraction_x = 0.5f;
+  in.workspace_canvas_relation.visible_canvas_workspace_fraction_y = 0.5f;
+  in.display_rotation_confidence = 0.f;
+
+  const auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "raw endpoint precision fixture completes");
+  if (out.status != sct::FailStatus::Ok) return;
+
+  const double width_error = std::abs(static_cast<double>(out.frame.width) - 160.0);
+  const double center_error = std::abs(out.frame.origin_top_left_displayed.y - 42.75);
+  std::printf("PRECISION raw_endpoint_width=%.6f width_error=%.6f center_y=%.6f center_error=%.6f\n",
+              out.frame.width, width_error, out.frame.origin_top_left_displayed.y, center_error);
+  Expect(width_error <= 0.75, "raw pixels define single-edge length without dilation expansion");
+  Expect(center_error <= 0.35, "weighted anti-aliased profile preserves subpixel center");
+}
+
+void TestRawStrokeWidthAndDarkRedVariants() {
+  struct Variant { int width; uint8_t b; uint8_t g; uint8_t r; };
+  const Variant variants[] = {
+      {1, 0, 0, 220},
+      {2, 18, 18, 112},
+      {3, 36, 30, 145},
+  };
+  for (const auto& variant : variants) {
+    constexpr int W = 180, H = 140, stride = W * 4;
+    std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 255);
+    constexpr int x0 = 30, x1 = 110, y0 = 54;
+    for (int y = y0; y < y0 + variant.width; ++y) {
+      for (int x = x0; x <= x1; ++x) {
+        if (x != 72) PutBgra(buf, stride, x, y, variant.b, variant.g, variant.r);
+      }
+    }
+    auto in = MakeViewportInput(buf, W, H, stride, {5, 5, 175, 135});
+    in.navigator_canvas_bounds = {10, 10, 170, 130};
+    in.workspace_canvas_relation.workspace_roi = {0, 0, 800, 600};
+    in.workspace_canvas_relation.visible_canvas_bounds_workspace_local = {200, 150, 600, 450};
+    const auto out = sct::CompleteViewportFrame(in);
+    Expect(out.status == sct::FailStatus::Ok, "line-width/dark-red variant completes");
+    if (out.status != sct::FailStatus::Ok) continue;
+    std::printf("PRECISION variant width=%d color=(%d,%d,%d) recovered_width=%.6f\n",
+                variant.width, variant.r, variant.g, variant.b, out.frame.width);
+    Expect(std::abs(static_cast<double>(out.frame.width) - 160.0) <= 1.0,
+           "line width and dark red do not alter centerline length");
+  }
 }
 
 // ---- §10 红框成组契约测试 ----
@@ -832,6 +908,15 @@ void TestNavigatorEnclosedBackgroundIsNotPaper() {
     FillRect(buf,stride,132,top,135,110,40,40,red);
     auto out=sct::ObserveCanvasExcludingBackground(buf.data(),W,H,stride,
         {0,0,W,H},-300,20,model,1.f,true);
+    if (!out.ambiguous) {
+      g_max_navigator_canvas_boundary_error = std::max(
+          g_max_navigator_canvas_boundary_error,
+          static_cast<double>(std::max({
+              std::abs(out.bounds_capture.left - 60),
+              std::abs(out.bounds_capture.top - 20),
+              std::abs(out.bounds_capture.right - 150),
+              std::abs(out.bounds_capture.bottom - 145)})));
+    }
     Expect(!out.ambiguous && out.bounds_capture.left==60 &&
         out.bounds_capture.top==20 && out.bounds_capture.right==150 &&
         out.bounds_capture.bottom==145,
@@ -849,6 +934,8 @@ int main() {
   TestViewportRedSoftAaAndGapRecall();
   TestViewportPattern01ParallelNoComplete();
   TestViewportPattern01FallsBackWhenVisibleCanvasExactRecoveryIsUnavailable();
+  TestRawStrokeEndpointsAndSubpixelCenter();
+  TestRawStrokeWidthAndDarkRedVariants();
   TestViewportPattern02IntersectingNoComplete();
   TestPattern01UnknownRotationDeduplicatesEquivalentCropAssignments();
   TestViewportNoRedPixelsIsEdgeFailureNotFrameFound();
@@ -869,7 +956,8 @@ int main() {
   TestNoWorkspaceCropDoesNotForceCropPath();
   TestViewportRotatedRectangleRelativeOrthogonal();
   if (g_failures == 0) {
-    std::printf("OK: all contract tests passed\n");
+    std::printf("OK: all contract tests passed; max_navigator_canvas_boundary_error=%.6f\n",
+                g_max_navigator_canvas_boundary_error);
     return 0;
   }
   std::printf("FAILED: %d test(s)\n", g_failures);

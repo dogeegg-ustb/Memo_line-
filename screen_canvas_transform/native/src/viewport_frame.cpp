@@ -39,30 +39,36 @@ constexpr double kCanvasAspectRelTol = 0.22;
 constexpr float kNarrowRedSatMin = 0.28f;
 constexpr float kNarrowRedSupportMin = 0.45f;
 constexpr int kNarrowRedMinSamples = 8;
+constexpr float kRawRedWeightMin = 0.10f;
+constexpr float kFinalRedWeightMin = 0.10f;
 
 constexpr int kEdgeL = 1;
 constexpr int kEdgeT = 2;
 constexpr int kEdgeR = 4;
 constexpr int kEdgeB = 8;
 
-inline bool IsNavigatorRedPixel(const uint8_t* p) {
+// Continuous red evidence used after the binary candidate gate.  The first
+// term is the red advantage over the strongest non-red channel; the second
+// keeps dark red strokes detectable without treating neutral gray as red.
+// This is deliberately based on channel relationships, not one RGB literal,
+// so anti-aliased mixtures retain a fractional contribution.
+inline float NavigatorRedWeight(const uint8_t* p) {
   const int b = p[0], g = p[1], r = p[2];
   const int maxc = std::max(r, std::max(g, b));
   const int minc = std::min(r, std::min(g, b));
-  if (maxc < 70) return false;
+  if (maxc < 35) return 0.f;
+  const int dominance = r - std::max(g, b);
+  if (dominance < 6) return 0.f;
   const int delta = maxc - minc;
-  if (delta < 14) return false;
-  if (r + 8 < maxc) return false;
+  if (delta < 10) return 0.f;
   const float sat = static_cast<float>(delta) / static_cast<float>(maxc);
-  if (sat < 0.12f) return false;
-  // 纯红
-  if (r >= 140 && r - g >= 40 && r - b >= 40 && r >= g + 20) return true;
-  if (r >= 110 && r >= g + 12 && r >= b + 12 && (r - g) + (r - b) >= 45) return true;
-  if (r >= 150 && g <= r - 8 && b <= r - 8 && sat >= 0.16f) return true;
-  // 斜边抗锯齿：偏粉/偏暗红，仍要求 R 通道占优
-  if (r >= 90 && r >= g + 8 && r >= b + 8 && (r - g) + (r - b) >= 28 && sat >= 0.12f)
-    return true;
-  return false;
+  const float advantage = std::clamp(static_cast<float>(dominance) / 255.f, 0.f, 1.f);
+  const float chroma = std::clamp(sat * std::min(1.f, static_cast<float>(maxc) / 180.f), 0.f, 1.f);
+  return std::clamp(0.80f * advantage + 0.20f * chroma, 0.f, 1.f);
+}
+
+inline bool IsNavigatorRedPixel(const uint8_t* p) {
+  return NavigatorRedWeight(p) >= kRawRedWeightMin;
 }
 
 // 多组筛选用：比观测门控更窄的“真红框”色度，用于压粉红/灰红 UI 干扰。
@@ -262,12 +268,13 @@ double EstimateDominantEdgeAngle(const std::vector<uint8_t>& det, int w, int h) 
 */
 }
 
-bool MeasureOrientedEdge(const std::vector<uint8_t>& det, const std::vector<uint8_t>& raw, int w,
-                         int h, double ux, double uy, double nx, double ny, double peak_offset,
-                         int family, ObservedEdge& out) {
+bool MeasureOrientedEdge(const std::vector<uint8_t>& det, const std::vector<uint8_t>& raw,
+                         const std::vector<float>& raw_weight, int w, int h, double ux,
+                         double uy, double nx, double ny, double peak_offset, int family,
+                         ObservedEdge& out) {
   const double inv_len = 1.0;  // ux,uy already unit
   (void)inv_len;
-  double t_lo = 1e100, t_hi = -1e100;
+  double det_t_lo = 1e100, det_t_hi = -1e100;
   int red_on = 0;
   int span_bins = 0;
 
@@ -293,56 +300,130 @@ bool MeasureOrientedEdge(const std::vector<uint8_t>& det, const std::vector<uint
       if (MaskAt(det, w, h, x, y)) hit = true;
     }
     if (hit) {
-      t_lo = std::min(t_lo, static_cast<double>(ti));
-      t_hi = std::max(t_hi, static_cast<double>(ti));
+      det_t_lo = std::min(det_t_lo, static_cast<double>(ti));
+      det_t_hi = std::max(det_t_hi, static_cast<double>(ti));
       ++red_on;
     }
   }
-  if (!(t_hi >= t_lo) || (t_hi - t_lo + 1.0) < kMinSegmentSpan) return false;
-  const double span = t_hi - t_lo + 1.0;
+  if (!(det_t_hi >= det_t_lo) || (det_t_hi - det_t_lo + 1.0) < kMinSegmentSpan) return false;
+  const double span = det_t_hi - det_t_lo + 1.0;
   const float support = static_cast<float>(red_on) / static_cast<float>(span);
   if (support < kMinEdgeSupport) return false;
 
-  // raw CoM 精修 offset，并收集端点
-  double sum_o = 0, wt = 0;
-  double sum_t = 0;
+  // The dilated mask has done its job: it supplied a coarse search window.
+  // Every final geometric quantity below comes from the original ROI pixels.
+  // Use a weighted local line fit to recover tangent, normal center and then
+  // the raw tangential extent in floating-point pixel coordinates.
+  double sum_x = 0, sum_y = 0, wt = 0;
   for (int y = 0; y < h; ++y) {
     for (int x = 0; x < w; ++x) {
-      if (!MaskAt(raw, w, h, x, y)) continue;
+      const size_t index = static_cast<size_t>(y) * w + x;
+      const double weight = index < raw_weight.size() ? raw_weight[index] : 0.0;
+      if (!raw[index] || weight < kFinalRedWeightMin) continue;
       const double o = Dot2(x, y, nx, ny);
-      if (std::abs(o - peak_offset) > kPeakRefineRadius + 0.5) continue;
       const double t = Dot2(x, y, ux, uy);
-      if (t < t_lo - 1.0 || t > t_hi + 1.0) continue;
-      sum_o += o;
-      sum_t += t;
-      wt += 1;
+      if (std::abs(o - peak_offset) > kPeakRefineRadius + 1.0) continue;
+      if (t < det_t_lo - 2.0 || t > det_t_hi + 2.0) continue;
+      sum_x += weight * static_cast<double>(x);
+      sum_y += weight * static_cast<double>(y);
+      wt += weight;
     }
   }
-  const double refined_o = wt > 0 ? sum_o / wt : peak_offset;
-  const double x0 = nx * refined_o + ux * t_lo;
-  const double y0 = ny * refined_o + uy * t_lo;
-  const double x1 = nx * refined_o + ux * t_hi;
-  const double y1 = ny * refined_o + uy * t_hi;
+  if (!(wt > 0.0)) return false;
 
-  out.ux = ux;
-  out.uy = uy;
-  out.nx = nx;
-  out.ny = ny;
+  const double mean_x = sum_x / wt;
+  const double mean_y = sum_y / wt;
+  const double mean_t = Dot2(mean_x, mean_y, ux, uy);
+  const double mean_o = Dot2(mean_x, mean_y, nx, ny);
+  double var_t = 0.0, var_o = 0.0, cov_to = 0.0;
+  for (int y = 0; y < h; ++y) {
+    for (int x = 0; x < w; ++x) {
+      const size_t index = static_cast<size_t>(y) * w + x;
+      const double weight = index < raw_weight.size() ? raw_weight[index] : 0.0;
+      if (!raw[index] || weight < kFinalRedWeightMin) continue;
+      const double o_abs = Dot2(x, y, nx, ny);
+      const double t_abs = Dot2(x, y, ux, uy);
+      if (std::abs(o_abs - peak_offset) > kPeakRefineRadius + 1.0) continue;
+      if (t_abs < det_t_lo - 2.0 || t_abs > det_t_hi + 2.0) continue;
+      const double t = t_abs - mean_t;
+      const double o = o_abs - mean_o;
+      var_t += weight * t * t;
+      var_o += weight * o * o;
+      cov_to += weight * t * o;
+    }
+  }
+
+  double refined_ux = ux;
+  double refined_uy = uy;
+  // For an axis-aligned candidate the discrete orientation is already exact;
+  // fitting a wide L-junction neighborhood can otherwise pull a horizontal
+  // profile toward its perpendicular arm. Oblique candidates still receive
+  // the raw-pixel direction refinement below.
+  const bool axis_candidate = std::max(std::abs(ux), std::abs(uy)) > 0.98;
+  if (!axis_candidate && var_t > var_o * 1.05 && var_t > 1e-6) {
+    const double rotate = 0.5 * std::atan2(2.0 * cov_to, var_t - var_o);
+    refined_ux = ux * std::cos(rotate) + nx * std::sin(rotate);
+    refined_uy = uy * std::cos(rotate) + ny * std::sin(rotate);
+    const double refined_len = std::hypot(refined_ux, refined_uy);
+    if (!(refined_len > 1e-9)) return false;
+    refined_ux /= refined_len;
+    refined_uy /= refined_len;
+    if (refined_ux * ux + refined_uy * uy < 0.0) {
+      refined_ux = -refined_ux;
+      refined_uy = -refined_uy;
+    }
+  }
+  const double refined_nx = -refined_uy;
+  const double refined_ny = refined_ux;
+  const double refined_o = Dot2(mean_x, mean_y, refined_nx, refined_ny);
+
+  // Re-project original red support with the fitted direction.  In particular,
+  // do not reuse det_t_lo/det_t_hi: dilation may bridge a gap, but its
+  // tangential expansion is not a line endpoint.
+  double raw_t_lo = 1e100, raw_t_hi = -1e100;
+  int raw_samples = 0;
+  for (int y = 0; y < h; ++y) {
+    for (int x = 0; x < w; ++x) {
+      const size_t index = static_cast<size_t>(y) * w + x;
+      const double weight = index < raw_weight.size() ? raw_weight[index] : 0.0;
+      if (!raw[index] || weight < kFinalRedWeightMin) continue;
+      const double o = Dot2(x, y, refined_nx, refined_ny);
+      const double t = Dot2(x, y, refined_ux, refined_uy);
+      if (std::abs(o - refined_o) > kPeakRefineRadius + 1.0) continue;
+      if (t < det_t_lo - 2.0 || t > det_t_hi + 2.0) continue;
+      raw_t_lo = std::min(raw_t_lo, t);
+      raw_t_hi = std::max(raw_t_hi, t);
+      ++raw_samples;
+    }
+  }
+  if (!(raw_t_hi >= raw_t_lo) || raw_samples < kMinRawRedPixels ||
+      (raw_t_hi - raw_t_lo + 1.0) < kMinSegmentSpan) return false;
+
+  const double x0 = refined_nx * refined_o + refined_ux * raw_t_lo;
+  const double y0 = refined_ny * refined_o + refined_uy * raw_t_lo;
+  const double x1 = refined_nx * refined_o + refined_ux * raw_t_hi;
+  const double y1 = refined_ny * refined_o + refined_uy * raw_t_hi;
+
+  out.ux = refined_ux;
+  out.uy = refined_uy;
+  out.nx = refined_nx;
+  out.ny = refined_ny;
   out.coord = refined_o;
   out.family = family;
   out.seg.x0 = x0;
   out.seg.y0 = y0;
   out.seg.x1 = x1;
   out.seg.y1 = y1;
-  out.seg.horizontal = (std::abs(ux) >= std::abs(uy));
+  out.seg.horizontal = (std::abs(refined_ux) >= std::abs(refined_uy));
   out.seg.support = support;
   out.seg.corner_at_start = -1;
   out.seg.corner_at_end = -1;
   return true;
 }
 
-void ObserveEdgesAtAngle(const std::vector<uint8_t>& det, const std::vector<uint8_t>& raw, int w,
-                         int h, double angle_rad, int family, std::vector<ObservedEdge>& pool) {
+void ObserveEdgesAtAngle(const std::vector<uint8_t>& det, const std::vector<uint8_t>& raw,
+                         const std::vector<float>& raw_weight, int w, int h, double angle_rad,
+                         int family, std::vector<ObservedEdge>& pool) {
   const double ux = std::cos(angle_rad);
   const double uy = std::sin(angle_rad);
   const double nx = -uy;
@@ -378,7 +459,7 @@ void ObserveEdgesAtAngle(const std::vector<uint8_t>& det, const std::vector<uint
   for (int pi : peaks) {
     const double peak_o = static_cast<double>(base + pi);
     ObservedEdge e;
-    if (MeasureOrientedEdge(det, raw, w, h, ux, uy, nx, ny, peak_o, family, e)) {
+    if (MeasureOrientedEdge(det, raw, raw_weight, w, h, ux, uy, nx, ny, peak_o, family, e)) {
       // 去重：同族近邻 offset
       bool dup = false;
       for (const auto& ex : pool) {
@@ -394,7 +475,8 @@ void ObserveEdgesAtAngle(const std::vector<uint8_t>& det, const std::vector<uint
 }
 
 void ObserveAllOrientedEdges(const std::vector<uint8_t>& det, const std::vector<uint8_t>& raw,
-                             int w, int h, float display_rot_deg, float display_rot_conf,
+                             const std::vector<float>& raw_weight, int w, int h,
+                             float display_rot_deg, float display_rot_conf,
                              std::vector<ObservedEdge>& pool) {
   pool.clear();
   const bool have_display_rot = display_rot_conf >= 0.2f && std::isfinite(display_rot_deg);
@@ -415,8 +497,8 @@ void ObserveAllOrientedEdges(const std::vector<uint8_t>& det, const std::vector<
     if (fold_family0_near_horizontal && std::abs(primary) > 0.7853981633974483) {
       primary = primary > 0 ? primary - kHalfPi : primary + kHalfPi;
     }
-    ObserveEdgesAtAngle(det, raw, w, h, primary, 0, out);
-    ObserveEdgesAtAngle(det, raw, w, h, primary + kHalfPi, 1, out);
+    ObserveEdgesAtAngle(det, raw, raw_weight, w, h, primary, 0, out);
+    ObserveEdgesAtAngle(det, raw, raw_weight, w, h, primary + kHalfPi, 1, out);
   };
 
   auto better = [](const std::vector<ObservedEdge>& a, const std::vector<ObservedEdge>& b) {
@@ -1216,7 +1298,11 @@ bool CompleteDirectedGroup(GroupCandidate& g, const ViewportCompletionInput& in,
   f.red_evidence.unanchored_segment_count = g.unanchored;
   f.red_evidence.confirmed_corner_count = g.confirmed_corners;
   f.red_evidence.completion_pattern = g.pattern;
-  f.confidence = std::min(1.f, 0.15f * f.visible_edge_count + 0.1f * g.complete_count);
+  float min_support = 1.f;
+  for (const auto& edge : g.edges) min_support = std::min(min_support, edge.seg.support);
+  f.confidence = std::min(
+      1.f, (0.15f * f.visible_edge_count + 0.1f * g.complete_count) *
+               std::clamp(min_support, 0.25f, 1.f));
   g.completed_ok = true;
   return true;
 }
@@ -1406,8 +1492,12 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
         !(std::isfinite(frame.width) && std::isfinite(frame.height))) {
       return false;
     }
-    frame.confidence =
-        std::clamp(0.15f * conf_edges + 0.1f * g.complete_count, 0.f, 1.f);
+    float min_support = 1.f;
+    for (const auto& edge : g.edges) min_support = std::min(min_support, edge.seg.support);
+    frame.confidence = std::clamp(
+        (0.15f * conf_edges + 0.1f * g.complete_count) *
+            std::clamp(min_support, 0.25f, 1.f),
+        0.f, 1.f);
     g.completed_ok = true;
     return true;
   };
@@ -1524,9 +1614,17 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
       return false;
     }
 
-    const double denom = contact_w * contact_w + contact_h * contact_h;
+    // Do not make weak and strong observations unconditionally equal.  Longer
+    // raw support and a higher continuity score carry more information, while
+    // the contact geometry still supplies the correct physical scale.
+    const double weight_w = std::max(0.05, static_cast<double>(h.seg.support)) *
+                            std::max(observed_w, 1.0);
+    const double weight_h = std::max(0.05, static_cast<double>(v.seg.support)) *
+                            std::max(observed_h, 1.0);
+    const double denom = weight_w * contact_w * contact_w + weight_h * contact_h * contact_h;
     if (!(denom > 1e-8) || !std::isfinite(denom)) return false;
-    const double scale = (contact_w * observed_w + contact_h * observed_h) / denom;
+    const double scale = (weight_w * contact_w * observed_w +
+                          weight_h * contact_h * observed_h) / denom;
     if (!(scale > 0 && std::isfinite(scale))) return false;
 
     const double fit_w = scale * contact_w;
@@ -1771,22 +1869,14 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
       set_pattern(ViewportCompletionPattern::TwoIntersectingCompleteEdges);
       const double vx = EdgePosX(*p.a);
       const double hy = EdgePosY(*p.b);
-      double w = 0, h = 0;
-      // One recovered axis plus workspace aspect defines the frame.  The
-      // perpendicular fragment remains positional evidence for the corner;
-      // it must not introduce a second, inconsistent scale.
-      if (!recover_size_from_vertical(*p.a, w, h) &&
-          !recover_size_from_horizontal(*p.b, w, h)) {
-        h = EdgeLen(*p.a);
-        w = EdgeLen(*p.b);
-        if (w < 4 || h < 4) return false;
-        const double h2 = w / aspect;
-        const double w2 = h * aspect;
-        if (std::abs(h2 - h) <= std::abs(w2 - w))
-          h = h2;
-        else
-          w = w2;
-      }
+      // Both edges are complete red sides, so use their independently fitted
+      // centerline lengths.  A complete perpendicular pair is the strongest
+      // evidence available here; do not let one side plus aspect replace the
+      // other side and silently hide a disagreement.
+      double h = EdgeLen(*p.a);
+      double w = EdgeLen(*p.b);
+      if (!(w > 4.0 && h > 4.0 && std::isfinite(w) && std::isfinite(h))) return false;
+      if (aspect > 0 && std::abs((w / h) / aspect - 1.0) > 0.20) return false;
       const bool left = p.a->workspace_edge == kEdgeL
           ? true
           : p.a->workspace_edge == kEdgeR
@@ -2128,13 +2218,17 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
   const int rh = roi.height();
 
   std::vector<uint8_t> red_raw(static_cast<size_t>(rw) * rh, 0);
+  std::vector<float> red_weight(static_cast<size_t>(rw) * rh, 0.f);
   int red_count = 0;
   for (int y = roi.top; y < roi.bottom; ++y) {
     for (int x = roi.left; x < roi.right; ++x) {
       const uint8_t* p =
           in.bgra + static_cast<size_t>(y) * in.stride + static_cast<size_t>(x) * 4;
-      if (IsNavigatorRedPixel(p)) {
-        red_raw[static_cast<size_t>(y - roi.top) * rw + (x - roi.left)] = 1;
+      const float weight = NavigatorRedWeight(p);
+      const size_t index = static_cast<size_t>(y - roi.top) * rw + (x - roi.left);
+      red_weight[index] = weight;
+      if (weight >= kRawRedWeightMin) {
+        red_raw[index] = 1;
         ++red_count;
       }
     }
@@ -2148,7 +2242,7 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
 
   // A. 观测定向红段：主朝向 + 正交朝向（彼此垂直，不要求贴屏幕轴）
   std::vector<ObservedEdge> pool;
-  ObserveAllOrientedEdges(red_det, red_raw, rw, rh, in.display_rotation_degrees,
+  ObserveAllOrientedEdges(red_det, red_raw, red_weight, rw, rh, in.display_rotation_degrees,
                           in.display_rotation_confidence, pool);
   if (pool.empty()) {
     return Fail(FailStatus::InsufficientViewportGeometry, "no oriented red edges");
