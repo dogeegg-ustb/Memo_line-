@@ -410,6 +410,9 @@ public static class NativeSct
     public static extern int sct_observe_canvas(in SctCanvasObserveRequest req, ref SctCanvasObservation result);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    public static extern int sct_observe_navigator_canvas(in SctCanvasObserveRequest req, ref SctCanvasObservation result);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     public static extern int sct_build_workspace_canvas_relation(
         in SctWorkspaceCanvasRelationRequest req,
         ref SctWorkspaceCanvasRelation result);

@@ -288,7 +288,7 @@ SCT_API int sct_detect_navigator_thumbnail_cii(const SctCiiRequest* req, SctDete
   return result->status;
 }
 
-SCT_API int sct_observe_canvas(const SctCanvasObserveRequest* req, SctCanvasObservation* out) {
+static int ObserveCanvasCore(const SctCanvasObserveRequest* req, SctCanvasObservation* out, bool navigator) {
   if (!out) return static_cast<int>(sct::FailStatus::InvalidCapture);
   std::memset(out, 0, sizeof(*out));
   if (!req || !req->bgra) {
@@ -299,10 +299,17 @@ SCT_API int sct_observe_canvas(const SctCanvasObserveRequest* req, SctCanvasObse
   auto obs = sct::ObserveCanvasExcludingBackground(
       req->bgra, req->width, req->height, req->stride,
       {req->roi_capture.left, req->roi_capture.top, req->roi_capture.right, req->roi_capture.bottom},
-      req->origin_x, req->origin_y, FromC(req->background), req->dpi_scale);
+      req->origin_x, req->origin_y, FromC(req->background), req->dpi_scale, navigator);
   *out = ToCObs(obs, obs.ambiguous ? static_cast<int>(sct::FailStatus::WorkspaceCanvasAmbiguous)
                                    : static_cast<int>(sct::FailStatus::Ok));
   return out->status;
+}
+
+SCT_API int sct_observe_canvas(const SctCanvasObserveRequest* req, SctCanvasObservation* out) {
+  return ObserveCanvasCore(req, out, false);
+}
+SCT_API int sct_observe_navigator_canvas(const SctCanvasObserveRequest* req, SctCanvasObservation* out) {
+  return ObserveCanvasCore(req, out, true);
 }
 
 SCT_API int sct_build_workspace_canvas_relation(const SctWorkspaceCanvasRelationRequest* req,

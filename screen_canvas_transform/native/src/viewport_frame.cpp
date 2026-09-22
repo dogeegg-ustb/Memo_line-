@@ -13,27 +13,32 @@ namespace {
 constexpr int kRedDilateRadius = 1;
 constexpr int kPeakRefineRadius = 2;
 constexpr int kMinRawRedPixels = 8;
-constexpr int kMinSegmentSpan = 6;
-constexpr float kMinEdgeSupport = 0.35f;
+constexpr int kMinSegmentSpan = 5;
+constexpr float kMinEdgeSupport = 0.28f;
 constexpr int kPeakMergeDist = 3;
 constexpr double kParallelDotMin = 0.92;   // |dir·dir|：平行
 constexpr double kOrthogonalDotMax = 0.35; // |dir·dir|：垂直（相对正交，非贴轴）
 
 // 组内空间相近 / 直角容差
-constexpr int kGroupCornerTolPx = 6;
+// Projection/raster extraction can trim an anti-aliased oblique stroke several
+// pixels before its mathematical corner. Keep group/corner identity tolerant
+// enough for that quantization while still far below a valid viewport side.
+constexpr int kGroupCornerTolPx = 10;
 constexpr float kParallelOverlapRatio = 0.35f;
 constexpr int kParallelOverlapMinPx = 8;
 constexpr int kMinViewportSidePx = 12;
+constexpr int kCollinearMergeTolPx = 6;
+constexpr int kCollinearGapMaxPx = 8;
 
-// 背景粘着（框外法向邻域）
-constexpr int kBgOutwardProbePx = 3;
-constexpr float kBgTouchRatio = 0.55f;
-constexpr int kBgTouchMinPx = 6;
-constexpr int kBgColorTol = 28;
-
-// 理论导航器红框尺寸匹配
+// 多组消歧：显示画布形状（理论红框尺寸 + 可选宽高比）
 constexpr double kTheorySizeAbsPx = 8.0;
 constexpr double kTheorySizeRel = 0.18;
+constexpr double kCanvasAspectRelTol = 0.22;
+
+// 多组消歧：窄红色度（严于观测门控 IsNavigatorRedPixel）
+constexpr float kNarrowRedSatMin = 0.28f;
+constexpr float kNarrowRedSupportMin = 0.45f;
+constexpr int kNarrowRedMinSamples = 8;
 
 constexpr int kEdgeL = 1;
 constexpr int kEdgeT = 2;
@@ -44,15 +49,35 @@ inline bool IsNavigatorRedPixel(const uint8_t* p) {
   const int b = p[0], g = p[1], r = p[2];
   const int maxc = std::max(r, std::max(g, b));
   const int minc = std::min(r, std::min(g, b));
-  if (maxc < 90) return false;
+  if (maxc < 70) return false;
   const int delta = maxc - minc;
-  if (delta < 22) return false;
-  if (r + 12 < maxc) return false;
+  if (delta < 14) return false;
+  if (r + 8 < maxc) return false;
   const float sat = static_cast<float>(delta) / static_cast<float>(maxc);
-  if (sat < 0.18f) return false;
+  if (sat < 0.12f) return false;
+  // 纯红
   if (r >= 140 && r - g >= 40 && r - b >= 40 && r >= g + 20) return true;
   if (r >= 110 && r >= g + 12 && r >= b + 12 && (r - g) + (r - b) >= 45) return true;
   if (r >= 150 && g <= r - 8 && b <= r - 8 && sat >= 0.16f) return true;
+  // 斜边抗锯齿：偏粉/偏暗红，仍要求 R 通道占优
+  if (r >= 90 && r >= g + 8 && r >= b + 8 && (r - g) + (r - b) >= 28 && sat >= 0.12f)
+    return true;
+  return false;
+}
+
+// 多组筛选用：比观测门控更窄的“真红框”色度，用于压粉红/灰红 UI 干扰。
+bool IsNarrowNavigatorRedPixel(const uint8_t* p) {
+  const int b = p[0], g = p[1], r = p[2];
+  const int maxc = std::max(r, std::max(g, b));
+  const int minc = std::min(r, std::min(g, b));
+  if (maxc < 100) return false;
+  const int delta = maxc - minc;
+  if (delta < 28) return false;
+  if (r + 4 < maxc) return false;
+  const float sat = static_cast<float>(delta) / static_cast<float>(maxc);
+  if (sat < kNarrowRedSatMin) return false;
+  if (r >= 140 && r - g >= 45 && r - b >= 45) return true;
+  if (r >= 120 && r >= g + 20 && r >= b + 20 && (r - g) + (r - b) >= 55) return true;
   return false;
 }
 
@@ -167,6 +192,49 @@ inline double EdgePosY(const ObservedEdge& e) { return 0.5 * (e.seg.y0 + e.seg.y
 
 // 结构张量估计红掩膜主边缘朝向（边方向，非梯度方向）。
 double EstimateDominantEdgeAngle(const std::vector<uint8_t>& det, int w, int h) {
+  // A second-order structure tensor cancels the two orthogonal families of
+  // a rectangle (especially a square). Search their joint projection energy.
+  std::vector<Vec2> points;
+  for (int y = 0; y < h; ++y)
+    for (int x = 0; x < w; ++x)
+      if (det[static_cast<size_t>(y) * w + x]) points.push_back({double(x), double(y)});
+  const int radius = static_cast<int>(std::ceil(std::hypot(w, h))) + 2;
+  auto score = [&](double angle) {
+    std::vector<double> hx(2 * radius + 1, 0), hy(hx.size(), 0);
+    const double c = std::cos(angle), s = std::sin(angle);
+    const size_t step = std::max<size_t>(1, points.size() / 12000);
+    for (size_t i = 0; i < points.size(); i += step) {
+      const auto p = points[i];
+      auto vote = [&](std::vector<double>& hist, double v) {
+        v += radius;
+        const int k = static_cast<int>(std::floor(v));
+        const double f = v - k;
+        if (k >= 0 && k + 1 < static_cast<int>(hist.size())) {
+          hist[k] += 1 - f;
+          hist[k + 1] += f;
+        }
+      };
+      vote(hx, c * p.x + s * p.y);
+      vote(hy, -s * p.x + c * p.y);
+    }
+    double energy = 0;
+    for (size_t i = 0; i < hx.size(); ++i) energy += hx[i] * hx[i] + hy[i] * hy[i];
+    return energy;
+  };
+  constexpr double rad = 0.017453292519943295;
+  double best = 0, best_score = -1;
+  for (int d = -45; d < 45; ++d) {
+    const double value = score(d * rad);
+    if (value > best_score) { best_score = value; best = d * rad; }
+  }
+  const double coarse = best;
+  for (int i = -10; i <= 10; ++i) {
+    const double a = coarse + i * 0.1 * rad;
+    const double value = score(a);
+    if (value > best_score) { best_score = value; best = a; }
+  }
+  return best;
+/*
   double ixx = 0, iyy = 0, ixy = 0;
   int n = 0;
   for (int y = 1; y + 1 < h; ++y) {
@@ -191,6 +259,7 @@ double EstimateDominantEdgeAngle(const std::vector<uint8_t>& det, int w, int h) 
   while (edge <= -1.5707963267948966) edge += 3.141592653589793;
   while (edge > 1.5707963267948966) edge -= 3.141592653589793;
   return edge;
+*/
 }
 
 bool MeasureOrientedEdge(const std::vector<uint8_t>& det, const std::vector<uint8_t>& raw, int w,
@@ -303,8 +372,8 @@ void ObserveEdgesAtAngle(const std::vector<uint8_t>& det, const std::vector<uint
     }
   }
 
-  // min_run ≈ 沿切向的典型跨度（用图像对角线比例）
-  const int min_run = std::max(w, h);
+  // 投影峰阈值：斜边直方图更散
+  const int min_run = std::max(6, std::min(w, h) / 4);
   auto peaks = AllClusterPeaks(FindProjectionPeaks(hist, min_run), hist);
   for (int pi : peaks) {
     const double peak_o = static_cast<double>(base + pi);
@@ -329,27 +398,48 @@ void ObserveAllOrientedEdges(const std::vector<uint8_t>& det, const std::vector<
                              std::vector<ObservedEdge>& pool) {
   pool.clear();
   const bool have_display_rot = display_rot_conf >= 0.2f && std::isfinite(display_rot_deg);
-  double primary = 0.0;
-  if (have_display_rot) {
-    // 显示角 = 画布 X；family0 沿 X（T/B），family1 沿 Y（L/R）——不折到水平
-    primary = display_rot_deg * 0.017453292519943295;
-  } else {
-    primary = EstimateDominantEdgeAngle(det, w, h);
-  }
-  while (primary <= -1.5707963267948966) primary += 3.141592653589793;
-  while (primary > 1.5707963267948966) primary -= 3.141592653589793;
-  if (!have_display_rot && std::abs(primary) > 0.7853981633974483) {
-    // 无显示角时：family0 取更接近水平的一族，避免竖边占优把 L/R 与 T/B 对调
-    primary = primary > 0 ? primary - 1.5707963267948966 : primary + 1.5707963267948966;
-  }
+  constexpr double kHalfPi = 1.5707963267948966;
+  constexpr double kPi = 3.141592653589793;
 
-  ObserveEdgesAtAngle(det, raw, w, h, primary, 0, pool);
-  ObserveEdgesAtAngle(det, raw, w, h, primary + 1.5707963267948966, 1, pool);
+  auto normalize_edge_angle = [&](double edge) {
+    while (edge <= -kHalfPi) edge += kPi;
+    while (edge > kHalfPi) edge -= kPi;
+    return edge;
+  };
 
-  if (pool.empty() || (!have_display_rot && std::abs(std::sin(2.0 * primary)) > 0.25 &&
-                       pool.size() < 2)) {
-    ObserveEdgesAtAngle(det, raw, w, h, 0.0, 0, pool);
-    ObserveEdgesAtAngle(det, raw, w, h, 1.5707963267948966, 1, pool);
+  // 向指定容器写入一对正交族；同一候选内 family0/1 共轴，候选之间不混写。
+  auto fill_pair = [&](std::vector<ObservedEdge>& out, double primary,
+                       bool fold_family0_near_horizontal) {
+    out.clear();
+    primary = normalize_edge_angle(primary);
+    if (fold_family0_near_horizontal && std::abs(primary) > 0.7853981633974483) {
+      primary = primary > 0 ? primary - kHalfPi : primary + kHalfPi;
+    }
+    ObserveEdgesAtAngle(det, raw, w, h, primary, 0, out);
+    ObserveEdgesAtAngle(det, raw, w, h, primary + kHalfPi, 1, out);
+  };
+
+  auto better = [](const std::vector<ObservedEdge>& a, const std::vector<ObservedEdge>& b) {
+    if (a.size() != b.size()) return a.size() > b.size();
+    double la = 0, lb = 0;
+    for (const auto& e : a)
+      la += std::hypot(e.seg.x1 - e.seg.x0, e.seg.y1 - e.seg.y0);
+    for (const auto& e : b)
+      lb += std::hypot(e.seg.x1 - e.seg.x0, e.seg.y1 - e.seg.y0);
+    return la > lb;
+  };
+
+  // 认边主方向来自红掩膜，不锁 OCR（OCR 只用于切割对应的逆向旋转标签）。
+  // 轴对齐仅作空结果回退，不得用更「长」的水平/竖直投影盖掉已抽出的斜边。
+  std::vector<ObservedEdge> cand;
+  fill_pair(cand, EstimateDominantEdgeAngle(raw, w, h), /*fold=*/true);
+  pool = cand;
+
+  // OCR is a directed-axis hint, not a reason to prefer a noisier line pool.
+
+  if (pool.size() < 2) {
+    fill_pair(cand, 0.0, /*fold=*/false);
+    if (better(cand, pool)) pool = std::move(cand);
   }
 }
 
@@ -495,7 +585,7 @@ bool GroupEdgeCardinalityOk(const std::vector<ObservedEdge>& edges) {
   double v0 = 0, v1 = 0, h0 = 0, h1 = 0;
   bool have_v0 = false, have_h0 = false;
   for (const auto& e : edges) {
-    if (e.seg.horizontal) {
+    if (e.family == 0) {
       if (n_h == 0) {
         h0 = e.coord;
         have_h0 = true;
@@ -638,6 +728,49 @@ bool EdgeIntersectsCanvasLocal(const ObservedEdge& e, const wb::IntRect& canvas_
   return (ox1 - ox0 > 0.5) && (oy1 - oy0 > 0.5);
 }
 
+// Length of the observed viewport edge that actually passes through the
+// Navigator's displayed canvas. Red ink outside that paper is not part of the
+// workspace/canvas overlap ratio and must not inflate the 0.1/0.2 numerator.
+bool ClipEdgeToCanvas(const ObservedEdge& e, const wb::IntRect& canvas_local,
+                      Vec2* clipped_start, Vec2* clipped_end) {
+  if (!canvas_local.valid()) return false;
+  const double x0 = e.seg.x0;
+  const double y0 = e.seg.y0;
+  const double dx = e.seg.x1 - x0;
+  const double dy = e.seg.y1 - y0;
+  double enter = 0.0;
+  double leave = 1.0;
+  auto clip = [&](double p, double q) {
+    if (std::abs(p) < 1e-12) return q >= 0.0;
+    const double r = q / p;
+    if (p < 0.0) {
+      if (r > leave) return false;
+      enter = std::max(enter, r);
+    } else {
+      if (r < enter) return false;
+      leave = std::min(leave, r);
+    }
+    return true;
+  };
+  const double left = canvas_local.left - 0.5;
+  const double top = canvas_local.top - 0.5;
+  const double right = canvas_local.right - 0.5;
+  const double bottom = canvas_local.bottom - 0.5;
+  if (!clip(-dx, x0 - left) || !clip(dx, right - x0) ||
+      !clip(-dy, y0 - top) || !clip(dy, bottom - y0) || leave <= enter) {
+    return false;
+  }
+  if (clipped_start) *clipped_start = {x0 + dx * enter, y0 + dy * enter};
+  if (clipped_end) *clipped_end = {x0 + dx * leave, y0 + dy * leave};
+  return true;
+}
+
+double EdgeLengthInsideCanvas(const ObservedEdge& e, const wb::IntRect& canvas_local) {
+  Vec2 a{}, b{};
+  if (!ClipEdgeToCanvas(e, canvas_local, &a, &b)) return 0.0;
+  return std::hypot(b.x - a.x, b.y - a.y);
+}
+
 enum class CropAssignResult { Applied, NotApplicable, Ambiguous, Failed };
 
 // 在切割边集合中，按 0° 语义角色选取几何极值边（T=最上横边…），避免 interior_ok 与旋转后几何冲突。
@@ -717,32 +850,6 @@ CropAssignResult AssignEdgesByCropCorrespondence(std::vector<ObservedEdge>& edge
       crop_matched.push_back(match);
     }
 
-    // 多切割边同屏侧冲突：仅校验本次 C_w↔C_v 直接指派，不含传播边。
-    const double ccx = 0.5 * (canvas_local.left + canvas_local.right);
-    const double ccy = 0.5 * (canvas_local.top + canvas_local.bottom);
-    const double side_tol = static_cast<double>(kGroupCornerTolPx);
-    ObservedEdge* by_crop_side[4] = {nullptr, nullptr, nullptr, nullptr};
-    for (size_t i = 0; i < crop_bits.size(); ++i) {
-      const int idx = EdgeBitIndex(crop_bits[i]);
-      if (idx >= 0 && idx < 4) by_crop_side[idx] = crop_matched[i];
-    }
-    if (by_crop_side[0] && by_crop_side[2]) {
-      if (EdgePosX(*by_crop_side[0]) > ccx + side_tol &&
-          EdgePosX(*by_crop_side[2]) > ccx + side_tol)
-        return false;
-      if (EdgePosX(*by_crop_side[0]) < ccx - side_tol &&
-          EdgePosX(*by_crop_side[2]) < ccx - side_tol)
-        return false;
-    }
-    if (by_crop_side[1] && by_crop_side[3]) {
-      if (EdgePosY(*by_crop_side[1]) > ccy + side_tol &&
-          EdgePosY(*by_crop_side[3]) > ccy + side_tol)
-        return false;
-      if (EdgePosY(*by_crop_side[1]) < ccy - side_tol &&
-          EdgePosY(*by_crop_side[3]) < ccy - side_tol)
-        return false;
-    }
-
     // §5.3 传播：由已赋值切割边推对边；未赋值的平行对按旋转类套屏侧语义
     std::vector<ObservedEdge*> all_v, all_h;
     for (auto& e : work) {
@@ -805,6 +912,14 @@ CropAssignResult AssignEdgesByCropCorrespondence(std::vector<ObservedEdge>& edge
   int success_q = -1;
   std::vector<ObservedEdge> best;
   bool any_role_ambiguous = false;
+  auto same_assignment = [](const std::vector<ObservedEdge>& a,
+                            const std::vector<ObservedEdge>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+      if (a[i].workspace_edge != b[i].workspace_edge) return false;
+    }
+    return true;
+  };
   for (int q : candidates) {
     auto trial = edges;
     bool q_ambiguous = false;
@@ -813,7 +928,13 @@ CropAssignResult AssignEdgesByCropCorrespondence(std::vector<ObservedEdge>& edge
       continue;
     }
     if (success_q >= 0 && success_q != q) {
-      return CropAssignResult::Ambiguous;
+      // With only one visible cutting edge, 0° and 180° (or 90° and
+      // 270°) can both be admissible while producing exactly the same
+      // semantic edge assignment.  That is not an edge-role ambiguity.  The
+      // old q-only comparison rejected these common 0.1/0.2 observations when
+      // OCR missed the displayed "0.0" rotation value.
+      if (!same_assignment(best, trial)) return CropAssignResult::Ambiguous;
+      continue;
     }
     if (success_q < 0) {
       success_q = q;
@@ -838,7 +959,7 @@ bool GroupSpatialGeometryOk(const std::vector<ObservedEdge>& edges, double max_w
   if (edges.empty() || edges.size() > 4) return false;
   int n_v = 0, n_h = 0;
   for (const auto& e : edges) {
-    if (e.seg.horizontal)
+    if (e.family == 0)
       ++n_h;
     else
       ++n_v;
@@ -848,7 +969,7 @@ bool GroupSpatialGeometryOk(const std::vector<ObservedEdge>& edges, double max_w
   // 平行对边：仅当两条均为切割边时才校验间距（非切割外框边不得与切割边拼成平行对）
   std::vector<const ObservedEdge*> verts, hors;
   for (const auto& e : edges) {
-    if (e.seg.horizontal)
+    if (e.family == 0)
       hors.push_back(&e);
     else
       verts.push_back(&e);
@@ -887,134 +1008,26 @@ bool GroupSpatialGeometryOk(const std::vector<ObservedEdge>& edges, double max_w
   return true;
 }
 
-struct BgColor {
-  int b = 128, g = 128, r = 128;
-  bool valid = false;
-};
-
-// 与导航器画布观测同源的背景色：优先 ThumbnailRoi \ NavigatorCanvas，否则 ROI 边框非红采样。
-BgColor EstimateNavigatorBackground(const ViewportCompletionInput& in, const wb::IntRect& roi) {
-  BgColor bg;
-  long sb = 0, sg = 0, sr = 0;
-  int n = 0;
-  wb::IntRect canvas = in.navigator_canvas_bounds.Clamp(in.width, in.height);
-  const bool has_chrome =
-      canvas.valid() &&
-      (canvas.left > roi.left || canvas.top > roi.top || canvas.right < roi.right ||
-       canvas.bottom < roi.bottom);
-
-  auto accum = [&](int x, int y) {
-    if (x < roi.left || x >= roi.right || y < roi.top || y >= roi.bottom) return;
-    const uint8_t* p =
-        in.bgra + static_cast<size_t>(y) * in.stride + static_cast<size_t>(x) * 4;
-    if (IsNavigatorRedPixel(p)) return;
-    sb += p[0];
-    sg += p[1];
-    sr += p[2];
-    ++n;
-  };
-
-  if (has_chrome) {
-    for (int y = roi.top; y < roi.bottom; ++y) {
-      for (int x = roi.left; x < roi.right; ++x) {
-        if (x >= canvas.left && x < canvas.right && y >= canvas.top && y < canvas.bottom) continue;
-        accum(x, y);
-      }
-    }
-  } else {
-    for (int x = roi.left; x < roi.right; ++x) {
-      accum(x, roi.top);
-      accum(x, roi.bottom - 1);
-    }
-    for (int y = roi.top; y < roi.bottom; ++y) {
-      accum(roi.left, y);
-      accum(roi.right - 1, y);
-    }
-  }
-  if (n < 8) return bg;
-  bg.b = static_cast<int>(sb / n);
-  bg.g = static_cast<int>(sg / n);
-  bg.r = static_cast<int>(sr / n);
-  bg.valid = true;
-  return bg;
-}
-
-bool PixelMatchesBg(const uint8_t* p, const BgColor& bg) {
-  if (!bg.valid) return false;
-  return std::abs(static_cast<int>(p[0]) - bg.b) <= kBgColorTol &&
-         std::abs(static_cast<int>(p[1]) - bg.g) <= kBgColorTol &&
-         std::abs(static_cast<int>(p[2]) - bg.r) <= kBgColorTol;
-}
-
-// 外侧 = 朝向该组矩形假设的框外方向。
-// 粘着判定优先认「落在 NavigatorCanvas 外」；仅有画布外色带时才用背景色模型，
-// 避免 ThumbnailRoi==Canvas 且整幅同色时把所有边都判成粘背景。
-bool EdgeTouchesBackground(const ObservedEdge& e, double left, double right, double top,
-                           double bottom, const ViewportCompletionInput& in, const wb::IntRect& roi,
-                           const wb::IntRect& canvas, const BgColor& bg, bool has_chrome) {
-  const int rw = roi.width();
-  const int rh = roi.height();
-  int hit = 0, total = 0;
-
-  auto sample = [&](int lx, int ly) {
-    if (lx < 0 || ly < 0 || lx >= rw || ly >= rh) return;
-    const int ax = roi.left + lx;
-    const int ay = roi.top + ly;
-    ++total;
-    const bool outside_canvas =
-        ax < canvas.left || ax >= canvas.right || ay < canvas.top || ay >= canvas.bottom;
-    if (outside_canvas) {
-      ++hit;
-      return;
-    }
-    if (!has_chrome || !bg.valid) return;
-    const uint8_t* p =
-        in.bgra + static_cast<size_t>(ay) * in.stride + static_cast<size_t>(ax) * 4;
-    if (PixelMatchesBg(p, bg)) ++hit;
-  };
-
-  // 外侧 = 沿边法向朝框外；框心取当前假设矩形中心（轴对齐近似，旋转时用边中点相对）
-  const double cx = 0.5 * (left + right);
-  const double cy = 0.5 * (top + bottom);
-  const double mx = 0.5 * (e.seg.x0 + e.seg.x1);
-  const double my = 0.5 * (e.seg.y0 + e.seg.y1);
-  double onx = e.nx, ony = e.ny;
-  if ((mx - cx) * onx + (my - cy) * ony < 0) {
-    onx = -onx;
-    ony = -ony;
-  }
-  const double len = EdgeLen(e);
-  const int steps = std::max(4, static_cast<int>(len / 4.0));
-  for (int i = 0; i <= steps; ++i) {
-    const double t = static_cast<double>(i) / static_cast<double>(steps);
-    const double px = e.seg.x0 + (e.seg.x1 - e.seg.x0) * t;
-    const double py = e.seg.y0 + (e.seg.y1 - e.seg.y0) * t;
-    for (int d = 1; d <= kBgOutwardProbePx; ++d) {
-      sample(static_cast<int>(std::lround(px + onx * d)),
-             static_cast<int>(std::lround(py + ony * d)));
-    }
-  }
-  if (total < kBgTouchMinPx) return false;
-  return hit >= kBgTouchMinPx &&
-         static_cast<float>(hit) / static_cast<float>(total) >= kBgTouchRatio;
-}
-
-bool GroupTouchesBackground(const std::vector<ObservedEdge>& edges, double left, double right,
-                            double top, double bottom, const ViewportCompletionInput& in,
-                            const wb::IntRect& roi, const wb::IntRect& canvas, const BgColor& bg,
-                            bool has_chrome) {
-  for (const auto& e : edges) {
-    if (EdgeTouchesBackground(e, left, right, top, bottom, in, roi, canvas, bg, has_chrome))
-      return true;
-  }
-  return false;
-}
-
 bool SizeMatchesTheory(double w, double h, double W_nav, double H_nav) {
   if (!(w > 2.0 && h > 2.0 && W_nav > 2.0 && H_nav > 2.0)) return false;
   const double tw = std::max(kTheorySizeAbsPx, kTheorySizeRel * W_nav);
   const double th = std::max(kTheorySizeAbsPx, kTheorySizeRel * H_nav);
   return std::abs(w - W_nav) <= tw && std::abs(h - H_nav) <= th;
+}
+
+bool AspectMatchesCanvas(double w, double h, double canvas_aspect) {
+  if (!(w > 2.0 && h > 2.0 && canvas_aspect > 1e-4)) return false;
+  const double a = w / h;
+  return std::abs(a - canvas_aspect) <= kCanvasAspectRelTol * canvas_aspect;
+}
+
+// 显示画布形状：理论视口尺寸（W_nav×H_nav）；若关系提供 canvas_aspect_ratio 再加宽高比约束。
+bool ShapeMatchesDisplayedCanvas(double w, double h, double W_nav, double H_nav,
+                                 double canvas_aspect, bool theory_available) {
+  if (!theory_available) return false;
+  if (!SizeMatchesTheory(w, h, W_nav, H_nav)) return false;
+  if (canvas_aspect > 1e-4 && !AspectMatchesCanvas(w, h, canvas_aspect)) return false;
+  return true;
 }
 
 struct GroupCandidate {
@@ -1024,24 +1037,35 @@ struct GroupCandidate {
   int partial_count = 0;
   int unanchored = 0;
   int confirmed_corners = 0;
-  bool touches_background = false;
   bool completed_ok = false;
   bool used_crop_correspondence = false;
   ViewportCompletionPattern pattern = ViewportCompletionPattern::FourCompleteEdges;
   NavigatorViewportFrame frame{};
 };
 
-bool IndicesEqualSorted(std::vector<int> a, std::vector<int> b) {
-  std::sort(a.begin(), a.end());
-  std::sort(b.begin(), b.end());
-  return a == b;
-}
-
-bool IsSubsetIndices(const std::vector<int>& sub, const std::vector<int>& super) {
-  for (int x : sub) {
-    if (std::find(super.begin(), super.end(), x) == super.end()) return false;
+// 沿组内观测红段采样：窄红支撑率达到门槛才通过（多组并列时用）。
+bool GroupNarrowRedChromaOk(const GroupCandidate& g, const ViewportCompletionInput& in,
+                            const wb::IntRect& roi) {
+  int total = 0;
+  int narrow = 0;
+  for (const auto& e : g.edges) {
+    const double len = EdgeLen(e);
+    const int steps = std::max(4, static_cast<int>(len / 3.0));
+    for (int i = 0; i <= steps; ++i) {
+      const double t = static_cast<double>(i) / static_cast<double>(steps);
+      const int lx = static_cast<int>(std::lround(e.seg.x0 + (e.seg.x1 - e.seg.x0) * t));
+      const int ly = static_cast<int>(std::lround(e.seg.y0 + (e.seg.y1 - e.seg.y0) * t));
+      const int ax = roi.left + lx;
+      const int ay = roi.top + ly;
+      if (ax < roi.left || ax >= roi.right || ay < roi.top || ay >= roi.bottom) continue;
+      const uint8_t* p =
+          in.bgra + static_cast<size_t>(ay) * in.stride + static_cast<size_t>(ax) * 4;
+      ++total;
+      if (IsNarrowNavigatorRedPixel(p)) ++narrow;
+    }
   }
-  return true;
+  if (total < kNarrowRedMinSamples) return false;
+  return static_cast<float>(narrow) / static_cast<float>(total) >= kNarrowRedSupportMin;
 }
 
 // 对单组做 pattern 补全；失败则 completed_ok=false（淘汰，不硬编矩形）。
@@ -1070,10 +1094,217 @@ void ExportGroupRedEdges(NavigatorViewportFrame& frame, const std::vector<Observ
   }
 }
 
+// Recover in the screen viewport's directed basis in thumbnail pixels, never
+// in the thumbnail AABB. A main-canvas clockwise rotation gives an inverse
+// rotation of screen axes in the (unrotated) navigator.
+bool CompleteDirectedGroup(GroupCandidate& g, const ViewportCompletionInput& in,
+                           const wb::IntRect& roi) {
+  if (g.edges.empty()) return false;
+  wb::IntRect canvas_abs = in.navigator_canvas_bounds.Clamp(in.width, in.height);
+  if (!canvas_abs.valid()) canvas_abs = roi;
+  const wb::IntRect canvas_local{
+      canvas_abs.left - roi.left, canvas_abs.top - roi.top,
+      canvas_abs.right - roi.left, canvas_abs.bottom - roi.top};
+  constexpr double rad = 0.017453292519943295;
+  const bool have_angle = in.display_rotation_confidence >= 0.2f &&
+                          std::isfinite(in.display_rotation_degrees);
+  const double expected = have_angle ? -in.display_rotation_degrees * rad : 0.0;
+  const Vec2 hint{std::cos(expected), std::sin(expected)};
+  Vec2 ax{g.edges[0].ux, g.edges[0].uy};
+  if (std::abs(ax.x * hint.x + ax.y * hint.y) < 0.70710678)
+    ax = {-ax.y, ax.x};
+  if (ax.x * hint.x + ax.y * hint.y < 0) ax = {-ax.x, -ax.y};
+  if (have_angle && ax.x * hint.x + ax.y * hint.y < std::cos(5 * rad)) return false;
+  const Vec2 ay{-ax.y, ax.x};
+  std::vector<ObservedEdge*> xs, ys; // constant x (L/R), constant y (T/B)
+  auto px = [&](const ObservedEdge* e) { return ax.x * EdgePosX(*e) + ax.y * EdgePosY(*e); };
+  auto py = [&](const ObservedEdge* e) { return ay.x * EdgePosX(*e) + ay.y * EdgePosY(*e); };
+  g.complete_count = g.partial_count = g.unanchored = g.confirmed_corners = 0;
+  for (auto& e : g.edges) {
+    if (std::abs(e.ux * ax.x + e.uy * ax.y) > 0.70710678) ys.push_back(&e);
+    else xs.push_back(&e);
+    if (e.complete) ++g.complete_count;
+    else if (e.has_start_corner || e.has_end_corner) ++g.partial_count;
+    else ++g.unanchored;
+    g.confirmed_corners += int(e.has_start_corner) + int(e.has_end_corner);
+  }
+  if (xs.empty() || ys.empty() || xs.size() > 2 || ys.size() > 2) return false;
+  std::sort(xs.begin(), xs.end(), [&](auto a, auto b) { return px(a) < px(b); });
+  std::sort(ys.begin(), ys.end(), [&](auto a, auto b) { return py(a) < py(b); });
+  double l = px(xs.front()), r = px(xs.back());
+  double t = py(ys.front()), b = py(ys.back());
+  const auto& wr = in.workspace_canvas_relation.workspace_roi;
+  const double aspect = wr.valid() ? double(wr.width()) / wr.height() : 0;
+  if (g.edges.size() == 3 && g.complete_count == 0) return false;
+  // A clipped three-side U determines one size and which way the absent
+  // opposite edge lies. Workspace aspect supplies the other size.
+  if (xs.size() == 1 && ys.size() == 2) {
+    if (!(aspect > 0 && b - t > 2)) return false;
+    const double mid = 0.5 * (px(ys[0]) + px(ys[1]));
+    if (std::abs(mid - l) < 2) return false;
+    if (mid > l) r = l + (b - t) * aspect;
+    else l = r - (b - t) * aspect;
+  } else if (ys.size() == 1 && xs.size() == 2) {
+    if (!(aspect > 0 && r - l > 2)) return false;
+    const double mid = 0.5 * (py(xs[0]) + py(xs[1]));
+    if (std::abs(mid - t) < 2) return false;
+    if (mid > t) b = t + (r - l) / aspect;
+    else t = b - (r - l) / aspect;
+  } else if (xs.size() == 1 && ys.size() == 1) {
+    // Two adjacent clipped sides still identify one viewport corner.  This is
+    // the oblique equivalent of pattern 0.2 in the axis-aligned path.  Recover
+    // the missing extent from WCR coverage when available; otherwise use the
+    // observed arms plus the workspace aspect (the same conservative fallback
+    // used by the axis-aligned implementation).
+    double width = 0, height = 0;
+    const double x_len = EdgeLengthInsideCanvas(*ys.front(), canvas_local);
+    const double y_len = EdgeLengthInsideCanvas(*xs.front(), canvas_local);
+    const double share_x = in.workspace_canvas_relation.visible_canvas_workspace_fraction_x;
+    const double share_y = in.workspace_canvas_relation.visible_canvas_workspace_fraction_y;
+    if (share_x > 1e-4 && share_x <= 1.001 && std::isfinite(share_x) && x_len >= 2.0)
+      width = x_len / share_x;
+    if (share_y > 1e-4 && share_y <= 1.001 && std::isfinite(share_y) && y_len >= 2.0)
+      height = y_len / share_y;
+    if (width <= 4.0 && height > 4.0 && aspect > 0) width = height * aspect;
+    if (height <= 4.0 && width > 4.0 && aspect > 0) height = width / aspect;
+    if (width <= 4.0 || height <= 4.0) {
+      if (!(aspect > 0 && x_len >= 2.0 && y_len >= 2.0)) return false;
+      width = x_len;
+      height = y_len;
+      const double height_from_x = width / aspect;
+      const double width_from_y = height * aspect;
+      if (std::abs(height_from_x - height) <= std::abs(width_from_y - width))
+        height = height_from_x;
+      else
+        width = width_from_y;
+    }
+
+    double ix = 0, iy = 0;
+    if (!LineIntersection(*xs.front(), *ys.front(), ix, iy)) return false;
+    const double corner_x = ax.x * ix + ax.y * iy;
+    const double corner_y = ay.x * ix + ay.y * iy;
+    // The observed arm midpoints tell which direction each side leaves the
+    // corner, so this works for all four corners without screen-axis guesses.
+    const bool extends_right = px(ys.front()) >= corner_x;
+    const bool extends_down = py(xs.front()) >= corner_y;
+    l = extends_right ? corner_x : corner_x - width;
+    r = l + width;
+    t = extends_down ? corner_y : corner_y - height;
+    b = t + height;
+  }
+  if (!(r - l > 2 && b - t > 2)) return false;
+  for (auto* e : xs) e->workspace_edge = std::abs(px(e) - l) < std::abs(px(e) - r) ? kEdgeL : kEdgeR;
+  for (auto* e : ys) e->workspace_edge = std::abs(py(e) - t) < std::abs(py(e) - b) ? kEdgeT : kEdgeB;
+  auto& f = g.frame;
+  f = NavigatorViewportFrame{};
+  f.origin_top_left_displayed = {roi.left + 0.5 + ax.x * l + ay.x * t,
+                                roi.top + 0.5 + ax.y * l + ay.y * t};
+  f.axis_x_displayed = {ax.x * (r - l), ax.y * (r - l)};
+  f.axis_y_displayed = {ay.x * (b - t), ay.y * (b - t)};
+  SetCorners(f);
+  g.pattern = g.complete_count >= 4 ? ViewportCompletionPattern::FourCompleteEdges
+      : g.complete_count == 3 ? ViewportCompletionPattern::ThreeCompleteEdges
+      : g.complete_count == 2 ? ViewportCompletionPattern::TwoIntersectingCompleteEdges
+      : g.complete_count == 1 ? ViewportCompletionPattern::OneCompleteEdge
+      : ViewportCompletionPattern::IntersectingSegmentsNoCompleteEdge;
+  f.completion_strategy = static_cast<int>(g.pattern);
+  f.visible_edge_count = static_cast<int>(g.edges.size());
+  f.red_evidence.segment_count = f.visible_edge_count;
+  for (int i = 0; i < f.visible_edge_count; ++i) f.red_evidence.segments[i] = g.edges[i].seg;
+  f.red_evidence.confirmed_complete_edge_count = g.complete_count;
+  f.red_evidence.partial_edge_count = g.partial_count;
+  f.red_evidence.unanchored_segment_count = g.unanchored;
+  f.red_evidence.confirmed_corner_count = g.confirmed_corners;
+  f.red_evidence.completion_pattern = g.pattern;
+  f.confidence = std::min(1.f, 0.15f * f.visible_edge_count + 0.1f * g.complete_count);
+  g.completed_ok = true;
+  return true;
+}
+
+// A single clipped line has no midpoint correspondence with the workspace.
+// Recover scale from an uncropped canvas dimension, and translation from the
+// observed canvas boundary. Validate every red line against that prediction.
+bool CompleteFromVisibleCanvas(GroupCandidate& g, const ViewportCompletionInput& in,
+                               const wb::IntRect& roi) {
+  const auto& rel = in.workspace_canvas_relation;
+  const auto& wr = rel.workspace_roi;
+  const auto& v = rel.visible_canvas_bounds_workspace_local;
+  const auto& nc = in.navigator_canvas_bounds;
+  if (!wr.valid() || !v.valid() || !nc.valid() || rel.ambiguous ||
+      in.display_rotation_confidence < 0.2f || !std::isfinite(in.display_rotation_degrees)) return false;
+  const double angle = std::remainder(in.display_rotation_degrees, 360.0);
+  const int q = static_cast<int>(std::lround(angle / 90.0));
+  if (std::abs(angle - q * 90.0) > 0.05) return false;
+  const int crop = rel.canvas_crop_sides;
+  const bool fullX = !(crop & (kEdgeL | kEdgeR));
+  const bool fullY = !(crop & (kEdgeT | kEdgeB));
+  if ((!fullX && !fullY) || (crop & (kEdgeL|kEdgeR)) == (kEdgeL|kEdgeR) ||
+      (crop & (kEdgeT|kEdgeB)) == (kEdgeT|kEdgeB)) return false;
+  const bool swap = (std::abs(q) % 2) != 0;
+  const double nw = swap ? nc.height() : nc.width();
+  const double nh = swap ? nc.width() : nc.height();
+  const double scale = fullX ? nw / v.width() : nh / v.height();
+  if (!(scale > 0)) return false;
+  const double fw = nw / scale, fh = nh / scale;
+  const double left = (crop & kEdgeL) ? v.right-fw : v.left;
+  const double top = (crop & kEdgeT) ? v.bottom-fh : v.top;
+  const double a = -angle * 0.017453292519943295;
+  const Vec2 ax{std::cos(a),std::sin(a)}, ay{-std::sin(a),std::cos(a)};
+  // Rotate about the canvas center in physical thumbnail pixels.
+  const Vec2 origin{nc.left+nc.width()*0.5-scale*(ax.x*(left+fw*0.5)+ay.x*(top+fh*0.5)),
+                    nc.top+nc.height()*0.5-scale*(ax.y*(left+fw*0.5)+ay.y*(top+fh*0.5))};
+  const double width = wr.width()*scale, height = wr.height()*scale;
+  for (auto& e : g.edges) {
+    const double dx = roi.left+0.5+EdgePosX(e)-origin.x;
+    const double dy = roi.top+0.5+EdgePosY(e)-origin.y;
+    const bool horizontal = std::abs(e.ux*ax.x+e.uy*ax.y) > 0.99;
+    const double coordinate = horizontal ? dx*ay.x+dy*ay.y : dx*ax.x+dy*ax.y;
+    const double extent = horizontal ? height : width;
+    if (std::min(std::abs(coordinate),std::abs(coordinate-extent)) > 3.0) return false;
+    e.workspace_edge = horizontal ? (coordinate < extent*0.5 ? kEdgeT : kEdgeB)
+                                  : (coordinate < extent*0.5 ? kEdgeL : kEdgeR);
+  }
+  auto& f = g.frame;
+  f.origin_top_left_displayed = origin;
+  f.axis_x_displayed = {ax.x*width,ax.y*width};
+  f.axis_y_displayed = {ay.x*height,ay.y*height};
+  SetCorners(f);
+  f.visible_edge_count = static_cast<int>(g.edges.size());
+  // This recovery is driven by the visible-canvas/workspace relation.  It does
+  // not turn a fragment into a geometrically complete red edge.  Report the
+  // evidence pattern truthfully so a lone/parallel fragment remains route 0.1
+  // (and orthogonal fragments remain 0.2) instead of being mislabeled 1.0.
+  bool has_horizontal = false;
+  bool has_vertical = false;
+  for (const auto& e : g.edges) {
+    const bool along_x = std::abs(e.ux * ax.x + e.uy * ax.y) > 0.99;
+    has_horizontal = has_horizontal || along_x;
+    has_vertical = has_vertical || !along_x;
+  }
+  g.pattern = has_horizontal && has_vertical
+                  ? ViewportCompletionPattern::IntersectingSegmentsNoCompleteEdge
+                  : ViewportCompletionPattern::ParallelSegmentsNoCompleteEdge;
+  f.completion_strategy = static_cast<int>(g.pattern);
+  f.red_evidence.completion_pattern = g.pattern;
+  f.red_evidence.segment_count = f.visible_edge_count;
+  for (int i=0;i<f.visible_edge_count;++i) f.red_evidence.segments[i] = g.edges[i].seg;
+  f.confidence = std::min(rel.confidence, 0.85f);
+  g.completed_ok = true;
+  return true;
+}
+
 bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
                           const wb::IntRect& roi, int rw, int rh,
                           bool* used_crop_correspondence) {
   AnnotateGroupRightAngles(g.edges);
+  // In 0.1/0.2 the observed red fragment is scaled by the corresponding
+  // displayed-canvas/workspace ratio, then the missing axis follows the
+  // workspace aspect.  Do not substitute a whole-workspace prediction here.
+  bool oblique = false;
+  for (const auto& e : g.edges)
+    if (std::abs(e.ux) > 0.01 && std::abs(e.uy) > 0.01) oblique = true;
+  if (oblique)
+    return CompleteDirectedGroup(g, in, roi);
 
   wb::IntRect canvas_abs = in.navigator_canvas_bounds.Clamp(in.width, in.height);
   if (!canvas_abs.valid()) canvas_abs = roi;
@@ -1088,10 +1319,22 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
     const CropAssignResult cr = AssignEdgesByCropCorrespondence(
         g.edges, crop_sides, canvas_local, in.display_rotation_degrees,
         in.display_rotation_confidence);
-    if (cr != CropAssignResult::Applied) return false;
-    crop_path = true;
-    g.used_crop_correspondence = true;
-    if (used_crop_correspondence) *used_crop_correspondence = true;
+    if (cr == CropAssignResult::Applied) {
+      crop_path = true;
+      g.used_crop_correspondence = true;
+      if (used_crop_correspondence) *used_crop_correspondence = true;
+    } else if (cr == CropAssignResult::Ambiguous) {
+      return false;
+    } else {
+      // Failed / NotApplicable：边不够或切不到时回退，勿整组直接杀掉
+      const int q =
+          ResolveDisplayQuarter(in.display_rotation_degrees, in.display_rotation_confidence);
+      if (q >= 0 && AssignEdgesByDisplayRotation(g.edges, q, rw, rh)) {
+        rotation_path = true;
+      } else if (!AssignGroupWorkspaceEdgesLegacy(g.edges)) {
+        return false;
+      }
+    }
   } else {
     const int q =
         ResolveDisplayQuarter(in.display_rotation_degrees, in.display_rotation_confidence);
@@ -1101,6 +1344,11 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
       return false;
     }
   }
+
+  if (in.display_rotation_confidence >= 0.2f &&
+      (g.edges.size() == 4 ||
+       (g.edges.size() == 3 && in.workspace_canvas_relation.workspace_roi.valid())))
+    return CompleteDirectedGroup(g, in, roi);
 
   const bool use_geom_placement = crop_path || rotation_path;
 
@@ -1143,7 +1391,9 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
     g.pattern = p;
   };
 
-  const double aspect = in.workspace_canvas_relation.canvas_aspect_ratio > 1e-6
+  const auto& workspace = in.workspace_canvas_relation.workspace_roi;
+  const double aspect = workspace.valid() ? double(workspace.width()) / workspace.height()
+      : in.workspace_canvas_relation.canvas_aspect_ratio > 1e-6
                             ? in.workspace_canvas_relation.canvas_aspect_ratio
                             : 1.0;
   const auto& wcr = in.workspace_canvas_relation;
@@ -1201,64 +1451,185 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
   };
 
   auto recover_size_from_vertical = [&](const ObservedEdge& e, double& w, double& h) -> bool {
-    const float share_y = wcr.visible_canvas_workspace_fraction_y;
-    const double covered = EdgeLen(e);
-    if (share_y > 1e-4f && covered >= 2.0) {
-      h = covered / share_y;
+    // Recover the full vertical viewport extent from the portion that cuts the
+    // displayed canvas: P / (workspaceHeight / visibleCanvasHeight).  Once an
+    // axis is recovered, the workspace aspect is the only authority for the
+    // missing axis; do not mix in a full-canvas-model scale here.
+    const auto& visible = wcr.visible_canvas_bounds_workspace_local;
+    const double observed_h = EdgeLengthInsideCanvas(e, canvas_local);
+    if (workspace.valid() && observed_h >= 2.0) {
+      const double ratio = visible.valid() && workspace.height() > 0
+          ? static_cast<double>(visible.height()) / workspace.height()
+          : wcr.visible_canvas_workspace_fraction_y;
+      if (!(ratio > 1e-4 && ratio <= 1.001 && std::isfinite(ratio))) return false;
+      h = observed_h / ratio;
       w = h * aspect;
       return w > 4.0 && h > 4.0;
     }
     return false;
   };
   auto recover_size_from_horizontal = [&](const ObservedEdge& e, double& w, double& h) -> bool {
-    const float share_x = wcr.visible_canvas_workspace_fraction_x;
-    const double covered = EdgeLen(e);
-    if (share_x > 1e-4f && covered >= 2.0) {
-      w = covered / share_x;
+    // Horizontal counterpart: P / (workspaceWidth / visibleCanvasWidth).
+    const auto& visible = wcr.visible_canvas_bounds_workspace_local;
+    const double observed_w = EdgeLengthInsideCanvas(e, canvas_local);
+    if (workspace.valid() && observed_w >= 2.0) {
+      const double ratio = visible.valid() && workspace.width() > 0
+          ? static_cast<double>(visible.width()) / workspace.width()
+          : wcr.visible_canvas_workspace_fraction_x;
+      if (!(ratio > 1e-4 && ratio <= 1.001 && std::isfinite(ratio))) return false;
+      w = observed_w / ratio;
       h = w / aspect;
       return w > 4.0 && h > 4.0;
     }
     return false;
   };
 
-  auto recover_h = [&](const ObservedEdge& e, double& w, double& h) -> bool {
-    if (recover_size_from_horizontal(e, w, h)) return true;
-    if (!use_geom_placement) return false;
-    h = std::max(EdgeLen(e), 8.0);
-    w = std::max(h * aspect, 8.0);
-    return true;
-  };
-  auto recover_v = [&](const ObservedEdge& e, double& w, double& h) -> bool {
-    if (recover_size_from_vertical(e, w, h)) return true;
-    if (!use_geom_placement) return false;
-    w = std::max(EdgeLen(e), 8.0);
-    h = std::max(w / aspect, 8.0);
-    return true;
+  // 0.2 has two independent observations of the same navigator scale: the
+  // horizontal partial edge and the vertical partial edge.  The old path used
+  // whichever recovery happened to run first, which makes the result depend on
+  // edge enumeration and turns a small extraction error on one edge into a
+  // translation/scale error for the whole frame.
+  //
+  // Recover one common scale from both clipped segment lengths.  The least
+  // squares form below is the symmetric fit of
+  //   len_h = scale * visible_canvas_width
+  //   len_v = scale * visible_canvas_height
+  // and therefore does not privilege either edge.  A large residual means the
+  // pair is not one rectangle (or one of the role/clip measurements is wrong),
+  // so the pair is rejected instead of silently choosing one side.
+  auto recover_size_from_orthogonal_pair = [&](const ObservedEdge& v,
+                                               const ObservedEdge& h,
+                                               double& w, double& hgt) -> bool {
+    const auto& visible = wcr.visible_canvas_bounds_workspace_local;
+    if (!workspace.valid() || !visible.valid()) {
+      // The relation normally carries the visible canvas bounds.  Keep the
+      // stored fractions as a bounded fallback for synthetic/replay inputs.
+      if (!workspace.valid()) return false;
+    }
+
+    const double workspace_w = static_cast<double>(workspace.width());
+    const double workspace_h = static_cast<double>(workspace.height());
+    const double contact_w = visible.valid()
+        ? static_cast<double>(visible.width())
+        : workspace_w * static_cast<double>(wcr.visible_canvas_workspace_fraction_x);
+    const double contact_h = visible.valid()
+        ? static_cast<double>(visible.height())
+        : workspace_h * static_cast<double>(wcr.visible_canvas_workspace_fraction_y);
+    const double observed_w = EdgeLengthInsideCanvas(h, canvas_local);
+    const double observed_h = EdgeLengthInsideCanvas(v, canvas_local);
+    if (!(workspace_w > 0 && workspace_h > 0 && contact_w > 1e-4 && contact_h > 1e-4 &&
+          observed_w >= 2.0 && observed_h >= 2.0 &&
+          std::isfinite(contact_w) && std::isfinite(contact_h) &&
+          std::isfinite(observed_w) && std::isfinite(observed_h))) {
+      return false;
+    }
+
+    const double denom = contact_w * contact_w + contact_h * contact_h;
+    if (!(denom > 1e-8) || !std::isfinite(denom)) return false;
+    const double scale = (contact_w * observed_w + contact_h * observed_h) / denom;
+    if (!(scale > 0 && std::isfinite(scale))) return false;
+
+    const double fit_w = scale * contact_w;
+    const double fit_h = scale * contact_h;
+    const double residual_w = std::abs(fit_w - observed_w) / std::max(observed_w, 1.0);
+    const double residual_h = std::abs(fit_h - observed_h) / std::max(observed_h, 1.0);
+    constexpr double kMaxPairLengthResidual = 0.30;
+    if (!std::isfinite(residual_w) || !std::isfinite(residual_h) ||
+        residual_w > kMaxPairLengthResidual || residual_h > kMaxPairLengthResidual) {
+      return false;
+    }
+
+    w = scale * workspace_w;
+    hgt = scale * workspace_h;
+    return w > 4.0 && hgt > 4.0 && std::isfinite(w) && std::isfinite(hgt);
   };
 
-  auto place_vertical_edge = [&](const ObservedEdge& e, double w, double h) {
-    const double cy = abs_y(EdgePosY(e));
-    const double ex = EdgePosX(e);
-    const bool is_geom_left =
-        use_geom_placement ? (0.5 * (canvas_local.left + canvas_local.right) > ex)
-                           : ((e.workspace_edge == kEdgeL) ||
-                              (e.workspace_edge == 0 && ex < rw * 0.5));
-    frame.origin_top_left_displayed = {
-        is_geom_left ? abs_x(ex) : abs_x(ex) - w, cy - h * 0.5};
-    frame.axis_x_displayed = {w, 0};
-    frame.axis_y_displayed = {0, h};
-  };
-  auto place_horizontal_edge = [&](const ObservedEdge& e, double w, double h) {
-    const double cx = abs_x(EdgePosX(e));
-    const double ey = EdgePosY(e);
-    const bool is_geom_top =
-        use_geom_placement ? (0.5 * (canvas_local.top + canvas_local.bottom) > ey)
-                           : ((e.workspace_edge == kEdgeT) ||
-                              (e.workspace_edge == 0 && ey < rh * 0.5));
-    frame.origin_top_left_displayed = {
-        cx - w * 0.5, is_geom_top ? abs_y(ey) : abs_y(ey) - h};
-    frame.axis_x_displayed = {w, 0};
-    frame.axis_y_displayed = {0, h};
+  // Complete one observed fragment into one factual viewport side.  The red
+  // fragment inside the Navigator paper corresponds to the interval where the
+  // matching workspace boundary touches the visible canvas.  Both interval
+  // length and interval offset are required; centering the recovered side on
+  // the fragment would invent axial symmetry and lose translation.
+  auto complete_partial_edge_as_one = [&](const ObservedEdge& e) -> bool {
+    const int role = e.workspace_edge;
+    const bool semantic_horizontal = role == kEdgeT || role == kEdgeB;
+    const bool semantic_vertical = role == kEdgeL || role == kEdgeR;
+    if (!semantic_horizontal && !semantic_vertical) return false;
+    if (!workspace.valid()) return false;
+    const auto& visible = wcr.visible_canvas_bounds_workspace_local;
+    if (!visible.valid()) return false;
+
+    Vec2 cut0{}, cut1{};
+    if (!ClipEdgeToCanvas(e, canvas_local, &cut0, &cut1)) return false;
+
+    Vec2 ax{}, ay{};
+    if (in.display_rotation_confidence >= 0.2f &&
+        std::isfinite(in.display_rotation_degrees)) {
+      constexpr double kRad = 0.017453292519943295;
+      const double a = -in.display_rotation_degrees * kRad;
+      ax = {std::cos(a), std::sin(a)};
+      ay = {-ax.y, ax.x};
+    } else if (semantic_horizontal) {
+      // The sign cannot be proven without a directed angle.  Preserve the
+      // ordinary screen-forward orientation; importantly, still use the
+      // workspace contact offset rather than a symmetric midpoint.
+      ax = std::abs(e.ux) >= std::abs(e.uy) ? Vec2{1, 0} : Vec2{0, 1};
+      ay = {-ax.y, ax.x};
+    } else {
+      ay = std::abs(e.ux) >= std::abs(e.uy) ? Vec2{1, 0} : Vec2{0, 1};
+      ax = {ay.y, -ay.x};
+    }
+
+    const Vec2 tangent = semantic_horizontal ? ax : ay;
+    if (std::abs(e.ux * tangent.x + e.uy * tangent.y) < 0.98) return false;
+    const double contact_start = semantic_horizontal ? visible.left : visible.top;
+    const double contact_length = semantic_horizontal ? visible.width() : visible.height();
+    const double total_length = semantic_horizontal ? workspace.width() : workspace.height();
+    if (!(contact_length > 0 && total_length > 0 && contact_length <= total_length)) return false;
+
+    const double p0 = Dot2(cut0.x, cut0.y, tangent.x, tangent.y);
+    const double p1 = Dot2(cut1.x, cut1.y, tangent.x, tangent.y);
+    const double observed_length = std::abs(p1 - p0);
+    if (!(observed_length >= 2.0)) return false;
+    const double pixels_per_workspace = observed_length / contact_length;
+    const double side_length = pixels_per_workspace * total_length;
+    const double side_start_projection = std::min(p0, p1) - contact_start * pixels_per_workspace;
+    const Vec2 reference = p0 <= p1 ? cut0 : cut1;
+    const double reference_projection = std::min(p0, p1);
+    const Vec2 side_start{
+        reference.x + tangent.x * (side_start_projection - reference_projection),
+        reference.y + tangent.y * (side_start_projection - reference_projection)};
+
+    frame = NavigatorViewportFrame{};
+    frame.visible_edge_count = static_cast<int>(g.edges.size());
+    frame.red_evidence.segment_count = 0;
+    for (const auto& observed : g.edges) {
+      if (frame.red_evidence.segment_count >= 32) break;
+      frame.red_evidence.segments[frame.red_evidence.segment_count++] = observed.seg;
+    }
+    frame.red_evidence.confirmed_complete_edge_count = 0;
+    frame.red_evidence.partial_edge_count = g.partial_count;
+    frame.red_evidence.unanchored_segment_count = g.unanchored;
+    frame.red_evidence.confirmed_corner_count = g.confirmed_corners;
+    set_pattern(ViewportCompletionPattern::ParallelSegmentsNoCompleteEdge);
+
+    if (semantic_horizontal) {
+      const double height = side_length / aspect;
+      if (!(height > 4.0 && std::isfinite(height))) return false;
+      frame.axis_x_displayed = {tangent.x * side_length, tangent.y * side_length};
+      frame.axis_y_displayed = {ay.x * height, ay.y * height};
+      frame.origin_top_left_displayed = {
+          abs_x(side_start.x) - (role == kEdgeB ? frame.axis_y_displayed.x : 0.0),
+          abs_y(side_start.y) - (role == kEdgeB ? frame.axis_y_displayed.y : 0.0)};
+    } else {
+      const double width = side_length * aspect;
+      if (!(width > 4.0 && std::isfinite(width))) return false;
+      frame.axis_x_displayed = {ax.x * width, ax.y * width};
+      frame.axis_y_displayed = {tangent.x * side_length, tangent.y * side_length};
+      frame.origin_top_left_displayed = {
+          abs_x(side_start.x) - (role == kEdgeR ? frame.axis_x_displayed.x : 0.0),
+          abs_y(side_start.y) - (role == kEdgeR ? frame.axis_x_displayed.y : 0.0)};
+    }
+    return finish_ok(1);
   };
 
   ObservedEdge* L = FindEdge(g.edges, kEdgeL);
@@ -1401,7 +1772,11 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
       const double vx = EdgePosX(*p.a);
       const double hy = EdgePosY(*p.b);
       double w = 0, h = 0;
-      if (!recover_size_from_vertical(*p.a, w, h) && !recover_size_from_horizontal(*p.b, w, h)) {
+      // One recovered axis plus workspace aspect defines the frame.  The
+      // perpendicular fragment remains positional evidence for the corner;
+      // it must not introduce a second, inconsistent scale.
+      if (!recover_size_from_vertical(*p.a, w, h) &&
+          !recover_size_from_horizontal(*p.b, w, h)) {
         h = EdgeLen(*p.a);
         w = EdgeLen(*p.b);
         if (w < 4 || h < 4) return false;
@@ -1412,12 +1787,16 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
         else
           w = w2;
       }
-      const bool left =
-          use_geom_placement ? (0.5 * (canvas_local.left + canvas_local.right) > vx)
-                             : (p.a->workspace_edge == kEdgeL);
-      const bool top =
-          use_geom_placement ? (0.5 * (canvas_local.top + canvas_local.bottom) > hy)
-                             : (p.b->workspace_edge == kEdgeT);
+      const bool left = p.a->workspace_edge == kEdgeL
+          ? true
+          : p.a->workspace_edge == kEdgeR
+              ? false
+              : (0.5 * (canvas_local.left + canvas_local.right) > vx);
+      const bool top = p.b->workspace_edge == kEdgeT
+          ? true
+          : p.b->workspace_edge == kEdgeB
+              ? false
+              : (0.5 * (canvas_local.top + canvas_local.bottom) > hy);
       const double ox = left ? abs_x(vx) : abs_x(vx) - w;
       const double oy = top ? abs_y(hy) : abs_y(hy) - h;
       frame.origin_top_left_displayed = {ox, oy};
@@ -1444,39 +1823,42 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
         }
     }
     if (!e) return false;
-    double w = 0, h = 0;
+    // 1.0 means this *whole* viewport side was observed.  Its two endpoints
+    // already fix the tangential component of the viewport frame, so it must
+    // never go through the 0.1/0.2 fragment-scale recovery or be re-centred.
+    // Preserve that side verbatim and complete only its missing normal axis
+    // from the workspace aspect; the resulting frame then goes straight to
+    // the common Screen→Canvas matrix solver.
+    const double edge_len = EdgeLen(*e);
+    if (!(edge_len > 4.0) || !std::isfinite(edge_len)) return false;
     if (e->seg.horizontal) {
-      if (!recover_h(*e, w, h)) return false;
-      place_horizontal_edge(*e, w, h);
+      const double w = edge_len;
+      const double h = w / aspect;
+      if (!(h > 4.0) || !std::isfinite(h)) return false;
+      const double left = std::min(e->seg.x0, e->seg.x1);
+      const double ey = EdgePosY(*e);
+      const bool is_top =
+          use_geom_placement ? (0.5 * (canvas_local.top + canvas_local.bottom) > ey)
+                             : (e->workspace_edge == kEdgeT ||
+                                (e->workspace_edge == 0 && ey < rh * 0.5));
+      frame.origin_top_left_displayed = {abs_x(left), is_top ? abs_y(ey) : abs_y(ey) - h};
+      frame.axis_x_displayed = {w, 0};
+      frame.axis_y_displayed = {0, h};
     } else {
-      if (!recover_v(*e, w, h)) return false;
-      place_vertical_edge(*e, w, h);
+      const double h = edge_len;
+      const double w = h * aspect;
+      if (!(w > 4.0) || !std::isfinite(w)) return false;
+      const double ex = EdgePosX(*e);
+      const double top = std::min(e->seg.y0, e->seg.y1);
+      const bool is_left =
+          use_geom_placement ? (0.5 * (canvas_local.left + canvas_local.right) > ex)
+                             : (e->workspace_edge == kEdgeL ||
+                                (e->workspace_edge == 0 && ex < rw * 0.5));
+      frame.origin_top_left_displayed = {is_left ? abs_x(ex) : abs_x(ex) - w, abs_y(top)};
+      frame.axis_x_displayed = {w, 0};
+      frame.axis_y_displayed = {0, h};
     }
     return finish_ok(1);
-  }
-
-  // 无完整直角边时：切割/旋转路径仍可用已指派切割边补全视口
-  if (g.complete_count == 0 && use_geom_placement) {
-    const ObservedEdge* anchor = nullptr;
-    for (const auto& ed : g.edges)
-      if (ed.workspace_edge != 0) {
-        anchor = &ed;
-        break;
-      }
-    if (anchor) {
-      set_pattern(g.edges.size() >= 2 && n_h > 0 && n_v > 0
-                      ? ViewportCompletionPattern::IntersectingSegmentsNoCompleteEdge
-                      : ViewportCompletionPattern::ParallelSegmentsNoCompleteEdge);
-      double w = 0, h = 0;
-      if (anchor->seg.horizontal) {
-        if (!recover_h(*anchor, w, h)) return false;
-        place_horizontal_edge(*anchor, w, h);
-      } else {
-        if (!recover_v(*anchor, w, h)) return false;
-        place_vertical_edge(*anchor, w, h);
-      }
-      return finish_ok(0);
-    }
   }
 
   // complete_count == 0 → 0.1 or 0.2
@@ -1486,14 +1868,9 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
     const ObservedEdge* best = &g.edges[0];
     for (const auto& e : g.edges)
       if (EdgeLen(e) > EdgeLen(*best)) best = &e;
-    double w = 0, h = 0;
-    if (best->seg.horizontal) {
-      if (!recover_h(*best, w, h)) return false;
-      place_horizontal_edge(*best, w, h);
-    } else {
-      if (!recover_v(*best, w, h)) return false;
-      place_vertical_edge(*best, w, h);
-    }
+    if (!complete_partial_edge_as_one(*best)) return false;
+    const double w = frame.width;
+    const double h = frame.height;
     if (g.edges.size() >= 2 && !best->seg.horizontal) {
       const ObservedEdge* other = nullptr;
       for (const auto& e : g.edges)
@@ -1551,29 +1928,31 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
       }
     }
   }
-  if (!v || !hz || best_dist > 24.0) return false;
+  if (!v || !hz) return false;
 
   double w = 0, h = 0;
-  if (!recover_size_from_vertical(*v, w, h) && !recover_size_from_horizontal(*hz, w, h)) {
-    h = std::max(EdgeLen(*v), 8.0);
-    w = std::max(EdgeLen(*hz), 8.0);
-    const double h2 = w / aspect;
-    const double w2 = h * aspect;
-    if (std::abs(h2 - h) <= std::abs(w2 - w))
-      h = h2;
-    else
-      w = w2;
-  }
+  if (!recover_size_from_orthogonal_pair(*v, *hz, w, h)) return false;
 
-  const double vx = EdgePosX(*v);
-  const double hy = EdgePosY(*hz);
-  const bool left =
-      use_geom_placement ? (0.5 * (canvas_local.left + canvas_local.right) > vx)
-                         : ((v->workspace_edge == kEdgeL) || (v->workspace_edge == 0 && vx < rw * 0.5));
-  const bool top =
-      use_geom_placement ? (0.5 * (canvas_local.top + canvas_local.bottom) > hy)
-                         : ((hz->workspace_edge == kEdgeT) ||
-                            (hz->workspace_edge == 0 && hy < rh * 0.5));
+  // A visible L should meet at its inferred corner.  With a crop path the
+  // corner may be clipped out of the navigator canvas, so the two infinite
+  // centerlines are still valid evidence; without crop correspondence keep
+  // the stricter endpoint-adjacency guard.
+  double ix = 0, iy = 0;
+  if (!LineIntersection(*v, *hz, ix, iy)) return false;
+  if (!crop_path && best_dist > kGroupCornerTolPx) return false;
+
+  const double vx = ix;
+  const double hy = iy;
+  const bool left = v->workspace_edge == kEdgeL
+      ? true
+      : v->workspace_edge == kEdgeR
+          ? false
+          : (0.5 * (canvas_local.left + canvas_local.right) > vx);
+  const bool top = hz->workspace_edge == kEdgeT
+      ? true
+      : hz->workspace_edge == kEdgeB
+          ? false
+          : (0.5 * (canvas_local.top + canvas_local.bottom) > hy);
   frame.origin_top_left_displayed = {left ? abs_x(vx) : abs_x(vx) - w,
                                      top ? abs_y(hy) : abs_y(hy) - h};
   frame.axis_x_displayed = {w, 0};
@@ -1581,90 +1960,155 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
   return finish_ok(0);
 }
 
-int PopCountBits(unsigned m) {
-  int c = 0;
-  while (m) {
-    c += static_cast<int>(m & 1u);
-    m >>= 1;
-  }
-  return c;
+// 同向共线且端点接近/投影重叠的红段合并为一条，减少断缝假多组。
+bool CanMergeCollinear(const ObservedEdge& a, const ObservedEdge& b) {
+  if (!DirsParallel(a.ux, a.uy, b.ux, b.uy)) return false;
+  if (std::abs(a.coord - b.coord) > kCollinearMergeTolPx) return false;
+  const double ux = a.ux, uy = a.uy;
+  const double a0 = Dot2(a.seg.x0, a.seg.y0, ux, uy);
+  const double a1 = Dot2(a.seg.x1, a.seg.y1, ux, uy);
+  const double b0 = Dot2(b.seg.x0, b.seg.y0, ux, uy);
+  const double b1 = Dot2(b.seg.x1, b.seg.y1, ux, uy);
+  const double lo_a = std::min(a0, a1), hi_a = std::max(a0, a1);
+  const double lo_b = std::min(b0, b1), hi_b = std::max(b0, b1);
+  const double gap = std::max(0.0, std::max(lo_a, lo_b) - std::min(hi_a, hi_b));
+  if (gap > kCollinearGapMaxPx) return false;
+  return true;
 }
 
-std::vector<GroupCandidate> EnumerateMaximalGroups(const std::vector<ObservedEdge>& pool,
-                                                   double max_w, double max_h,
-                                                   const wb::IntRect& canvas_local) {
-  const int n = static_cast<int>(pool.size());
-  std::vector<std::vector<int>> raw;
-  // 枚举至多 2 竖直 + 2 水平的子集
-  std::vector<int> verts, hors;
-  for (int i = 0; i < n; ++i) {
-    if (pool[i].seg.horizontal)
-      hors.push_back(i);
-    else
-      verts.push_back(i);
-  }
+ObservedEdge MergeCollinearPair(const ObservedEdge& a, const ObservedEdge& b) {
+  ObservedEdge out = a;
+  const double ux = a.ux, uy = a.uy;
+  const double a0 = Dot2(a.seg.x0, a.seg.y0, ux, uy);
+  const double a1 = Dot2(a.seg.x1, a.seg.y1, ux, uy);
+  const double b0 = Dot2(b.seg.x0, b.seg.y0, ux, uy);
+  const double b1 = Dot2(b.seg.x1, b.seg.y1, ux, uy);
+  const double lo = std::min(std::min(a0, a1), std::min(b0, b1));
+  const double hi = std::max(std::max(a0, a1), std::max(b0, b1));
+  const double mid = 0.5 * (a.coord + b.coord);
+  // 原点取 a 线段在法向上的落点近似：p = mid*n + t*u
+  out.coord = mid;
+  out.seg.x0 = mid * a.nx + lo * ux;
+  out.seg.y0 = mid * a.ny + lo * uy;
+  out.seg.x1 = mid * a.nx + hi * ux;
+  out.seg.y1 = mid * a.ny + hi * uy;
+  out.seg.horizontal = a.seg.horizontal;
+  out.seg.support = std::max(a.seg.support, b.seg.support);
+  out.ux = a.ux;
+  out.uy = a.uy;
+  out.nx = a.nx;
+  out.ny = a.ny;
+  out.family = a.family;
+  return out;
+}
 
-  auto try_push = [&](const std::vector<int>& idx) {
-    if (idx.empty()) return;
-    std::vector<ObservedEdge> edges;
-    edges.reserve(idx.size());
-    for (int i : idx) edges.push_back(pool[i]);
-    if (!GroupSpatialGeometryOk(edges, max_w, max_h, canvas_local)) return;
-    if (!GroupEdgeCardinalityOk(edges)) return;
-    for (auto& existing : raw) {
-      if (IndicesEqualSorted(existing, idx)) return;
-    }
-    raw.push_back(idx);
-  };
-
-  // 所有非空子集：|V|<=2, |H|<=2
-  const int nv = static_cast<int>(verts.size());
-  const int nh = static_cast<int>(hors.size());
-  // 限制枚举规模，避免极端噪声下指数爆炸
-  const int nv_use = std::min(nv, 8);
-  const int nh_use = std::min(nh, 8);
-  for (int vm = 1; vm < (1 << nv_use); ++vm) {
-    if (PopCountBits(static_cast<unsigned>(vm)) > 2) continue;
-    std::vector<int> vs;
-    for (int i = 0; i < nv_use; ++i)
-      if (vm & (1 << i)) vs.push_back(verts[i]);
-    // 仅竖直
-    try_push(vs);
-    for (int hm = 1; hm < (1 << nh_use); ++hm) {
-      if (PopCountBits(static_cast<unsigned>(hm)) > 2) continue;
-      std::vector<int> idx = vs;
-      for (int j = 0; j < nh_use; ++j)
-        if (hm & (1 << j)) idx.push_back(hors[j]);
-      try_push(idx);
-    }
-  }
-  for (int hm = 1; hm < (1 << nh_use); ++hm) {
-    if (PopCountBits(static_cast<unsigned>(hm)) > 2) continue;
-    std::vector<int> hs;
-    for (int j = 0; j < nh_use; ++j)
-      if (hm & (1 << j)) hs.push_back(hors[j]);
-    try_push(hs);
-  }
-
-  // 仅保留极大组（不被其它合法组真包含）
-  std::vector<std::vector<int>> maximal;
-  for (const auto& a : raw) {
-    bool dominated = false;
-    for (const auto& b : raw) {
-      if (a.size() >= b.size()) continue;
-      if (IsSubsetIndices(a, b)) {
-        dominated = true;
+void MergeCollinearNearbyEdges(std::vector<ObservedEdge>& pool) {
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    for (size_t i = 0; i < pool.size() && !changed; ++i) {
+      for (size_t j = i + 1; j < pool.size(); ++j) {
+        if (!CanMergeCollinear(pool[i], pool[j])) continue;
+        pool[i] = MergeCollinearPair(pool[i], pool[j]);
+        pool.erase(pool.begin() + static_cast<std::ptrdiff_t>(j));
+        changed = true;
         break;
       }
     }
-    if (!dominated) maximal.push_back(a);
+  }
+}
+
+double ParallelLinkMaxSide(const ObservedEdge& e, double max_w, double max_h) {
+  // 法向更偏水平 → 对边间距受导航器宽度约束；否则受高度约束。
+  return (std::abs(e.nx) >= std::abs(e.ny)) ? max_w : max_h;
+}
+
+bool EdgesAdjacencyLinkable(const ObservedEdge& a, const ObservedEdge& b, double max_w,
+                            double max_h) {
+  if (OrthogonalAdjacent(a, b)) return true;
+  if (DirsParallel(a.ux, a.uy, b.ux, b.uy)) {
+    return ParallelPairOk(a, b, ParallelLinkMaxSide(a, max_w, max_h));
+  }
+  return false;
+}
+
+struct EdgeDsu {
+  std::vector<int> p;
+  explicit EdgeDsu(int n) : p(static_cast<size_t>(n)) {
+    for (int i = 0; i < n; ++i) p[static_cast<size_t>(i)] = i;
+  }
+  int Find(int x) {
+    if (p[static_cast<size_t>(x)] != x) p[static_cast<size_t>(x)] = Find(p[static_cast<size_t>(x)]);
+    return p[static_cast<size_t>(x)];
+  }
+  void Unite(int a, int b) {
+    a = Find(a);
+    b = Find(b);
+    if (a != b) p[static_cast<size_t>(a)] = b;
+  }
+};
+
+bool GroupValidForEmit(const std::vector<ObservedEdge>& edges, double max_w, double max_h,
+                       const wb::IntRect& canvas_local) {
+  return GroupEdgeCardinalityOk(edges) && GroupSpatialGeometryOk(edges, max_w, max_h, canvas_local);
+}
+
+// 分量过大时：按边长贪心加入，保持仍为合法单矩形假设（不再做全子集枚举）。
+std::vector<ObservedEdge> GreedyValidSubset(const std::vector<ObservedEdge>& edges, double max_w,
+                                            double max_h, const wb::IntRect& canvas_local) {
+  std::vector<int> order(edges.size());
+  for (size_t i = 0; i < edges.size(); ++i) order[i] = static_cast<int>(i);
+  std::sort(order.begin(), order.end(), [&](int ia, int ib) {
+    return EdgeLen(edges[static_cast<size_t>(ia)]) > EdgeLen(edges[static_cast<size_t>(ib)]);
+  });
+  std::vector<ObservedEdge> chosen;
+  for (int idx : order) {
+    std::vector<ObservedEdge> trial = chosen;
+    trial.push_back(edges[static_cast<size_t>(idx)]);
+    if (GroupValidForEmit(trial, max_w, max_h, canvas_local)) chosen = std::move(trial);
+  }
+  return chosen;
+}
+
+// 成组：共线合并 → 相交/平行邻接连通分量 → 每分量一个组（过大则贪心收敛到合法子集）。
+// 一条边默认只属于一个连通分量，不再做「每种子集单独假设」。
+std::vector<GroupCandidate> ClusterGroupsByAdjacency(std::vector<ObservedEdge> pool, double max_w,
+                                                     double max_h,
+                                                     const wb::IntRect& canvas_local) {
+  MergeCollinearNearbyEdges(pool);
+  const int n = static_cast<int>(pool.size());
+  std::vector<GroupCandidate> out;
+  if (n == 0) return out;
+
+  EdgeDsu dsu(n);
+  for (int i = 0; i < n; ++i) {
+    for (int j = i + 1; j < n; ++j) {
+      if (EdgesAdjacencyLinkable(pool[static_cast<size_t>(i)], pool[static_cast<size_t>(j)], max_w,
+                                 max_h)) {
+        dsu.Unite(i, j);
+      }
+    }
   }
 
-  std::vector<GroupCandidate> out;
-  for (const auto& idx : maximal) {
+  std::vector<std::vector<int>> comps(static_cast<size_t>(n));
+  for (int i = 0; i < n; ++i) {
+    comps[static_cast<size_t>(dsu.Find(i))].push_back(i);
+  }
+
+  for (const auto& idxs : comps) {
+    if (idxs.empty()) continue;
+    std::vector<ObservedEdge> edges;
+    edges.reserve(idxs.size());
+    for (int i : idxs) edges.push_back(pool[static_cast<size_t>(i)]);
+
+    if (!GroupValidForEmit(edges, max_w, max_h, canvas_local)) {
+      edges = GreedyValidSubset(edges, max_w, max_h, canvas_local);
+      if (edges.empty()) continue;
+    }
+
     GroupCandidate g;
-    g.indices = idx;
-    for (int i : idx) g.edges.push_back(pool[i]);
+    g.indices = idxs;
+    g.edges = std::move(edges);
     out.push_back(std::move(g));
   }
   return out;
@@ -1715,43 +2159,33 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
   const wb::IntRect canvas_local{
       canvas.left - roi.left, canvas.top - roi.top,
       canvas.right - roi.left, canvas.bottom - roi.top};
-  const bool has_chrome =
-      canvas.left > roi.left || canvas.top > roi.top || canvas.right < roi.right ||
-      canvas.bottom < roi.bottom;
   // 导航器画布在 ROI 局部坐标下的边长上限（平行对边间距）
   const double nav_w_local =
       static_cast<double>(std::max(1, std::min(canvas.right, roi.right) - std::max(canvas.left, roi.left)));
   const double nav_h_local =
       static_cast<double>(std::max(1, std::min(canvas.bottom, roi.bottom) - std::max(canvas.top, roi.top)));
 
-  // B. 枚举合法极大 RedFrameEdgeGroup
-  auto groups = EnumerateMaximalGroups(pool, nav_w_local, nav_h_local, canvas_local);
+  // B. 共线合并 + 相交/平行邻接连通分量成组（一条边默认只进一组）
+  auto groups = ClusterGroupsByAdjacency(std::move(pool), nav_w_local, nav_h_local, canvas_local);
   if (groups.empty()) {
     return Fail(FailStatus::AmbiguousViewportGeometry, "no valid red frame edge group");
   }
 
-  const BgColor bg = EstimateNavigatorBackground(in, roi);
   const auto& wcr = in.workspace_canvas_relation;
   const double W_nav = nav_w_local * static_cast<double>(wcr.visible_canvas_fraction_x);
   const double H_nav = nav_h_local * static_cast<double>(wcr.visible_canvas_fraction_y);
   const bool theory_available =
       wcr.visible_canvas_fraction_x > 1e-4f && wcr.visible_canvas_fraction_y > 1e-4f;
+  const double canvas_aspect = wcr.canvas_aspect_ratio;
 
   // C+D. 组内直角 → 完整边 → pattern 补全
   std::vector<GroupCandidate*> survivors;
   for (auto& g : groups) {
     if (!CompleteGroupPattern(g, in, roi, rw, rh, nullptr)) continue;
-    // 背景粘着：用补全后矩形框定义外侧
-    const double left = g.frame.origin_top_left_displayed.x - roi.left - 0.5;
-    const double top = g.frame.origin_top_left_displayed.y - roi.top - 0.5;
-    const double right = left + g.frame.axis_x_displayed.x;
-    const double bottom = top + g.frame.axis_y_displayed.y;
-    g.touches_background = GroupTouchesBackground(g.edges, left, right, top, bottom, in, roi,
-                                                  canvas, bg, has_chrome);
     survivors.push_back(&g);
   }
 
-  // E. 多组硬消歧（§6）——纯 if-else，禁止打分
+  // E. 多组硬消歧（§6）：仅显示画布形状 + 窄红色度，禁止打分
   if (survivors.empty()) {
     return Fail(FailStatus::AmbiguousViewportGeometry, "no group completed via pattern");
   }
@@ -1760,30 +2194,32 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
   if (survivors.size() == 1) {
     target = survivors[0];
   } else {
-    std::vector<GroupCandidate*> B;
-    for (auto* g : survivors)
-      if (g->touches_background) B.push_back(g);
-
-    if (B.size() == 1) {
-      target = B[0];
-    } else if (B.size() >= 2) {
+    if (!theory_available) {
       return Fail(FailStatus::AmbiguousViewportGeometry,
-                  "multiple groups touch navigator background");
+                  "displayed canvas shape unavailable for disambiguation");
+    }
+    std::vector<GroupCandidate*> S;
+    for (auto* g : survivors) {
+      if (ShapeMatchesDisplayedCanvas(g->frame.width, g->frame.height, W_nav, H_nav,
+                                      canvas_aspect, theory_available)) {
+        S.push_back(g);
+      }
+    }
+    if (S.size() == 1) {
+      target = S[0];
+    } else if (S.empty()) {
+      return Fail(FailStatus::AmbiguousViewportGeometry, "no canvas shape match");
     } else {
-      // |B|==0 → 理论尺寸分支
-      if (!theory_available) {
-        return Fail(FailStatus::AmbiguousViewportGeometry,
-                    "theory navigator size unavailable for disambiguation");
+      // 形状并列 → 窄红色度再筛；真实绘画中极少出现多框同形且同为窄红
+      std::vector<GroupCandidate*> N;
+      for (auto* g : S) {
+        if (GroupNarrowRedChromaOk(*g, in, roi)) N.push_back(g);
       }
-      std::vector<GroupCandidate*> M;
-      for (auto* g : survivors) {
-        if (SizeMatchesTheory(g->frame.width, g->frame.height, W_nav, H_nav)) M.push_back(g);
-      }
-      if (M.size() == 1) {
-        target = M[0];
+      if (N.size() == 1) {
+        target = N[0];
       } else {
         return Fail(FailStatus::AmbiguousViewportGeometry,
-                    "theory size match not unique");
+                    "canvas shape / narrow-red filter not unique");
       }
     }
   }

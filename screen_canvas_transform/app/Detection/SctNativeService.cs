@@ -141,7 +141,7 @@ public sealed class SctNativeService
     public CanvasObservationDto ObserveCanvas(
         CaptureSession session,
         IntRect roiCapturePx,
-        WorkspaceBackgroundModel background)
+        WorkspaceBackgroundModel background, bool navigator = false)
     {
         return WithLockedFrame(session, (scan0, stride) =>
         {
@@ -159,7 +159,8 @@ public sealed class SctNativeService
             };
 
             var result = new NativeSct.SctCanvasObservation { AmbiguityReason = "" };
-            _ = NativeSct.sct_observe_canvas(in request, ref result);
+            _ = navigator ? NativeSct.sct_observe_navigator_canvas(in request, ref result)
+                          : NativeSct.sct_observe_canvas(in request, ref result);
             return CanvasObservationDto.FromNative(result);
         });
     }

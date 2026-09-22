@@ -11,92 +11,30 @@ namespace {
 
 std::pair<float, float> SideMetrics(const IntRect& rect, OuterSide side, const FeatureMaps& features,
                                     const BackgroundModel& model, const DetectorConfig& cfg) {
-  const int h = features.height;
-  const int w = features.width;
-  const int n = cfg.validate_sample_count;
-  std::vector<float> de_out, de_in, g;
-
-  if (side == OuterSide::Left || side == OuterSide::Right) {
-    for (int i = 0; i < n; ++i) {
-      const float t = (n == 1) ? 0.f : static_cast<float>(i) / static_cast<float>(n - 1);
-      int y = static_cast<int>(std::round(rect.top + 1 + t * (rect.bottom - 2 - (rect.top + 1))));
-      y = std::max(0, std::min(h - 1, y + (i % 3) - 1));
-      int x = (side == OuterSide::Left) ? rect.left : rect.right - 1;
-      x = std::max(1, std::min(w - 2, x));
-      if (side == OuterSide::Left) {
-        de_out.push_back(DeltaE76(features.lab.At(x - 1, y), model.center_lab));
-        de_in.push_back(DeltaE76(features.lab.At(std::min(w - 1, x + 1), y), model.center_lab));
-      } else {
-        de_out.push_back(DeltaE76(features.lab.At(std::min(w - 1, x + 1), y), model.center_lab));
-        de_in.push_back(DeltaE76(features.lab.At(std::max(0, x - 1), y), model.center_lab));
-      }
-      g.push_back(std::fabs(features.gradient_x.At(x, y)));
-    }
-  } else {
-    for (int i = 0; i < n; ++i) {
-      const float t = (n == 1) ? 0.f : static_cast<float>(i) / static_cast<float>(n - 1);
-      int x = static_cast<int>(std::round(rect.left + 1 + t * (rect.right - 2 - (rect.left + 1))));
-      x = std::max(0, std::min(w - 1, x + (i % 3) - 1));
-      int y = (side == OuterSide::Top) ? rect.top : rect.bottom - 1;
-      y = std::max(1, std::min(h - 2, y));
-      if (side == OuterSide::Top) {
-        de_out.push_back(DeltaE76(features.lab.At(x, y - 1), model.center_lab));
-        de_in.push_back(DeltaE76(features.lab.At(x, std::min(h - 1, y + 1)), model.center_lab));
-      } else {
-        de_out.push_back(DeltaE76(features.lab.At(x, std::min(h - 1, y + 1)), model.center_lab));
-        de_in.push_back(DeltaE76(features.lab.At(x, std::max(0, y - 1)), model.center_lab));
-      }
-      g.push_back(std::fabs(features.gradient_y.At(x, y)));
-    }
+  const bool vertical = side == OuterSide::Left || side == OuterSide::Right;
+  const bool low = side == OuterSide::Left || side == OuterSide::Top;
+  const int coord = vertical ? (low ? rect.left : rect.right)
+                             : (low ? rect.top : rect.bottom);
+  const int limit = vertical ? features.width : features.height;
+  if (coord <= 0 || coord >= limit) return {0.f,0.f};
+  const int begin = vertical ? rect.top : rect.left;
+  const int end = vertical ? rect.bottom : rect.right;
+  const int n = std::max(4,cfg.validate_sample_count);
+  double outside = 0, transition = 0;
+  // Stratified midpoints differ from the regular refinement grid. Rectangles
+  // are half-open: right/bottom's outside pixel is coord, inside is coord-1.
+  for (int i=0;i<n;++i) {
+    const int along = std::min(end-1,begin+int((i+0.5)*(end-begin)/n));
+    const int inside = low ? coord : coord-1, out = low ? coord-1 : coord;
+    const float* il = vertical ? features.lab.At(inside,along) : features.lab.At(along,inside);
+    const float* ol = vertical ? features.lab.At(out,along) : features.lab.At(along,out);
+    const Lab inside_lab{il[0],il[1],il[2]};
+    outside += std::clamp(DeltaE76(ol,model.center_lab)/std::max(model.weak_delta_e,1e-3f),0.f,1.f);
+    // Both pixels differing from the model is NOT a boundary. Require an
+    // actual cross-edge change; this also validates canvas-occluded endpoints.
+    transition += std::clamp(DeltaE76(ol,inside_lab)/std::max(model.strong_delta_e,1e-3f),0.f,1.f);
   }
-
-  auto mean_clip = [](const std::vector<float>& v, float denom, bool inv) {
-    if (v.empty()) return 0.f;
-    double acc = 0;
-    for (float x : v) {
-      float t = std::max(0.f, std::min(1.f, x / denom));
-      acc += inv ? (1.f - t) : t;
-    }
-    return static_cast<float>(acc / v.size());
-  };
-  // outside score: high when outside similar to bg model (for OUTER edge, outside should be dissimilar!)
-  // Architecture: outside should NOT match bg; Python validate uses out_score = clip(1 - de_out/weak)
-  // which is HIGH when outside IS similar to bg — that matches their naming "outside_background_score"
-  // meaning "outside of canvas was bg" in the old canvas-centric naming.
-  // For OUTER workspace edges: outside should be UI (dissimilar), inside near edge should be bg.
-  // Looking at Python validate again carefully:
-  //   out_score = mean(clip(1 - de_out/weak))  — high if outside looks like bg
-  //   in_diff = mean(clip(de_in/strong)) — high if inside differs from bg
-  //   transition = 0.55*out_score + 0.45*in_diff
-  // And validate_min_outside_score — so they want outside≈bg.
-  // That's canvas-edge semantics (outside=workspace bg)!
-  //
-  // Architecture says outer edge: inside≈bg, outside≠bg.
-  // For our OUTER refine we use out_diff (dissimilar outside) + in_sim.
-  // For validate of OUTER edges we should flip: outside_score = dissimilar outside,
-  // and inside near edge similar to bg.
-  //
-  // User said architecture fixes prefer OUTER. So validate for outer:
-  //   outside_score = how well outside differs from bg (1 - sim)
-  //   transition combines outside_diff + inside_sim
-
-  const float out_diff = 1.f - mean_clip(de_out, std::max(model.weak_delta_e, 1e-3f), true);
-  // mean_clip with inv=true gives mean(1 - de/weak) = similarity. So out_diff = 1 - similarity = dissimilarity.
-  // Wait I messed up. Let me compute clearly:
-  float out_sim = 0, in_sim = 0;
-  {
-    double a = 0, b = 0;
-    for (float d : de_out) a += std::max(0.f, std::min(1.f, 1.f - d / std::max(model.weak_delta_e, 1e-3f)));
-    for (float d : de_in) b += std::max(0.f, std::min(1.f, 1.f - d / std::max(model.weak_delta_e, 1e-3f)));
-    out_sim = de_out.empty() ? 0.f : static_cast<float>(a / de_out.size());
-    in_sim = de_in.empty() ? 0.f : static_cast<float>(b / de_in.size());
-  }
-  // OUTER: want low out_sim, high in_sim
-  const float outside_score = 1.f - out_sim;  // high when outside ≠ bg
-  const float transition = std::max(0.f, std::min(1.f, 0.55f * outside_score + 0.45f * in_sim));
-  (void)g;
-  (void)mean_clip;
-  return {outside_score, transition};
+  return {float(outside/n),float(transition/n)};
 }
 
 bool ValidateCorners(const IntRect& rect, const FeatureMaps& features, const BackgroundModel& model) {
@@ -173,23 +111,17 @@ ValidateResult ValidateRectangle(const IntRect& rect, const Hypothesis& hyp,
   res.metrics["mean_outside"] = mean_out;
   res.metrics["mean_transition"] = mean_tr;
 
-  // Prefer the stronger two sides so one inset edge cannot veto an otherwise solid rect.
-  std::vector<float> out_sorted = outside_scores;
-  std::vector<float> tr_sorted = transition_scores;
-  std::sort(out_sorted.begin(), out_sorted.end(), std::greater<float>());
-  std::sort(tr_sorted.begin(), tr_sorted.end(), std::greater<float>());
-  const float top2_out = 0.5f * (out_sorted[0] + out_sorted[1]);
-  const float top2_tr = 0.5f * (tr_sorted[0] + tr_sorted[1]);
-  res.metrics["top2_outside"] = top2_out;
-  res.metrics["top2_transition"] = top2_tr;
-  if (mean_out < cfg.validate_min_outside_score && top2_out < cfg.validate_min_outside_score + 0.12f)
-    return res;
-  if (mean_tr < cfg.validate_min_transition && top2_tr < cfg.validate_min_transition + 0.12f)
-    return res;
+  // Every outer side needs independent evidence; two strong sides cannot
+  // compensate for a missing or unseparated third/fourth boundary.
+  for (size_t i=0;i<4;++i)
+    if (outside_scores[i] < cfg.validate_min_outside_score ||
+        transition_scores[i] < cfg.validate_min_transition) return res;
 
   const bool corners_ok = ValidateCorners(rect, features, model);
   res.metrics["corners_ok"] = corners_ok ? 1.f : 0.f;
-  if (!corners_ok) return res;
+  // Corner pixels are frequently occupied by tabs, scroll bars or anti-aliased
+  // separators. The four independent side strips above are stronger evidence;
+  // retain corners as diagnostics rather than rejecting a verified rectangle.
 
   const int w = features.width;
   const int h = features.height;

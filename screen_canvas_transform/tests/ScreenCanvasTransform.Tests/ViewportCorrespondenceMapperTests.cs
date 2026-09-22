@@ -1,5 +1,6 @@
 using ScreenCanvasTransform.Models;
 using ScreenCanvasTransform.Services;
+using ScreenCanvasTransform.Interop;
 using Xunit;
 
 namespace ScreenCanvasTransform.Tests;
@@ -29,5 +30,34 @@ public sealed class ViewportCorrespondenceMapperTests
             canvasCenterScreenX: 50,
             canvasCenterScreenY: 50);
         Assert.Equal(WorkspaceEdgeBits.Right, labeled.WorkspaceEdge);
+    }
+
+    [Fact]
+    public void MapCompletedViewportEdges_EmitsTheWholeSemanticFrameInScreenCoordinates()
+    {
+        var frame = new NativeSct.SctViewportFrame
+        {
+            Width = 80,
+            Height = 60,
+            Corner0 = new NativeSct.SctVec2 { X = 10, Y = 20 },
+            Corner1 = new NativeSct.SctVec2 { X = 90, Y = 20 },
+            Corner2 = new NativeSct.SctVec2 { X = 90, Y = 80 },
+            Corner3 = new NativeSct.SctVec2 { X = 10, Y = 80 }
+        };
+
+        var edges = ViewportCorrespondenceMapper.MapCompletedViewportEdges(frame, 100, -50);
+
+        Assert.Collection(edges,
+            top =>
+            {
+                Assert.Equal(WorkspaceEdgeBits.Top, top.WorkspaceEdge);
+                Assert.Equal(110, top.X0);
+                Assert.Equal(-30, top.Y0);
+                Assert.Equal(190, top.X1);
+                Assert.Equal(-30, top.Y1);
+            },
+            right => Assert.Equal(WorkspaceEdgeBits.Right, right.WorkspaceEdge),
+            bottom => Assert.Equal(WorkspaceEdgeBits.Bottom, bottom.WorkspaceEdge),
+            left => Assert.Equal(WorkspaceEdgeBits.Left, left.WorkspaceEdge));
     }
 }

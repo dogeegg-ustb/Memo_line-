@@ -23,6 +23,10 @@ public sealed class NavigatorOcrService
 
     private const int MinSlotSizePx = 8;
     private const int Upscale = 6;
+    // Windows.Media.Ocr exposes text and bounding boxes, but no per-word confidence.
+    // This is evidence that a token passed our own numeric validation, never a score
+    // returned by the OCR engine.
+    private const float ValidatedTokenEvidence = 0.85f;
 
     /// <summary>Only numeric tokens (optional sign / decimal). Units like % ° are stripped before parse.</summary>
     private static readonly Regex NumberRegex = new(
@@ -82,8 +86,9 @@ public sealed class NavigatorOcrService
     }
 
     /// <summary>
-    /// OCR the union of scale+rotation slots once; assign uppermost scale-like number and
-    /// lowermost rotation-like number by bbox Y (digits may drift left/right inside the block).
+    /// OCR the scale and rotation slots independently.  CSP's sliders and frame lines can
+    /// cause Windows OCR to return only the upper row when both rows are passed as one image.
+    /// Fall back to the union when the slot-specific pass is incomplete.
     /// </summary>
     private static async Task<NavigatorNumericReadingDto> ReadByVerticalOrderAsync(
         CaptureSession session,
@@ -112,9 +117,28 @@ public sealed class NavigatorOcrService
         Log(debugDir, $"slots scale={scaleSlotCapture} rot={rotationSlotCapture} union={union}");
 
         // Bright-digit binarize (+ dilate/pad) first — plain invert often returns empty on teen %.
-        var hits = await RecognizeSlotAsync(
-                session, union, engine, debugDir, "region", cancellationToken)
+        var scaleHits = await RecognizeSlotAsync(
+                session, scaleSlotCapture, engine, debugDir, "scale", cancellationToken)
             .ConfigureAwait(false);
+        var rotationHits = await RecognizeSlotAsync(
+                session, rotationSlotCapture, engine, debugDir, "rotation", cancellationToken)
+            .ConfigureAwait(false);
+
+        bool scaleFromSlot = TryPickOrdered(
+            scaleHits.OrderBy(h => h.CenterY).ThenBy(h => h.CenterX).ToList(),
+            TryParseScale, out float scaleVal, out string scaleRaw);
+        bool rotationFromSlot = TryPickOrdered(
+            rotationHits.OrderByDescending(h => h.CenterY).ThenBy(h => h.CenterX).ToList(),
+            TryParseRotation, out float rotVal, out string rotRaw);
+
+        var hits = scaleHits.Concat(rotationHits).ToList();
+        if (!scaleFromSlot || !rotationFromSlot)
+        {
+            Log(debugDir, $"slot pass incomplete scale={scaleFromSlot} rotation={rotationFromSlot}; trying union");
+            hits = await RecognizeSlotAsync(
+                    session, union, engine, debugDir, "region", cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         double midY = (union.Top + union.Bottom) * 0.5;
         // Prefer geometry split if slots are stacked; otherwise mid of union.
@@ -126,30 +150,15 @@ public sealed class NavigatorOcrService
 
         var topHits = hits.Where(h => h.CenterY < midY).OrderBy(h => h.CenterY).ThenBy(h => h.CenterX).ToList();
         var bottomHits = hits.Where(h => h.CenterY >= midY).OrderByDescending(h => h.CenterY).ThenBy(h => h.CenterX).ToList();
-        // If partition empty (both numbers landed same half), fall back to global Y order.
-        if (topHits.Count == 0 || bottomHits.Count == 0)
-        {
-            var byY = hits.OrderBy(h => h.CenterY).ThenBy(h => h.CenterX).ToList();
-            topHits = byY.Take(Math.Max(1, byY.Count / 2)).ToList();
-            bottomHits = byY.Skip(Math.Max(0, byY.Count - Math.Max(1, byY.Count / 2))).Reverse().ToList();
-            Log(debugDir, "partition-empty → global Y split");
-        }
+        // Slots carry semantic identity. Never reuse the scale token as rotation
+        // when only one line was recognized (e.g. 20.1% becoming 20.1 degrees).
 
-        bool scaleOk = TryPickOrdered(topHits, TryParseScale, out float scaleVal, out string scaleRaw);
-        bool rotOk = TryPickOrdered(bottomHits, TryParseRotation, out float rotVal, out string rotRaw);
-        if (!rotOk)
-        {
-            // Try any remaining hits as rotation (still prefer lower Y).
-            var rest = hits.OrderByDescending(h => h.CenterY).ToList();
-            rotOk = TryPickOrdered(rest, TryParseRotation, out rotVal, out rotRaw);
-        }
-
-        if (!rotOk)
-        {
-            rotOk = true;
-            rotVal = 0;
-            rotRaw = "0";
-        }
+        bool scaleOk = scaleFromSlot
+            ? scaleFromSlot
+            : TryPickOrdered(topHits, TryParseScale, out scaleVal, out scaleRaw);
+        bool rotOk = rotationFromSlot
+            ? rotationFromSlot
+            : TryPickOrdered(bottomHits, TryParseRotation, out rotVal, out rotRaw);
 
         Log(debugDir,
             $"result scaleOk={scaleOk} raw='{scaleRaw}' val={scaleVal}; " +
@@ -159,8 +168,10 @@ public sealed class NavigatorOcrService
         {
             ScalePercent = scaleOk ? scaleVal : 0,
             RotationDegrees = rotOk ? rotVal : 0,
-            ScaleConfidence = scaleOk ? 0.85f : 0,
-            RotationConfidence = rotOk && rotRaw != "0" ? 0.85f : (rotOk ? 0.5f : 0),
+            // Do not turn an OCR failure into a made-up 0°.  A missing rotation
+            // reading must remain distinguishable from an actual "0" or "0.0".
+            ScaleConfidence = scaleOk ? ValidatedTokenEvidence : 0,
+            RotationConfidence = rotOk ? ValidatedTokenEvidence : 0,
             ScaleRawText = scaleRaw,
             RotationRawText = rotRaw,
             SourceCaptureId = session.CaptureId,
@@ -212,7 +223,7 @@ public sealed class NavigatorOcrService
     private readonly record struct RawToken(
         string Text, double CenterY, double CenterX, double Left, double Right, double Height);
 
-    private enum DigitFragKind { Digits, DecimalMark }
+    private enum DigitFragKind { Digits, DecimalMark, Sign }
 
     private readonly record struct DigitFrag(
         DigitFragKind Kind, string Digits, double CenterY, double CenterX, double Left, double Right, double Height);
@@ -284,6 +295,13 @@ public sealed class NavigatorOcrService
             return;
         }
 
+        if (text is "-" or "−" or "﹣" or "－" or "+" or "＋")
+        {
+            string sign = text is "+" or "＋" ? "+" : "-";
+            sink.Add(new DigitFrag(DigitFragKind.Sign, sign, cy, cx, left, right, height));
+            return;
+        }
+
         // Char-wise: keep digits / mapped confusions / decimal marks; drop the rest.
         var digits = new System.Text.StringBuilder();
         double digLeft = left;
@@ -295,10 +313,23 @@ public sealed class NavigatorOcrService
         for (int i = 0; i < text.Length; i++)
         {
             char ch = text[i];
-            char mapped = MapConfusionToDigitOrZero(ch);
             double cLeft = left + i * unit;
             double cRight = left + (i + 1) * unit;
             double cCx = (cLeft + cRight) * 0.5;
+            if (ch is '-' or '−' or '﹣' or '－' or '+' or '＋')
+            {
+                if (inDigits)
+                {
+                    sink.Add(new DigitFrag(DigitFragKind.Digits, digits.ToString(), cy,
+                        (digLeft + digRight) * 0.5, digLeft, digRight, height));
+                    inDigits = false;
+                    digits.Clear();
+                }
+                sink.Add(new DigitFrag(DigitFragKind.Sign,
+                    ch is '+' or '＋' ? "+" : "-", cy, cCx, cLeft, cRight, height));
+                continue;
+            }
+            char mapped = MapConfusionToDigitOrZero(ch);
 
             if (mapped != '\0')
             {
@@ -401,6 +432,21 @@ public sealed class NavigatorOcrService
                 continue;
             }
 
+            if (f.Kind == DigitFragKind.Sign)
+            {
+                // A sign is meaningful only at the start of the number. OCR
+                // commonly emits it as a word separate from the digits.
+                if (sb.Length == 0)
+                {
+                    sb.Append(f.Digits);
+                    startLeft = f.Left;
+                    endRight = f.Right;
+                    sumY += f.CenterY;
+                    n++;
+                }
+                continue;
+            }
+
             // Digits only — decimals come from explicit marks / "&"→"8." mapping, not gap heuristics.
             if (sb.Length == 0)
             {
@@ -442,9 +488,9 @@ public sealed class NavigatorOcrService
                 sb.Append('.');
                 continue;
             }
-            if (ch is >= '0' and <= '9' or '.' or '-' or '+')
+            if (ch is >= '0' and <= '9' or '.' or '-' or '+' or '−' or '﹣' or '－' or '＋')
             {
-                sb.Append(ch);
+                sb.Append(ch is '−' or '﹣' or '－' ? '-' : ch is '＋' ? '+' : ch);
                 continue;
             }
             char mapped = MapConfusionToDigitOrZero(ch);
@@ -601,7 +647,29 @@ public sealed class NavigatorOcrService
             catch { /* ignore */ }
         }
 
-        List<Hit>? bestPartial = null;
+        List<Hit>? bestHits = null;
+        int bestScore = -1;
+        int bestHitCount = -1;
+
+        void Consider(IReadOnlyList<Hit> hits)
+        {
+            int score = 0;
+            foreach (var hit in hits)
+            {
+                if (TryParseScale(hit.Text, out _)) score++;
+                if (TryParseRotation(hit.Text, out _)) score++;
+            }
+
+            // Prefer a threshold that recovers both stacked values.  The old
+            // early return on the first scale token could discard the lower
+            // rotation token (commonly 0.0) even though a later threshold saw it.
+            if (score > bestScore || (score == bestScore && hits.Count > bestHitCount))
+            {
+                bestScore = score;
+                bestHitCount = hits.Count;
+                bestHits = hits.ToList();
+            }
+        }
 
         foreach (int threshold in BrightDigitThresholds)
         {
@@ -618,10 +686,7 @@ public sealed class NavigatorOcrService
                     padded, slotCapture, engine, debugDir, $"{tag}_T{threshold}", OcrPadPx, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (hits.Any(h => TryParseScale(h.Text, out _)))
-                return hits;
-            if (hits.Count > 0 && bestPartial is null)
-                bestPartial = hits;
+            Consider(hits);
         }
 
         using (var inv = (Bitmap)upscaled.Clone())
@@ -637,10 +702,7 @@ public sealed class NavigatorOcrService
             var hits = await OcrBitmapToHitsAsync(
                     padded, slotCapture, engine, debugDir, $"{tag}_invert", OcrPadPx, cancellationToken)
                 .ConfigureAwait(false);
-            if (hits.Any(h => TryParseScale(h.Text, out _)))
-                return hits;
-            if (hits.Count > 0 && bestPartial is null)
-                bestPartial = hits;
+            Consider(hits);
         }
 
         {
@@ -648,11 +710,10 @@ public sealed class NavigatorOcrService
             var hits = await OcrBitmapToHitsAsync(
                     padded, slotCapture, engine, debugDir, $"{tag}_raw", OcrPadPx, cancellationToken)
                 .ConfigureAwait(false);
-            if (hits.Count > 0)
-                return hits;
+            Consider(hits);
         }
 
-        return bestPartial ?? new List<Hit>();
+        return bestHits ?? new List<Hit>();
     }
 
     private static async Task<List<Hit>> OcrBitmapToHitsAsync(

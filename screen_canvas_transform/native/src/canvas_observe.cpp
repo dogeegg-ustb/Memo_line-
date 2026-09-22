@@ -1,235 +1,143 @@
 #include "sct/canvas_observe.hpp"
-
 #include "wb/color.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <cstring>
-#include <queue>
+#include <limits>
 #include <vector>
 
 namespace sct {
-namespace {
-
-inline void BgraAt(const uint8_t* bgra, int stride, int x, int y, uint8_t& b, uint8_t& g,
-                   uint8_t& r) {
-  const uint8_t* p = bgra + static_cast<size_t>(y) * stride + static_cast<size_t>(x) * 4;
-  b = p[0];
-  g = p[1];
-  r = p[2];
-}
-
-}  // namespace
 
 CanvasObservation ObserveCanvasExcludingBackground(
     const uint8_t* bgra, int width, int height, int stride, const wb::IntRect& roi_capture,
-    int origin_x, int origin_y, const wb::BackgroundModel& model, float /*dpi_scale*/) {
+    int origin_x, int origin_y, const wb::BackgroundModel& model, float dpi_scale, bool navigator) {
   CanvasObservation out;
-  if (!bgra || width <= 0 || height <= 0 || !roi_capture.valid()) {
+  auto fail = [&](const char* reason) {
     out.ambiguous = true;
-    std::snprintf(out.ambiguity_reason, sizeof(out.ambiguity_reason), "invalid input");
+    std::snprintf(out.ambiguity_reason, sizeof(out.ambiguity_reason), "%s", reason);
     return out;
+  };
+  if (!bgra || width <= 0 || height <= 0 || width > std::numeric_limits<int>::max()/4 ||
+      stride < width*4 || !roi_capture.valid()) return fail("invalid input");
+  if (!std::isfinite(model.weak_delta_e) || model.weak_delta_e <= 0 ||
+      !std::isfinite(model.center_lab.L) || !std::isfinite(model.center_lab.a) ||
+      !std::isfinite(model.center_lab.b)) return fail("invalid background model");
+  const auto roi = roi_capture.Clamp(width, height);
+  if (!roi.valid()) return fail("roi empty");
+  const int rw=roi.width(), rh=roi.height();
+  const size_t count=size_t(rw)*rh;
+  std::vector<uint8_t> background(count,0), exterior(count,0);
+  auto index=[&](int x,int y) { return size_t(y)*rw+x; };
+  for (int y=0;y<rh;++y) for (int x=0;x<rw;++x) {
+    const auto* p=bgra+size_t(y+roi.top)*stride+size_t(x+roi.left)*4;
+    background[index(x,y)]=wb::DeltaE76(wb::BgrToLab(p[0],p[1],p[2]),model.center_lab)
+                              <=model.weak_delta_e;
   }
 
-  wb::IntRect roi = roi_capture.Clamp(width, height);
-  if (!roi.valid()) {
-    out.ambiguous = true;
-    std::snprintf(out.ambiguity_reason, sizeof(out.ambiguity_reason), "roi empty");
-    return out;
+  // Remove only background connected to the ROI exterior. A painted patch
+  // matching the background inside the canvas is not exterior background.
+  // Seed every exterior component, including L/U shapes and opposite bands.
+  std::vector<size_t> pending;
+  auto seed=[&](int x,int y) {
+    const size_t i=index(x,y);
+    if (background[i] && !exterior[i]) {exterior[i]=1;pending.push_back(i);}
+  };
+  for (int x=0;x<rw;++x) {seed(x,0);seed(x,rh-1);}
+  for (int y=0;y<rh;++y) {seed(0,y);seed(rw-1,y);}
+  for (size_t head=0;head<pending.size();++head) {
+    const size_t i=pending[head];const int x=int(i%rw),y=int(i/rw);
+    if(x>0)seed(x-1,y);if(x+1<rw)seed(x+1,y);
+    if(y>0)seed(x,y-1);if(y+1<rh)seed(x,y+1);
   }
-
-  const int rw = roi.width();
-  const int rh = roi.height();
-  std::vector<uint8_t> non_bg(static_cast<size_t>(rw) * rh, 0);
-
-  for (int y = roi.top; y < roi.bottom; ++y) {
-    for (int x = roi.left; x < roi.right; ++x) {
-      uint8_t b, g, r;
-      BgraAt(bgra, stride, x, y, b, g, r);
-      wb::Lab lab = wb::BgrToLab(b, g, r);
-      float de = wb::DeltaE76(lab, model.center_lab);
-      const int ix = x - roi.left;
-      const int iy = y - roi.top;
-      if (de > model.weak_delta_e) {
-        non_bg[static_cast<size_t>(iy) * rw + ix] = 1;
-      }
+  // The workspace can contain small non-background UI remnants near its rim.
+  // They must not be merged into the displayed canvas. Select one connected
+  // foreground body; a canvas with artwork remains connected to its paper.
+  std::vector<uint8_t> visited(count,0);
+  int minx=rw,miny=rh,maxx=-1,maxy=-1,best_area=0;
+  for(int sy=0;sy<rh;++sy) for(int sx=0;sx<rw;++sx) {
+    const size_t initial=index(sx,sy);
+    if(exterior[initial] || visited[initial]) continue;
+    std::vector<size_t> component{initial}; visited[initial]=1;
+    int cx0=sx,cx1=sx,cy0=sy,cy1=sy;
+    for(size_t head=0;head<component.size();++head) {
+      const size_t i=component[head]; const int x=int(i%rw),y=int(i/rw);
+      cx0=std::min(cx0,x);cx1=std::max(cx1,x);cy0=std::min(cy0,y);cy1=std::max(cy1,y);
+      auto add=[&](int nx,int ny) {
+        const size_t ni=index(nx,ny);
+        if(!exterior[ni]&&!visited[ni]) {visited[ni]=1;component.push_back(ni);}
+      };
+      if(x>0)add(x-1,y);if(x+1<rw)add(x+1,y);if(y>0)add(x,y-1);if(y+1<rh)add(x,y+1);
+    }
+    if(static_cast<int>(component.size())>best_area) {
+      best_area=static_cast<int>(component.size());minx=cx0;maxx=cx1;miny=cy0;maxy=cy1;
     }
   }
-
-  // Largest 4-connected non-background component.
-  std::vector<int> labels(static_cast<size_t>(rw) * rh, 0);
-  int best_label = 0;
-  int best_count = 0;
-  int next = 1;
-  for (int y = 0; y < rh; ++y) {
-    for (int x = 0; x < rw; ++x) {
-      size_t i = static_cast<size_t>(y) * rw + x;
-      if (!non_bg[i] || labels[i]) continue;
-      int count = 0;
-      int minx = x, maxx = x, miny = y, maxy = y;
-      std::queue<std::pair<int, int>> q;
-      q.push({x, y});
-      labels[i] = next;
-      while (!q.empty()) {
-        auto [cx, cy] = q.front();
-        q.pop();
-        ++count;
-        minx = std::min(minx, cx);
-        maxx = std::max(maxx, cx);
-        miny = std::min(miny, cy);
-        maxy = std::max(maxy, cy);
-        const int nbs[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-        for (auto& d : nbs) {
-          int nx = cx + d[0];
-          int ny = cy + d[1];
-          if (nx < 0 || ny < 0 || nx >= rw || ny >= rh) continue;
-          size_t ni = static_cast<size_t>(ny) * rw + nx;
-          if (!non_bg[ni] || labels[ni]) continue;
-          labels[ni] = next;
-          q.push({nx, ny});
-        }
-      }
-      if (count > best_count) {
-        best_count = count;
-        best_label = next;
-        out.bounds_capture = {roi.left + minx, roi.top + miny, roi.left + maxx + 1,
-                              roi.top + maxy + 1};
-      }
-      ++next;
+  if(maxx<minx || maxy<miny) return fail("no separable foreground canvas");
+  if (navigator) {
+    // Connectivity is useful for keeping artwork inside the paper, but a red
+    // viewport can also enclose exterior gray. Such a pocket is NOT paper
+    // evidence. Measure the bounds from actual non-background pixels, ignoring
+    // red viewport ink (including AA) so long vertical strokes cannot support
+    // a false left/right boundary. This evidence mask is only used here; the
+    // workspace observation and the original image/viewport detection stay intact.
+    std::vector<int> columns(rw,0), rows(rh,0);
+    for(int y=miny;y<=maxy;++y) for(int x=minx;x<=maxx;++x) {
+      const auto* p=bgra+size_t(y+roi.top)*stride+size_t(x+roi.left)*4;
+      const int b=p[0], g=p[1], r=p[2];
+      const bool viewport_ink = r >= 70 && r-g >= 8 && r-b >= 8;
+      if(!background[index(x,y)] && !viewport_ink) {++columns[x];++rows[y];}
     }
+    const int minColumn = std::max(2,*std::max_element(columns.begin(),columns.end())/10);
+    const int minRow = std::max(2,*std::max_element(rows.begin(),rows.end())/10);
+    while(minx<=maxx && columns[minx]<minColumn) ++minx;
+    while(maxx>=minx && columns[maxx]<minColumn) --maxx;
+    while(miny<=maxy && rows[miny]<minRow) ++miny;
+    while(maxy>=miny && rows[maxy]<minRow) --maxy;
+    if(maxx<minx || maxy<miny) return fail("no supported navigator canvas body");
   }
+  out.bounds_capture={roi.left+minx,roi.top+miny,roi.left+maxx+1,roi.top+maxy+1};
+  out.bounds_screen={out.bounds_capture.left+origin_x,out.bounds_capture.top+origin_y,
+                     out.bounds_capture.right+origin_x,out.bounds_capture.bottom+origin_y};
+  const int bw=maxx-minx+1,bh=maxy-miny+1;
+  out.aspect_ratio=float(bw)/bh;
 
-  if (best_count <= 0 || !out.bounds_capture.valid()) {
-    out.ambiguous = true;
-    std::snprintf(out.ambiguity_reason, sizeof(out.ambiguity_reason), "no non-background canvas");
-    return out;
-  }
-
-  // Recompute bounds for best_label precisely.
-  int minx = rw, maxx = -1, miny = rh, maxy = -1;
-  int fill = 0;
-  for (int y = 0; y < rh; ++y) {
-    for (int x = 0; x < rw; ++x) {
-      if (labels[static_cast<size_t>(y) * rw + x] != best_label) continue;
-      ++fill;
-      minx = std::min(minx, x);
-      maxx = std::max(maxx, x);
-      miny = std::min(miny, y);
-      maxy = std::max(maxy, y);
-    }
-  }
-  out.bounds_capture = {roi.left + minx, roi.top + miny, roi.left + maxx + 1, roi.top + maxy + 1};
-  out.bounds_screen = {out.bounds_capture.left + origin_x, out.bounds_capture.top + origin_y,
-                       out.bounds_capture.right + origin_x, out.bounds_capture.bottom + origin_y};
-
-  const int bw = out.bounds_capture.width();
-  const int bh = out.bounds_capture.height();
-  if (bw <= 0 || bh <= 0) {
-    out.ambiguous = true;
-    std::snprintf(out.ambiguity_reason, sizeof(out.ambiguity_reason), "empty bounds");
-    return out;
-  }
-
-  out.aspect_ratio = static_cast<float>(bw) / static_cast<float>(bh);
-  const float fill_ratio = static_cast<float>(fill) / static_cast<float>(bw * bh);
-
-  // Edge support: fraction of boundary pixels belonging to best component.
-  auto edge_support = [&](int side) -> float {
-    int hit = 0, total = 0;
-    if (side == 0) {  // left
-      for (int y = miny; y <= maxy; ++y) {
-        ++total;
-        if (labels[static_cast<size_t>(y) * rw + minx] == best_label) ++hit;
-      }
-    } else if (side == 1) {  // top
-      for (int x = minx; x <= maxx; ++x) {
-        ++total;
-        if (labels[static_cast<size_t>(miny) * rw + x] == best_label) ++hit;
-      }
-    } else if (side == 2) {  // right
-      for (int y = miny; y <= maxy; ++y) {
-        ++total;
-        if (labels[static_cast<size_t>(y) * rw + maxx] == best_label) ++hit;
-      }
+  // AABB line support is a separate diagnostic for rectangular direct mapping.
+  // It does not decide whether an arbitrary foreground is surrounded.
+  for(int side=0;side<4;++side) {
+    int hits=0,total=0;
+    if(side==0 || side==2) {
+      int x=side==0?minx:maxx;
+      for(int y=miny;y<=maxy;++y) {++total;hits+=!exterior[index(x,y)];}
     } else {
-      for (int x = minx; x <= maxx; ++x) {
-        ++total;
-        if (labels[static_cast<size_t>(maxy) * rw + x] == best_label) ++hit;
+      int y=side==1?miny:maxy;
+      for(int x=minx;x<=maxx;++x) {++total;hits+=!exterior[index(x,y)];}
+    }
+    out.boundary_support[side]=float(hits)/total;
+    if(out.boundary_support[side]>=0.55f) out.visible_edges_mask|=1<<side;
+  }
+  const int depth=std::clamp(int(std::lround(2*(std::isfinite(dpi_scale)?dpi_scale:1.f))),1,4);
+  const int gaps[4]={minx,miny,rw-1-maxx,rh-1-maxy};
+  int surrounded_sides=0;
+  for(int side=0;side<4;++side) {
+    // A thin visible rim is valid. Never demand a band proportional to canvas
+    // area or clamp a missing exterior sample to an inside pixel.
+    const int d=std::min(depth,gaps[side]);
+    if(d<1)continue;
+    int hits=0,total=0;
+    for(int k=1;k<=d;++k) {
+      if(side==0 || side==2) {
+        const int x=side==0?minx-k:maxx+k;
+        for(int y=miny;y<=maxy;++y) {++total;hits+=exterior[index(x,y)];}
+      } else {
+        const int y=side==1?miny-k:maxy+k;
+        for(int x=minx;x<=maxx;++x) {++total;hits+=exterior[index(x,y)];}
       }
     }
-    return total > 0 ? static_cast<float>(hit) / static_cast<float>(total) : 0.f;
-  };
-
-  for (int s = 0; s < 4; ++s) {
-    out.boundary_support[s] = edge_support(s);
-    if (out.boundary_support[s] >= 0.55f) out.visible_edges_mask |= (1 << s);
+    if(total>0 && float(hits)/total>=0.95f)++surrounded_sides;
   }
-
-  // Outward workspace-background support: sample a band just outside each canvas
-  // AABB edge (toward ROI interior, away from canvas). Uses the same weak-ΔE
-  // non_bg mask so "四周都是工作区背景色" is color evidence, not merely inset.
-  constexpr float kOutwardBgMin = 0.55f;
-  auto outward_bg_support = [&](int side) -> float {
-    const int depth = std::clamp(std::min(bw, bh) / 40, 2, 8);
-    int hit = 0, total = 0;
-    if (side == 0) {  // left → sample x in [minx-depth, minx)
-      if (minx < depth) return 0.f;
-      for (int y = miny; y <= maxy; ++y) {
-        for (int dx = 1; dx <= depth; ++dx) {
-          ++total;
-          if (!non_bg[static_cast<size_t>(y) * rw + (minx - dx)]) ++hit;
-        }
-      }
-    } else if (side == 1) {  // top
-      if (miny < depth) return 0.f;
-      for (int x = minx; x <= maxx; ++x) {
-        for (int dy = 1; dy <= depth; ++dy) {
-          ++total;
-          if (!non_bg[static_cast<size_t>(miny - dy) * rw + x]) ++hit;
-        }
-      }
-    } else if (side == 2) {  // right
-      if (maxx + depth >= rw) return 0.f;
-      for (int y = miny; y <= maxy; ++y) {
-        for (int dx = 1; dx <= depth; ++dx) {
-          ++total;
-          if (!non_bg[static_cast<size_t>(y) * rw + (maxx + dx)]) ++hit;
-        }
-      }
-    } else {  // bottom
-      if (maxy + depth >= rh) return 0.f;
-      for (int x = minx; x <= maxx; ++x) {
-        for (int dy = 1; dy <= depth; ++dy) {
-          ++total;
-          if (!non_bg[static_cast<size_t>(maxy + dy) * rw + x]) ++hit;
-        }
-      }
-    }
-    return total > 0 ? static_cast<float>(hit) / static_cast<float>(total) : 0.f;
-  };
-
-  // Completeness: each side is a visible canvas edge, inset from ROI rim, AND
-  // backed by workspace-background color outside the canvas.
-  int complete = 0;
-  const int band = 2;
-  const bool inset[4] = {minx > band, miny > band, maxx < rw - 1 - band, maxy < rh - 1 - band};
-  for (int s = 0; s < 4; ++s) {
-    if (((out.visible_edges_mask >> s) & 1) == 0 || !inset[s]) continue;
-    if (outward_bg_support(s) >= kOutwardBgMin) ++complete;
-  }
-  out.four_sides_complete = (complete == 4) && fill_ratio >= 0.35f;
-
-  out.confidence = std::clamp(0.35f * fill_ratio + 0.15f * complete +
-                                  0.1f * (out.boundary_support[0] + out.boundary_support[1] +
-                                          out.boundary_support[2] + out.boundary_support[3]),
-                              0.f, 1.f);
-
-  if (fill_ratio < 0.08f) {
-    out.ambiguous = true;
-    std::snprintf(out.ambiguity_reason, sizeof(out.ambiguity_reason), "low fill ratio");
-  }
+  out.four_sides_complete=surrounded_sides==4;
+  out.confidence=0.5f+0.125f*surrounded_sides;
   return out;
 }
-
 }  // namespace sct

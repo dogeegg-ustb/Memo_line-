@@ -160,6 +160,8 @@ struct CanvasObservation {
   float confidence = 0.f;
   int visible_edges_mask = 0;  // bit0=L bit1=T bit2=R bit3=B
   float boundary_support[4] = {0, 0, 0, 0};
+  // Foreground is surrounded by observed exterior background on all four
+  // sides. Direct AABB mapping additionally requires high boundary_support.
   bool four_sides_complete = false;
   bool ambiguous = false;
   char ambiguity_reason[128] = {};

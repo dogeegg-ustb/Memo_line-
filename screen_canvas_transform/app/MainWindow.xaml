@@ -82,7 +82,13 @@
                 Content="隐藏标记"
                 MinWidth="100"
                 Padding="12,8"
-                Click="HideOverlayButton_OnClick"/>
+                Click="HideOverlayButton_OnClick"
+                Margin="0,0,8,0"/>
+        <Button x:Name="ViewportOverlayButton"
+                Content="隐藏补全视口"
+                MinWidth="130"
+                Padding="12,8"
+                Click="ViewportOverlayButton_OnClick"/>
       </StackPanel>
     </StackPanel>
   </Grid>

@@ -1,6 +1,7 @@
 #include "wb/detector.hpp"
 
 #include "wb/background.hpp"
+#include "wb/color.hpp"
 #include "wb/features.hpp"
 #include "wb/geometry.hpp"
 #include "wb/grower.hpp"
@@ -560,14 +561,35 @@ DetectionOutput WorkspaceBorderDetector::Detect(const DetectionInput& in) const 
       }
       filtered.push_back(std::move(h));
     }
+    // A user ROI is deliberately rough, but a candidate that covers only a
+    // minority of it is an internal panel/canvas fragment rather than the
+    // workspace the user selected. This is a hard containment check, not a
+    // score or an area preference.
+    std::vector<Hypothesis> roi_containing;
+    const int user_area = std::max(1, work_user.area());
+    for (auto& h : filtered) {
+      const int l = std::max(h.rect.left, work_user.left);
+      const int t = std::max(h.rect.top, work_user.top);
+      const int r = std::min(h.rect.right, work_user.right);
+      const int b = std::min(h.rect.bottom, work_user.bottom);
+      const int intersection = std::max(0, r-l) * std::max(0, b-t);
+      if (static_cast<float>(intersection) / user_area >= 0.55f)
+        roi_containing.push_back(std::move(h));
+    }
+    filtered = std::move(roi_containing);
     if (filtered.empty()) {
-      return Fail(Status::EndpointTruncated, "endpoints truncated", capture_id);
+      return Fail(Status::InsufficientGeometry, "no candidate covers selected workspace ROI", capture_id);
     }
 
     auto selected = SelectBestHypothesis(std::move(filtered), all_sides, cfg_);
     if (!selected.best) {
       if (selected.reason == "AmbiguousCandidates") {
-        return Fail(Status::AmbiguousCandidates, selected.reason, capture_id);
+        std::string reason=selected.reason;
+        for (const auto& h : selected.ranked)
+          reason += " m"+std::to_string(h.model_index)+"["+std::to_string(h.rect.left)+","+
+              std::to_string(h.rect.top)+","+std::to_string(h.rect.right)+","+
+              std::to_string(h.rect.bottom)+"]";
+        return Fail(Status::AmbiguousCandidates, reason, capture_id);
       }
       return Fail(Status::InsufficientGeometry,
                   selected.reason.empty() ? "no hypothesis" : selected.reason, capture_id);
@@ -603,14 +625,26 @@ DetectionOutput WorkspaceBorderDetector::Detect(const DetectionInput& in) const 
     {
       auto sim = BuildSimilarity(full_feat, refine_model, grow_roi, cfg_);
       auto full_seeds = SampleBackgroundSeeds(full_feat, user_roi, cfg_, dpi_scale);
-      if (GrowBackground(full_seeds, refine_model.seed_ids, sim, grow_roi, cfg_, full_grown)) {
+      // Seed IDs are local to a sampling resolution. Reassociate by the frozen
+      // model's color, never by coarse IDs after resampling at full resolution.
+      std::vector<int> full_ids;
+      for (const auto& seed : full_seeds)
+        if (seed.accepted && DeltaE76(seed.mean_lab, refine_model.center_lab) <=
+                                 refine_model.strong_delta_e)
+          full_ids.push_back(seed.seed_id);
+      if (GrowBackground(full_seeds, full_ids, sim, grow_roi, cfg_, full_grown)) {
         grown_ptr = &full_grown.mask;
       }
     }
 
     auto val = ValidateRectangle(refined, best, full_feat, refine_model, grown_ptr, cfg_);
     if (!val.ok) {
-      return Fail(Status::IndependentValidationFailed, "validation failed", capture_id);
+      std::string reason = "validation failed rect=[" + std::to_string(refined.left) + "," +
+          std::to_string(refined.top) + "," + std::to_string(refined.right) + "," +
+          std::to_string(refined.bottom) + "]";
+      for (const auto& metric : val.metrics)
+        reason += " " + metric.first + "=" + std::to_string(metric.second);
+      return Fail(Status::IndependentValidationFailed, reason, capture_id);
     }
 
     DetectionOutput out;

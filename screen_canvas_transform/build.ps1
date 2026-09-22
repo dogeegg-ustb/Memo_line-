@@ -2,7 +2,8 @@
 # workspace_border_detect algorithm sources are compiled into ScreenCanvasNative
 # (color/features/.../detector.cpp) — no WorkspaceBorderNative.dll, no wb_* exports.
 param(
-  [string]$Configuration = "Release"
+  [string]$Configuration = "Release",
+  [string]$NativeBuildDirectory = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,6 +11,7 @@ $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Native = Join-Path $Root "native"
 $App = Join-Path $Root "app"
 $Build = Join-Path $Native "build_src"
+if ($NativeBuildDirectory) { $Build = [IO.Path]::GetFullPath($NativeBuildDirectory) }
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $vswhere)) { throw "vswhere not found" }
@@ -70,26 +72,36 @@ try {
   Pop-Location
 }
 
-$exe = Get-ChildItem -Path (Join-Path $App "bin") -Recurse -Filter ScreenCanvasTransform.exe |
-  Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$exe = Get-Item (Join-Path $App "bin\x64\$Configuration\net8.0-windows10.0.19041.0\win-x64\ScreenCanvasTransform.exe")
 if (-not $exe) { throw "ScreenCanvasTransform.exe not found" }
 Copy-Item $dll (Join-Path $exe.DirectoryName "ScreenCanvasNative.dll") -Force
 Write-Host "OK: $($exe.FullName)"
 Write-Host "DLL: $(Join-Path $exe.DirectoryName 'ScreenCanvasNative.dll')"
 
-# Native contract tests
-$testSrc = Join-Path $Native "tests\contract_tests.cpp"
+# Native geometry contracts and physical-coordinate regressions.
 $testObjs = @(
+  (Join-Path $Build "color.obj"),
+  (Join-Path $Build "features.obj"),
+  (Join-Path $Build "seeds.obj"),
+  (Join-Path $Build "background.obj"),
+  (Join-Path $Build "similarity.obj"),
+  (Join-Path $Build "grower.obj"),
+  (Join-Path $Build "scoring.obj"),
+  (Join-Path $Build "refine.obj"),
+  (Join-Path $Build "validate.obj"),
+  (Join-Path $Build "detector.obj"),
   (Join-Path $Build "viewport_frame.obj"),
   (Join-Path $Build "transform_solve.obj"),
   (Join-Path $Build "workspace_canvas_relation.obj"),
   (Join-Path $Build "geometry.obj"),
-  (Join-Path $Build "canvas_observe.obj"),
-  (Join-Path $Build "color.obj")
+  (Join-Path $Build "canvas_observe.obj")
 )
-& cl.exe @common /c $testSrc /Fo"$Build\contract_tests.obj"
-if ($LASTEXITCODE -ne 0) { throw "contract test compile failed" }
-& link.exe /nologo /OUT:$Build\contract_tests.exe "$Build\contract_tests.obj" @testObjs
-if ($LASTEXITCODE -ne 0) { throw "contract test link failed" }
-& $Build\contract_tests.exe
-if ($LASTEXITCODE -ne 0) { throw "contract tests failed" }
+foreach ($testName in @("contract_tests", "rotation_regression_tests", "workspace_regression_tests")) {
+  $testSrc = Join-Path $Native "tests\$testName.cpp"
+  & cl.exe @common /c $testSrc "/Fo$Build\$testName.obj"
+  if ($LASTEXITCODE -ne 0) { throw "$testName compile failed" }
+  & link.exe /nologo "/OUT:$Build\$testName.exe" "$Build\$testName.obj" @testObjs
+  if ($LASTEXITCODE -ne 0) { throw "$testName link failed" }
+  & "$Build\$testName.exe"
+  if ($LASTEXITCODE -ne 0) { throw "$testName failed" }
+}

@@ -103,16 +103,18 @@ GrownBackground* GrowBackground(const std::vector<SeedPatch>& seeds,
     int side_vote[5] = {};
   };
   std::vector<Comp> comps;
-  ImageU8 labels;
-  labels.Allocate(w, h, 0);
+  // Sampling can touch more than 255 disconnected components. A byte label
+  // wraps to zero and re-enqueues already visited pixels.
+  std::vector<int> labels(static_cast<size_t>(w)*h,0);
+  auto label_at = [&](int x,int y) -> int& { return labels[static_cast<size_t>(y)*w+x]; };
   int next_label = 1;
 
   auto flood = [&](int sx, int sy, int side_idx) {
-    if (!growable.At(sx, sy) || labels.At(sx, sy)) return;
+    if (!growable.At(sx, sy) || label_at(sx, sy)) return;
     Comp c;
     std::queue<std::pair<int, int>> q;
     q.push({sx, sy});
-    labels.At(sx, sy) = static_cast<uint8_t>(next_label);
+    label_at(sx, sy) = next_label;
     c.side_vote[side_idx]++;
     c.pixels = 1;
     static const int dxs[4] = {1, -1, 0, 0};
@@ -124,12 +126,12 @@ GrownBackground* GrowBackground(const std::vector<SeedPatch>& seeds,
         const int nx = p.first + dxs[k];
         const int ny = p.second + dys[k];
         if (nx < x0 || nx >= x1 || ny < y0 || ny >= y1) continue;
-        if (!growable.At(nx, ny) || labels.At(nx, ny)) continue;
+        if (!growable.At(nx, ny) || label_at(nx, ny)) continue;
         // Do not leak across strong barriers into non-strong background.
         if (similarity.barrier_mask.At(nx, ny) && !similarity.strong_mask.At(nx, ny) &&
             !similarity.weak_mask.At(nx, ny))
           continue;
-        labels.At(nx, ny) = static_cast<uint8_t>(next_label);
+        label_at(nx, ny) = next_label;
         ++c.pixels;
         q.push({nx, ny});
       }
@@ -160,7 +162,7 @@ GrownBackground* GrowBackground(const std::vector<SeedPatch>& seeds,
   int bx0 = w, bx1 = 0, by0 = h, by1 = 0;
   for (int y = y0; y < y1; ++y) {
     for (int x = x0; x < x1; ++x) {
-      const int lid = labels.At(x, y);
+      const int lid = label_at(x, y);
       if (!lid || !keep.count(lid)) continue;
       out.mask.At(x, y) = 1;
       int maj = 1, majv = -1;
@@ -205,23 +207,21 @@ GrownBackground* GrowBackground(const std::vector<SeedPatch>& seeds,
 
 bool IsWorkspaceBackgroundModel(const GrownBackground& grown, const BackgroundModel& model,
                                 const DetectorConfig& cfg) {
-  // Solid canvas-like blob: high fill, almost no interior hole.
-  if (grown.bbox_fill_ratio >= 0.85f && grown.hole_score < 0.12f) return false;
-  if (grown.bbox_fill_ratio > cfg.max_bg_bbox_fill_ratio &&
-      grown.hole_score < cfg.min_bg_hole_score) {
-    return false;
-  }
-  // Weak multi-side rectangular support → likely interior canvas color.
-  if (model.rectangular_support_score < cfg.min_model_rect_support) return false;
-
-  if (grown.hole_score >= cfg.min_bg_hole_score) return true;
-  if (grown.bbox_fill_ratio <= cfg.max_bg_bbox_fill_ratio &&
-      grown.touches_capture_border < 0.55f) {
-    return true;
-  }
-  // Touching capture border heavily without a hole looks like leaked UI / solid panel.
+  if (!grown.bbox.valid() || grown.pixel_count < 16 ||
+      model.rectangular_support_score < cfg.min_model_rect_support) return false;
   if (grown.touches_capture_border >= cfg.max_bg_capture_border_touch) return false;
-  return grown.hole_score >= cfg.min_bg_hole_score * 0.5f;
+
+  // Fill fraction is not topology: a small canvas can occupy <1% of a valid
+  // workspace. Require a resolved hole/notch/gap, not a minimum missing area
+  // fraction. A 2x2 missing patch is the fixed raster noise tolerance.
+  const auto& b = grown.bbox;
+  for (int y = b.top; y + 1 < b.bottom; ++y) {
+    for (int x = b.left; x + 1 < b.right; ++x) {
+      if (!grown.mask.At(x,y) && !grown.mask.At(x+1,y) &&
+          !grown.mask.At(x,y+1) && !grown.mask.At(x+1,y+1)) return true;
+    }
+  }
+  return false; // solid color rectangle; no canvas/background topology
 }
 
 }  // namespace wb

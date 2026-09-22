@@ -156,6 +156,7 @@ void TestViewportPattern01ParallelNoComplete() {
   DrawRedVLine(buf, stride, 40, 25, 70, 0, 0, 220);
   wb::IntRect thumb{10, 10, 110, 90};
   auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.workspace_canvas_relation.visible_canvas_bounds_workspace_local = {200, 150, 600, 450};
   auto out = sct::CompleteViewportFrame(in);
   Expect(out.status == sct::FailStatus::Ok, "0.1 parallel segments ok");
   Expect(out.frame.red_evidence.confirmed_complete_edge_count == 0, "0.1 has no complete edges");
@@ -189,6 +190,13 @@ void TestViewportPattern02IntersectingNoComplete() {
          "0.2 origin near L corner x");
   Expect(std::abs(out.frame.origin_top_left_displayed.y - (Y + 0.5)) < 2.0,
          "0.2 origin near L corner y");
+  // The two clipped axes imply slightly different raw scales after raster
+  // extraction.  0.2 must fit one common scale from both observations instead
+  // of silently taking the vertical edge first (which produces a visibly
+  // different, taller frame).
+  Expect(std::abs(out.frame.width - 100.5) < 4.0 &&
+             std::abs(out.frame.height - 75.4) < 4.0,
+         "0.2 recovers size from both orthogonal segment lengths");
 }
 
 void TestViewportNoRedPixelsIsEdgeFailureNotFrameFound() {
@@ -244,6 +252,83 @@ void TestScalePercentDoesNotChangeMatrix() {
   Expect(r200.snapshot.marker.target_arm_display_px >
              r100.snapshot.marker.target_arm_display_px,
          "marker arm grows with scale");
+
+  const auto& c2s = r100.snapshot.canvas_to_screen;
+  Expect(std::abs(r100.snapshot.marker.anchor_screen.x - c2s.m[2]) < 1e-9 &&
+             std::abs(r100.snapshot.marker.anchor_screen.y - c2s.m[5]) < 1e-9,
+         "marker anchor is normalized canvas top-left (0,0)");
+  Expect(r100.snapshot.marker.x_arm_end_screen.x > r100.snapshot.marker.anchor_screen.x,
+         "top-left marker X arm points along canvas +X");
+  Expect(r100.snapshot.marker.y_arm_end_screen.y > r100.snapshot.marker.anchor_screen.y,
+         "top-left marker Y arm points along canvas +Y");
+}
+
+void TestPattern01UnknownRotationDeduplicatesEquivalentCropAssignments() {
+  constexpr int W = 160;
+  constexpr int H = 120;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
+  const wb::IntRect thumb{5, 5, 155, 115};
+  const wb::IntRect canvas{20, 20, 140, 100};
+  FillRect(buf, stride, canvas.left, canvas.top, canvas.right, canvas.bottom, 210, 210, 210);
+  // A single cutting fragment above the Navigator midpoint.  Workspace crop
+  // correspondence says it is semantic Bottom even though screen geometry
+  // alone would call it Top.
+  DrawRedHLine(buf, stride, 35, 30, 130, 0, 0, 220);
+  auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.navigator_canvas_bounds = canvas;
+  in.workspace_canvas_relation.canvas_crop_sides = 8;  // Bottom
+  // Deliberately asymmetric along the workspace edge: 50 px before the
+  // contact interval and 150 px after it. A midpoint mirror would be wrong.
+  in.workspace_canvas_relation.visible_canvas_bounds_workspace_local = {50, 60, 650, 540};
+  in.display_rotation_degrees = 0.f;
+  in.display_rotation_confidence = 0.f;  // reproduce intermittent OCR miss of visible "0.0"
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok,
+         "0.1 accepts equivalent discrete-angle crop assignments");
+  if (out.status != sct::FailStatus::Ok) return;
+  Expect(out.frame.completion_strategy ==
+             static_cast<int>(sct::ViewportCompletionPattern::ParallelSegmentsNoCompleteEdge),
+         "unknown-rotation single fragment remains pattern 0.1");
+  Expect(out.frame.origin_top_left_displayed.y < 35.0,
+         "semantic Bottom role places completed frame above the observed edge");
+  Expect(out.frame.origin_top_left_displayed.x > 17.0 &&
+             out.frame.origin_top_left_displayed.x < 24.0,
+         "0.1 tangential origin follows asymmetric workspace contact position");
+}
+
+void TestViewportPattern01FallsBackWhenVisibleCanvasExactRecoveryIsUnavailable() {
+  // A lone horizontal red edge remains valid 0.1 evidence even when the
+  // stricter visible-canvas recovery cannot be used (e.g. rotation OCR was
+  // not read).  It must fall through to normal WCR single-edge completion.
+  constexpr int W = 140;
+  constexpr int H = 110;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 255);
+  DrawRedHLine(buf, stride, 28, 25, 115, 0, 0, 220);
+  wb::IntRect thumb{10, 10, 130, 100};
+  auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.workspace_canvas_relation.visible_canvas_bounds_workspace_local = {80, 60, 720, 540};
+  // Default zero rotation confidence intentionally makes CompleteFromVisibleCanvas
+  // reject its exact path; the 0.1 single-edge path must still succeed.
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "0.1 falls back after exact visible-canvas rejection");
+  Expect(out.frame.completion_strategy ==
+             static_cast<int>(sct::ViewportCompletionPattern::ParallelSegmentsNoCompleteEdge),
+         "fallback reports 0.1 rather than failing or relabeling as 1.0");
+  Expect(out.frame.red_evidence.confirmed_complete_edge_count == 0,
+         "fallback does not manufacture a complete red edge");
+  if (!(std::abs(out.frame.width - 112.5) < 3.0 &&
+        std::abs(out.frame.height - 84.375) < 3.0)) {
+    std::printf("INFO: 0.1 recovered size %.3f x %.3f\n", out.frame.width, out.frame.height);
+  }
+  // The ideal horizontal red-on-canvas segment is 90 px; raster extraction
+  // may extend it by about one pixel at either end.  90 px ÷
+  // (visibleCanvasWidth(640) / workspaceWidth(800)) = 112.5 px; the second
+  // axis is completed with the 4:3 workspace aspect.
+  Expect(std::abs(out.frame.width - 112.5) < 3.0 &&
+             std::abs(out.frame.height - 84.375) < 3.0,
+         "0.1 divides red-on-canvas pixels by displayed-canvas/workspace ratio");
 }
 
 // ---- §10 红框成组契约测试 ----
@@ -270,10 +355,21 @@ void TestInterferenceOrthogonalRedDoesNotFakeComplete() {
   Expect(out.frame.completion_strategy ==
              static_cast<int>(sct::ViewportCompletionPattern::OneCompleteEdge),
          "interference keeps 1.0 not inflated complete count");
+  // The complete top edge is the actual viewport side, not a clipped 0.1
+  // fragment.  Its endpoints must survive completion exactly; only the normal
+  // side is derived from the 4:3 workspace aspect.
+  // Raster extraction expands this one-pixel stroke by roughly one pixel at
+  // each endpoint.  Assert endpoint preservation (not the literal ink span),
+  // and specifically reject the old 0.5 fragment-ratio rescaling.
+  Expect(std::abs(out.frame.origin_top_left_displayed.x - (L - 0.5)) < 2.0 &&
+             std::abs(out.frame.origin_top_left_displayed.y - (T + 0.5)) < 2.0 &&
+             out.frame.width > (R - L - 2.0) &&
+             std::abs(out.frame.height - out.frame.width * 0.75) < 2.0,
+         "1.0 preserves the observed complete edge and only completes its normal axis");
 }
 
 void TestTwoSeparableRectanglesFormTwoGroupsDisambiguateBySize() {
-  // 两套可分离平行/垂直结构 → 成两组；无背景粘着时靠理论尺寸唯一匹配
+  // 两套可分离平行/垂直结构 → 成两组；多组时靠显示画布形状（理论尺寸）唯一匹配
   constexpr int W = 200;
   constexpr int H = 160;
   constexpr int stride = W * 4;
@@ -297,53 +393,64 @@ void TestTwoSeparableRectanglesFormTwoGroupsDisambiguateBySize() {
          "two groups: target has 4 complete");
 }
 
-void TestBackgroundUniqueSelectsWithoutSizeBranch() {
-  // 两组中仅一组外侧粘导航器背景 → 不进入尺寸分支即选中
+void TestShapeUniqueSelectsAmongMultipleGroups() {
+  // 两组均可补全；仅一组匹配显示画布形状 → 直接选中，不必再靠窄红
   constexpr int W = 200;
   constexpr int H = 160;
   constexpr int stride = W * 4;
-  // 缩略图外圈 = 导航器背景（深灰），画布内 = 浅色
   std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
   wb::IntRect thumb{5, 5, 195, 155};
   wb::IntRect canvas{20, 20, 180, 140};
   FillRect(buf, stride, canvas.left, canvas.top, canvas.right, canvas.bottom, 210, 210, 210);
-  // 贴顶边的框（外侧探到背景）
-  DrawRedRect1px(buf, stride, 40, 20, 100, 70, 0, 0, 220);
-  // 画布中部另一框（不粘背景），尺寸也接近以免误判依赖
-  DrawRedRect1px(buf, stride, 110, 80, 170, 130, 0, 0, 220);
+  // 匹配理论：nav≈160×120，fraction→80×60
+  DrawRedRect1px(buf, stride, 40, 30, 120, 90, 0, 0, 220);   // 80×60
+  DrawRedRect1px(buf, stride, 130, 100, 160, 125, 0, 0, 220);  // 30×25（勿取 40×30，否则
+                                                              // share=0.5 缺边恢复会凑成 80×60）
   auto in = MakeViewportInput(buf, W, H, stride, thumb);
   in.navigator_canvas_bounds = canvas;
-  // 故意给错误理论尺寸：若误入尺寸分支会失败或选错
-  in.workspace_canvas_relation.visible_canvas_fraction_x = 0.15f;
-  in.workspace_canvas_relation.visible_canvas_fraction_y = 0.15f;
+  in.workspace_canvas_relation.visible_canvas_fraction_x =
+      static_cast<float>(80.0 / 160.0);
+  in.workspace_canvas_relation.visible_canvas_fraction_y =
+      static_cast<float>(60.0 / 120.0);
+  in.workspace_canvas_relation.canvas_aspect_ratio = 80.0 / 60.0;
+  // 关闭「边长/share」恢复，避免缺边组被放大到理论尺寸
+  in.workspace_canvas_relation.visible_canvas_workspace_fraction_x = 1.0f;
+  in.workspace_canvas_relation.visible_canvas_workspace_fraction_y = 1.0f;
   auto out = sct::CompleteViewportFrame(in);
-  Expect(out.status == sct::FailStatus::Ok, "bg-unique selects ok");
+  Expect(out.status == sct::FailStatus::Ok, "shape-unique selects ok");
+  Expect(std::abs(out.frame.width - 80.0) < 4.0, "shape-unique picked ~80 wide");
+  Expect(std::abs(out.frame.height - 60.0) < 4.0, "shape-unique picked ~60 tall");
+}
+
+void TestNarrowRedBreaksShapeTie() {
+  // 两框同形都匹配理论尺寸；一框强红、一框粉红灰红 → 窄红筛出强红
+  constexpr int W = 220;
+  constexpr int H = 180;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 200);
+  wb::IntRect thumb{5, 5, 215, 175};
+  wb::IntRect canvas{10, 10, 210, 170};
+  DrawRedRect1px(buf, stride, 20, 20, 100, 80, 0, 0, 220);      // 80×60 强红
+  DrawRedRect1px(buf, stride, 120, 90, 200, 150, 125, 130, 160);  // 80×60 粉灰红（仍可观测）
+  auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  in.navigator_canvas_bounds = canvas;
+  in.workspace_canvas_relation.visible_canvas_fraction_x =
+      static_cast<float>(80.0 / 200.0);
+  in.workspace_canvas_relation.visible_canvas_fraction_y =
+      static_cast<float>(60.0 / 160.0);
+  in.workspace_canvas_relation.canvas_aspect_ratio = 80.0 / 60.0;
+  in.workspace_canvas_relation.visible_canvas_workspace_fraction_x = 1.0f;
+  in.workspace_canvas_relation.visible_canvas_workspace_fraction_y = 1.0f;
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "narrow-red breaks shape tie");
+  Expect(std::abs(out.frame.origin_top_left_displayed.x - (20 + 0.5)) < 2.5,
+         "narrow-red picked strong-red rect left");
   Expect(std::abs(out.frame.origin_top_left_displayed.y - (20 + 0.5)) < 2.5,
-         "bg-unique picked top-touching rect");
-  Expect(std::abs(out.frame.origin_top_left_displayed.x - (40 + 0.5)) < 2.5,
-         "bg-unique picked left of top rect");
+         "narrow-red picked strong-red rect top");
 }
 
-void TestMultipleGroupsTouchBackgroundMustFail() {
-  constexpr int W = 200;
-  constexpr int H = 160;
-  constexpr int stride = W * 4;
-  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
-  wb::IntRect thumb{5, 5, 195, 155};
-  wb::IntRect canvas{20, 20, 180, 140};
-  FillRect(buf, stride, canvas.left, canvas.top, canvas.right, canvas.bottom, 210, 210, 210);
-  // 两框分别贴左/右画布边 → 两组都粘背景
-  DrawRedRect1px(buf, stride, 20, 40, 70, 100, 0, 0, 220);
-  DrawRedRect1px(buf, stride, 130, 40, 180, 100, 0, 0, 220);
-  auto in = MakeViewportInput(buf, W, H, stride, thumb);
-  in.navigator_canvas_bounds = canvas;
-  auto out = sct::CompleteViewportFrame(in);
-  Expect(out.status == sct::FailStatus::AmbiguousViewportGeometry,
-         "|B|>=2 must fail AmbiguousViewportGeometry");
-}
-
-void TestNoBackgroundTheoryAmbiguousMustFail() {
-  // |B|==0 且两组尺寸都不匹配 / 或都匹配 → 失败，不得取较近者
+void TestCanvasShapeAmbiguousMustFail() {
+  // 两组尺寸都不匹配显示画布形状 → 失败，不得取较近者
   constexpr int W = 200;
   constexpr int H = 160;
   constexpr int stride = W * 4;
@@ -359,17 +466,17 @@ void TestNoBackgroundTheoryAmbiguousMustFail() {
   in.workspace_canvas_relation.visible_canvas_fraction_y = 0.5f;
   auto out = sct::CompleteViewportFrame(in);
   Expect(out.status == sct::FailStatus::AmbiguousViewportGeometry,
-         "|M|==0 must fail, no nearest-pick");
+         "|S|==0 must fail, no nearest-pick");
 }
 
-void TestNoBackgroundTheoryTieMustFail() {
+void TestCanvasShapeAndNarrowRedTieMustFail() {
+  // 两框同形且同为强窄红 → 形状+窄红仍并列，必须失败
   constexpr int W = 220;
   constexpr int H = 180;
   constexpr int stride = W * 4;
   std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 200);
   wb::IntRect thumb{5, 5, 215, 175};
   wb::IntRect canvas{10, 10, 210, 170};
-  // 两框同为 80×60，理论也是 80×60 → |M|>=2 失败
   DrawRedRect1px(buf, stride, 20, 20, 100, 80, 0, 0, 220);
   DrawRedRect1px(buf, stride, 120, 90, 200, 150, 0, 0, 220);
   auto in = MakeViewportInput(buf, W, H, stride, thumb);
@@ -381,7 +488,7 @@ void TestNoBackgroundTheoryTieMustFail() {
   in.workspace_canvas_relation.canvas_aspect_ratio = 80.0 / 60.0;
   auto out = sct::CompleteViewportFrame(in);
   Expect(out.status == sct::FailStatus::AmbiguousViewportGeometry,
-         "|M|>=2 must fail, no smaller-error pick");
+         "|N|>=2 must fail, no smaller-error pick");
 }
 
 // ---- 切割边对应契约 ----
@@ -536,7 +643,8 @@ void TestCropOnePairPropagates() {
 }
 
 void TestCropConflictAmbiguous() {
-  // 两条竖直红边都在画布中心左侧 → L/R 双切割无法唯一对应 → 失败
+  // Panning may put both viewport sides left of the canvas center. This is
+  // valid geometry: the canvas center is not evidence of a role conflict.
   constexpr int W = 160;
   constexpr int H = 120;
   constexpr int stride = W * 4;
@@ -555,8 +663,8 @@ void TestCropConflictAmbiguous() {
   in.display_rotation_degrees = 0.f;
   in.display_rotation_confidence = 0.9f;
   auto out = sct::CompleteViewportFrame(in);
-  Expect(out.status == sct::FailStatus::AmbiguousViewportGeometry,
-         "crop L+R with both edges left-of-center → ambiguous");
+  Expect(out.status == sct::FailStatus::Ok,
+         "off-center viewport remains valid under panning");
 }
 
 void TestPartial180SingleCuttingHorizontal() {
@@ -651,7 +759,8 @@ void TestViewportRotatedRectangleRelativeOrthogonal() {
   DrawRedLine(buf, stride, W, H, bl.first, bl.second, tl.first, tl.second, 0, 0, 220);
   wb::IntRect thumb{20, 20, 180, 160};
   auto in = MakeViewportInput(buf, W, H, stride, thumb);
-  in.display_rotation_degrees = 25.f;
+  // Navigator viewport rotates opposite to the main canvas.
+  in.display_rotation_degrees = -25.f;
   in.display_rotation_confidence = 1.f;
   auto out = sct::CompleteViewportFrame(in);
   Expect(out.status == sct::FailStatus::Ok, "rotated 25° red rect must complete");
@@ -696,27 +805,60 @@ void TestFourSidesCompleteRequiresOutwardBackground() {
   FillRect(buf, stride, 121, 30, 180, 130, 200, 40, 40);
   auto fake = sct::ObserveCanvasExcludingBackground(buf.data(), W, H, stride, {0, 0, W, H}, 0, 0,
                                                     model);
-  Expect(!fake.four_sides_complete,
-         "inset alone is not enough: outward band must match workspace BG");
+  Expect(!fake.four_sides_complete && fake.bounds_capture.right == 120,
+         "nearby non-background invalidates the claimed exterior background rim");
 }
 
 }  // namespace
 
+void TestNavigatorEnclosedBackgroundIsNotPaper() {
+  constexpr int W=200, H=160, stride=W*4;
+  std::vector<uint8_t> buf(stride*H,0);
+  wb::BackgroundModel model;
+  model.center_lab=wb::BgrToLab(45,45,45);
+  model.strong_delta_e=6.f;
+  model.weak_delta_e=12.f;
+  for (int variant=0; variant<3; ++variant) {
+    FillRect(buf,stride,0,0,W,H,45,45,45);
+    FillRect(buf,stride,60,20,150,145,255,255,255);
+    // Dark artwork must not change the paper bounds.
+    FillRect(buf,stride,80,50,120,90,45,45,45);
+    // Closed viewport enclosing left gutter, or clipped at the ROI top.
+    const int top=variant==1 ? 0 : 8;
+    const int red=variant==2 ? 100 : 255;
+    FillRect(buf,stride,25,top,28,110,40,40,red);
+    FillRect(buf,stride,25,top,135,top+3,40,40,red);
+    FillRect(buf,stride,25,107,135,110,40,40,red);
+    FillRect(buf,stride,132,top,135,110,40,40,red);
+    auto out=sct::ObserveCanvasExcludingBackground(buf.data(),W,H,stride,
+        {0,0,W,H},-300,20,model,1.f,true);
+    Expect(!out.ambiguous && out.bounds_capture.left==60 &&
+        out.bounds_capture.top==20 && out.bounds_capture.right==150 &&
+        out.bounds_capture.bottom==145,
+        "navigator excludes gray pocket and viewport ink from paper bounds");
+    Expect(out.bounds_screen.left==-240 && out.bounds_screen.top==40,
+        "navigator paper bounds preserve capture-to-screen origin");
+  }
+}
+
 int main() {
+  TestNavigatorEnclosedBackgroundIsNotPaper();
   TestWorkspaceCanvasRelationBuild();
   TestFourSidesCompleteRequiresOutwardBackground();
   TestViewportRedFourEdgesGeometryStable();
   TestViewportRedSoftAaAndGapRecall();
   TestViewportPattern01ParallelNoComplete();
+  TestViewportPattern01FallsBackWhenVisibleCanvasExactRecoveryIsUnavailable();
   TestViewportPattern02IntersectingNoComplete();
+  TestPattern01UnknownRotationDeduplicatesEquivalentCropAssignments();
   TestViewportNoRedPixelsIsEdgeFailureNotFrameFound();
   TestScalePercentDoesNotChangeMatrix();
   TestInterferenceOrthogonalRedDoesNotFakeComplete();
   TestTwoSeparableRectanglesFormTwoGroupsDisambiguateBySize();
-  TestBackgroundUniqueSelectsWithoutSizeBranch();
-  TestMultipleGroupsTouchBackgroundMustFail();
-  TestNoBackgroundTheoryAmbiguousMustFail();
-  TestNoBackgroundTheoryTieMustFail();
+  TestShapeUniqueSelectsAmongMultipleGroups();
+  TestNarrowRedBreaksShapeTie();
+  TestCanvasShapeAmbiguousMustFail();
+  TestCanvasShapeAndNarrowRedTieMustFail();
   TestCropCorrespondence180BottomMapsToTop();
   TestNonCuttingRedEdgeExcludedFromCropMatch();
   TestCropFourPairsDirectLtrb();

@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private SaveArchive? _activeArchive;
     private bool _flowRunning;
     private bool _recomputePending;
+    private bool _viewportOverlayEnabled = true;
 
     public MainWindow()
     {
@@ -122,6 +123,29 @@ public partial class MainWindow : Window
         // 只隐藏 ROI 框；橙色 L 标记始终保留，便于对照画布角。
         HideRoiBorders();
         SetStatus("已隐藏区域标记（橙色 L 仍保留）。");
+    }
+
+    private void ViewportOverlayButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        _viewportOverlayEnabled = !_viewportOverlayEnabled;
+        ViewportOverlayButton.Content = _viewportOverlayEnabled ? "隐藏补全视口" : "显示补全视口";
+
+        if (!_viewportOverlayEnabled)
+        {
+            _completeEdgeOverlay.Hide();
+            SetStatus("已隐藏系统补全 viewport 覆盖层。");
+            return;
+        }
+
+        if (_activeSession is not null && _lastResult is not null)
+        {
+            ApplyCompleteEdgeOverlay(_activeSession, _lastResult.Snapshot);
+            SetStatus("已显示系统补全 viewport 覆盖层。");
+        }
+        else
+        {
+            SetStatus("当前没有可显示的补全 viewport；请先完成一次重算。 ");
+        }
     }
 
     private void HideRoiBorders()
@@ -748,13 +772,23 @@ public partial class MainWindow : Window
             $"[红框边] 识别到 {observedCount} 条观测边，完整边={snapshot.ConfirmedCompleteEdgeCount} " +
             $"CaptureId={snapshot.CaptureId}");
 
-        if (observedCount <= 0 || snapshot.ObservedRedEdges.Length == 0)
+        if (!_viewportOverlayEnabled)
         {
             _completeEdgeOverlay.Hide();
             return;
         }
 
-        var screenEdges = ViewportCorrespondenceMapper.MapObservedEdges(snapshot, session);
+        var completedFrameEdges = ViewportCorrespondenceMapper.MapCompletedViewportEdges(
+            snapshot.Raw.Viewport, session.OriginX, session.OriginY);
+        if (completedFrameEdges.Count == 0)
+        {
+            _completeEdgeOverlay.Hide();
+            return;
+        }
+
+        // The overlay is the reconstructed viewport, not merely the source fragments.
+        // This makes a 0.1/0.2 result visibly reviewable on the navigator itself.
+        var screenEdges = completedFrameEdges;
         int assignedRoles = 0;
         foreach (var e in snapshot.ObservedRedEdges)
         {

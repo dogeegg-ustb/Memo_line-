@@ -1,5 +1,6 @@
 using ScreenCanvasTransform.Capture;
 using ScreenCanvasTransform.Detection;
+using ScreenCanvasTransform.Diagnostics;
 using ScreenCanvasTransform.Interop;
 using ScreenCanvasTransform.Models;
 using ScreenCanvasTransform.Ocr;
@@ -295,7 +296,7 @@ public sealed class TransformPipelineService
         }
 
         progress?.Report(TransformStage.ObservingNavigatorCanvas);
-        var navCanvas = _native.ObserveCanvas(session, thumbnailCapture, background);
+        var navCanvas = _native.ObserveCanvas(session, thumbnailCapture, background, navigator: true);
         if (navCanvas.Ambiguous || (navCanvas.BoundsCapture.IsEmpty && navCanvas.BoundsScreen.IsEmpty))
         {
             throw Fail(
@@ -349,7 +350,34 @@ public sealed class TransformPipelineService
             canvasW,
             canvasH);
 
-        if (!wsCanvas.FourSidesComplete || wsCanvas.Ambiguous)
+        // An axis-aligned bounding box does not identify the canvas origin
+        // after rotation, including 90/180 degrees.
+        bool unrotated = numbers.RotationConfidence >= 0.2f
+            && float.IsFinite(numbers.RotationDegrees)
+            && Math.Abs(Math.IEEERemainder(numbers.RotationDegrees, 360.0)) < 0.05;
+        // The detected full canvas must also preserve the archived pixel aspect.
+        // This rejects a large, white non-canvas region that happens to be surrounded
+        // by workspace-colored pixels. Keep this tolerance aligned with native solve.
+        const double directAspectRelativeTolerance = 0.04;
+        double archivedAspect = (double)canvasW / canvasH;
+        double observedAspect = wsCanvas.BoundsCapture.Height > 0
+            ? (double)wsCanvas.BoundsCapture.Width / wsCanvas.BoundsCapture.Height
+            : double.NaN;
+        bool archivedAspectMatches = double.IsFinite(observedAspect)
+            && Math.Abs(observedAspect / archivedAspect - 1.0) <= directAspectRelativeTolerance;
+
+        // An AABB alone cannot distinguish 0° from 180°.  Direct mapping is only
+        // valid after OCR actually read a zero rotation; an unread value must use
+        // the viewport route rather than silently assume 0°.
+        bool directWorkspacePath = wsCanvas.FourSidesComplete && !wsCanvas.Ambiguous
+            && wsCanvas.HasAxisAlignedBoundary && archivedAspectMatches && unrotated;
+        LiveDebugLog.Write(
+            $"[DirectWorkspace] canvas={wsCanvas.BoundsCapture} surrounded={wsCanvas.FourSidesComplete} " +
+            $"axis={wsCanvas.HasAxisAlignedBoundary} rot={numbers.RotationDegrees:F1} " +
+            $"rotConf={numbers.RotationConfidence:F2} aspect={observedAspect:F4}/{archivedAspect:F4} " +
+            $"aspectOk={archivedAspectMatches} direct={directWorkspacePath} " +
+            $"support=[{string.Join(",", wsCanvas.BoundarySupport.Select(x => x.ToString("F2")))}]");
+        if (!directWorkspacePath)
         {
             progress?.Report(TransformStage.CompletingViewportFrame);
             IntRect navCanvasCapture = navCanvas.BoundsCapture.IsEmpty
@@ -363,6 +391,17 @@ public sealed class TransformPipelineService
                 wsRelation,
                 numbers.RotationDegrees,
                 numbers.RotationConfidence);
+
+            LiveDebugLog.Write(
+                $"[ViewportRaw] status={viewport.Status} strategy={viewport.CompletionStrategy} " +
+                $"canvasCapture={navCanvasCapture} workspace={workspaceRoiScreen} " +
+                $"visibleLocal={wsRelation.VisibleCanvasBoundsWorkspaceLocal} " +
+                $"crop=0x{wsRelation.CanvasCropSides:X} " +
+                $"fraction=({wsRelation.VisibleCanvasWorkspaceFractionX:F4},{wsRelation.VisibleCanvasWorkspaceFractionY:F4}) " +
+                $"origin=({viewport.OriginTopLeftDisplayed.X:F1},{viewport.OriginTopLeftDisplayed.Y:F1}) " +
+                $"axisX=({viewport.AxisXDisplayed.X:F1},{viewport.AxisXDisplayed.Y:F1}) " +
+                $"axisY=({viewport.AxisYDisplayed.X:F1},{viewport.AxisYDisplayed.Y:F1}) " +
+                $"size=({viewport.Width:F1},{viewport.Height:F1})");
 
             if (viewport.Status != NativeSct.StatusOk)
             {
@@ -404,6 +443,13 @@ public sealed class TransformPipelineService
         };
 
         var snapshot = _native.SolveTransform(solveReq);
+        LiveDebugLog.Write(
+            $"[SolveMatrix] viewportRoute={!snapshot.UsedDirectWorkspacePath} " +
+            $"navCanvas={snapshot.NavigatorCanvas.BoundsCapture} " +
+            $"S2C=[{snapshot.Raw.ScreenToCanvas.M0:F6},{snapshot.Raw.ScreenToCanvas.M1:F6},{snapshot.Raw.ScreenToCanvas.M2:F3};" +
+            $"{snapshot.Raw.ScreenToCanvas.M3:F6},{snapshot.Raw.ScreenToCanvas.M4:F6},{snapshot.Raw.ScreenToCanvas.M5:F3}] " +
+            $"C2S=[{snapshot.Raw.CanvasToScreen.M0:F2},{snapshot.Raw.CanvasToScreen.M1:F2},{snapshot.Raw.CanvasToScreen.M2:F1};" +
+            $"{snapshot.Raw.CanvasToScreen.M3:F2},{snapshot.Raw.CanvasToScreen.M4:F2},{snapshot.Raw.CanvasToScreen.M5:F1}]");
         if (snapshot.Status != NativeSct.StatusOk && snapshot.FailureStatus != 117)
         {
             if (snapshot.Status != NativeSct.StatusOk)

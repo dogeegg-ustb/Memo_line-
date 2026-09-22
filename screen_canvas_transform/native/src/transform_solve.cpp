@@ -11,6 +11,81 @@ namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kRotationAxisToleranceDeg = 5.0;
+// Must match TransformPipelineService's direct-workspace aspect gate.
+constexpr double kDirectAspectRelativeTolerance = 0.04;
+
+bool DirectCanvasAspectMatches(const CanvasObservation& canvas, int canvas_pixel_width,
+                               int canvas_pixel_height) {
+  if (!canvas.bounds_screen.valid() || canvas_pixel_width <= 0 || canvas_pixel_height <= 0)
+    return false;
+  const double observed = static_cast<double>(canvas.bounds_screen.width()) /
+                          static_cast<double>(canvas.bounds_screen.height());
+  const double archived = static_cast<double>(canvas_pixel_width) /
+                          static_cast<double>(canvas_pixel_height);
+  return std::isfinite(observed) && std::isfinite(archived) && archived > 0 &&
+         std::abs(observed / archived - 1.0) <= kDirectAspectRelativeTolerance;
+}
+
+// A 1.0 frame supplies one genuine viewport side, but that side can be clipped
+// by the Navigator's paper rectangle. In that case its tangential endpoints
+// describe the visible paper, not the complete workspace viewport. Mapping the
+// whole workspace to that clipped segment loses the paper's offset inside the
+// workspace and produces a translation error in canvas coordinates.
+//
+// The workspace relation already contains the missing fact: at least one
+// complete displayed paper axis plus the archived paper aspect. Build W->C
+// from that anchored full-paper model when it is trustworthy. This deliberately
+// leaves the viewport frame untouched: it remains factual red-frame evidence
+// for the overlay/UI, while this matrix describes the actual canvas coordinates.
+bool TryBuildOneCompleteEdgeWorkspaceTransform(const SolveInput& in,
+                                               double rotation_geometry,
+                                               Affine2D* workspace_to_canvas) {
+  if (!workspace_to_canvas ||
+      in.viewport.completion_strategy !=
+          static_cast<int>(ViewportCompletionPattern::OneCompleteEdge) ||
+      !std::isfinite(rotation_geometry) || std::abs(rotation_geometry) > 0.05) {
+    return false;
+  }
+
+  const auto& rel = in.workspace_canvas_relation;
+  const auto& full = rel.full_canvas_model_workspace_local;
+  const auto& visible = rel.visible_canvas_bounds_workspace_local;
+  if (rel.ambiguous || rel.confidence < 0.5f || !rel.workspace_roi.valid() ||
+      !full.valid() || !visible.valid() || full.width() < 1 || full.height() < 1 ||
+      visible.left < full.left || visible.top < full.top || visible.right > full.right ||
+      visible.bottom > full.bottom) {
+    return false;
+  }
+
+  constexpr int kEdgeL = 1;
+  constexpr int kEdgeT = 2;
+  constexpr int kEdgeR = 4;
+  constexpr int kEdgeB = 8;
+  const int crop = rel.canvas_crop_sides;
+  const bool complete_x = (crop & (kEdgeL | kEdgeR)) == 0;
+  const bool complete_y = (crop & (kEdgeT | kEdgeB)) == 0;
+  if (!complete_x && !complete_y) return false;
+
+  // A non-cropped axis must be represented verbatim by the full model. This
+  // prevents an aspect-only extrapolation from being treated as an anchor.
+  if ((complete_x && std::abs(full.width() - visible.width()) > 2) ||
+      (complete_y && std::abs(full.height() - visible.height()) > 2)) {
+    return false;
+  }
+
+  const double archived_aspect =
+      static_cast<double>(in.canvas_pixel_width) / static_cast<double>(in.canvas_pixel_height);
+  const double modeled_aspect = static_cast<double>(full.width()) / full.height();
+  if (!std::isfinite(modeled_aspect) || !std::isfinite(archived_aspect) ||
+      archived_aspect <= 0 || std::abs(modeled_aspect / archived_aspect - 1.0) > 0.02) {
+    return false;
+  }
+
+  workspace_to_canvas->m = {
+      1.0 / full.width(), 0, -static_cast<double>(full.left) / full.width(),
+      0, 1.0 / full.height(), -static_cast<double>(full.top) / full.height()};
+  return true;
+}
 
 void CopyStr(char* dst, size_t n, const char* s) {
   if (!dst || n == 0) return;
@@ -102,9 +177,14 @@ MarkerGeometry BuildMarkerGeometry(const Affine2D& canvas_to_screen, int canvas_
   mg.arm_length_canvas =
       CanvasEpsilonForTargetScreenLength(canvas_to_screen, mg.target_arm_display_px);
 
+  // The normalized canvas coordinate system is top-left based: (0, 0) is the
+  // canvas origin and +Y points down on screen.  Keep the diagnostic marker on
+  // that same origin instead of drawing the former bottom-left marker at y=1.
   mg.anchor_screen = canvas_to_screen.Apply({0, 0});
   mg.x_arm_end_screen = canvas_to_screen.Apply({mg.arm_length_canvas, 0});
-  mg.y_arm_end_screen = canvas_to_screen.Apply({0, mg.arm_length_canvas});
+  const double y_length = ScreenLengthFromCanvasDelta(canvas_to_screen, 0, 1);
+  const double y_epsilon = y_length > 0 ? mg.target_arm_display_px * 0.7 / y_length : 0;
+  mg.y_arm_end_screen = canvas_to_screen.Apply({0, y_epsilon});
   return mg;
 }
 
@@ -137,7 +217,8 @@ Affine2D Multiply(const Affine2D& a, const Affine2D& b) {
 Affine2D InvertAffine(const Affine2D& a, bool* ok) {
   const double det = a.m[0] * a.m[4] - a.m[1] * a.m[3];
   Affine2D r;
-  if (std::abs(det) < 1e-12) {
+  if (!std::all_of(a.m.begin(), a.m.end(), [](double v) { return std::isfinite(v); }) ||
+      !std::isfinite(det) || std::abs(det) < 1e-12) {
     if (ok) *ok = false;
     return r;
   }
@@ -160,9 +241,17 @@ double ConditionEstimate(const Affine2D& a) {
   return fro * fro / std::abs(det);
 }
 
-Affine2D Affine2D::FromCorners(Vec2 /*src00*/, Vec2 /*src10*/, Vec2 /*src01*/, Vec2 /*dst00*/,
-                               Vec2 /*dst10*/, Vec2 /*dst01*/) {
-  return Identity();
+Affine2D Affine2D::FromCorners(Vec2 src00, Vec2 src10, Vec2 src01, Vec2 dst00,
+                               Vec2 dst10, Vec2 dst01) {
+  Affine2D src, dst;
+  src.m = {src10.x-src00.x, src01.x-src00.x, src00.x,
+           src10.y-src00.y, src01.y-src00.y, src00.y};
+  dst.m = {dst10.x-dst00.x, dst01.x-dst00.x, dst00.x,
+           dst10.y-dst00.y, dst01.y-dst00.y, dst00.y};
+  bool ok = false;
+  const auto inverse = InvertAffine(src, &ok);
+  if (!ok) { src.m.fill(std::numeric_limits<double>::quiet_NaN()); return src; }
+  return Multiply(dst, inverse);
 }
 
 SolveResult SolveTransform(const SolveInput& in) {
@@ -182,7 +271,7 @@ SolveResult SolveTransform(const SolveInput& in) {
   const float scale_percent = in.injected_scale_percent > 0.f
                                   ? in.injected_scale_percent
                                   : in.numbers.scale_percent;
-  if (scale_percent <= 0.f ||
+  if (!std::isfinite(scale_percent) || scale_percent <= 0.f ||
       (in.injected_scale_percent <= 0.f &&
        (in.numbers.scale_confidence < 0.2f || in.numbers.scale_percent <= 0))) {
     return FailSolve(Stage::ReadingNavigatorNumbers, FailStatus::OcrScaleFailed,
@@ -219,7 +308,7 @@ SolveResult SolveTransform(const SolveInput& in) {
   snap.workspace_canvas_relation = in.workspace_canvas_relation;
   snap.numbers = in.numbers;
   snap.viewport = in.viewport;
-  snap.rotation_degrees_geometry = static_cast<float>(rotation_geometry);
+  snap.rotation_degrees_geometry = static_cast<float>(-rotation_geometry);
   snap.rotation_degrees_ocr_or_injected = in.numbers.rotation_degrees;
   snap.rotation_degrees = snap.rotation_degrees_geometry;
   snap.scale_percent_ocr_or_injected = scale_percent;
@@ -250,7 +339,16 @@ SolveResult SolveTransform(const SolveInput& in) {
   bool inv_ok = false;
 
   if (in.workspace_canvas.four_sides_complete && !in.workspace_canvas.ambiguous &&
-      in.workspace_canvas.bounds_screen.valid()) {
+      std::all_of(std::begin(in.workspace_canvas.boundary_support),
+                  std::end(in.workspace_canvas.boundary_support),
+                  [](float v) { return std::isfinite(v) && v >= 0.95f; }) &&
+      in.workspace_canvas.bounds_screen.valid() &&
+      DirectCanvasAspectMatches(in.workspace_canvas, in.canvas_pixel_width,
+                                in.canvas_pixel_height) &&
+      in.viewport.width < 1.f && in.viewport.height < 1.f &&
+      in.numbers.rotation_confidence >= 0.2f &&
+      std::isfinite(in.numbers.rotation_degrees) &&
+      std::abs(std::remainder(in.numbers.rotation_degrees, 360.0)) < 0.05) {
     snap.used_direct_workspace_path = 1;
     const auto& b = in.workspace_canvas.bounds_screen;
     const double l = b.left - in.workspace_roi_screen.left;
@@ -280,36 +378,37 @@ SolveResult SolveTransform(const SolveInput& in) {
       return FailSolve(Stage::ObservingNavigatorCanvas, FailStatus::NavigatorCanvasAmbiguous,
                        "navigator canvas missing", in);
     }
-    const wb::IntRect nc = in.navigator_canvas.bounds_screen.valid()
-                               ? in.navigator_canvas.bounds_screen
-                               : in.navigator_canvas.bounds_capture;
-    const double nl = nc.left;
-    const double nt = nc.top;
-    const double nw = nc.width();
-    const double nh = nc.height();
-    if (nw < 1 || nh < 1) {
-      return FailSolve(Stage::SolvingTransform, FailStatus::MatrixSingular,
-                       "navigator canvas degenerate", in);
+    const bool relation_anchored =
+        TryBuildOneCompleteEdgeWorkspaceTransform(in, rotation_geometry, &t_w_to_c);
+    if (!relation_anchored) {
+      // Completion exports CapturePx. Never subtract a ScreenPx origin from it:
+      // on a negative-origin desktop that introduces a monitor-sized translation.
+      const wb::IntRect nc = in.navigator_canvas.bounds_capture.valid()
+                                 ? in.navigator_canvas.bounds_capture
+                                 : in.navigator_canvas.bounds_screen;
+      const double nl = nc.left;
+      const double nt = nc.top;
+      const double nw = nc.width();
+      const double nh = nc.height();
+      if (nw < 1 || nh < 1) {
+        return FailSolve(Stage::SolvingTransform, FailStatus::MatrixSingular,
+                         "navigator canvas degenerate", in);
+      }
+
+      Affine2D t_w_to_d;
+      t_w_to_d.m = {in.viewport.axis_x_displayed.x / Ww, in.viewport.axis_y_displayed.x / Wh,
+                    in.viewport.origin_top_left_displayed.x,
+                    in.viewport.axis_x_displayed.y / Ww, in.viewport.axis_y_displayed.y / Wh,
+                    in.viewport.origin_top_left_displayed.y};
+
+      Affine2D t_d_to_u;
+      t_d_to_u.m = {1.0 / nw, 0, -nl / nw, 0, 1.0 / nh, -nt / nh};
+
+      // The navigator canvas is unrotated. The directed red-frame axes already
+      // map screen +X/+Y into it. Applying another inverse rotation here cancels
+      // the real rotation (and distorts a non-square normalized canvas).
+      t_w_to_c = Multiply(t_d_to_u, t_w_to_d);
     }
-
-    Affine2D t_w_to_d;
-    t_w_to_d.m = {in.viewport.axis_x_displayed.x / Ww, in.viewport.axis_y_displayed.x / Wh,
-                  in.viewport.origin_top_left_displayed.x,
-                  in.viewport.axis_x_displayed.y / Ww, in.viewport.axis_y_displayed.y / Wh,
-                  in.viewport.origin_top_left_displayed.y};
-
-    Affine2D t_d_to_u;
-    t_d_to_u.m = {1.0 / nw, 0, -nl / nw, 0, 1.0 / nh, -nt / nh};
-
-    Affine2D D = MakeDisplayOperator(rotation_geometry);
-    Affine2D Dinv = InvertAffine(D, &inv_ok);
-    if (!inv_ok) {
-      return FailSolve(Stage::SolvingTransform, FailStatus::MatrixSingular, "D inverse failed",
-                       in);
-    }
-
-    Affine2D t_w_to_u = Multiply(t_d_to_u, t_w_to_d);
-    t_w_to_c = Multiply(Dinv, t_w_to_u);
     t_c_to_w = InvertAffine(t_w_to_c, &inv_ok);
     if (!inv_ok) {
       return FailSolve(Stage::SolvingTransform, FailStatus::MatrixSingular,
@@ -333,11 +432,12 @@ SolveResult SolveTransform(const SolveInput& in) {
   }
 
   // Scale consistency diagnostic only — never applied to matrix.
-  if (in.viewport.width > 1.f && in.viewport.height > 1.f) {
-    const double vp_aspect = in.viewport.width / in.viewport.height;
-    const double canvas_aspect =
-        static_cast<double>(in.canvas_pixel_width) / static_cast<double>(in.canvas_pixel_height);
-    snap.scale_geometry_estimate = static_cast<float>(vp_aspect / canvas_aspect * 100.0);
+  {
+    const double sx = std::hypot(snap.canvas_to_screen.m[0], snap.canvas_to_screen.m[3])
+                      / in.canvas_pixel_width;
+    const double sy = std::hypot(snap.canvas_to_screen.m[1], snap.canvas_to_screen.m[4])
+                      / in.canvas_pixel_height;
+    snap.scale_geometry_estimate = static_cast<float>(100.0 * std::sqrt(sx * sy));
     snap.scale_consistency_error =
         std::abs(snap.scale_geometry_estimate - scale_percent) / std::max(scale_percent, 1.f);
   }

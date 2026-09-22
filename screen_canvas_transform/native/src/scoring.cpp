@@ -58,9 +58,9 @@ SelectResult SelectBestHypothesis(std::vector<Hypothesis> hyps,
   res.margin = 1.f;
 
   // Distinct construction paths that disagree on the rectangle → ambiguous.
-  if (res.ranked.size() >= 2) {
-    const float iou = RectIou(res.ranked[0].rect, res.ranked[1].rect);
-    res.margin = iou;
+  for (size_t i=1; i<res.ranked.size(); ++i) {
+    const float iou = RectIou(res.ranked[0].rect, res.ranked[i].rect);
+    res.margin = std::min(res.margin,iou);
     if (iou < cfg.ambiguity_iou_max) {
       res.best = nullptr;
       res.reason = "AmbiguousCandidates";

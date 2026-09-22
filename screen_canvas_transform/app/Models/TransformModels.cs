@@ -48,6 +48,8 @@ public sealed class CanvasObservationDto
     public int VisibleEdgesMask { get; init; }
     public float[] BoundarySupport { get; init; } = new float[4];
     public bool FourSidesComplete { get; init; }
+    public bool HasAxisAlignedBoundary => BoundarySupport.Length == 4
+        && BoundarySupport.All(s => float.IsFinite(s) && s >= 0.95f);
     public bool Ambiguous { get; init; }
     public string AmbiguityReason { get; init; } = "";
 

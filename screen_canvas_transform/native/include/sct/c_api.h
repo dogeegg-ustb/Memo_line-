@@ -90,6 +90,7 @@ typedef struct SctCanvasObserveRequest {
   float dpi_scale;
 } SctCanvasObserveRequest;
 
+
 typedef struct SctCanvasObservation {
   int status;
   SctIntRect bounds_capture;
@@ -292,6 +293,7 @@ SCT_API const char* sct_source_revision(void);
 SCT_API int sct_detect_workspace(const SctDetectRequest* req, SctDetectResult* result);
 SCT_API int sct_detect_navigator_thumbnail_cii(const SctCiiRequest* req, SctDetectResult* result);
 SCT_API int sct_observe_canvas(const SctCanvasObserveRequest* req, SctCanvasObservation* out);
+SCT_API int sct_observe_navigator_canvas(const SctCanvasObserveRequest* req, SctCanvasObservation* out);
 SCT_API int sct_build_workspace_canvas_relation(const SctWorkspaceCanvasRelationRequest* req,
                                                 SctWorkspaceCanvasRelation* out);
 SCT_API int sct_complete_viewport_frame(const SctViewportRequest* req, SctViewportFrame* out);

@@ -9,10 +9,10 @@ namespace sct {
 //
 // 强约束流水线（红框成组契约）：
 //   A) 色稳定向红段观测（窄色域 + 固定朝向；朝向可为任意角，不要求贴屏幕轴）
-//   B) 按相对平行/垂直 + 空间相近枚举合法 RedFrameEdgeGroup
+//   B) 共线合并后按相交/平行邻接连通分量成组（一条边默认只进一组；禁止子集枚举多假设）
 //   C) 组内邻边直角标注完整边（禁止掩膜 stub 作为 complete 充分条件）
 //   D) 证据足够的组按 ViewportCompletionPattern 补全
-//   E) if-else 硬消歧选出唯一目标组（禁止打分排序）
+//   E) if-else 硬消歧：多组时仅用显示画布形状 + 窄红色度（禁止打分排序）
 //   F) 仅发布目标组的 NavigatorViewportFrame 与 CompleteEdge
 //
 // 几何约束：组内边彼此平行或垂直（矩形），MUST NOT 要求与屏幕坐标轴垂直。

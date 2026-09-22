@@ -29,9 +29,9 @@ float SideCostAt(const FeatureMaps& features, const BackgroundModel& model, Oute
     if (coord < 1 || coord >= w - 1) return -1e9f;
     for (int y = along0; y < along1; y += step) {
       const int yy = std::max(0, std::min(h - 1, y));
-      const int xin = (side == OuterSide::Left) ? std::min(w - 1, coord + 1) : std::max(0, coord - 1);
+      const int xin = (side == OuterSide::Left) ? coord : coord - 1;
       const int xout =
-          (side == OuterSide::Left) ? std::max(0, coord - 1) : std::min(w - 1, coord + 1);
+          (side == OuterSide::Left) ? coord - 1 : coord;
       const float de_in = DeltaE76(features.lab.At(xin, yy), model.center_lab);
       const float de_out = DeltaE76(features.lab.At(xout, yy), model.center_lab);
       const float in_sim = std::max(0.f, std::min(1.f, 1.f - de_in / weak));
@@ -44,9 +44,9 @@ float SideCostAt(const FeatureMaps& features, const BackgroundModel& model, Oute
     if (coord < 1 || coord >= h - 1) return -1e9f;
     for (int x = along0; x < along1; x += step) {
       const int xx = std::max(0, std::min(w - 1, x));
-      const int yin = (side == OuterSide::Top) ? std::min(h - 1, coord + 1) : std::max(0, coord - 1);
+      const int yin = (side == OuterSide::Top) ? coord : coord - 1;
       const int yout =
-          (side == OuterSide::Top) ? std::max(0, coord - 1) : std::min(h - 1, coord + 1);
+          (side == OuterSide::Top) ? coord - 1 : coord;
       const float de_in = DeltaE76(features.lab.At(xx, yin), model.center_lab);
       const float de_out = DeltaE76(features.lab.At(xx, yout), model.center_lab);
       const float in_sim = std::max(0.f, std::min(1.f, 1.f - de_in / weak));
@@ -59,36 +59,6 @@ float SideCostAt(const FeatureMaps& features, const BackgroundModel& model, Oute
   return n ? static_cast<float>(acc / n) : -1e9f;
 }
 
-int RefineVertical(const FeatureMaps& features, const BackgroundModel& model, int coarse, int y0,
-                   int y1, int radius, int lo, int hi, const DetectorConfig& /*cfg*/) {
-  std::vector<Cost> costs;
-  for (int c = coarse - radius; c <= coarse + radius; ++c) {
-    if (c < lo || c > hi) continue;
-    Cost k;
-    k.coord = c;
-    k.score = SideCostAt(features, model, OuterSide::Left, c, y0, y1);
-    // Use Left cost shape; caller chooses side for xout/xin via separate calls.
-    costs.push_back(k);
-  }
-  if (costs.empty()) return coarse;
-  std::sort(costs.begin(), costs.end());
-  return costs.front().coord;
-}
-
-int RefineHorizontal(const FeatureMaps& features, const BackgroundModel& model, int coarse, int x0,
-                     int x1, int radius, int lo, int hi, const DetectorConfig& /*cfg*/) {
-  std::vector<Cost> costs;
-  for (int c = coarse - radius; c <= coarse + radius; ++c) {
-    if (c < lo || c > hi) continue;
-    Cost k;
-    k.coord = c;
-    k.score = SideCostAt(features, model, OuterSide::Top, c, x0, x1);
-    costs.push_back(k);
-  }
-  if (costs.empty()) return coarse;
-  std::sort(costs.begin(), costs.end());
-  return costs.front().coord;
-}
 
 }  // namespace
 
@@ -174,8 +144,6 @@ IntRect* RefineRectangle(const IntRect& coarse, const FeatureMaps& features,
       shifted(out.top, coarse.top) || shifted(out.bottom, coarse.bottom)) {
     return nullptr;  // refine shift exceeded
   }
-  (void)RefineVertical;
-  (void)RefineHorizontal;
   return &out;
 }
 

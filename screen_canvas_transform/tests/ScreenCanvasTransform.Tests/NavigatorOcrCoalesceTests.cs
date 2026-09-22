@@ -44,6 +44,8 @@ public sealed class NavigatorOcrCoalesceTests
         Assert.Contains(hits, h => h.Text == "0.0");
         Assert.True(NavigatorOcrService.TryParseScale("18.9", out float scale));
         Assert.Equal(18.9f, scale, precision: 3);
+        Assert.True(NavigatorOcrService.TryParseRotation("0.0", out float rotation));
+        Assert.Equal(0f, rotation, precision: 3);
     }
 
     [Fact]
@@ -66,5 +68,23 @@ public sealed class NavigatorOcrCoalesceTests
         Assert.Equal("14.8", NavigatorOcrService.NormalizeDecimalPunctuation("14，8"));
         Assert.Equal("0.0", NavigatorOcrService.NormalizeDecimalPunctuation("0．0"));
         Assert.Equal("18.9", NavigatorOcrService.NormalizeDecimalPunctuation("18.9%"));
+        Assert.Equal("-27.0", NavigatorOcrService.NormalizeDecimalPunctuation("−27．0°"));
+    }
+
+    [Fact]
+    public void Coalesce_SeparateMinus_PreservesNegativeRotation()
+    {
+        var tokens = new (string, double, double, double, double, double)[]
+        {
+            ("−", 100, 12, 8, 16, 12),
+            ("27", 100, 28, 18, 38, 16),
+            ("．", 104, 42, 39, 45, 6),
+            ("0", 100, 50, 46, 54, 16),
+        };
+
+        var hit = Assert.Single(NavigatorOcrService.CoalesceOcrNumberTokens(tokens));
+        Assert.Equal("-27.0", hit.Text);
+        Assert.True(NavigatorOcrService.TryParseRotation(hit.Text, out float rotation));
+        Assert.Equal(-27f, rotation, precision: 3);
     }
 }

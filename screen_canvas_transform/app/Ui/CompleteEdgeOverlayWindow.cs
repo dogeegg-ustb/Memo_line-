@@ -8,9 +8,9 @@ using ScreenCanvasTransform.Models;
 namespace ScreenCanvasTransform.Ui;
 
 /// <summary>
-/// Click-through overlay: observed red-frame edges (solid=complete, dashed=partial)
-/// with workspace-edge labels (左/右/上/下) placed on each edge midpoint along the outward
-/// normal (perpendicular to the viewport border). Labels use system workspace_edge roles.
+/// Click-through overlay of the completed navigator viewport frame in the same red family
+/// as the source red frame, with workspace-edge labels (左/右/上/下) placed on each edge
+/// midpoint along the outward normal. Endpoints are ScreenPhysicalPx from caller.
 /// Endpoints are ScreenPhysicalPx from caller.
 /// </summary>
 public sealed class CompleteEdgeOverlayWindow : IDisposable
@@ -36,10 +36,10 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
     private const float LabelFontSizePx = 15f;
 
     private static readonly System.Drawing.Color PartialEdgeColor =
-        System.Drawing.Color.FromArgb(200, 80, 170, 255);
+        System.Drawing.Color.FromArgb(180, 220, 0, 0);
 
     private static readonly System.Drawing.Color EdgeColor =
-        System.Drawing.Color.FromArgb(230, 30, 120, 255);
+        System.Drawing.Color.FromArgb(235, 220, 0, 0);
 
     private static readonly System.Drawing.Color LabelFillColor =
         System.Drawing.Color.FromArgb(255, 255, 230, 80);

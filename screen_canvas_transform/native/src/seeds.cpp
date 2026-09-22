@@ -30,13 +30,13 @@ std::vector<SeedPatch> SampleBackgroundSeeds(const FeatureMaps& features, const 
   int seed_id = 0;
   const int n = cfg.seeds_per_side;
 
-  auto patch_stats = [&](int cx, int cy, Lab& mean_lab, float& grad_density,
+  auto patch_stats = [&](int cx, int cy, int patch_size, Lab& mean_lab, float& grad_density,
                          float& local_var) -> bool {
-    const int x0 = std::max(0, cx - half);
-    const int y0 = std::max(0, cy - half);
-    const int x1 = std::min(w, x0 + size);
-    const int y1 = std::min(h, y0 + size);
-    if (x1 - x0 < size / 2 || y1 - y0 < size / 2) return false;
+    const int x0 = std::max(user_roi.left, cx - patch_size/2);
+    const int y0 = std::max(user_roi.top, cy - patch_size/2);
+    const int x1 = std::min(user_roi.right, x0 + patch_size);
+    const int y1 = std::min(user_roi.bottom, y0 + patch_size);
+    if (x1 - x0 < patch_size || y1 - y0 < patch_size) return false;
     std::vector<float> L, A, B, gvals, vvals;
     for (int y = y0; y < y1; ++y) {
       for (int x = x0; x < x1; ++x) {
@@ -59,12 +59,9 @@ std::vector<SeedPatch> SampleBackgroundSeeds(const FeatureMaps& features, const 
     return true;
   };
 
-  auto reject = [&](float grad_d, float local_var, int cx, int cy) -> std::string {
-    const float rcx = (user_roi.left + user_roi.right) * 0.5f;
-    const float rcy = (user_roi.top + user_roi.bottom) * 0.5f;
-    const float dx = std::fabs(cx - rcx) / std::max(user_roi.width() * 0.5f, 1.f);
-    const float dy = std::fabs(cy - rcy) / std::max(user_roi.height() * 0.5f, 1.f);
-    if (std::max(dx, dy) < cfg.seed_center_exclude_ratio * 0.55f) return "too_central";
+  auto reject = [&](float grad_d, float local_var) -> std::string {
+    // A coarse user selection may place real workspace background anywhere.
+    // Geometry, not distance from the user ROI center, identifies its role.
     if (grad_d > cfg.seed_max_grad_density) return "high_gradient";
     if (local_var > cfg.seed_max_local_var) return "high_variance";
     return {};
@@ -98,12 +95,26 @@ std::vector<SeedPatch> SampleBackgroundSeeds(const FeatureMaps& features, const 
     points.emplace_back(OuterSide::Bottom, x_right, y_bot);
   }
 
-  std::set<std::pair<int, int>> seen;
+  // Small patches cover thin background strips that the proportional patches
+  // straddle. Cover the whole user ROI, including its rim and center.
+  const size_t large_patch_count = points.size();
+  const int grid_step = std::clamp(short_side / 24, 3, 16);
+  for (int y=user_roi.top+1; y<user_roi.bottom-1; y+=grid_step) {
+    for (int x=user_roi.left+1; x<user_roi.right-1; x+=grid_step)
+      points.emplace_back(OuterSide::Left,x,y);
+    points.emplace_back(OuterSide::Right,user_roi.right-2,y);
+  }
+  for (int x=user_roi.left+1; x<user_roi.right-1; x+=grid_step)
+    points.emplace_back(OuterSide::Bottom,x,user_roi.bottom-2);
+
+  std::set<std::tuple<int, int, int>> seen;
+  size_t point_index = 0;
   for (const auto& tup : points) {
+    const int patch_size = point_index++ < large_patch_count ? size : 3;
     OuterSide side;
     int cx, cy;
     std::tie(side, cx, cy) = tup;
-    if (!seen.insert({cx, cy}).second) continue;
+    if (!seen.insert({cx, cy, patch_size}).second) continue;
     if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
     if (!user_roi.ContainsPoint(cx, cy)) continue;
     SeedPatch s;
@@ -111,17 +122,17 @@ std::vector<SeedPatch> SampleBackgroundSeeds(const FeatureMaps& features, const 
     s.side = side;
     s.x = cx;
     s.y = cy;
-    s.size = size;
+    s.size = patch_size;
     Lab mean{};
     float gd = 1.f, lv = 1e9f;
-    if (!patch_stats(cx, cy, mean, gd, lv)) {
+    if (!patch_stats(cx, cy, patch_size, mean, gd, lv)) {
       s.accepted = false;
       s.reject_reason = "oob";
       seeds.push_back(s);
       continue;
     }
     s.mean_lab = mean;
-    s.reject_reason = reject(gd, lv, cx, cy);
+    s.reject_reason = reject(gd, lv);
     s.accepted = s.reject_reason.empty();
     seeds.push_back(s);
   }

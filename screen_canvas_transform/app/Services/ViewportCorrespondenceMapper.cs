@@ -1,4 +1,5 @@
 using ScreenCanvasTransform.Capture;
+using ScreenCanvasTransform.Interop;
 using ScreenCanvasTransform.Models;
 using ScreenCanvasTransform.Ui;
 
@@ -120,6 +121,49 @@ public static class ViewportCorrespondenceMapper
                 e.IsComplete, e.WorkspaceEdge, rot, rotConf, cx, cy));
         }
         return list;
+    }
+
+    /// <summary>
+    /// Maps the completed viewport frame, rather than only its observed red fragments,
+    /// into physical screen coordinates. The semantic corners are emitted in the same
+    /// order as the navigator's viewport frame: TL → TR → BR → BL.
+    /// </summary>
+    public static IReadOnlyList<CompleteEdgeOverlayWindow.LabeledScreenEdge> MapCompletedViewportEdges(
+        NativeSct.SctViewportFrame viewport, int captureOriginX, int captureOriginY)
+    {
+        var corners = new[]
+        {
+            viewport.Corner0,
+            viewport.Corner1,
+            viewport.Corner2,
+            viewport.Corner3
+        };
+        if (corners.Any(c => !double.IsFinite(c.X) || !double.IsFinite(c.Y)))
+            return Array.Empty<CompleteEdgeOverlayWindow.LabeledScreenEdge>();
+
+        // An empty native frame is the direct-workspace path, or an unsuccessful
+        // completion. Do not draw a degenerate origin-only rectangle in either case.
+        if (viewport.Width <= 2f || viewport.Height <= 2f)
+            return Array.Empty<CompleteEdgeOverlayWindow.LabeledScreenEdge>();
+
+        int[] roles =
+        {
+            WorkspaceEdgeBits.Top,
+            WorkspaceEdgeBits.Right,
+            WorkspaceEdgeBits.Bottom,
+            WorkspaceEdgeBits.Left
+        };
+        var edges = new CompleteEdgeOverlayWindow.LabeledScreenEdge[4];
+        for (int i = 0; i < edges.Length; i++)
+        {
+            var p0 = corners[i];
+            var p1 = corners[(i + 1) % corners.Length];
+            edges[i] = new CompleteEdgeOverlayWindow.LabeledScreenEdge(
+                p0.X + captureOriginX, p0.Y + captureOriginY,
+                p1.X + captureOriginX, p1.Y + captureOriginY,
+                roles[i], IsComplete: true);
+        }
+        return edges;
     }
 
     public static string FormatCorrespondenceLog(
