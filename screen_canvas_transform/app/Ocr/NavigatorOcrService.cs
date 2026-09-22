@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text.RegularExpressions;
 using ScreenCanvasTransform.Capture;
+using ScreenCanvasTransform.Diagnostics;
 using ScreenCanvasTransform.Models;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
@@ -19,7 +20,32 @@ namespace ScreenCanvasTransform.Ocr;
 /// </summary>
 public sealed class NavigatorOcrService
 {
-    public static bool DebugEnabled { get; set; } = true;
+    public static bool DebugEnabled { get; set; } =
+        Environment.GetEnvironmentVariable("SCT_OCR_DEBUG") == "1";
+
+    // Cache evidence only when the actual resampled OCR input AND bounds/language
+    // match exactly (including bicubic sampling across ROI edges). Changed inputs
+    // always run the full six-candidate recognizer.
+    // Returned reading metadata is still created afresh for the current capture.
+    private sealed record CachedSlot(IntRect Bounds, string Language, byte[] Pixels, List<Hit> Hits);
+    private readonly List<CachedSlot> _slotCache = new();
+    private readonly object _cacheGate = new();
+    private const int MaxCachedSlots = 8;
+
+    private static byte[] ReadSlotPixels(Bitmap frame, IntRect bounds)
+    {
+        int rowBytes = checked(bounds.Width * 4);
+        var pixels = new byte[checked(rowBytes * bounds.Height)];
+        var data = frame.LockBits(new Rectangle(bounds.Left, bounds.Top, bounds.Width, bounds.Height),
+            ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            for (int y = 0; y < bounds.Height; ++y)
+                Marshal.Copy(data.Scan0 + y * data.Stride, pixels, y * rowBytes, rowBytes);
+        }
+        finally { frame.UnlockBits(data); }
+        return pixels;
+    }
 
     private const int MinSlotSizePx = 8;
     private const int Upscale = 6;
@@ -79,6 +105,7 @@ public sealed class NavigatorOcrService
         OcrLayoutScreen layoutScreen,
         CancellationToken cancellationToken = default)
     {
+        using var timing = new StageTimer("ocr", session.CaptureId);
         IntRect scaleSlot = session.ScreenToCapture(layoutScreen.ScaleSlotScreen).ClampTo(session.CaptureBounds);
         IntRect rotationSlot = session.ScreenToCapture(layoutScreen.RotationSlotScreen).ClampTo(session.CaptureBounds);
         return await ReadByVerticalOrderAsync(session, scaleSlot, rotationSlot, cancellationToken)
@@ -90,7 +117,7 @@ public sealed class NavigatorOcrService
     /// cause Windows OCR to return only the upper row when both rows are passed as one image.
     /// Fall back to the union when the slot-specific pass is incomplete.
     /// </summary>
-    private static async Task<NavigatorNumericReadingDto> ReadByVerticalOrderAsync(
+    private async Task<NavigatorNumericReadingDto> ReadByVerticalOrderAsync(
         CaptureSession session,
         IntRect scaleSlotCapture,
         IntRect rotationSlotCapture,
@@ -611,7 +638,7 @@ public sealed class NavigatorOcrService
         return dst;
     }
 
-    private static async Task<List<Hit>> RecognizeSlotAsync(
+    private async Task<List<Hit>> RecognizeSlotAsync(
         CaptureSession session,
         IntRect slotCapture,
         OcrEngine engine,
@@ -625,6 +652,7 @@ public sealed class NavigatorOcrService
             return new List<Hit>();
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         int tw = Math.Max(8, slotCapture.Width * Upscale);
         int th = Math.Max(8, slotCapture.Height * Upscale);
 
@@ -639,6 +667,26 @@ public sealed class NavigatorOcrService
                 new Rectangle(0, 0, tw, th),
                 new Rectangle(slotCapture.Left, slotCapture.Top, slotCapture.Width, slotCapture.Height),
                 GraphicsUnit.Pixel);
+        }
+
+        // Bound retained memory to at most 8 * 4 MiB; oversized inputs still OCR.
+        byte[]? slotPixels = !DebugEnabled && (long)tw * th * 4 <= 4 * 1024 * 1024
+            ? ReadSlotPixels(upscaled, new IntRect(0, 0, tw, th)) : null;
+        string language = engine.RecognizerLanguage.LanguageTag;
+        if (slotPixels is not null)
+        {
+            lock (_cacheGate)
+            {
+                int index = _slotCache.FindIndex(entry => entry.Bounds.Equals(slotCapture) &&
+                    entry.Language == language && entry.Pixels.AsSpan().SequenceEqual(slotPixels));
+                if (index >= 0)
+                {
+                    var cached = _slotCache[index];
+                    _slotCache.RemoveAt(index);
+                    _slotCache.Add(cached);
+                    return cached.Hits.ToList();
+                }
+            }
         }
 
         if (DebugEnabled)
@@ -713,7 +761,18 @@ public sealed class NavigatorOcrService
             Consider(hits);
         }
 
-        return bestHits ?? new List<Hit>();
+        var result = bestHits ?? new List<Hit>();
+        // Failed/empty readings are not memoized: allow recognition to retry.
+        if (slotPixels is not null && result.Count > 0 &&
+            result.Any(hit => TryParseScale(hit.Text, out _) || TryParseRotation(hit.Text, out _)))
+        {
+            lock (_cacheGate)
+            {
+                if (_slotCache.Count >= MaxCachedSlots) _slotCache.RemoveAt(0);
+                _slotCache.Add(new CachedSlot(slotCapture, language, slotPixels, result.ToList()));
+            }
+        }
+        return result;
     }
 
     private static async Task<List<Hit>> OcrBitmapToHitsAsync(

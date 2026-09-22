@@ -103,6 +103,7 @@ public static class ClipStudioCapture
     /// </summary>
     public static Bitmap CaptureThreadWindows()
     {
+        using var timing = new StageTimer("capture");
         var desktop = ScreenCapture.GetVirtualScreenBoundsPhysical();
         if (desktop.Width <= 0 || desktop.Height <= 0)
             throw new InvalidOperationException("虚拟桌面尺寸无效。");

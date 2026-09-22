@@ -523,6 +523,8 @@ public partial class MainWindow : Window
         if (_flowRunning)
             return;
 
+        using var timing = new StageTimer("archive-recompute-total");
+
         _flowRunning = true;
         _recomputePending = true;
         LoadArchiveButton.IsEnabled = false;
@@ -623,6 +625,8 @@ public partial class MainWindow : Window
 
         if (_recomputePending)
             return;
+
+        using var timing = new StageTimer("recompute-total");
 
         _recomputePending = true;
         _flowRunning = true;

@@ -1,5 +1,6 @@
 param(
   [string]$OutputDirectory = "",
+  [string]$NativeBuildDirectory = "",
   [switch]$SkipNativeBuild
 )
 
@@ -7,6 +8,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $App = Join-Path $Root "app"
 $NativeBuild = Join-Path $Root "native\build_release"
+if ($NativeBuildDirectory) { $NativeBuild = [IO.Path]::GetFullPath($NativeBuildDirectory) }
 $Project = Join-Path $App "ScreenCanvasTransform.csproj"
 
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
@@ -40,6 +42,10 @@ try {
 
 # Keep the native dependency at the probe root used by NativeSct.DllName.
 Copy-Item -LiteralPath $nativeDll -Destination (Join-Path $OutputDirectory "ScreenCanvasNative.dll") -Force
+$nestedNative = Join-Path $OutputDirectory "Native\ScreenCanvasNative.dll"
+if (Test-Path -LiteralPath $nestedNative) {
+  Copy-Item -LiteralPath $nativeDll -Destination $nestedNative -Force
+}
 
 $required = @(
   "ScreenCanvasTransform.exe",

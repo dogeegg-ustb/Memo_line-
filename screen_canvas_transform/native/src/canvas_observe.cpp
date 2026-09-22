@@ -2,6 +2,7 @@
 #include "wb/color.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -29,16 +30,29 @@ CanvasObservation ObserveCanvasExcludingBackground(
   const size_t count=size_t(rw)*rh;
   std::vector<uint8_t> background(count,0), exterior(count,0);
   auto index=[&](int x,int y) { return size_t(y)*rw+x; };
+  // Exact per-call memoization: the same BGR value has the same classification
+  // for this background model. Collisions recompute using the original math;
+  // no quantization, threshold change or stale model survives between frames.
+  std::array<uint32_t,4096> color_keys;
+  color_keys.fill(0xffffffffu);
+  std::array<uint8_t,4096> color_values{};
   for (int y=0;y<rh;++y) for (int x=0;x<rw;++x) {
     const auto* p=bgra+size_t(y+roi.top)*stride+size_t(x+roi.left)*4;
-    background[index(x,y)]=wb::DeltaE76(wb::BgrToLab(p[0],p[1],p[2]),model.center_lab)
-                              <=model.weak_delta_e;
+    const uint32_t key=uint32_t(p[0]) | (uint32_t(p[1])<<8) | (uint32_t(p[2])<<16);
+    const size_t slot=(key*2654435761u)>>20;
+    if(color_keys[slot]!=key) {
+      color_values[slot]=wb::DeltaE76(wb::BgrToLab(p[0],p[1],p[2]),model.center_lab)
+                            <=model.weak_delta_e;
+      color_keys[slot]=key;
+    }
+    background[index(x,y)]=color_values[slot];
   }
 
   // Remove only background connected to the ROI exterior. A painted patch
   // matching the background inside the canvas is not exterior background.
   // Seed every exterior component, including L/U shapes and opposite bands.
   std::vector<size_t> pending;
+  pending.reserve(count);
   auto seed=[&](int x,int y) {
     const size_t i=index(x,y);
     if (background[i] && !exterior[i]) {exterior[i]=1;pending.push_back(i);}
@@ -58,7 +72,9 @@ CanvasObservation ObserveCanvasExcludingBackground(
   for(int sy=0;sy<rh;++sy) for(int sx=0;sx<rw;++sx) {
     const size_t initial=index(sx,sy);
     if(exterior[initial] || visited[initial]) continue;
-    std::vector<size_t> component{initial}; visited[initial]=1;
+    // The exterior flood is finished. Reuse its queue for each component.
+    auto& component=pending;
+    component.clear(); component.push_back(initial); visited[initial]=1;
     int cx0=sx,cx1=sx,cy0=sy,cy1=sy;
     for(size_t head=0;head<component.size();++head) {
       const size_t i=component[head]; const int x=int(i%rw),y=int(i/rw);

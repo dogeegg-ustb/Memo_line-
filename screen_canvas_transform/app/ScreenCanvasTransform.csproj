@@ -28,8 +28,8 @@
   <Target Name="CopyNativeDll" AfterTargets="Build">
     <ItemGroup>
       <_NativeDll Include="$(MSBuildProjectDirectory)\Native\ScreenCanvasNative.dll" Condition="Exists('$(MSBuildProjectDirectory)\Native\ScreenCanvasNative.dll')" />
-      <_NativeDll Include="$(MSBuildProjectDirectory)\..\native\build\ScreenCanvasNative.dll" Condition="Exists('$(MSBuildProjectDirectory)\..\native\build\ScreenCanvasNative.dll')" />
-      <_NativeDll Include="$(MSBuildProjectDirectory)\..\native\build_src\ScreenCanvasNative.dll" Condition="Exists('$(MSBuildProjectDirectory)\..\native\build_src\ScreenCanvasNative.dll')" />
+      <_NativeDll Include="$(MSBuildProjectDirectory)\..\native\build\ScreenCanvasNative.dll" Condition="'@(_NativeDll)' == '' And Exists('$(MSBuildProjectDirectory)\..\native\build\ScreenCanvasNative.dll')" />
+      <_NativeDll Include="$(MSBuildProjectDirectory)\..\native\build_src\ScreenCanvasNative.dll" Condition="'@(_NativeDll)' == '' And Exists('$(MSBuildProjectDirectory)\..\native\build_src\ScreenCanvasNative.dll')" />
     </ItemGroup>
     <Copy SourceFiles="@(_NativeDll)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="'@(_NativeDll)' != ''" />
   </Target>

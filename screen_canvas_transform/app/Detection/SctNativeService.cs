@@ -143,6 +143,7 @@ public sealed class SctNativeService
         IntRect roiCapturePx,
         WorkspaceBackgroundModel background, bool navigator = false)
     {
+        using var timing = new StageTimer(navigator ? "navigator-canvas" : "workspace-canvas", session.CaptureId);
         return WithLockedFrame(session, (scan0, stride) =>
         {
             var request = new NativeSct.SctCanvasObserveRequest
@@ -201,6 +202,7 @@ public sealed class SctNativeService
         float displayRotationDegrees = 0f,
         float displayRotationConfidence = 0f)
     {
+        using var timing = new StageTimer("viewport", session.CaptureId);
         return WithLockedFrame(session, (scan0, stride) =>
         {
             var request = new NativeSct.SctViewportRequest
@@ -225,6 +227,7 @@ public sealed class SctNativeService
 
     public TransformSnapshotDto SolveTransform(NativeSct.SctSolveRequest request)
     {
+        using var timing = new StageTimer("solve");
         var result = new NativeSct.SctTransformSnapshot
         {
             SnapshotId = "",
