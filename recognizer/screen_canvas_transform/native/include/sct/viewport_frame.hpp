@@ -8,7 +8,7 @@ namespace sct {
 // Detect / complete NavigatorViewportFrame inside NavigatorThumbnailRoi.
 //
 // 强约束流水线（红框成组契约）：
-//   A) 宽红证据稳定朝向；窄红颜色峰提取线候选并收回抗锯齿像素
+//   A) 窄红核心确定直线朝向和种子；按抗锯齿覆盖轮廓生长观测红边
 //   B) 共线合并后按相交/平行邻接连通分量成组（一条边默认只进一组；禁止子集枚举多假设）
 //   C) 组内邻边直角标注完整边（禁止掩膜 stub 作为 complete 充分条件）
 //   D) 证据足够的组按 ViewportCompletionPattern 补全
@@ -16,8 +16,8 @@ namespace sct {
 //   F) 仅发布目标组的 NavigatorViewportFrame 与 CompleteEdge
 //
 // 几何约束：组内边彼此平行或垂直（矩形），MUST NOT 要求与屏幕坐标轴垂直。
-// Red stroke: color-peak mask + narrow projection peaks; geometry stabilizes
-// orientation and later rejects implausible line groups.
+// Red stroke: strict core votes for line direction; local coverage profiles
+// grow its visible span. Geometry later rejects implausible line groups.
 struct ViewportCompletionInput {
   const uint8_t* bgra = nullptr;
   int width = 0;

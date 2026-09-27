@@ -39,8 +39,9 @@ constexpr float kNarrowRedSupportMin = 0.45f;
 constexpr int kNarrowRedMinSamples = 8;
 constexpr float kRawRedWeightMin = 0.10f;
 constexpr int kSeedMinLengthPx = 8;
+constexpr int kObservedMinLengthPx = 16;
 
-// Global weighted-Hough red-line discovery.  This stage only observes red
+// Strict-core Hough red-line discovery. This stage only observes red
 // lines; rectangle grouping and viewport completion remain downstream.
 constexpr int kHoughThetaBins = 360;       // 0.5 degree bins
 constexpr int kHoughRhoSmoothRadius = 2;   // collect anti-aliased stroke width
@@ -49,10 +50,15 @@ constexpr int kHoughPeakThetaRadius = 2;
 constexpr int kHoughMaxPeaks = 64;
 constexpr int kHoughMaxObservedEdges = 32;
 constexpr double kHoughDuplicateParallelDotMin = 0.999;
-constexpr int kLineProbeHalfWidthPx = 2;
+constexpr double kRedFrameAngleToleranceDegrees = 5.0;
+constexpr int kLineProbeHalfWidthPx = 3;
+constexpr int kCoreCenterTolerancePx = 1;
 constexpr int kLineMaxThicknessPx = 7;
 constexpr int kLineMaxBridgeGapPx = 6;
+constexpr int kCoreSeedMaxGapPx = 3;
 constexpr float kLineMinProfileSupport = 0.35f;
+constexpr float kAaProfileRiseTolerance = 0.08f;
+constexpr float kAaBlendResidualMax = 42.f;
 
 constexpr int kEdgeL = 1;
 constexpr int kEdgeT = 2;
@@ -92,6 +98,7 @@ bool IsNarrowNavigatorRedPixel(const uint8_t* p) {
   if (sat < kNarrowRedSatMin) return false;
   if (r >= 140 && r - g >= 45 && r - b >= 45) return true;
   if (r >= 120 && r >= g + 20 && r >= b + 20 && (r - g) + (r - b) >= 55) return true;
+  if (r >= 100 && r - g >= 60 && r - b >= 60) return true;
   return false;
 }
 
@@ -180,20 +187,101 @@ bool NarrowRedAt(const std::vector<uint8_t>& narrow, int w, int h, int x, int y)
   return narrow[static_cast<size_t>(y) * w + x] != 0;
 }
 
-bool IsThinRedProfilePoint(const std::vector<float>& weights, int w, int h,
-                           double x, double y, double nx, double ny,
-                           int center_offset) {
+struct BgrPixel {
+  uint8_t b = 0;
+  uint8_t g = 0;
+  uint8_t r = 0;
+};
+
+struct LineProfileEvidence {
+  bool supported = false;
+  bool narrow_core = false;
+  int center_offset = 0;
+};
+
+const BgrPixel* PixelAt(const std::vector<BgrPixel>& pixels, int w, int h, int x, int y) {
+  if (x < 0 || y < 0 || x >= w || y >= h) return nullptr;
+  return &pixels[static_cast<size_t>(y) * w + x];
+}
+
+// An accepted wide-red pixel must look like coverage blending between the
+// strict red core and the local colour immediately outside that side of the
+// stroke. This admits raster anti-aliasing while rejecting arbitrary pink/red
+// image regions that merely pass a broad colour threshold.
+bool FitsCoverageBlend(const BgrPixel& pixel, const BgrPixel& core,
+                       const BgrPixel& background, float& alpha) {
+  const float vb = static_cast<float>(core.b) - background.b;
+  const float vg = static_cast<float>(core.g) - background.g;
+  const float vr = static_cast<float>(core.r) - background.r;
+  const float denom = vb * vb + vg * vg + vr * vr;
+  if (denom < 64.f) return false;
+  const float pb = static_cast<float>(pixel.b) - background.b;
+  const float pg = static_cast<float>(pixel.g) - background.g;
+  const float pr = static_cast<float>(pixel.r) - background.r;
+  alpha = (pb * vb + pg * vg + pr * vr) / denom;
+  if (alpha < -0.08f || alpha > 1.12f) return false;
+  const float eb = pb - alpha * vb;
+  const float eg = pg - alpha * vg;
+  const float er = pr - alpha * vr;
+  return std::sqrt(eb * eb + eg * eg + er * er) <= kAaBlendResidualMax;
+}
+
+LineProfileEvidence AnalyzeLineProfile(const std::vector<float>& weights,
+                                       const std::vector<uint8_t>& narrow,
+                                       const std::vector<BgrPixel>& pixels,
+                                       int w, int h, double x, double y,
+                                       double nx, double ny) {
+  LineProfileEvidence out;
+  float best = 0.f;
+  for (int d = -kLineProbeHalfWidthPx; d <= kLineProbeHalfWidthPx; ++d) {
+    const int px = static_cast<int>(std::lround(x + nx * d));
+    const int py = static_cast<int>(std::lround(y + ny * d));
+    const float response = RedWeightAt(weights, w, h, px, py);
+    if (response > best) { best = response; out.center_offset = d; }
+  }
+  if (best < kRawRedWeightMin) return out;
+  if (std::abs(out.center_offset) > kCoreCenterTolerancePx) return out;
+
+  const int cx = static_cast<int>(std::lround(x + nx * out.center_offset));
+  const int cy = static_cast<int>(std::lround(y + ny * out.center_offset));
+  const BgrPixel* core = PixelAt(pixels, w, h, cx, cy);
+  if (!core) return out;
+
   int thickness = 1;
+  bool blend_ok = true;
+  out.narrow_core = std::abs(out.center_offset) <= kCoreCenterTolerancePx &&
+                    NarrowRedAt(narrow, w, h, cx, cy);
   for (int sign : {-1, 1}) {
-    for (int d = 1; d <= kLineMaxThicknessPx; ++d) {
-      const double offset = center_offset + sign * d;
+    const int bg_distance = kLineMaxThicknessPx + 2;
+    const int bx = static_cast<int>(std::lround(x + nx * (out.center_offset + sign * bg_distance)));
+    const int by = static_cast<int>(std::lround(y + ny * (out.center_offset + sign * bg_distance)));
+    const BgrPixel* background = PixelAt(pixels, w, h, bx, by);
+    float previous_weight = best;
+    float previous_alpha = 1.12f;
+    for (int d = 1; d <= kLineMaxThicknessPx + 1; ++d) {
+      const double offset = out.center_offset + sign * d;
       const int px = static_cast<int>(std::lround(x + nx * offset));
       const int py = static_cast<int>(std::lround(y + ny * offset));
-      if (RedWeightAt(weights, w, h, px, py) < kRawRedWeightMin) break;
+      const float response = RedWeightAt(weights, w, h, px, py);
+      if (response < kRawRedWeightMin) break;
+      const BgrPixel* current = PixelAt(pixels, w, h, px, py);
+      if (background && current) {
+        float alpha = 0.f;
+        if (!FitsCoverageBlend(*current, *core, *background, alpha) || alpha < 0.12f)
+          break;
+        if (alpha > previous_alpha + 0.15f) blend_ok = false;
+        previous_alpha = alpha;
+      }
+      if (d > kLineMaxThicknessPx) return out;
       ++thickness;
+      if (std::abs(out.center_offset + sign * d) <= kCoreCenterTolerancePx)
+        out.narrow_core = out.narrow_core || NarrowRedAt(narrow, w, h, px, py);
+      if (response > previous_weight + kAaProfileRiseTolerance) blend_ok = false;
+      previous_weight = response;
     }
   }
-  return thickness <= kLineMaxThicknessPx;
+  out.supported = thickness <= kLineMaxThicknessPx && blend_ok;
+  return out;
 }
 
 void AddUniqueObservedEdge(ObservedEdge edge, std::vector<ObservedEdge>& pool) {
@@ -225,6 +313,7 @@ void AddUniqueObservedEdge(ObservedEdge edge, std::vector<ObservedEdge>& pool) {
 
 void EmitSupportedLineRuns(const std::vector<float>& red_weight,
                            const std::vector<uint8_t>& narrow_red,
+                           const std::vector<BgrPixel>& pixels,
                            int w, int h, double nx, double ny, double rho,
                            std::vector<ObservedEdge>& pool) {
   const double point_x = nx * rho;
@@ -242,7 +331,7 @@ void EmitSupportedLineRuns(const std::vector<float>& red_weight,
   double line_t0 = 0.0, line_t1 = 0.0;
   if (!ClipLineToImage(ox, oy, ux, uy, w, h, line_t0, line_t1)) return;
   const int sample_count = static_cast<int>(std::floor(line_t1 - line_t0)) + 1;
-  const int required_length = std::max(kSeedMinLengthPx, std::min(w, h) / 12);
+  const int required_length = std::max(kObservedMinLengthPx, std::min(w, h) / 12);
   if (sample_count < required_length) return;
 
   std::vector<uint8_t> supported(static_cast<size_t>(sample_count), 0);
@@ -251,51 +340,60 @@ void EmitSupportedLineRuns(const std::vector<float>& red_weight,
     const double t = line_t0 + i;
     const double x = ox + ux * t;
     const double y = oy + uy * t;
-    float best = 0.f;
-    int best_offset = 0;
-    bool narrow = false;
-    for (int d = -kLineProbeHalfWidthPx; d <= kLineProbeHalfWidthPx; ++d) {
-      const int px = static_cast<int>(std::lround(x + nx * d));
-      const int py = static_cast<int>(std::lround(y + ny * d));
-      const float response = RedWeightAt(red_weight, w, h, px, py);
-      if (response > best) {
-        best = response;
-        best_offset = d;
-      }
-      narrow = narrow || NarrowRedAt(narrow_red, w, h, px, py);
-    }
-    if (best >= kRawRedWeightMin &&
-        IsThinRedProfilePoint(red_weight, w, h, x, y, nx, ny, best_offset)) {
+    const auto profile = AnalyzeLineProfile(
+        red_weight, narrow_red, pixels, w, h, x, y, nx, ny);
+    if (profile.supported) {
       supported[static_cast<size_t>(i)] = 1;
-      narrow_supported[static_cast<size_t>(i)] = narrow ? 1 : 0;
+      narrow_supported[static_cast<size_t>(i)] = profile.narrow_core ? 1 : 0;
     }
   }
 
-  std::vector<int> support_indices;
-  support_indices.reserve(static_cast<size_t>(sample_count));
-  for (int i = 0; i < sample_count; ++i)
-    if (supported[static_cast<size_t>(i)]) support_indices.push_back(i);
-  if (support_indices.empty()) return;
-
-  size_t run_begin = 0;
-  while (run_begin < support_indices.size()) {
-    size_t run_end = run_begin + 1;
-    while (run_end < support_indices.size() &&
-           support_indices[run_end] - support_indices[run_end - 1] - 1 <=
-               kLineMaxBridgeGapPx) {
-      ++run_end;
+  // Strict-core runs are the only seeds. Grow each seed in both tangent
+  // directions through AA-profile support, with a bounded raster gap.
+  std::vector<uint8_t> emitted(static_cast<size_t>(sample_count), 0);
+  for (int seed_start = 0; seed_start < sample_count;) {
+    while (seed_start < sample_count && !narrow_supported[static_cast<size_t>(seed_start)])
+      ++seed_start;
+    if (seed_start >= sample_count) break;
+    int seed_end = seed_start;
+    int core_count = 1;
+    int last_core = seed_start;
+    for (int i = seed_start + 1; i < sample_count; ++i) {
+      if (narrow_supported[static_cast<size_t>(i)]) {
+        if (i - last_core - 1 > kCoreSeedMaxGapPx) break;
+        last_core = i;
+        seed_end = i;
+        ++core_count;
+      }
     }
-    const int first = support_indices[run_begin];
-    const int last = support_indices[run_end - 1];
+    const int seed_span = seed_end - seed_start + 1;
+    seed_start = std::max(seed_start + 1, seed_end + 1);
+    if (seed_span < kSeedMinLengthPx || core_count < kMinRawRedPixels) continue;
+
+    int first = seed_end - seed_span + 1;
+    int last = seed_end;
+    int gap = 0;
+    for (int i = first - 1; i >= 0; --i) {
+      if (supported[static_cast<size_t>(i)]) { first = i; gap = 0; }
+      else if (++gap > kLineMaxBridgeGapPx) break;
+    }
+    gap = 0;
+    for (int i = last + 1; i < sample_count; ++i) {
+      if (supported[static_cast<size_t>(i)]) { last = i; gap = 0; }
+      else if (++gap > kLineMaxBridgeGapPx) break;
+    }
+    if (emitted[static_cast<size_t>((first + last) / 2)]) continue;
     const int span = last - first + 1;
+    int supported_count = 0;
     int narrow_count = 0;
-    for (int i = first; i <= last; ++i)
+    for (int i = first; i <= last; ++i) {
+      supported_count += supported[static_cast<size_t>(i)] != 0;
       narrow_count += narrow_supported[static_cast<size_t>(i)] != 0;
-    const int supported_count = static_cast<int>(run_end - run_begin);
+    }
     const float support = static_cast<float>(supported_count) / std::max(1, span);
-    const int min_narrow = std::max(kMinRawRedPixels, required_length / 3);
     if (span >= required_length && support >= kLineMinProfileSupport &&
-        narrow_count >= min_narrow) {
+        narrow_count >= kMinRawRedPixels) {
+      for (int i = first; i <= last; ++i) emitted[static_cast<size_t>(i)] = 1;
       const double t0 = line_t0 + first;
       const double t1 = line_t0 + last;
       ObservedEdge edge;
@@ -315,17 +413,15 @@ void EmitSupportedLineRuns(const std::vector<float>& red_weight,
       edge.seg.corner_at_end = -1;
       AddUniqueObservedEdge(edge, pool);
     }
-    run_begin = run_end;
   }
 }
 
-// Discover red lines globally.  Every red pixel votes for an entire line, so
-// anti-aliasing holes and short interruptions do not split one factual edge
-// into unrelated connected components.  Endpoints still come only from actual
-// red support along the winning line; downstream code remains responsible for
-// deciding corners, complete sides, groups, and viewport completion patterns.
+// Discover red lines globally. Strict red cores determine candidate direction;
+// supported AA profiles determine their visible endpoints. Downstream code
+// decides corners, complete sides, groups, and viewport completion patterns.
 void DetectGlobalRedLines(const std::vector<float>& red_weight,
                           const std::vector<uint8_t>& narrow_red,
+                          const std::vector<BgrPixel>& pixels,
                           int w, int h, std::vector<ObservedEdge>& pool) {
   pool.clear();
   const int rho_extent = static_cast<int>(std::ceil(std::hypot(w - 1.0, h - 1.0)));
@@ -344,9 +440,10 @@ void DetectGlobalRedLines(const std::vector<float>& red_weight,
   for (int y = 0; y < h; ++y) {
     for (int x = 0; x < w; ++x) {
       const size_t pixel = static_cast<size_t>(y) * w + x;
-      const float response = red_weight[pixel];
-      if (response < kRawRedWeightMin) continue;
-      const float vote = response * (narrow_red[pixel] ? 1.f : 0.35f);
+      // Direction is owned exclusively by strict red core pixels. Wide red
+      // evidence is reserved for profile-constrained growth after seeding.
+      if (!narrow_red[pixel]) continue;
+      const float vote = std::max(0.25f, red_weight[pixel]);
       for (int theta = 0; theta < kHoughThetaBins; ++theta) {
         const int rho = static_cast<int>(std::lround(
             x * cos_table[static_cast<size_t>(theta)] +
@@ -371,7 +468,7 @@ void DetectGlobalRedLines(const std::vector<float>& red_weight,
     return score;
   };
 
-  const int required_length = std::max(kSeedMinLengthPx, std::min(w, h) / 12);
+  const int required_length = std::max(kObservedMinLengthPx, std::min(w, h) / 12);
   const float min_peak_score = std::max(4.f, required_length * 0.25f);
   std::vector<HoughPeak> peaks;
   for (int theta = 0; theta < kHoughThetaBins; ++theta) {
@@ -403,9 +500,23 @@ void DetectGlobalRedLines(const std::vector<float>& red_weight,
     const double nx = cos_table[static_cast<size_t>(peak.theta_bin)];
     const double ny = sin_table[static_cast<size_t>(peak.theta_bin)];
     const double rho = peak.rho_bin - rho_extent;
-    EmitSupportedLineRuns(red_weight, narrow_red, w, h, nx, ny, rho, pool);
+    EmitSupportedLineRuns(red_weight, narrow_red, pixels, w, h, nx, ny, rho, pool);
     if (pool.size() >= kHoughMaxObservedEdges) break;
   }
+}
+
+bool RedLineMatchesDisplayRotation(const ObservedEdge& edge, double rotation_degrees) {
+  if (!std::isfinite(rotation_degrees) || !std::isfinite(edge.ux) || !std::isfinite(edge.uy))
+    return false;
+  // CSP's positive rotation maps to a negative slope in screen coordinates
+  // (the same convention used by CompleteDirectedGroup). Lines are undirected,
+  // so compare modulo 180° against the OCR angle and its perpendicular.
+  const double target = std::remainder(-rotation_degrees, 180.0);
+  const double angle = std::atan2(edge.uy, edge.ux) * 180.0 / 3.14159265358979323846;
+  const double parallel_delta = std::abs(std::remainder(angle - target, 180.0));
+  const double perpendicular_delta =
+      std::abs(std::remainder(angle - (target + 90.0), 180.0));
+  return std::min(parallel_delta, perpendicular_delta) <= kRedFrameAngleToleranceDegrees;
 }
 
 double EdgeLen(const ObservedEdge& e) {
@@ -2109,6 +2220,7 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
 
   std::vector<float> red_weight(static_cast<size_t>(rw) * rh, 0.f);
   std::vector<uint8_t> narrow_red(static_cast<size_t>(rw) * rh, 0);
+  std::vector<BgrPixel> pixels(static_cast<size_t>(rw) * rh);
   int red_count = 0;
   for (int y = roi.top; y < roi.bottom; ++y) {
     for (int x = roi.left; x < roi.right; ++x) {
@@ -2116,6 +2228,7 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
           in.bgra + static_cast<size_t>(y) * in.stride + static_cast<size_t>(x) * 4;
       const float weight = NavigatorRedWeight(p);
       const size_t index = static_cast<size_t>(y - roi.top) * rw + (x - roi.left);
+      pixels[index] = {p[0], p[1], p[2]};
       red_weight[index] = weight;
       if (weight >= kRawRedWeightMin) {
         ++red_count;
@@ -2133,9 +2246,15 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
     return Fail(FailStatus::InsufficientViewportGeometry, "no narrow-red seed pixels");
   }
 
-  // A. 连续红色权重上的全局加权 Hough；输出仍只是观测红线。
+  // A. 窄红核心投票确定直线，沿线用抗锯齿覆盖轮廓生长观测红边。
   std::vector<ObservedEdge> pool;
-  DetectGlobalRedLines(red_weight, narrow_red, rw, rh, pool);
+  DetectGlobalRedLines(red_weight, narrow_red, pixels, rw, rh, pool);
+  if (in.display_rotation_confidence >= 0.2f &&
+      std::isfinite(in.display_rotation_degrees)) {
+    pool.erase(std::remove_if(pool.begin(), pool.end(), [&](const ObservedEdge& edge) {
+      return !RedLineMatchesDisplayRotation(edge, in.display_rotation_degrees);
+    }), pool.end());
+  }
   if (pool.empty()) {
     return Fail(FailStatus::InsufficientViewportGeometry, "no global red line segments");
   }
