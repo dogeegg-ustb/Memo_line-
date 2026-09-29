@@ -141,7 +141,8 @@ public sealed class SctNativeService
     public CanvasObservationDto ObserveCanvas(
         CaptureSession session,
         IntRect roiCapturePx,
-        WorkspaceBackgroundModel background, bool navigator = false)
+        WorkspaceBackgroundModel background, bool navigator = false,
+        int canvasPixelWidth = 0, int canvasPixelHeight = 0)
     {
         using var timing = new StageTimer(navigator ? "navigator-canvas" : "workspace-canvas", session.CaptureId);
         return WithLockedFrame(session, (scan0, stride) =>
@@ -156,7 +157,9 @@ public sealed class SctNativeService
                 OriginX = session.OriginX,
                 OriginY = session.OriginY,
                 Background = background.ToNative(),
-                DpiScale = Math.Max(session.DpiX, session.DpiY) / 96f
+                DpiScale = Math.Max(session.DpiX, session.DpiY) / 96f,
+                CanvasPixelWidth = canvasPixelWidth,
+                CanvasPixelHeight = canvasPixelHeight
             };
 
             var result = new NativeSct.SctCanvasObservation { AmbiguityReason = "" };

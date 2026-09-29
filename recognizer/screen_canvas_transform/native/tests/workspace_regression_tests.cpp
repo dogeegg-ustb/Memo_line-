@@ -22,6 +22,13 @@ void Fill(std::vector<uint8_t>& image, int w, wb::IntRect r, int value) {
     p[0]=p[1]=p[2]=uint8_t(value);p[3]=255;
   }
 }
+void FillColor(std::vector<uint8_t>& image, int w, wb::IntRect r,
+               uint8_t b, uint8_t g, uint8_t red) {
+  for (int y=r.top; y<r.bottom; ++y) for (int x=r.left; x<r.right; ++x) {
+    auto* p=&image[(size_t(y)*w+x)*4];
+    p[0]=b;p[1]=g;p[2]=red;p[3]=255;
+  }
+}
 bool Near(wb::IntRect a, wb::IntRect b, int tolerance=1) {
   return std::abs(a.left-b.left)<=tolerance && std::abs(a.top-b.top)<=tolerance &&
          std::abs(a.right-b.right)<=tolerance && std::abs(a.bottom-b.bottom)<=tolerance;
@@ -86,6 +93,26 @@ void Observations() {
   Fill(image,w,{0,0,w,h},45);
   Check(observe().ambiguous,"uniform background does not invent canvas");
 }
+void NavigatorKeepsDarkCanvasTopEdge() {
+  constexpr int w=240,h=180;
+  std::vector<uint8_t> image(size_t(w)*h*4,255);
+  Fill(image,w,{0,0,w,h},41);
+  Fill(image,w,{60,20,150,145},230);
+  // The scaled illustration starts with a few near-gray dark rows. They are
+  // close enough to the workspace background to pass the old broad Lab gate.
+  FillColor(image,w,{60,20,150,25},33,37,36);
+
+  wb::BackgroundModel bg;
+  bg.center_lab=wb::BgrToLab(41,41,41);
+  bg.strong_delta_e=3.5f;
+  bg.weak_delta_e=6.f;
+  auto out=sct::ObserveCanvasExcludingBackground(image.data(),w,h,w*4,
+      {0,0,w,h},0,0,bg,1.f,true);
+  Check(!out.ambiguous,"dark-edged navigator canvas remains observable");
+  Check(out.bounds_capture.left==60 && out.bounds_capture.top==20 &&
+        out.bounds_capture.right==150 && out.bounds_capture.bottom==145,
+        "strict background range preserves near-gray artwork at navigator paper edge");
+}
 void RejectUnsupportedBoundaries() {
   constexpr int w=640,h=480;
   std::vector<uint8_t> image(size_t(w)*h*4,255);
@@ -138,6 +165,7 @@ int main(int argc, char** argv) {
     return out.status==wb::Status::Ok?0:1;
   }
   Observations();
+  NavigatorKeepsDarkCanvasTopEdge();
   RejectUnsupportedBoundaries();
   for (auto roi:{wb::IntRect{70,50,570,430},wb::IntRect{95,75,545,405}}) {
     WorkspaceCase({310,230,330,250},roi,"small canvas");

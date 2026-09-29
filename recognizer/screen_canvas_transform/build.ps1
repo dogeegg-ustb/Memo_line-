@@ -3,7 +3,8 @@
 # (color/features/.../detector.cpp) — no WorkspaceBorderNative.dll, no wb_* exports.
 param(
   [string]$Configuration = "Release",
-  [string]$NativeBuildDirectory = ""
+  [string]$NativeBuildDirectory = "",
+  [switch]$SkipTests
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,10 +28,11 @@ Push-Location $Build
 try {
   $srcs = @(
     "color.cpp","features.cpp","seeds.cpp","background.cpp","similarity.cpp","grower.cpp",
-    "geometry.cpp","scoring.cpp","refine.cpp","validate.cpp","detector.cpp","navigator_thumbnail.cpp"
+    "geometry.cpp","scoring.cpp","refine.cpp","validate.cpp","detector.cpp"
   ) | ForEach-Object { Join-Path $WorkspaceNative "src\$_" }
   $srcs += @(
-    "canvas_observe.cpp","workspace_canvas_relation.cpp","viewport_frame.cpp","transform_solve.cpp","sct_c_api.cpp"
+    "navigator_thumbnail.cpp","canvas_observe.cpp","workspace_canvas_relation.cpp",
+    "viewport_frame.cpp","transform_solve.cpp","sct_c_api.cpp"
   ) | ForEach-Object { Join-Path $Native "src\$_" }
   $incs = @("/I$(Join-Path $WorkspaceNative 'include')", "/I$(Join-Path $Native 'include')")
   $common = @("/nologo","/std:c++17","/O2","/EHsc","/utf-8","/MT","/DSCT_NATIVE_EXPORTS") + $incs
@@ -81,6 +83,8 @@ Copy-Item $dll (Join-Path $exe.DirectoryName "ScreenCanvasNative.dll") -Force
 Write-Host "OK: $($exe.FullName)"
 Write-Host "DLL: $(Join-Path $exe.DirectoryName 'ScreenCanvasNative.dll')"
 
+if ($SkipTests) { return }
+
 # Native geometry contracts and physical-coordinate regressions.
 $testObjs = @(
   (Join-Path $Build "color.obj"),
@@ -93,13 +97,14 @@ $testObjs = @(
   (Join-Path $Build "refine.obj"),
   (Join-Path $Build "validate.obj"),
   (Join-Path $Build "detector.obj"),
+  (Join-Path $Build "navigator_thumbnail.obj"),
   (Join-Path $Build "viewport_frame.obj"),
   (Join-Path $Build "transform_solve.obj"),
   (Join-Path $Build "workspace_canvas_relation.obj"),
   (Join-Path $Build "geometry.obj"),
   (Join-Path $Build "canvas_observe.obj")
 )
-foreach ($testName in @("contract_tests", "rotation_regression_tests", "workspace_regression_tests")) {
+foreach ($testName in @("contract_tests", "rotation_regression_tests", "workspace_regression_tests", "navigator_thumbnail_regression_tests")) {
   $testSrc = Join-Path $Native "tests\$testName.cpp"
   & cl.exe @common /c $testSrc "/Fo$Build\$testName.obj"
   if ($LASTEXITCODE -ne 0) { throw "$testName compile failed" }

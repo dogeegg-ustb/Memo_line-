@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "csp-panel-validator"
+version = "0.1.0"
+description = "Offline-capable CSP panel OCR and visual-state validation tool"
+requires-python = ">=3.10,<3.15"
+
+[project.scripts]
+csp-panel-validator = "csp_panel_validator.main:main"
+csp-panel-replay = "scripts.replay:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["csp_panel_validator*", "scripts*"]
+
+[tool.setuptools.package-data]
+csp_panel_validator = ["data/*.json", "data/*.sqlite3"]

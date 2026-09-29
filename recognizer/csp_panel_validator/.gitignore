@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+.tmp/
+build/
+*.egg-info/
+exports/
+profiles/*.json
+!profiles/example.json
+*.jsonl
+*.tmp

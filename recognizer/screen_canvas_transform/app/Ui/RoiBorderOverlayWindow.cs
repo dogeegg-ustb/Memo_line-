@@ -71,12 +71,26 @@ public sealed class RoiBorderOverlayWindow : IDisposable
             "ScreenCanvasWorkspaceRoiBorder",
             System.Drawing.Color.FromArgb(230, 72, 199, 92));
 
+    /// <summary>Observed workspace canvas boundary — purple.</summary>
+    public static RoiBorderOverlayWindow CreateWorkspaceCanvas()
+        => new(
+            "ScreenCanvasTransform.WorkspaceCanvasBorder",
+            "ScreenCanvasWorkspaceCanvasBorder",
+            System.Drawing.Color.FromArgb(245, 175, 70, 255));
+
     /// <summary>NavigatorThumbnailRoi from C-II — magenta.</summary>
     public static RoiBorderOverlayWindow CreateNavigatorThumbnail()
         => new(
             "ScreenCanvasTransform.NavigatorThumbnailRoiBorder",
             "ScreenCanvasNavigatorThumbnailRoiBorder",
             System.Drawing.Color.FromArgb(230, 220, 60, 200));
+
+    /// <summary>Observed canvas bounds inside the navigator thumbnail — blue.</summary>
+    public static RoiBorderOverlayWindow CreateNavigatorCanvas()
+        => new(
+            "ScreenCanvasTransform.NavigatorCanvasBorder",
+            "ScreenCanvasNavigatorCanvasBorder",
+            System.Drawing.Color.FromArgb(255, 45, 165, 255));
 
     public string? BoundCaptureId => _boundCaptureId;
 

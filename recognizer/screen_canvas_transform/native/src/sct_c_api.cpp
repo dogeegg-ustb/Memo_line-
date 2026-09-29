@@ -299,7 +299,8 @@ static int ObserveCanvasCore(const SctCanvasObserveRequest* req, SctCanvasObserv
   auto obs = sct::ObserveCanvasExcludingBackground(
       req->bgra, req->width, req->height, req->stride,
       {req->roi_capture.left, req->roi_capture.top, req->roi_capture.right, req->roi_capture.bottom},
-      req->origin_x, req->origin_y, FromC(req->background), req->dpi_scale, navigator);
+      req->origin_x, req->origin_y, FromC(req->background), req->dpi_scale, navigator,
+      req->canvas_pixel_width, req->canvas_pixel_height);
   *out = ToCObs(obs, obs.ambiguous ? static_cast<int>(sct::FailStatus::WorkspaceCanvasAmbiguous)
                                    : static_cast<int>(sct::FailStatus::Ok));
   return out->status;

@@ -6,20 +6,25 @@ using ScreenCanvasTransform.Models;
 namespace ScreenCanvasTransform.Services;
 
 /// <summary>
-/// Stores and matches compact luminance-gradient fingerprints around archived ROI boundaries.
-/// This deliberately does not inspect OCR slots, canvas content, or Navigator viewport ink.
+/// Stores and matches compact luminance fingerprints outside archived ROI boundaries.
+/// Samples never cross into the workspace or Navigator thumbnail, so canvas zoom,
+/// artwork and viewport ink cannot invalidate an otherwise unchanged UI layout.
 /// </summary>
 public static class ArchiveVisualFingerprintService
 {
-    public const int FingerprintVersion = 1;
+    public const int FingerprintVersion = 2;
     public const int SamplesPerEdge = 48;
     public const int NormalBandDepth = 3;
-    private const float MinimumReferenceStrength = 5f;
-    private const double MinimumCosineSimilarity = 0.84;
+    private const double MaximumMeanAbsoluteError = 10.0;
 
     private enum Side { Left, Top, Right, Bottom }
 
-    private sealed record EdgeMatch(bool Matched, int Offset, double Similarity, float Strength);
+    private sealed record EdgeMatch(
+        bool Matched,
+        int Offset,
+        double Similarity,
+        float Strength,
+        double MeanAbsoluteError);
 
     public sealed record MatchResult(
         bool IsMatch,
@@ -72,20 +77,23 @@ public static class ArchiveVisualFingerprintService
             var nav = MatchRoi(scan0, stride, width, height, thumbnail,
                 fingerprint.NavigatorThumbnail, fingerprint.NormalBandDepth, searchRadius);
 
-            var xOffsets = ws.Edges.Concat(nav.Edges)
+            // Workspace exterior UI is the validity anchor. Navigator exterior
+            // samples are diagnostic support and must not reject an archive just
+            // because its surrounding panel is visually uniform.
+            var xOffsets = ws.Edges
                 .Where(e => e.Side is Side.Left or Side.Right && e.Match.Matched)
                 .Select(e => e.Match.Offset).ToArray();
-            var yOffsets = ws.Edges.Concat(nav.Edges)
+            var yOffsets = ws.Edges
                 .Where(e => e.Side is Side.Top or Side.Bottom && e.Match.Matched)
                 .Select(e => e.Match.Offset).ToArray();
             int offsetX = Median(xOffsets);
             int offsetY = Median(yOffsets);
             bool offsetsAgree = Spread(xOffsets) <= 4 && Spread(yOffsets) <= 4;
-            bool matched = ws.IsMatch && nav.IsMatch && offsetsAgree;
+            bool matched = ws.IsMatch && offsetsAgree;
             string message = matched
-                ? $"边界指纹匹配：工作区 {ws.MatchedCount}/4，导航器缩略图 {nav.MatchedCount}/4，偏移=({offsetX},{offsetY})。"
-                : $"边界指纹不匹配：工作区 {ws.MatchedCount}/4，导航器缩略图 {nav.MatchedCount}/4，" +
-                  $"偏移一致={offsetsAgree}。";
+                ? $"外侧 UI 指纹匹配：工作区 {ws.MatchedCount}/4，导航器参考 {nav.MatchedCount}/4，偏移=({offsetX},{offsetY})。"
+                : $"外侧 UI 指纹不匹配：工作区 {ws.MatchedCount}/4，导航器参考 {nav.MatchedCount}/4，" +
+                  $"工作区偏移一致={offsetsAgree}。";
             return new MatchResult(matched, message, ws.MatchedCount, nav.MatchedCount, offsetX, offsetY);
         });
     }
@@ -114,12 +122,6 @@ public static class ArchiveVisualFingerprintService
                 || edge.Values.Any(v => !float.IsFinite(v)) || !float.IsFinite(edge.Strength))
                 return $"{name}.{edgeName} 无效";
         }
-        bool hasVertical = roi.Left.Strength >= MinimumReferenceStrength
-            || roi.Right.Strength >= MinimumReferenceStrength;
-        bool hasHorizontal = roi.Top.Strength >= MinimumReferenceStrength
-            || roi.Bottom.Strength >= MinimumReferenceStrength;
-        if (!hasVertical || !hasHorizontal)
-            return $"{name} 缺少可辨识的横向或纵向边界";
         return null;
     }
 
@@ -154,23 +156,25 @@ public static class ArchiveVisualFingerprintService
         byte* scan0, int stride, int width, int height, IntRect rect, Side side,
         EdgeFingerprintDto reference, int depth, int searchRadius)
     {
-        EdgeMatch bestOverall = new(false, 0, double.NegativeInfinity, 0);
+        EdgeMatch bestOverall = new(false, 0, double.NegativeInfinity, 0, double.PositiveInfinity);
         EdgeMatch? bestMatched = null;
-        if (reference.Strength < MinimumReferenceStrength)
-            return bestOverall;
 
         for (int offset = -searchRadius; offset <= searchRadius; offset++)
         {
             EdgeFingerprintDto current = SampleEdge(
                 scan0, stride, width, height, rect, side, offset, depth);
-            double similarity = Cosine(reference.Values, current.Values);
-            double strengthRatio = current.Strength / Math.Max(reference.Strength, 0.001f);
-            bool strengthOk = strengthRatio is >= 0.35 and <= 2.85;
-            bool isMatch = strengthOk && similarity >= MinimumCosineSimilarity;
-            var candidate = new EdgeMatch(isMatch, offset, similarity, current.Strength);
-            if (similarity > bestOverall.Similarity)
+            double error = MeanAbsoluteError(reference.Values, current.Values);
+            double similarity = Math.Clamp(1.0 - error / 255.0, -1.0, 1.0);
+            bool isMatch = error <= MaximumMeanAbsoluteError;
+            var candidate = new EdgeMatch(isMatch, offset, similarity, current.Strength, error);
+            if (error < bestOverall.MeanAbsoluteError - 1e-6
+                || (Math.Abs(error - bestOverall.MeanAbsoluteError) <= 1e-6
+                    && Math.Abs(offset) < Math.Abs(bestOverall.Offset)))
                 bestOverall = candidate;
-            if (isMatch && (bestMatched is null || similarity > bestMatched.Similarity))
+            if (isMatch && (bestMatched is null
+                || error < bestMatched.MeanAbsoluteError - 1e-6
+                || (Math.Abs(error - bestMatched.MeanAbsoluteError) <= 1e-6
+                    && Math.Abs(offset) < Math.Abs(bestMatched.Offset))))
                 bestMatched = candidate;
         }
         return bestMatched ?? bestOverall;
@@ -202,11 +206,10 @@ public static class ArchiveVisualFingerprintService
             int count = 0;
             for (int band = 1; band <= depth; band++)
             {
-                GetPair(side, boundary, along, band,
-                    out int xo, out int yo, out int xi, out int yi);
-                if (!Inside(xo, yo, width, height) || !Inside(xi, yi, width, height))
+                GetExteriorPoint(side, boundary, along, band, out int x, out int y);
+                if (!Inside(x, y, width, height))
                     continue;
-                sum += Luma(scan0, stride, xo, yo) - Luma(scan0, stride, xi, yi);
+                sum += Luma(scan0, stride, x, y);
                 count++;
             }
             values[sample] = count > 0 ? (float)sum / count : 0;
@@ -215,24 +218,24 @@ public static class ArchiveVisualFingerprintService
         return new EdgeFingerprintDto
         {
             Values = values,
-            Strength = values.Sum(Math.Abs) / values.Length
+            Strength = MeanDeviation(values)
         };
     }
 
-    private static void GetPair(
+    private static void GetExteriorPoint(
         Side side, int boundary, int along, int band,
-        out int xo, out int yo, out int xi, out int yi)
+        out int x, out int y)
     {
         switch (side)
         {
             case Side.Left:
-                xo = boundary - band; xi = boundary + band - 1; yo = yi = along; break;
+                x = boundary - band; y = along; break;
             case Side.Top:
-                yo = boundary - band; yi = boundary + band - 1; xo = xi = along; break;
+                x = along; y = boundary - band; break;
             case Side.Right:
-                xi = boundary - band; xo = boundary + band - 1; yo = yi = along; break;
+                x = boundary + band - 1; y = along; break;
             case Side.Bottom:
-                yi = boundary - band; yo = boundary + band - 1; xo = xi = along; break;
+                x = along; y = boundary + band - 1; break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(side));
         }
@@ -247,18 +250,21 @@ public static class ArchiveVisualFingerprintService
         yield return (roi.Bottom, "Bottom", Side.Bottom);
     }
 
-    private static double Cosine(float[] a, float[] b)
+    private static double MeanAbsoluteError(float[] a, float[] b)
     {
         if (a.Length != b.Length || a.Length == 0)
-            return -1;
-        double dot = 0, aa = 0, bb = 0;
+            return double.PositiveInfinity;
+        double error = 0;
         for (int i = 0; i < a.Length; i++)
-        {
-            dot += a[i] * b[i];
-            aa += a[i] * a[i];
-            bb += b[i] * b[i];
-        }
-        return aa > 1e-6 && bb > 1e-6 ? dot / Math.Sqrt(aa * bb) : -1;
+            error += Math.Abs(a[i] - b[i]);
+        return error / a.Length;
+    }
+
+    private static float MeanDeviation(float[] values)
+    {
+        if (values.Length == 0) return 0;
+        float mean = values.Average();
+        return values.Sum(v => Math.Abs(v - mean)) / values.Length;
     }
 
     private static int Median(int[] values)

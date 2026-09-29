@@ -88,6 +88,8 @@ typedef struct SctCanvasObserveRequest {
   int origin_y;
   SctBackgroundModel background;
   float dpi_scale;
+  int canvas_pixel_width;
+  int canvas_pixel_height;
 } SctCanvasObserveRequest;
 
 

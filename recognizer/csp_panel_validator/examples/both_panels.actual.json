@@ -1,0 +1,718 @@
+{
+  "schema_version": 2,
+  "frame_id": 1,
+  "captured_at": "2026-09-24T12:41:35.159Z",
+  "recognized_at": "2026-09-24T12:41:36.935Z",
+  "last_observed_at": "2026-09-24T12:41:36.935Z",
+  "status": "partial",
+  "brush": {
+    "name": "G筆",
+    "status": "ok",
+    "candidates": [],
+    "evidence": [
+      {
+        "roi_id": "props",
+        "bbox": [
+          75,
+          13,
+          95,
+          18
+        ],
+        "type": "ocr_text",
+        "ocr_score": 0.99695,
+        "reason": "当前工具属性标题明确显示的工具名称"
+      },
+      {
+        "roi_id": "props",
+        "bbox": [
+          216,
+          13,
+          93,
+          15
+        ],
+        "type": "ocr_text",
+        "ocr_score": 0.94875,
+        "reason": "当前工具属性标题明确显示的工具名称"
+      },
+      {
+        "roi_id": "list",
+        "bbox": [
+          294,
+          29,
+          36,
+          25
+        ],
+        "type": "selected_background",
+        "ocr_score": 0.9783,
+        "reason": "子工具列表当前行的选中背景与文字证据"
+      }
+    ],
+    "source": "tool_properties_and_tool_list",
+    "incomplete": false,
+    "properties": [
+      {
+        "key": "brush_size",
+        "label": "笔刷尺寸",
+        "type": "number",
+        "value": 5.4,
+        "unit": null,
+        "raw_text": "5.4",
+        "enabled": "unknown",
+        "status": "ok",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              24,
+              96,
+              76,
+              24
+            ],
+            "type": "ocr_text",
+            "ocr_score": 0.99995,
+            "reason": "标签右侧的数字词段"
+          },
+          {
+            "roi_id": "props",
+            "bbox": [
+              251,
+              103,
+              51,
+              26
+            ],
+            "type": "ocr_text",
+            "ocr_score": 0.99876,
+            "reason": "标签右侧的数字词段"
+          }
+        ],
+        "observed": {
+          "label": "笔刷尺寸",
+          "number": 5.4,
+          "unit": null
+        },
+        "definition": {
+          "property_id": "brush_size.brush_size",
+          "category": "Brush size",
+          "value_kind": "number",
+          "read_support": "visible_number_checkbox_or_text_enum",
+          "sources": [
+            {
+              "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/B.htm",
+              "section": "Brush size",
+              "item": "Brush size"
+            },
+            {
+              "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/12.htm",
+              "section": "筆刷尺寸",
+              "item": "筆刷尺寸"
+            },
+            {
+              "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.7",
+              "kind": "installed_ui_translation"
+            },
+            {
+              "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.120",
+              "kind": "installed_ui_translation"
+            },
+            {
+              "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.47",
+              "kind": "installed_ui_translation"
+            }
+          ],
+          "catalog_version": "2026-09-24",
+          "match_method": "exact",
+          "context_candidates": []
+        }
+      },
+      {
+        "key": "opacity",
+        "label": "不透明度",
+        "type": "number",
+        "value": 100,
+        "unit": null,
+        "raw_text": "100",
+        "enabled": "unknown",
+        "status": "ok",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              23,
+              145,
+              77,
+              24
+            ],
+            "type": "ocr_text",
+            "ocr_score": 0.99998,
+            "reason": "标签右侧的数字词段"
+          },
+          {
+            "roi_id": "props",
+            "bbox": [
+              253,
+              154,
+              48,
+              21
+            ],
+            "type": "ocr_text",
+            "ocr_score": 0.99982,
+            "reason": "标签右侧的数字词段"
+          }
+        ],
+        "observed": {
+          "label": "不透明度",
+          "number": 100,
+          "unit": null
+        },
+        "definition": {
+          "property_id": "ink.opacity",
+          "category": "Ink",
+          "value_kind": "number",
+          "read_support": "visible_number_checkbox_or_text_enum",
+          "sources": [
+            {
+              "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/I.htm",
+              "section": "Ink",
+              "item": "Opacity"
+            },
+            {
+              "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/15.htm",
+              "section": "墨水",
+              "item": "不透明度"
+            },
+            {
+              "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.153",
+              "kind": "installed_ui_translation"
+            },
+            {
+              "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.1",
+              "kind": "installed_ui_translation"
+            }
+          ],
+          "catalog_version": "2026-09-24",
+          "match_method": "shared_visible_label",
+          "context_candidates": [
+            "ink.opacity",
+            "watercolor_edge.opacity"
+          ]
+        }
+      },
+      {
+        "key": "antialiasing",
+        "label": "消除锯齿",
+        "type": "enum",
+        "value": "弱",
+        "unit": null,
+        "raw_text": "弱",
+        "enabled": "unknown",
+        "status": "ok",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              23,
+              201,
+              77,
+              26
+            ],
+            "type": "selected_background",
+            "ocr_score": 0.99974,
+            "reason": "标签右侧选项中唯一高亮的一项"
+          },
+          {
+            "roi_id": "props",
+            "bbox": [
+              189,
+              201,
+              27,
+              26
+            ],
+            "type": "selected_background",
+            "ocr_score": 1.0,
+            "reason": "标签右侧选项中唯一高亮的一项"
+          }
+        ],
+        "observed": {
+          "label": "消除锯齿",
+          "option": "弱"
+        },
+        "definition": {
+          "property_id": "anti_aliasing.anti_aliasing",
+          "category": "Anti-aliasing",
+          "value_kind": "enum",
+          "read_support": "visible_number_checkbox_or_text_enum",
+          "sources": [
+            {
+              "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/A.htm",
+              "section": "Anti-aliasing",
+              "item": "Anti-aliasing"
+            },
+            {
+              "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/10.htm",
+              "section": "消除鋸齒",
+              "item": "消除鋸齒"
+            },
+            {
+              "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.42.1.37",
+              "kind": "installed_ui_translation"
+            },
+            {
+              "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.3",
+              "kind": "installed_ui_translation"
+            },
+            {
+              "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.55",
+              "kind": "installed_ui_translation"
+            }
+          ],
+          "catalog_version": "2026-09-24",
+          "match_method": "exact",
+          "context_candidates": []
+        }
+      },
+      {
+        "key": "stabilization",
+        "label": "手颤修正",
+        "type": "number",
+        "value": 8,
+        "unit": null,
+        "raw_text": "8",
+        "enabled": "unknown",
+        "status": "ok",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              24,
+              244,
+              77,
+              23
+            ],
+            "type": "ocr_text",
+            "ocr_score": 0.99958,
+            "reason": "标签右侧的数字词段"
+          },
+          {
+            "roi_id": "props",
+            "bbox": [
+              272,
+              255,
+              12,
+              16
+            ],
+            "type": "ocr_text",
+            "ocr_score": 0.99999,
+            "reason": "标签右侧的数字词段"
+          }
+        ],
+        "observed": {
+          "label": "手颤修正",
+          "number": 8,
+          "unit": null
+        },
+        "definition": {
+          "property_id": "correction.stabilization",
+          "category": "Correction",
+          "value_kind": "number",
+          "read_support": "visible_number_checkbox_or_text_enum",
+          "sources": [
+            {
+              "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/C.htm",
+              "section": "Correction",
+              "item": "Stabilization"
+            },
+            {
+              "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/9.htm",
+              "section": "修正",
+              "item": "抖動修正"
+            },
+            {
+              "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.11",
+              "kind": "installed_ui_translation"
+            }
+          ],
+          "catalog_version": "2026-09-24",
+          "match_method": "exact",
+          "context_candidates": []
+        }
+      },
+      {
+        "key": "adjust_stabilization_by_speed",
+        "label": "根据速度调整手颤",
+        "type": "checkbox",
+        "value": "checked",
+        "unit": null,
+        "raw_text": "checked",
+        "enabled": "unknown",
+        "status": "ok",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              49,
+              292,
+              148,
+              22
+            ],
+            "type": "checkbox",
+            "ocr_score": 0.99992,
+            "reason": "标签左侧复选框的当前勾选状态"
+          },
+          {
+            "roi_id": "props",
+            "bbox": [
+              27,
+              295,
+              19,
+              19
+            ],
+            "type": "checkbox",
+            "ocr_score": 0.99992,
+            "reason": "当前帧文字左侧方框的边框与填充分析"
+          }
+        ],
+        "observed": {
+          "label": "根据速度调整手颤",
+          "option": "checked"
+        },
+        "definition": {
+          "property_id": "correction.adjust_by_speed",
+          "category": "Correction",
+          "value_kind": "checkbox",
+          "read_support": "visible_number_checkbox_or_text_enum",
+          "sources": [
+            {
+              "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/C.htm",
+              "section": "Correction",
+              "item": "Adjust by speed"
+            },
+            {
+              "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/9.htm",
+              "section": "修正",
+              "item": "根據速度修正抖動"
+            },
+            {
+              "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.130",
+              "kind": "installed_ui_translation"
+            },
+            {
+              "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.13",
+              "kind": "installed_ui_translation"
+            }
+          ],
+          "catalog_version": "2026-09-24",
+          "match_method": "exact",
+          "context_candidates": []
+        }
+      },
+      {
+        "key": "correction.vector_magnet",
+        "label": "矢量吸附",
+        "type": "compound",
+        "value": "unknown",
+        "unit": null,
+        "raw_text": null,
+        "enabled": "unknown",
+        "status": "partial",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              48,
+              340,
+              77,
+              24
+            ],
+            "type": "ocr_text",
+            "ocr_score": 0.99992,
+            "reason": "已识别标签，但右侧没有唯一可读的当前值"
+          }
+        ],
+        "observed": {
+          "label": "矢量吸附",
+          "option": "unknown"
+        },
+        "definition": {
+          "property_id": "correction.vector_magnet",
+          "category": "Correction",
+          "value_kind": "compound",
+          "read_support": "visible_number_checkbox_or_text_enum",
+          "sources": [
+            {
+              "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/C.htm",
+              "section": "Correction",
+              "item": "Vector magnet"
+            },
+            {
+              "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/9.htm",
+              "section": "修正",
+              "item": "吸附向量【PRO／EX】"
+            },
+            {
+              "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.177",
+              "kind": "installed_ui_translation"
+            }
+          ],
+          "catalog_version": "2026-09-24",
+          "match_method": "exact",
+          "context_candidates": []
+        }
+      }
+    ]
+  },
+  "unresolved": [],
+  "timings_ms": {
+    "capture": 0,
+    "ocr": 1734,
+    "parse": 42,
+    "total": 1777
+  },
+  "capture_backend": "offline_fixture",
+  "capture_scope": "client",
+  "raw_ocr": [
+    {
+      "roi_id": "list",
+      "text": "G筆",
+      "bbox": [
+        294,
+        29,
+        36,
+        25
+      ],
+      "score": 0.9783
+    },
+    {
+      "roi_id": "list",
+      "text": "擬真G筆",
+      "bbox": [
+        257,
+        82,
+        73,
+        26
+      ],
+      "score": 0.98986
+    },
+    {
+      "roi_id": "props",
+      "text": "“G筆”工具属性",
+      "bbox": [
+        75,
+        13,
+        95,
+        18
+      ],
+      "score": 0.99695
+    },
+    {
+      "roi_id": "props",
+      "text": "“G筆”笔刷尺寸",
+      "bbox": [
+        216,
+        13,
+        93,
+        15
+      ],
+      "score": 0.94875
+    },
+    {
+      "roi_id": "props",
+      "text": "G筆",
+      "bbox": [
+        1,
+        35,
+        33,
+        23
+      ],
+      "score": 0.99413
+    },
+    {
+      "roi_id": "props",
+      "text": "笔刷尺寸",
+      "bbox": [
+        24,
+        96,
+        76,
+        24
+      ],
+      "score": 0.99995
+    },
+    {
+      "roi_id": "props",
+      "text": "5.4",
+      "bbox": [
+        251,
+        103,
+        51,
+        26
+      ],
+      "score": 0.99876
+    },
+    {
+      "roi_id": "props",
+      "text": "不透明度",
+      "bbox": [
+        23,
+        145,
+        77,
+        24
+      ],
+      "score": 0.99998
+    },
+    {
+      "roi_id": "props",
+      "text": "100",
+      "bbox": [
+        253,
+        154,
+        48,
+        21
+      ],
+      "score": 0.99982
+    },
+    {
+      "roi_id": "props",
+      "text": "消除锯齿",
+      "bbox": [
+        23,
+        201,
+        77,
+        26
+      ],
+      "score": 0.99974
+    },
+    {
+      "roi_id": "props",
+      "text": "无",
+      "bbox": [
+        134,
+        203,
+        26,
+        23
+      ],
+      "score": 0.99946
+    },
+    {
+      "roi_id": "props",
+      "text": "弱",
+      "bbox": [
+        189,
+        201,
+        27,
+        26
+      ],
+      "score": 1.0
+    },
+    {
+      "roi_id": "props",
+      "text": "中",
+      "bbox": [
+        244,
+        203,
+        26,
+        22
+      ],
+      "score": 0.99969
+    },
+    {
+      "roi_id": "props",
+      "text": "强",
+      "bbox": [
+        297,
+        204,
+        27,
+        22
+      ],
+      "score": 0.99048
+    },
+    {
+      "roi_id": "props",
+      "text": "手颤修正",
+      "bbox": [
+        24,
+        244,
+        77,
+        23
+      ],
+      "score": 0.99958
+    },
+    {
+      "roi_id": "props",
+      "text": "8",
+      "bbox": [
+        272,
+        255,
+        12,
+        16
+      ],
+      "score": 0.99999
+    },
+    {
+      "roi_id": "props",
+      "text": "根据速度调整手颤",
+      "bbox": [
+        49,
+        292,
+        148,
+        22
+      ],
+      "score": 0.99992
+    },
+    {
+      "roi_id": "props",
+      "text": "矢量吸附",
+      "bbox": [
+        48,
+        340,
+        77,
+        24
+      ],
+      "score": 0.99992
+    }
+  ],
+  "panels": [
+    {
+      "roi_id": "list",
+      "role": "tool_list",
+      "frame_id": 1,
+      "ocr_regions": [
+        [
+          2,
+          1,
+          328,
+          53
+        ],
+        [
+          2,
+          55,
+          328,
+          53
+        ]
+      ],
+      "input_pixels": 34768,
+      "roi_pixels": 107244,
+      "ocr_ms": 1000,
+      "status": "read"
+    },
+    {
+      "roi_id": "props",
+      "role": "tool_properties",
+      "frame_id": 1,
+      "ocr_regions": [
+        [
+          0,
+          0,
+          331,
+          445
+        ]
+      ],
+      "input_pixels": 147295,
+      "roi_pixels": 147295,
+      "ocr_ms": 734,
+      "status": "read"
+    }
+  ],
+  "catalog": {
+    "version": "2026-09-24",
+    "property_count": 150
+  }
+}

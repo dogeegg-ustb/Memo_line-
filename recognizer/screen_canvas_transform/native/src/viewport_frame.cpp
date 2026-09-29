@@ -177,32 +177,44 @@ bool ClipLineToImage(double ox, double oy, double ux, double uy,
   return clip_axis(ox, ux, w - 1.0) && clip_axis(oy, uy, h - 1.0);
 }
 
-float RedWeightAt(const std::vector<float>& weights, int w, int h, int x, int y) {
-  if (x < 0 || y < 0 || x >= w || y >= h) return 0.f;
-  return weights[static_cast<size_t>(y) * w + x];
-}
-
-bool NarrowRedAt(const std::vector<uint8_t>& narrow, int w, int h, int x, int y) {
-  if (x < 0 || y < 0 || x >= w || y >= h) return false;
-  return narrow[static_cast<size_t>(y) * w + x] != 0;
-}
-
 struct BgrPixel {
   uint8_t b = 0;
   uint8_t g = 0;
   uint8_t r = 0;
 };
 
+struct BgraView {
+  const uint8_t* bgra = nullptr;
+  int width = 0;
+  int height = 0;
+  int stride = 0;
+  int origin_x = 0;
+  int origin_y = 0;
+};
+
+const uint8_t* PixelAt(const BgraView& view, int x, int y) {
+  if (x < 0 || y < 0 || x >= view.width || y >= view.height) return nullptr;
+  return view.bgra + static_cast<size_t>(y + view.origin_y) * view.stride +
+         static_cast<size_t>(x + view.origin_x) * 4;
+}
+
+float RedWeightAt(const BgraView& view, int x, int y) {
+  const uint8_t* p = PixelAt(view, x, y);
+  return p ? NavigatorRedWeight(p) : 0.f;
+}
+
+bool NarrowRedAt(const BgraView& view, int x, int y) {
+  const uint8_t* p = PixelAt(view, x, y);
+  return p && IsNarrowNavigatorRedPixel(p);
+}
+
+BgrPixel BgrAt(const uint8_t* p) { return {p[0], p[1], p[2]}; }
+
 struct LineProfileEvidence {
   bool supported = false;
   bool narrow_core = false;
   int center_offset = 0;
 };
-
-const BgrPixel* PixelAt(const std::vector<BgrPixel>& pixels, int w, int h, int x, int y) {
-  if (x < 0 || y < 0 || x >= w || y >= h) return nullptr;
-  return &pixels[static_cast<size_t>(y) * w + x];
-}
 
 // An accepted wide-red pixel must look like coverage blending between the
 // strict red core and the local colour immediately outside that side of the
@@ -226,17 +238,14 @@ bool FitsCoverageBlend(const BgrPixel& pixel, const BgrPixel& core,
   return std::sqrt(eb * eb + eg * eg + er * er) <= kAaBlendResidualMax;
 }
 
-LineProfileEvidence AnalyzeLineProfile(const std::vector<float>& weights,
-                                       const std::vector<uint8_t>& narrow,
-                                       const std::vector<BgrPixel>& pixels,
-                                       int w, int h, double x, double y,
+LineProfileEvidence AnalyzeLineProfile(const BgraView& view, double x, double y,
                                        double nx, double ny) {
   LineProfileEvidence out;
   float best = 0.f;
   for (int d = -kLineProbeHalfWidthPx; d <= kLineProbeHalfWidthPx; ++d) {
     const int px = static_cast<int>(std::lround(x + nx * d));
     const int py = static_cast<int>(std::lround(y + ny * d));
-    const float response = RedWeightAt(weights, w, h, px, py);
+    const float response = RedWeightAt(view, px, py);
     if (response > best) { best = response; out.center_offset = d; }
   }
   if (best < kRawRedWeightMin) return out;
@@ -244,30 +253,32 @@ LineProfileEvidence AnalyzeLineProfile(const std::vector<float>& weights,
 
   const int cx = static_cast<int>(std::lround(x + nx * out.center_offset));
   const int cy = static_cast<int>(std::lround(y + ny * out.center_offset));
-  const BgrPixel* core = PixelAt(pixels, w, h, cx, cy);
-  if (!core) return out;
+  const uint8_t* core_pixel = PixelAt(view, cx, cy);
+  if (!core_pixel) return out;
+  const BgrPixel core = BgrAt(core_pixel);
 
   int thickness = 1;
   bool blend_ok = true;
   out.narrow_core = std::abs(out.center_offset) <= kCoreCenterTolerancePx &&
-                    NarrowRedAt(narrow, w, h, cx, cy);
+                    NarrowRedAt(view, cx, cy);
   for (int sign : {-1, 1}) {
     const int bg_distance = kLineMaxThicknessPx + 2;
     const int bx = static_cast<int>(std::lround(x + nx * (out.center_offset + sign * bg_distance)));
     const int by = static_cast<int>(std::lround(y + ny * (out.center_offset + sign * bg_distance)));
-    const BgrPixel* background = PixelAt(pixels, w, h, bx, by);
+    const uint8_t* background_pixel = PixelAt(view, bx, by);
     float previous_weight = best;
     float previous_alpha = 1.12f;
     for (int d = 1; d <= kLineMaxThicknessPx + 1; ++d) {
       const double offset = out.center_offset + sign * d;
       const int px = static_cast<int>(std::lround(x + nx * offset));
       const int py = static_cast<int>(std::lround(y + ny * offset));
-      const float response = RedWeightAt(weights, w, h, px, py);
+      const float response = RedWeightAt(view, px, py);
       if (response < kRawRedWeightMin) break;
-      const BgrPixel* current = PixelAt(pixels, w, h, px, py);
-      if (background && current) {
+      const uint8_t* current_pixel = PixelAt(view, px, py);
+      if (background_pixel && current_pixel) {
         float alpha = 0.f;
-        if (!FitsCoverageBlend(*current, *core, *background, alpha) || alpha < 0.12f)
+        if (!FitsCoverageBlend(BgrAt(current_pixel), core, BgrAt(background_pixel), alpha) ||
+            alpha < 0.12f)
           break;
         if (alpha > previous_alpha + 0.15f) blend_ok = false;
         previous_alpha = alpha;
@@ -275,7 +286,7 @@ LineProfileEvidence AnalyzeLineProfile(const std::vector<float>& weights,
       if (d > kLineMaxThicknessPx) return out;
       ++thickness;
       if (std::abs(out.center_offset + sign * d) <= kCoreCenterTolerancePx)
-        out.narrow_core = out.narrow_core || NarrowRedAt(narrow, w, h, px, py);
+        out.narrow_core = out.narrow_core || NarrowRedAt(view, px, py);
       if (response > previous_weight + kAaProfileRiseTolerance) blend_ok = false;
       previous_weight = response;
     }
@@ -311,11 +322,11 @@ void AddUniqueObservedEdge(ObservedEdge edge, std::vector<ObservedEdge>& pool) {
   if (pool.size() < kHoughMaxObservedEdges) pool.push_back(edge);
 }
 
-void EmitSupportedLineRuns(const std::vector<float>& red_weight,
-                           const std::vector<uint8_t>& narrow_red,
-                           const std::vector<BgrPixel>& pixels,
-                           int w, int h, double nx, double ny, double rho,
+void EmitSupportedLineRuns(const BgraView& thumbnail,
+                           double nx, double ny, double rho,
                            std::vector<ObservedEdge>& pool) {
+  const int w = thumbnail.width;
+  const int h = thumbnail.height;
   const double point_x = nx * rho;
   const double point_y = ny * rho;
   double ux = -ny, uy = nx;
@@ -340,8 +351,7 @@ void EmitSupportedLineRuns(const std::vector<float>& red_weight,
     const double t = line_t0 + i;
     const double x = ox + ux * t;
     const double y = oy + uy * t;
-    const auto profile = AnalyzeLineProfile(
-        red_weight, narrow_red, pixels, w, h, x, y, nx, ny);
+    const auto profile = AnalyzeLineProfile(thumbnail, x, y, nx, ny);
     if (profile.supported) {
       supported[static_cast<size_t>(i)] = 1;
       narrow_supported[static_cast<size_t>(i)] = profile.narrow_core ? 1 : 0;
@@ -421,9 +431,11 @@ void EmitSupportedLineRuns(const std::vector<float>& red_weight,
 // decides corners, complete sides, groups, and viewport completion patterns.
 void DetectGlobalRedLines(const std::vector<float>& red_weight,
                           const std::vector<uint8_t>& narrow_red,
-                          const std::vector<BgrPixel>& pixels,
-                          int w, int h, std::vector<ObservedEdge>& pool) {
+                          const BgraView& thumbnail,
+                          std::vector<ObservedEdge>& pool) {
   pool.clear();
+  const int w = thumbnail.width;
+  const int h = thumbnail.height;
   const int rho_extent = static_cast<int>(std::ceil(std::hypot(w - 1.0, h - 1.0)));
   const int rho_bins = rho_extent * 2 + 1;
   if (rho_bins <= 1) return;
@@ -500,8 +512,76 @@ void DetectGlobalRedLines(const std::vector<float>& red_weight,
     const double nx = cos_table[static_cast<size_t>(peak.theta_bin)];
     const double ny = sin_table[static_cast<size_t>(peak.theta_bin)];
     const double rho = peak.rho_bin - rho_extent;
-    EmitSupportedLineRuns(red_weight, narrow_red, pixels, w, h, nx, ny, rho, pool);
+    EmitSupportedLineRuns(thumbnail, nx, ny, rho, pool);
     if (pool.size() >= kHoughMaxObservedEdges) break;
+  }
+}
+
+// Hough seeds stay inside the Navigator thumbnail, but a visible viewport
+// stroke can continue past that rectangle. Follow only an already accepted
+// segment across the thumbnail boundary and stop at its last supported pixel
+// in the frozen screen capture.
+void ExtendObservedLinePastThumbnail(ObservedEdge& edge, const wb::IntRect& roi,
+                                     const BgraView& capture) {
+  const double original_length = std::hypot(edge.seg.x1 - edge.seg.x0,
+                                            edge.seg.y1 - edge.seg.y0);
+  int added_support = 0;
+  auto extend_end = [&](bool at_start) {
+    const double x = at_start ? edge.seg.x0 : edge.seg.x1;
+    const double y = at_start ? edge.seg.y0 : edge.seg.y1;
+    const double ux = at_start ? -edge.ux : edge.ux;
+    const double uy = at_start ? -edge.uy : edge.uy;
+    double roi_enter = 0.0, roi_leave = 0.0;
+    if (!ClipLineToImage(x, y, ux, uy, roi.width(), roi.height(),
+                         roi_enter, roi_leave) ||
+        roi_leave > kLineMaxBridgeGapPx + 1.0) {
+      return;
+    }
+
+    const double screen_x = roi.left + x;
+    const double screen_y = roi.top + y;
+    double screen_enter = 0.0, screen_leave = 0.0;
+    if (!ClipLineToImage(screen_x, screen_y, ux, uy,
+                         capture.width, capture.height,
+                         screen_enter, screen_leave)) {
+      return;
+    }
+
+    int gap = 0;
+    int last_supported = 0;
+    int supported_count = 0;
+    for (int step = 1; step <= static_cast<int>(std::floor(screen_leave)); ++step) {
+      const auto profile = AnalyzeLineProfile(
+          capture, screen_x + ux * step, screen_y + uy * step, edge.nx, edge.ny);
+      if (profile.supported) {
+        last_supported = step;
+        ++supported_count;
+        gap = 0;
+      } else if (++gap > kLineMaxBridgeGapPx) {
+        break;
+      }
+    }
+    if (last_supported == 0) return;
+
+    if (at_start) {
+      edge.seg.x0 = x + ux * last_supported;
+      edge.seg.y0 = y + uy * last_supported;
+    } else {
+      edge.seg.x1 = x + ux * last_supported;
+      edge.seg.y1 = y + uy * last_supported;
+    }
+    added_support += supported_count;
+  };
+
+  extend_end(true);
+  extend_end(false);
+  if (added_support > 0) {
+    const double extended_length = std::hypot(edge.seg.x1 - edge.seg.x0,
+                                               edge.seg.y1 - edge.seg.y0);
+    edge.seg.support = static_cast<float>(std::clamp(
+        (edge.seg.support * original_length + added_support) /
+            std::max(extended_length, 1.0),
+        0.0, 1.0));
   }
 }
 
@@ -2220,7 +2300,8 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
 
   std::vector<float> red_weight(static_cast<size_t>(rw) * rh, 0.f);
   std::vector<uint8_t> narrow_red(static_cast<size_t>(rw) * rh, 0);
-  std::vector<BgrPixel> pixels(static_cast<size_t>(rw) * rh);
+  const BgraView thumbnail{in.bgra, rw, rh, in.stride, roi.left, roi.top};
+  const BgraView capture{in.bgra, in.width, in.height, in.stride, 0, 0};
   int red_count = 0;
   for (int y = roi.top; y < roi.bottom; ++y) {
     for (int x = roi.left; x < roi.right; ++x) {
@@ -2228,7 +2309,6 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
           in.bgra + static_cast<size_t>(y) * in.stride + static_cast<size_t>(x) * 4;
       const float weight = NavigatorRedWeight(p);
       const size_t index = static_cast<size_t>(y - roi.top) * rw + (x - roi.left);
-      pixels[index] = {p[0], p[1], p[2]};
       red_weight[index] = weight;
       if (weight >= kRawRedWeightMin) {
         ++red_count;
@@ -2248,7 +2328,8 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
 
   // A. 窄红核心投票确定直线，沿线用抗锯齿覆盖轮廓生长观测红边。
   std::vector<ObservedEdge> pool;
-  DetectGlobalRedLines(red_weight, narrow_red, pixels, rw, rh, pool);
+  DetectGlobalRedLines(red_weight, narrow_red, thumbnail, pool);
+  for (auto& edge : pool) ExtendObservedLinePastThumbnail(edge, roi, capture);
   if (in.display_rotation_confidence >= 0.2f &&
       std::isfinite(in.display_rotation_degrees)) {
     pool.erase(std::remove_if(pool.begin(), pool.end(), [&](const ObservedEdge& edge) {

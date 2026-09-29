@@ -16,9 +16,11 @@ public partial class MainWindow : Window
 {
     private readonly TransformPipelineService _pipeline = new();
     private readonly SaveArchiveService _archiveService = new();
-    // Distinct border colors: Workspace=green, Thumbnail=magenta.
+    // Distinct border colors: Workspace ROI=green, canvas=purple, Thumbnail ROI=magenta, navigator canvas=blue.
     private readonly RoiBorderOverlayWindow _workspaceBorder = RoiBorderOverlayWindow.CreateWorkspace();
+    private readonly RoiBorderOverlayWindow _workspaceCanvasBorder = RoiBorderOverlayWindow.CreateWorkspaceCanvas();
     private readonly RoiBorderOverlayWindow _thumbnailBorder = RoiBorderOverlayWindow.CreateNavigatorThumbnail();
+    private readonly RoiBorderOverlayWindow _navigatorCanvasBorder = RoiBorderOverlayWindow.CreateNavigatorCanvas();
     private readonly MarkerOverlayWindow _markerOverlay = new();
     private readonly CompleteEdgeOverlayWindow _completeEdgeOverlay = new();
     private CaptureSession? _activeSession;
@@ -36,7 +38,9 @@ public partial class MainWindow : Window
             _markerOverlay.Dispose();
             _completeEdgeOverlay.Dispose();
             _workspaceBorder.Dispose();
+            _workspaceCanvasBorder.Dispose();
             _thumbnailBorder.Dispose();
+            _navigatorCanvasBorder.Dispose();
             _activeSession?.Dispose();
         };
     }
@@ -140,6 +144,7 @@ public partial class MainWindow : Window
         if (_activeSession is not null && _lastResult is not null)
         {
             ApplyCompleteEdgeOverlay(_activeSession, _lastResult.Snapshot);
+            ApplyNavigatorCanvasBorder(_activeSession, _lastResult.Snapshot);
             SetStatus("已显示系统补全 viewport 覆盖层。");
         }
         else
@@ -151,7 +156,9 @@ public partial class MainWindow : Window
     private void HideRoiBorders()
     {
         _workspaceBorder.Hide();
+        _workspaceCanvasBorder.Hide();
         _thumbnailBorder.Hide();
+        _navigatorCanvasBorder.Hide();
     }
 
     private void HideAllOverlays()
@@ -375,6 +382,7 @@ public partial class MainWindow : Window
             session.ClearRoi(RoiKind.Navigator);
             session.ClearRoi(RoiKind.OcrNumbers);
             _thumbnailBorder.Hide();
+            _navigatorCanvasBorder.Hide();
             _markerOverlay.Hide();
             _completeEdgeOverlay.Hide();
 
@@ -453,7 +461,7 @@ public partial class MainWindow : Window
                     Show();
                     Activate();
                     SetStage(TransformStage.ReadingNavigatorNumbers);
-                    SetStatus("正在 OCR 验证框选区域能否读出缩放数字…");
+                    SetStatus("正在 OCR 验证缩放和旋转数字，并标定数字位置…");
 
                     var probe = await Task.Run(
                             async () => await new NavigatorOcrService()
@@ -464,12 +472,12 @@ public partial class MainWindow : Window
                     if (!probe.Ok)
                     {
                         SetStatus(
-                            $"OCR 未能读出缩放数字（raw='{probe.Numbers.ScaleRawText}'）。请把左侧数字区框大一点再试。" +
+                            $"OCR 未能同时读出缩放和旋转数字（scale='{probe.Numbers.ScaleRawText}'，rot='{probe.Numbers.RotationRawText}'）。请重新框选数字区。" +
                             $" 调试: %TEMP%\\sct_ocr_debug\\{session.CaptureId}");
                         MessageBox.Show(
                             this,
-                            $"未能在框选区域读出缩放数字。\n原始文本：'{probe.Numbers.ScaleRawText}'\n\n" +
-                            "请框选缩略图下方左侧整块数字区（宁宽勿窄），再试一次。",
+                            $"未能同时读出缩放和旋转数字。\n缩放：'{probe.Numbers.ScaleRawText}'\n旋转：'{probe.Numbers.RotationRawText}'\n\n" +
+                            "请框选缩略图下方包含两行数字的区域，再试一次。",
                             "OCR 框选失败",
                             MessageBoxButton.OK,
                             MessageBoxImage.Warning);
@@ -496,6 +504,7 @@ public partial class MainWindow : Window
                 _markerOverlay.Hide();
                 _completeEdgeOverlay.Hide();
                 _thumbnailBorder.Hide();
+                _navigatorCanvasBorder.Hide();
                 if (!IsVisible)
                 {
                     Show();
@@ -557,6 +566,33 @@ public partial class MainWindow : Window
 
             _activeSession = session;
             SetStage(TransformStage.CaptureFrozen);
+
+            // Archive validity belongs to archive selection. Keep it outside
+            // RecomputeFromArchiveAsync/RecomputeCoreAsync so ordinary recompute
+            // never re-runs archive validation.
+            SetStage(TransformStage.LoadingSaveArchive);
+            ArchiveVisualFingerprintService.MatchResult fingerprintMatch;
+            try
+            {
+                fingerprintMatch = ArchiveVisualFingerprintService.Match(session, archive);
+            }
+            catch (Exception ex)
+            {
+                Show();
+                Activate();
+                SetStatus($"无法校验存档外侧 UI：{ex.Message}");
+                return;
+            }
+            LiveDebugLog.Write($"[ArchiveFingerprint] {fingerprintMatch.Message}");
+            if (!fingerprintMatch.IsMatch)
+            {
+                Show();
+                Activate();
+                SetStatus($"存档与当前 CSP 布局不匹配：{fingerprintMatch.Message}");
+                return;
+            }
+
+            SetStage(TransformStage.ArchiveRecomputeRequested);
 
             var progress = new Progress<TransformStage>(SetStage);
             var result = await Task.Run(
@@ -760,6 +796,28 @@ public partial class MainWindow : Window
             session.CaptureId,
             result.Snapshot.CaptureId);
 
+        var workspaceCanvas = result.Snapshot.WorkspaceCanvas;
+        IntRect workspaceCanvasBoundsScreen = workspaceCanvas.BoundsScreen;
+        if (workspaceCanvasBoundsScreen.IsEmpty && !workspaceCanvas.BoundsCapture.IsEmpty)
+        {
+            workspaceCanvasBoundsScreen = new IntRect(
+                workspaceCanvas.BoundsCapture.Left + session.OriginX,
+                workspaceCanvas.BoundsCapture.Top + session.OriginY,
+                workspaceCanvas.BoundsCapture.Width,
+                workspaceCanvas.BoundsCapture.Height);
+        }
+        if (!workspaceCanvas.Ambiguous && !workspaceCanvasBoundsScreen.IsEmpty)
+        {
+            _workspaceCanvasBorder.TryShowIfCaptureMatches(
+                workspaceCanvasBoundsScreen,
+                session.CaptureId,
+                result.Snapshot.CaptureId);
+        }
+        else
+        {
+            _workspaceCanvasBorder.Hide();
+        }
+
         _markerOverlay.TryShowIfGenerationMatches(
             result.Snapshot.Marker,
             result.Snapshot.CaptureId,
@@ -768,6 +826,30 @@ public partial class MainWindow : Window
             result.Snapshot.Generation);
 
         ApplyCompleteEdgeOverlay(session, result.Snapshot);
+        ApplyNavigatorCanvasBorder(session, result.Snapshot);
+    }
+
+    private void ApplyNavigatorCanvasBorder(CaptureSession session, TransformSnapshotDto snapshot)
+    {
+        var navigatorCanvas = snapshot.NavigatorCanvas;
+        IntRect boundsScreen = navigatorCanvas.BoundsScreen;
+        if (boundsScreen.IsEmpty && !navigatorCanvas.BoundsCapture.IsEmpty)
+        {
+            boundsScreen = new IntRect(
+                navigatorCanvas.BoundsCapture.Left + session.OriginX,
+                navigatorCanvas.BoundsCapture.Top + session.OriginY,
+                navigatorCanvas.BoundsCapture.Width,
+                navigatorCanvas.BoundsCapture.Height);
+        }
+
+        if (navigatorCanvas.Ambiguous || boundsScreen.IsEmpty)
+        {
+            _navigatorCanvasBorder.Hide();
+            return;
+        }
+
+        _navigatorCanvasBorder.TryShowIfCaptureMatches(
+            boundsScreen, session.CaptureId, snapshot.CaptureId);
     }
 
     private void ApplyCompleteEdgeOverlay(CaptureSession session, TransformSnapshotDto snapshot)
@@ -794,6 +876,7 @@ public partial class MainWindow : Window
         // The overlay is the reconstructed viewport, not merely the source fragments.
         // This makes a 0.1/0.2 result visibly reviewable on the navigator itself.
         var screenEdges = completedFrameEdges;
+        var recognizedRedEdges = ViewportCorrespondenceMapper.MapObservedEdges(snapshot, session);
         int assignedRoles = 0;
         foreach (var e in snapshot.ObservedRedEdges)
         {
@@ -806,6 +889,7 @@ public partial class MainWindow : Window
 
         _completeEdgeOverlay.TryShowIfCaptureMatches(
             screenEdges,
+            recognizedRedEdges,
             session.CaptureId,
             snapshot.CaptureId);
     }

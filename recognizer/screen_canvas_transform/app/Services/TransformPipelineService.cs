@@ -296,7 +296,8 @@ public sealed class TransformPipelineService
         }
 
         progress?.Report(TransformStage.ObservingNavigatorCanvas);
-        var navCanvas = _native.ObserveCanvas(session, thumbnailCapture, background, navigator: true);
+        var navCanvas = _native.ObserveCanvas(session, thumbnailCapture, background,
+            navigator: true, canvasPixelWidth: canvasW, canvasPixelHeight: canvasH);
         if (navCanvas.Ambiguous || (navCanvas.BoundsCapture.IsEmpty && navCanvas.BoundsScreen.IsEmpty))
         {
             throw Fail(

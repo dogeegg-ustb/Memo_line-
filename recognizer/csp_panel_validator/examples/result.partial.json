@@ -1,0 +1,68 @@
+{
+  "schema_version": 2,
+  "frame_id": 12,
+  "captured_at": "2026-09-23T08:00:00.120Z",
+  "recognized_at": "2026-09-23T08:00:00.388Z",
+  "last_observed_at": "2026-09-23T08:00:00.120Z",
+  "status": "partial",
+  "brush": {
+    "name": "unknown",
+    "status": "unknown",
+    "candidates": [],
+    "evidence": [],
+    "source": "no_reliable_candidate",
+    "properties": [
+      {
+        "key": "brush_size",
+        "label": "笔刷尺寸",
+        "type": "number",
+        "value": 5.4,
+        "unit": null,
+        "raw_text": "5.4",
+        "enabled": "unknown",
+        "status": "ok",
+        "evidence": [
+          {
+            "roi_id": "tool-properties",
+            "bbox": [
+              22,
+              84,
+              164,
+              24
+            ],
+            "type": "ocr_text",
+            "ocr_score": 0.98,
+            "reason": "当前帧同一行的标签与数值邻接关系"
+          }
+        ]
+      }
+    ]
+  },
+  "unresolved": [
+    {
+      "roi_id": "tool-properties",
+      "raw_text": "无文字图标",
+      "status": "unknown",
+      "evidence": [
+        {
+          "roi_id": "tool-properties",
+          "bbox": [
+            270,
+            210,
+            28,
+            28
+          ],
+          "type": "ocr_text",
+          "ocr_score": null,
+          "reason": "当前帧视觉证据没有可解释文字"
+        }
+      ]
+    }
+  ],
+  "timings_ms": {
+    "capture": 9,
+    "ocr": 221,
+    "parse": 2,
+    "total": 232
+  }
+}

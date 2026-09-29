@@ -1,0 +1,392 @@
+{
+  "schema_version": 2,
+  "frame_id": 1,
+  "captured_at": "2026-09-23T13:26:33.788Z",
+  "recognized_at": "2026-09-23T13:26:35.087Z",
+  "last_observed_at": "2026-09-23T13:26:35.087Z",
+  "status": "partial",
+  "brush": {
+    "name": "僅參照編輯圖層選擇",
+    "status": "ok",
+    "candidates": [],
+    "evidence": [
+      {
+        "roi_id": "props",
+        "bbox": [
+          176,
+          26,
+          435,
+          41
+        ],
+        "type": "ocr_text",
+        "ocr_score": 0.98266,
+        "reason": "当前工具属性标题明确显示的工具名称"
+      }
+    ],
+    "source": "tool_properties",
+    "incomplete": false,
+    "properties": [
+      {
+        "key": "creation_mode",
+        "label": "创建方式",
+        "type": "enum",
+        "value": "unknown",
+        "unit": null,
+        "raw_text": null,
+        "enabled": "unknown",
+        "status": "partial",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              56,
+              231,
+              172,
+              55
+            ],
+            "type": "ocr_text",
+            "ocr_score": 0.9999,
+            "reason": "当前帧发现参数标签，但没有可可靠绑定的当前值"
+          }
+        ]
+      },
+      {
+        "key": "contiguous_pixels",
+        "label": "取样连续的像素",
+        "type": "checkbox",
+        "value": "checked",
+        "unit": null,
+        "raw_text": "取样连续的像素",
+        "enabled": "unknown",
+        "status": "ok",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              110,
+              339,
+              292,
+              50
+            ],
+            "type": "checkbox",
+            "ocr_score": 0.9997,
+            "reason": "文字左侧复选框与当前帧填充状态"
+          },
+          {
+            "roi_id": "props",
+            "bbox": [
+              59,
+              343,
+              48,
+              48
+            ],
+            "type": "checkbox",
+            "ocr_score": 0.9997,
+            "reason": "当前帧文字左侧方框的边框与填充分析"
+          }
+        ]
+      },
+      {
+        "key": "close_gap",
+        "label": "闭合间隙",
+        "type": "checkbox",
+        "value": "checked",
+        "unit": null,
+        "raw_text": "闭合间隙",
+        "enabled": "unknown",
+        "status": "ok",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              110,
+              446,
+              174,
+              51
+            ],
+            "type": "checkbox",
+            "ocr_score": 0.99989,
+            "reason": "文字左侧复选框与当前帧填充状态"
+          },
+          {
+            "roi_id": "props",
+            "bbox": [
+              59,
+              450,
+              48,
+              49
+            ],
+            "type": "checkbox",
+            "ocr_score": 0.99989,
+            "reason": "当前帧文字左侧方框的边框与填充分析"
+          }
+        ]
+      },
+      {
+        "key": "color_tolerance",
+        "label": "颜色容差",
+        "type": "number",
+        "value": 10,
+        "unit": null,
+        "raw_text": "10.0",
+        "enabled": "unknown",
+        "status": "ok",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              54,
+              536,
+              174,
+              54
+            ],
+            "type": "ocr_text",
+            "ocr_score": 0.99892,
+            "reason": "当前帧同一行的标签与数值邻接关系"
+          },
+          {
+            "roi_id": "props",
+            "bbox": [
+              550,
+              559,
+              123,
+              45
+            ],
+            "type": "ocr_text",
+            "ocr_score": 0.99993,
+            "reason": "当前帧同一行的标签与数值邻接关系"
+          }
+        ]
+      },
+      {
+        "key": "area_scaling",
+        "label": "扩缩选区",
+        "type": "checkbox",
+        "value": "unchecked",
+        "unit": null,
+        "raw_text": "扩缩选区",
+        "enabled": "unknown",
+        "status": "ok",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              108,
+              644,
+              175,
+              54
+            ],
+            "type": "checkbox",
+            "ocr_score": 0.99939,
+            "reason": "文字左侧复选框与当前帧填充状态"
+          },
+          {
+            "roi_id": "props",
+            "bbox": [
+              62,
+              653,
+              44,
+              42
+            ],
+            "type": "checkbox",
+            "ocr_score": 0.99939,
+            "reason": "当前帧文字左侧方框的边框与填充分析"
+          }
+        ]
+      },
+      {
+        "key": "reference_layers",
+        "label": "多图层参照",
+        "type": "checkbox",
+        "value": "unchecked",
+        "unit": null,
+        "raw_text": "多图层参照",
+        "enabled": "unknown",
+        "status": "ok",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              112,
+              777,
+              210,
+              48
+            ],
+            "type": "checkbox",
+            "ocr_score": 0.99964,
+            "reason": "文字左侧复选框与当前帧填充状态"
+          },
+          {
+            "roi_id": "props",
+            "bbox": [
+              59,
+              780,
+              49,
+              49
+            ],
+            "type": "checkbox",
+            "ocr_score": 0.99964,
+            "reason": "当前帧文字左侧方框的边框与填充分析"
+          }
+        ]
+      },
+      {
+        "key": "antialiasing",
+        "label": "消除锯齿",
+        "type": "checkbox",
+        "value": "checked",
+        "unit": null,
+        "raw_text": "消除锯齿",
+        "enabled": "unknown",
+        "status": "ok",
+        "evidence": [
+          {
+            "roi_id": "props",
+            "bbox": [
+              110,
+              882,
+              173,
+              55
+            ],
+            "type": "checkbox",
+            "ocr_score": 0.99983,
+            "reason": "文字左侧复选框与当前帧填充状态"
+          },
+          {
+            "roi_id": "props",
+            "bbox": [
+              59,
+              888,
+              48,
+              48
+            ],
+            "type": "checkbox",
+            "ocr_score": 0.99983,
+            "reason": "当前帧文字左侧方框的边框与填充分析"
+          }
+        ]
+      }
+    ]
+  },
+  "unresolved": [],
+  "timings_ms": {
+    "capture": 1,
+    "ocr": 1298,
+    "parse": 0,
+    "total": 1299
+  },
+  "capture_backend": "user_screenshot_replay",
+  "capture_scope": "client",
+  "raw_ocr": [
+    {
+      "roi_id": "props",
+      "text": "“僅參照編輯圖層選擇”工具属性",
+      "bbox": [
+        176,
+        26,
+        435,
+        41
+      ],
+      "score": 0.98266
+    },
+    {
+      "roi_id": "props",
+      "text": "僅參照編輯圖層選擇",
+      "bbox": [
+        7,
+        75,
+        367,
+        50
+      ],
+      "score": 0.96551
+    },
+    {
+      "roi_id": "props",
+      "text": "创建方式",
+      "bbox": [
+        56,
+        231,
+        172,
+        55
+      ],
+      "score": 0.9999
+    },
+    {
+      "roi_id": "props",
+      "text": "取样连续的像素",
+      "bbox": [
+        110,
+        339,
+        292,
+        50
+      ],
+      "score": 0.9997
+    },
+    {
+      "roi_id": "props",
+      "text": "闭合间隙",
+      "bbox": [
+        110,
+        446,
+        174,
+        51
+      ],
+      "score": 0.99989
+    },
+    {
+      "roi_id": "props",
+      "text": "颜色容差",
+      "bbox": [
+        54,
+        536,
+        174,
+        54
+      ],
+      "score": 0.99892
+    },
+    {
+      "roi_id": "props",
+      "text": "10.0",
+      "bbox": [
+        550,
+        559,
+        123,
+        45
+      ],
+      "score": 0.99993
+    },
+    {
+      "roi_id": "props",
+      "text": "扩缩选区",
+      "bbox": [
+        108,
+        644,
+        175,
+        54
+      ],
+      "score": 0.99939
+    },
+    {
+      "roi_id": "props",
+      "text": "多图层参照",
+      "bbox": [
+        112,
+        777,
+        210,
+        48
+      ],
+      "score": 0.99964
+    },
+    {
+      "roi_id": "props",
+      "text": "消除锯齿",
+      "bbox": [
+        110,
+        882,
+        173,
+        55
+      ],
+      "score": 0.99983
+    }
+  ]
+}

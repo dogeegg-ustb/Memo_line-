@@ -136,7 +136,10 @@ WorkspaceCanvasRelationResult BuildWorkspaceCanvasRelation(
       static_cast<float>(vw) / static_cast<float>(full_w);
   rel.visible_canvas_fraction_y =
       static_cast<float>(vh) / static_cast<float>(full_h);
-  rel.full_canvas_edge_evidence = obs.four_sides_complete ? 0xF : obs.visible_edges_mask;
+  // Completion may only use independently observed canvas edges. A foreground
+  // component surrounded by workspace background is not evidence for four
+  // axis-aligned canvas boundaries.
+  rel.full_canvas_edge_evidence = obs.visible_edges_mask;
   rel.confidence = std::clamp(obs.confidence, 0.f, 1.f);
   rel.ambiguous = obs.ambiguous;
 

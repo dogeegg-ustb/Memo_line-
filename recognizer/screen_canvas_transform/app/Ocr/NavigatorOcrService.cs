@@ -6,11 +6,13 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text.RegularExpressions;
+using RapidOcrNet;
 using ScreenCanvasTransform.Capture;
 using ScreenCanvasTransform.Diagnostics;
 using ScreenCanvasTransform.Models;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
+using SkiaSharp;
 
 namespace ScreenCanvasTransform.Ocr;
 
@@ -53,6 +55,8 @@ public sealed class NavigatorOcrService
     // This is evidence that a token passed our own numeric validation, never a score
     // returned by the OCR engine.
     private const float ValidatedTokenEvidence = 0.85f;
+    private static readonly SemaphoreSlim RapidGate = new(1, 1);
+    private static RapidOcr? _rapidOcr;
 
     /// <summary>Only numeric tokens (optional sign / decimal). Units like % ° are stripped before parse.</summary>
     private static readonly Regex NumberRegex = new(
@@ -108,7 +112,12 @@ public sealed class NavigatorOcrService
         using var timing = new StageTimer("ocr", session.CaptureId);
         IntRect scaleSlot = session.ScreenToCapture(layoutScreen.ScaleSlotScreen).ClampTo(session.CaptureBounds);
         IntRect rotationSlot = session.ScreenToCapture(layoutScreen.RotationSlotScreen).ClampTo(session.CaptureBounds);
-        return await ReadByVerticalOrderAsync(session, scaleSlot, rotationSlot, cancellationToken)
+        IntRect? scaleDigits = layoutScreen.ScaleDigitsScreen is { } scaleScreen
+            ? session.ScreenToCapture(scaleScreen).ClampTo(session.CaptureBounds) : null;
+        IntRect? rotationDigits = layoutScreen.RotationDigitsScreen is { } rotationScreen
+            ? session.ScreenToCapture(rotationScreen).ClampTo(session.CaptureBounds) : null;
+        return await ReadByVerticalOrderAsync(
+                session, scaleSlot, rotationSlot, scaleDigits, rotationDigits, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -121,6 +130,8 @@ public sealed class NavigatorOcrService
         CaptureSession session,
         IntRect scaleSlotCapture,
         IntRect rotationSlotCapture,
+        IntRect? scaleDigitsCapture,
+        IntRect? rotationDigitsCapture,
         CancellationToken cancellationToken)
     {
         string debugDir = Path.Combine(Path.GetTempPath(), "sct_ocr_debug", session.CaptureId);
@@ -145,18 +156,67 @@ public sealed class NavigatorOcrService
 
         // Bright-digit binarize (+ dilate/pad) first — plain invert often returns empty on teen %.
         var scaleHits = await RecognizeSlotAsync(
-                session, scaleSlotCapture, engine, debugDir, "scale", cancellationToken)
+                session, scaleDigitsCapture ?? scaleSlotCapture, engine, debugDir,
+                scaleDigitsCapture is null ? "scale" : "scale_calibrated", cancellationToken)
             .ConfigureAwait(false);
         var rotationHits = await RecognizeSlotAsync(
-                session, rotationSlotCapture, engine, debugDir, "rotation", cancellationToken)
+                session, rotationDigitsCapture ?? rotationSlotCapture, engine, debugDir,
+                rotationDigitsCapture is null ? "rotation" : "rotation_calibrated", cancellationToken)
             .ConfigureAwait(false);
 
         bool scaleFromSlot = TryPickOrdered(
             scaleHits.OrderBy(h => h.CenterY).ThenBy(h => h.CenterX).ToList(),
-            TryParseScale, out float scaleVal, out string scaleRaw);
+            TryParseScale, out float scaleVal, out string scaleRaw, out Hit scaleHit);
         bool rotationFromSlot = TryPickOrdered(
             rotationHits.OrderByDescending(h => h.CenterY).ThenBy(h => h.CenterX).ToList(),
-            TryParseRotation, out float rotVal, out string rotRaw);
+            TryParseRotation, out float rotVal, out string rotRaw, out Hit rotHit);
+
+        if (!scaleFromSlot && scaleDigitsCapture is not null)
+        {
+            scaleHits = await RecognizeSlotAsync(
+                    session, scaleSlotCapture, engine, debugDir, "scale_full", cancellationToken)
+                .ConfigureAwait(false);
+            scaleFromSlot = TryPickOrdered(
+                scaleHits.OrderBy(h => h.CenterY).ThenBy(h => h.CenterX).ToList(),
+                TryParseScale, out scaleVal, out scaleRaw, out scaleHit);
+        }
+        if (!rotationFromSlot && rotationDigitsCapture is not null)
+        {
+            rotationHits = await RecognizeSlotAsync(
+                    session, rotationSlotCapture, engine, debugDir, "rotation_full", cancellationToken)
+                .ConfigureAwait(false);
+            rotationFromSlot = TryPickOrdered(
+                rotationHits.OrderByDescending(h => h.CenterY).ThenBy(h => h.CenterX).ToList(),
+                TryParseRotation, out rotVal, out rotRaw, out rotHit);
+        }
+
+        // The slider plot can dominate text segmentation even when its left
+        // numeric label is legible. Retry with the label side of the same slot;
+        // keep enough width for signed and multi-digit rotation values.
+        if (!rotationFromSlot && rotationSlotCapture.Width >= MinSlotSizePx * 2)
+        {
+            foreach (double fraction in new[] { 0.75, 0.60 })
+            {
+                int right = rotationSlotCapture.Left + Math.Max(
+                    MinSlotSizePx, (int)Math.Round(rotationSlotCapture.Width * fraction));
+                if (right >= rotationSlotCapture.Right)
+                    continue;
+                IntRect labelSlot = new(rotationSlotCapture.Left, rotationSlotCapture.Top,
+                    right, rotationSlotCapture.Bottom);
+                var labelHits = await RecognizeSlotAsync(
+                        session, labelSlot, engine, debugDir,
+                        $"rotation_label_{fraction:0.00}", cancellationToken)
+                    .ConfigureAwait(false);
+                if (!TryPickOrdered(
+                        labelHits.OrderByDescending(h => h.CenterY).ThenBy(h => h.CenterX).ToList(),
+                        TryParseRotation, out rotVal, out rotRaw, out rotHit))
+                    continue;
+                rotationHits = labelHits;
+                rotationFromSlot = true;
+                Log(debugDir, $"rotation label crop accepted width={labelSlot.Width} raw='{rotRaw}'");
+                break;
+            }
+        }
 
         var hits = scaleHits.Concat(rotationHits).ToList();
         if (!scaleFromSlot || !rotationFromSlot)
@@ -182,10 +242,30 @@ public sealed class NavigatorOcrService
 
         bool scaleOk = scaleFromSlot
             ? scaleFromSlot
-            : TryPickOrdered(topHits, TryParseScale, out scaleVal, out scaleRaw);
+            : TryPickOrdered(topHits, TryParseScale, out scaleVal, out scaleRaw, out scaleHit);
         bool rotOk = rotationFromSlot
             ? rotationFromSlot
-            : TryPickOrdered(bottomHits, TryParseRotation, out rotVal, out rotRaw);
+            : TryPickOrdered(bottomHits, TryParseRotation, out rotVal, out rotRaw, out rotHit);
+
+        // The open-source model is cold-loaded only when Windows OCR exhausted its
+        // calibrated window, full slot, label crop, and combined-region passes.
+        if (!scaleOk)
+        {
+            var rapidHits = await RecognizeRapidFallbackAsync(session, scaleSlotCapture,
+                debugDir, "scale", cancellationToken).ConfigureAwait(false);
+            scaleOk = TryPickOrdered(rapidHits, TryParseScale,
+                out scaleVal, out scaleRaw, out scaleHit);
+        }
+        if (!rotOk)
+        {
+            IntRect label = new(rotationSlotCapture.Left, rotationSlotCapture.Top,
+                rotationSlotCapture.Left + Math.Max(MinSlotSizePx,
+                    (int)Math.Round(rotationSlotCapture.Width * 0.75)), rotationSlotCapture.Bottom);
+            var rapidHits = await RecognizeRapidFallbackAsync(session, label,
+                debugDir, "rotation", cancellationToken).ConfigureAwait(false);
+            rotOk = TryPickOrdered(rapidHits, TryParseRotation,
+                out rotVal, out rotRaw, out rotHit);
+        }
 
         Log(debugDir,
             $"result scaleOk={scaleOk} raw='{scaleRaw}' val={scaleVal}; " +
@@ -201,6 +281,8 @@ public sealed class NavigatorOcrService
             RotationConfidence = rotOk ? ValidatedTokenEvidence : 0,
             ScaleRawText = scaleRaw,
             RotationRawText = rotRaw,
+            ScaleDigitsCapture = scaleOk ? CalibrateDigitsWindow(scaleHit, scaleSlotCapture) : null,
+            RotationDigitsCapture = rotOk ? CalibrateDigitsWindow(rotHit, rotationSlotCapture) : null,
             SourceCaptureId = session.CaptureId,
             CapturedAt = DateTime.UtcNow
         };
@@ -216,8 +298,17 @@ public sealed class NavigatorOcrService
     {
         var layout = LayoutFromUserRegion(regionScreen);
         var numbers = await ReadWithLayoutAsync(session, layout, cancellationToken).ConfigureAwait(false);
-        bool ok = numbers.ScaleConfidence >= 0.2f && numbers.ScalePercent > 0;
-        return (ok, layout, numbers);
+        bool ok = numbers.ScaleConfidence >= 0.2f && numbers.ScalePercent > 0
+            && numbers.RotationConfidence >= 0.2f
+            && numbers.ScaleDigitsCapture is not null
+            && numbers.RotationDigitsCapture is not null;
+        if (!ok) return (false, layout, numbers);
+        var calibrated = layout with
+        {
+            ScaleDigitsScreen = session.CaptureToScreen(numbers.ScaleDigitsCapture!.Value),
+            RotationDigitsScreen = session.CaptureToScreen(numbers.RotationDigitsCapture!.Value)
+        };
+        return (true, calibrated, numbers);
     }
 
     private static IntRect Union(IntRect a, IntRect b)
@@ -245,7 +336,7 @@ public sealed class NavigatorOcrService
         return new IntRect(nav.Left, top, nav.Right, nav.Bottom);
     }
 
-    private readonly record struct Hit(string Text, double CenterY, double CenterX);
+    private readonly record struct Hit(string Text, double CenterY, double CenterX, double FontHeight);
 
     private readonly record struct RawToken(
         string Text, double CenterY, double CenterX, double Left, double Right, double Height);
@@ -803,7 +894,7 @@ public sealed class NavigatorOcrService
             BitmapPixelFormat.Bgra8, tw, th, BitmapAlphaMode.Ignore);
         softwareBitmap.CopyFromBuffer(pixels.AsBuffer());
 
-        OcrResult ocr = await engine.RecognizeAsync(softwareBitmap).AsTask(cancellationToken)
+        Windows.Media.Ocr.OcrResult ocr = await engine.RecognizeAsync(softwareBitmap).AsTask(cancellationToken)
             .ConfigureAwait(false);
 
         var rawTokens = new List<(string Text, double CenterY, double CenterX, double Left, double Right, double Height)>();
@@ -823,7 +914,15 @@ public sealed class NavigatorOcrService
         }
 
         var coalesced = CoalesceOcrNumberTokens(rawTokens);
-        var hits = coalesced.Select(h => new Hit(h.Text, h.CenterY, h.CenterX)).ToList();
+        var hits = coalesced.Select(h =>
+        {
+            double fontHeight = rawTokens
+                .Where(t => Math.Abs(t.CenterY - h.CenterY) <= Math.Max(3.0, t.Height))
+                .Select(t => t.Height)
+                .DefaultIfEmpty(Math.Max(8.0, slotCapture.Height / 3.0))
+                .Average();
+            return new Hit(h.Text, h.CenterY, h.CenterX, fontHeight);
+        }).ToList();
 
         Log(debugDir,
             $"{tag}: full='{ocr.Text}' rawWords={rawTokens.Count} digitHits={hits.Count} " +
@@ -861,14 +960,123 @@ public sealed class NavigatorOcrService
         }
     }
 
+    private static IntRect CalibrateDigitsWindow(Hit hit, IntRect slot)
+    {
+        double height = Math.Clamp(hit.FontHeight, 8.0, slot.Height);
+        double charWidth = Math.Max(5.0, height * 0.65);
+        int margin = Math.Max(3, (int)Math.Ceiling(height * 0.30));
+        int left = (int)Math.Floor(hit.CenterX - hit.Text.Length * charWidth * 0.5) - margin;
+        int right = left + (int)Math.Ceiling(5.5 * charWidth) + margin * 2;
+        int top = (int)Math.Floor(hit.CenterY - height * 1.15);
+        int bottom = (int)Math.Ceiling(hit.CenterY + height * 1.15);
+        if (right > slot.Right) { left -= right - slot.Right; right = slot.Right; }
+        if (left < slot.Left) { right += slot.Left - left; left = slot.Left; }
+        return new IntRect(left, top, right, bottom).ClampTo(slot);
+    }
+
+    private static async Task<List<Hit>> RecognizeRapidFallbackAsync(
+        CaptureSession session, IntRect bounds, string debugDir, string label,
+        CancellationToken cancellationToken)
+    {
+        var hits = new List<Hit>();
+        bounds = bounds.ClampTo(session.CaptureBounds);
+        if (bounds.Width < MinSlotSizePx || bounds.Height < MinSlotSizePx)
+            return hits;
+
+        await RapidGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // OCR detection models expect readable glyphs. Enlarge only the small
+            // UI label crop, keeping this work off the normal Windows OCR path.
+            const int scale = 4;
+            using var enlarged = new Bitmap(bounds.Width * scale, bounds.Height * scale);
+            using (var graphics = Graphics.FromImage(enlarged))
+            {
+                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                graphics.DrawImage(session.FrozenCapture,
+                    new Rectangle(0, 0, enlarged.Width, enlarged.Height),
+                    new Rectangle(bounds.Left, bounds.Top, bounds.Width, bounds.Height),
+                    GraphicsUnit.Pixel);
+            }
+            _rapidOcr ??= CreateRapidOcr();
+            foreach (bool inverted in new[] { false, true })
+            {
+                using var encoded = new MemoryStream();
+                if (inverted)
+                {
+                    using var negative = new Bitmap(enlarged.Width, enlarged.Height);
+                    using var graphics = Graphics.FromImage(negative);
+                    using var attributes = new ImageAttributes();
+                    attributes.SetColorMatrix(new ColorMatrix(new[]
+                    {
+                        new[] { -1f, 0f, 0f, 0f, 0f },
+                        new[] { 0f, -1f, 0f, 0f, 0f },
+                        new[] { 0f, 0f, -1f, 0f, 0f },
+                        new[] { 0f, 0f, 0f, 1f, 0f },
+                        new[] { 1f, 1f, 1f, 0f, 1f }
+                    }));
+                    graphics.DrawImage(enlarged, new Rectangle(0, 0, negative.Width, negative.Height),
+                        0, 0, enlarged.Width, enlarged.Height, GraphicsUnit.Pixel, attributes);
+                    negative.Save(encoded, ImageFormat.Png);
+                }
+                else enlarged.Save(encoded, ImageFormat.Png);
+                encoded.Position = 0;
+                using var image = SKBitmap.Decode(encoded);
+                if (image is null) continue;
+                RapidOcrNet.OcrResult result = await Task.Run(() =>
+                    _rapidOcr.Detect(image, RapidOcrOptions.Default with { DoAngle = false }),
+                    cancellationToken).ConfigureAwait(false);
+                foreach (var block in result.TextBlocks)
+                {
+                    var points = block.BoxPoints;
+                    if (points.Length == 0) continue;
+                    double centerX = bounds.Left + points.Average(p => p.X) / scale;
+                    double centerY = bounds.Top + points.Average(p => p.Y) / scale;
+                    double fontHeight = (points.Max(p => p.Y) - points.Min(p => p.Y)) / scale;
+                    string text = Regex.Replace(block.Text,
+                        @"(?<=\d)\s*([.,])\s*(?=\d)", "$1");
+                    hits.Add(new Hit(text, centerY, centerX, fontHeight));
+                }
+                if (hits.Any(h => TryParseScale(h.Text, out _) || TryParseRotation(h.Text, out _)))
+                    break;
+            }
+            Log(debugDir, $"rapid fallback {label} hits={string.Join(" | ", hits.Select(h => h.Text))}");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Log(debugDir, $"rapid fallback {label} failed: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally { RapidGate.Release(); }
+        return hits;
+    }
+
+    private static RapidOcr CreateRapidOcr()
+    {
+        var ocr = new RapidOcr();
+        string modelDir = Path.Combine(AppContext.BaseDirectory, "models", "v5");
+        try
+        {
+            ocr.InitModels(
+                detPath: Path.Combine(modelDir, "ch_PP-OCRv5_mobile_det.onnx"),
+                clsPath: Path.Combine(modelDir, "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx"),
+                recPath: Path.Combine(modelDir, "latin_PP-OCRv5_rec_mobile_infer.onnx"),
+                keysPath: Path.Combine(modelDir, "ppocrv5_latin_dict.txt"));
+            return ocr;
+        }
+        catch { ocr.Dispose(); throw; }
+    }
+
     private static bool TryPickOrdered(
         IReadOnlyList<Hit> hits,
         TryParseSlot parse,
         out float value,
-        out string raw)
+        out string raw,
+        out Hit selected)
     {
         value = 0;
         raw = "";
+        selected = default;
         if (hits.Count == 0)
             return false;
 
@@ -877,6 +1085,7 @@ public sealed class NavigatorOcrService
             if (parse(hit.Text, out value))
             {
                 raw = hit.Text;
+                selected = hit;
                 return true;
             }
         }

@@ -20,7 +20,8 @@ add_library(ScreenCanvasNative SHARED
   ${WORKSPACE_BORDER_NATIVE_ROOT}/src/refine.cpp
   ${WORKSPACE_BORDER_NATIVE_ROOT}/src/validate.cpp
   ${WORKSPACE_BORDER_NATIVE_ROOT}/src/detector.cpp
-  ${WORKSPACE_BORDER_NATIVE_ROOT}/src/navigator_thumbnail.cpp
+  # SCT's navigator extraction handles both left/right and top/bottom background.
+  src/navigator_thumbnail.cpp
   src/canvas_observe.cpp
   src/workspace_canvas_relation.cpp
   src/viewport_frame.cpp

@@ -31,6 +31,7 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
     private const uint SwpShowWindow = 0x0040;
     private const uint SwpNoCopyBits = 0x0100;
     private const int StrokeThickness = 3;
+    private const int ObservedLineThickness = 2;
     private const int Pad = 8;
     private const int LabelOffsetPx = 10;
     private const float LabelFontSizePx = 15f;
@@ -40,6 +41,12 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
 
     private static readonly System.Drawing.Color EdgeColor =
         System.Drawing.Color.FromArgb(235, 220, 0, 0);
+
+    private static readonly System.Drawing.Color PartialObservedLineColor =
+        System.Drawing.Color.FromArgb(255, 255, 230, 40);
+
+    private static readonly System.Drawing.Color CompleteObservedLineColor =
+        System.Drawing.Color.FromArgb(255, 255, 145, 0);
 
     private static readonly System.Drawing.Color LabelFillColor =
         System.Drawing.Color.FromArgb(255, 255, 230, 80);
@@ -79,7 +86,16 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
     public readonly record struct LabeledScreenEdge(
         double X0, double Y0, double X1, double Y1, int WorkspaceEdge, bool IsComplete);
 
+    private readonly record struct RecognitionDisplayLine(
+        float X0, float Y0, float X1, float Y1, bool IsComplete);
+
     public void Show(IReadOnlyList<LabeledScreenEdge> screenEdges, string captureId)
+        => Show(screenEdges, Array.Empty<LabeledScreenEdge>(), captureId);
+
+    public void Show(
+        IReadOnlyList<LabeledScreenEdge> screenEdges,
+        IReadOnlyList<LabeledScreenEdge> recognizedRedEdges,
+        string captureId)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (string.IsNullOrWhiteSpace(captureId))
@@ -90,6 +106,8 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
             Hide();
             return;
         }
+
+        var recognitionLines = BuildRecognitionDisplayLines(recognizedRedEdges);
 
         using var font = CreateLabelFont();
         float frameCx = 0f, frameCy = 0f;
@@ -125,6 +143,12 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
             }
         }
 
+        foreach (var line in recognitionLines)
+        {
+            IncludePoint(line.X0, line.Y0, ref minX, ref minY, ref maxX, ref maxY);
+            IncludePoint(line.X1, line.Y1, ref minX, ref minY, ref maxX, ref maxY);
+        }
+
         if (!double.IsFinite(minX) || !double.IsFinite(minY) ||
             !double.IsFinite(maxX) || !double.IsFinite(maxY))
         {
@@ -153,12 +177,29 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
                 e.X0 - left, e.Y0 - top, e.X1 - left, e.Y1 - top, e.WorkspaceEdge, e.IsComplete);
         }
 
-        UpdateLayeredContent(w, h, local, font);
+        var localRecognitionLines = new RecognitionDisplayLine[recognitionLines.Length];
+        for (int i = 0; i < recognitionLines.Length; i++)
+        {
+            var line = recognitionLines[i];
+            localRecognitionLines[i] = new RecognitionDisplayLine(
+                line.X0 - left, line.Y0 - top,
+                line.X1 - left, line.Y1 - top, line.IsComplete);
+        }
+
+        UpdateLayeredContent(w, h, local, localRecognitionLines, font);
         ShowWindow(_hwnd, SwShowNoActivate);
     }
 
     public bool TryShowIfCaptureMatches(
         IReadOnlyList<LabeledScreenEdge> screenEdges,
+        string expectedCaptureId,
+        string resultCaptureId)
+        => TryShowIfCaptureMatches(
+            screenEdges, Array.Empty<LabeledScreenEdge>(), expectedCaptureId, resultCaptureId);
+
+    public bool TryShowIfCaptureMatches(
+        IReadOnlyList<LabeledScreenEdge> screenEdges,
+        IReadOnlyList<LabeledScreenEdge> recognizedRedEdges,
         string expectedCaptureId,
         string resultCaptureId)
     {
@@ -168,8 +209,40 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
             return false;
         }
 
-        Show(screenEdges, expectedCaptureId);
+        Show(screenEdges, recognizedRedEdges, expectedCaptureId);
         return true;
+    }
+
+    private static RecognitionDisplayLine[] BuildRecognitionDisplayLines(
+        IReadOnlyList<LabeledScreenEdge>? recognizedRedEdges)
+    {
+        if (recognizedRedEdges is null || recognizedRedEdges.Count == 0)
+            return Array.Empty<RecognitionDisplayLine>();
+
+        var lines = new List<RecognitionDisplayLine>(recognizedRedEdges.Count);
+        foreach (var observed in recognizedRedEdges)
+        {
+            double dx = observed.X1 - observed.X0;
+            double dy = observed.Y1 - observed.Y0;
+            if (!double.IsFinite(observed.X0) || !double.IsFinite(observed.Y0) ||
+                !double.IsFinite(observed.X1) || !double.IsFinite(observed.Y1) ||
+                Math.Sqrt(dx * dx + dy * dy) < 1.0)
+                continue;
+
+            lines.Add(new RecognitionDisplayLine(
+                (float)observed.X0, (float)observed.Y0,
+                (float)observed.X1, (float)observed.Y1, observed.IsComplete));
+        }
+        return lines.ToArray();
+    }
+
+    private static void IncludePoint(
+        float x, float y, ref double minX, ref double minY, ref double maxX, ref double maxY)
+    {
+        minX = Math.Min(minX, x);
+        minY = Math.Min(minY, y);
+        maxX = Math.Max(maxX, x);
+        maxY = Math.Max(maxY, y);
     }
 
     public void Hide()
@@ -273,7 +346,12 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
             throw new InvalidOperationException("无法创建完整边覆盖层窗口。");
     }
 
-    private void UpdateLayeredContent(int width, int height, LabeledScreenEdge[] localEdges, Font font)
+    private void UpdateLayeredContent(
+        int width,
+        int height,
+        LabeledScreenEdge[] localEdges,
+        RecognitionDisplayLine[] recognitionLines,
+        Font font)
     {
         using var bmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(bmp))
@@ -306,6 +384,24 @@ public sealed class CompleteEdgeOverlayWindow : IDisposable
             {
                 var pen = e.IsComplete ? solidPen : dashedPen;
                 g.DrawLine(pen, (float)e.X0, (float)e.Y0, (float)e.X1, (float)e.Y1);
+            }
+
+            using var partialObservedPen = new System.Drawing.Pen(
+                PartialObservedLineColor, ObservedLineThickness)
+            {
+                StartCap = LineCap.Flat,
+                EndCap = LineCap.Flat
+            };
+            using var completeObservedPen = new System.Drawing.Pen(
+                CompleteObservedLineColor, ObservedLineThickness)
+            {
+                StartCap = LineCap.Flat,
+                EndCap = LineCap.Flat
+            };
+            foreach (var line in recognitionLines)
+            {
+                var pen = line.IsComplete ? completeObservedPen : partialObservedPen;
+                g.DrawLine(pen, line.X0, line.Y0, line.X1, line.Y1);
             }
 
             using var fillBrush = new SolidBrush(LabelFillColor);

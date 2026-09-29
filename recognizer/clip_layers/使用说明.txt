@@ -1,0 +1,44 @@
+CSP .clip 图层属性提取工具
+
+用途
+直接读取 CLIP STUDIO PAINT 的 .clip 文件，提取图层名称、图层透明度、可见性、文件夹关系、混合模式、锁定、剪贴、蒙版等属性。
+只读取文件内部的 SQLite 元数据，不解压图像像素，也不修改原始 .clip 文件。
+
+运行条件
+Python 3.11 或更高版本，且标准库 sqlite3 支持 deserialize。无需安装第三方包。
+此工具已在本机 Python 3.14 / Windows 64 位上运行验证。
+
+最简单的用法
+将 .clip 文件拖到“拖入CLIP提取图层属性.cmd”上。支持一次拖入多个文件。
+结果会保存为原文件旁边的“文件名.layers.json”；再次运行会覆盖旧的 JSON 报告。
+
+命令行
+python clip_layers.py 画稿.clip -o 图层.json
+python clip_layers.py 画稿.clip --format csv -o 图层.csv
+python clip_layers.py 画稿.clip              （在终端打印 JSON）
+如果输出文件已经存在，命令行默认拒绝覆盖；添加 --force 可覆盖。
+
+作为 Python 模块使用
+from clip_layers import read_clip_layers
+report = read_clip_layers("画稿.clip")
+for layer in report["layers"]:
+    print(layer["name"], layer["opacity_percent"], layer["visible"])
+
+字段说明
+- opacity_raw：CSP 文件中的原始值，范围 0–256。
+- opacity_percent：按 opacity_raw / 256 × 100 换算的百分比。
+- visible：图层自身的可见性。
+- effective_visible：考虑上级文件夹后，该图层是否可见。
+- blend_mode_id / blend_mode：混合模式编号及名称；未知编号会原样保留。
+- parent_id / depth：图层树关系。
+- type_raw / folder_raw / masking_raw：格式中的原始属性，方便处理特殊图层。
+- canvas.width_raw / height_raw：画布内部数值，可能使用非像素单位。
+
+说明
+这里的“透明度”指图层面板中的图层不透明度，不是图像每个像素的 Alpha 值。
+此工具只做读取；不渲染图像，也不编辑 .clip 文件。
+新版本 CSP 可能更改文件结构，遇到不支持的文件时会给出错误，不会修改原文件。
+
+格式参考：clipparse 0.2.0（MIT）
+https://github.com/wamsoft/clipparse
+https://pypi.org/project/clipparse/

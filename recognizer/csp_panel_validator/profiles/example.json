@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "profile_kind": "example",
+  "name": "example-panel",
+  "monitor": {
+    "screen_id": "DISPLAY1|example|0,0",
+    "name": "Display 1",
+    "geometry": [
+      0,
+      0,
+      1920,
+      1080
+    ],
+    "capture_size": [
+      1920,
+      1080
+    ],
+    "dpi": 96.0,
+    "device_pixel_ratio": 1.0,
+    "output_index": 0
+  },
+  "rois": [
+    {
+      "id": "tool-properties",
+      "name": "工具属性",
+      "role": "tool_properties",
+      "rect": [
+        1440,
+        80,
+        440,
+        620
+      ]
+    },
+    {
+      "id": "tool-list",
+      "name": "子工具列表",
+      "role": "tool_list",
+      "rect": [
+        1000,
+        80,
+        420,
+        620
+      ]
+    }
+  ],
+  "ocr": {
+    "engine": "rapidocr",
+    "language": "ch",
+    "model": "default",
+    "use_gpu": false
+  },
+  "sampling": {
+    "interval_ms": 500,
+    "change_threshold": 3.0,
+    "coalesce_ms": 150,
+    "max_wait_ms": 800,
+    "force_full_recognition": true
+  }
+}

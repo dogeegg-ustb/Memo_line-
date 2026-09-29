@@ -112,6 +112,8 @@ public static class NativeSct
         public int OriginY;
         public SctBackgroundModel Background;
         public float DpiScale;
+        public int CanvasPixelWidth;
+        public int CanvasPixelHeight;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]

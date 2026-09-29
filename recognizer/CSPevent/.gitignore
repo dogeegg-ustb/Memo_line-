@@ -1,0 +1,8 @@
+__pycache__/
+*.sqlite3.tmp
+bin/
+obj/
+publish/
+self-test.txt
+*.log
+events/

@@ -93,6 +93,8 @@ public sealed class NavigatorNumericReadingDto
     public float RotationConfidence { get; init; }
     public string ScaleRawText { get; init; } = "";
     public string RotationRawText { get; init; } = "";
+    public IntRect? ScaleDigitsCapture { get; init; }
+    public IntRect? RotationDigitsCapture { get; init; }
     public string SourceCaptureId { get; init; } = "";
     public DateTime CapturedAt { get; init; }
 

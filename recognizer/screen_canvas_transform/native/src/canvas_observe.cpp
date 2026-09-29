@@ -6,13 +6,91 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <unordered_map>
 #include <vector>
 
 namespace sct {
+namespace {
+
+struct BgrColor {
+  int b = 0;
+  int g = 0;
+  int r = 0;
+};
+
+// The workspace detector owns the background model in Lab. Convert its centre
+// back to the captured 8-bit colour so canvas observation can use a deliberately
+// narrow, non-drifting colour range. Windows screen capture preserves flat UI
+// fills exactly; the small weak range only absorbs conversion round-off.
+BgrColor LabCenterToBgr(const wb::Lab& lab) {
+  constexpr double delta = 6.0 / 29.0;
+  auto inverse_f = [](double t) {
+    constexpr double d = 6.0 / 29.0;
+    return t > d ? t * t * t : 3.0 * d * d * (t - 4.0 / 29.0);
+  };
+  const double fy = (lab.L + 16.0) / 116.0;
+  const double fx = fy + lab.a / 500.0;
+  const double fz = fy - lab.b / 200.0;
+  const double x = 0.95047 * inverse_f(fx);
+  const double y = inverse_f(fy);
+  const double z = 1.08883 * inverse_f(fz);
+  double r =  3.2404542 * x - 1.5371385 * y - 0.4985314 * z;
+  double g = -0.9692660 * x + 1.8760108 * y + 0.0415560 * z;
+  double b =  0.0556434 * x - 0.2040259 * y + 1.0572252 * z;
+  auto encode = [](double c) {
+    c = c <= 0.0031308 ? 12.92 * c : 1.055 * std::pow(c, 1.0 / 2.4) - 0.055;
+    return std::clamp(static_cast<int>(std::lround(c * 255.0)), 0, 255);
+  };
+  return {encode(b), encode(g), encode(r)};
+}
+
+int BgrDistance(const uint8_t* p, const BgrColor& c) {
+  return std::max({std::abs(int(p[0]) - c.b), std::abs(int(p[1]) - c.g),
+                   std::abs(int(p[2]) - c.r)});
+}
+
+BgrColor NavigatorBackgroundFromRim(const uint8_t* bgra, int stride,
+                                    const wb::IntRect& roi, const BgrColor& workspace_bg) {
+  struct Candidate {
+    int pixels = 0;
+  };
+  std::unordered_map<uint32_t, Candidate> candidates;
+  const int band = std::min({8, roi.width() / 4, roi.height() / 4});
+  if (band < 1) return workspace_bg;
+  for (int y = roi.top; y < roi.bottom; ++y) {
+    for (int x = roi.left; x < roi.right; ++x) {
+      if (x - roi.left >= band && roi.right - 1 - x >= band &&
+          y - roi.top >= band && roi.bottom - 1 - y >= band) continue;
+      const auto* p = bgra + size_t(y) * stride + size_t(x) * 4;
+      // Only nearby UI fills can replace the workspace background. Artwork
+      // and white paper on a tightly cropped rim must not become background.
+      if (BgrDistance(p, workspace_bg) > 24) continue;
+      const uint32_t key = uint32_t(p[0]) | (uint32_t(p[1]) << 8) |
+                           (uint32_t(p[2]) << 16);
+      auto& candidate = candidates[key];
+      ++candidate.pixels;
+    }
+  }
+  uint32_t best_key = 0;
+  int best_count = 0;
+  for (const auto& [key, candidate] : candidates) {
+    // C-II may crop the thumbnail to the image's right/top/bottom edge. The
+    // surrounding panel is then exposed on only one side of this ROI.
+    if (candidate.pixels <= best_count) continue;
+    best_key = key;
+    best_count = candidate.pixels;
+  }
+  if (best_count < std::max(16, band * 4)) return workspace_bg;
+  return {int(best_key & 255), int((best_key >> 8) & 255),
+          int((best_key >> 16) & 255)};
+}
+
+}  // namespace
 
 CanvasObservation ObserveCanvasExcludingBackground(
     const uint8_t* bgra, int width, int height, int stride, const wb::IntRect& roi_capture,
-    int origin_x, int origin_y, const wb::BackgroundModel& model, float dpi_scale, bool navigator) {
+    int origin_x, int origin_y, const wb::BackgroundModel& model, float dpi_scale,
+    bool navigator, int canvas_pixel_width, int canvas_pixel_height) {
   CanvasObservation out;
   auto fail = [&](const char* reason) {
     out.ambiguous = true;
@@ -28,46 +106,58 @@ CanvasObservation ObserveCanvasExcludingBackground(
   if (!roi.valid()) return fail("roi empty");
   const int rw=roi.width(), rh=roi.height();
   const size_t count=size_t(rw)*rh;
-  std::vector<uint8_t> background(count,0), exterior(count,0);
+  std::vector<uint8_t> strong_background(count,0), background(count,0), exterior(count,0);
   auto index=[&](int x,int y) { return size_t(y)*rw+x; };
-  // Exact per-call memoization: the same BGR value has the same classification
-  // for this background model. Collisions recompute using the original math;
-  // no quantization, threshold change or stale model survives between frames.
+  // Keep the narrow range for both observations, but center the navigator mask
+  // on its own panel fill. CSP can draw that panel a few RGB levels away from
+  // the workspace; with a fixed workspace center the entire panel becomes
+  // foreground and pulls the measured canvas boundary to the ROI edge.
+  const BgrColor workspace_bg = LabCenterToBgr(model.center_lab);
+  const BgrColor model_bg = navigator
+      ? NavigatorBackgroundFromRim(bgra, stride, roi, workspace_bg)
+      : workspace_bg;
   std::array<uint32_t,4096> color_keys;
   color_keys.fill(0xffffffffu);
   std::array<uint8_t,4096> color_values{};
+  std::array<uint8_t,4096> strong_values{};
   for (int y=0;y<rh;++y) for (int x=0;x<rw;++x) {
     const auto* p=bgra+size_t(y+roi.top)*stride+size_t(x+roi.left)*4;
     const uint32_t key=uint32_t(p[0]) | (uint32_t(p[1])<<8) | (uint32_t(p[2])<<16);
     const size_t slot=(key*2654435761u)>>20;
     if(color_keys[slot]!=key) {
-      color_values[slot]=wb::DeltaE76(wb::BgrToLab(p[0],p[1],p[2]),model.center_lab)
-                            <=model.weak_delta_e;
+      const int distance=BgrDistance(p,model_bg);
+      strong_values[slot]=distance<=1;
+      color_values[slot]=distance<=3;
       color_keys[slot]=key;
     }
     background[index(x,y)]=color_values[slot];
+    strong_background[index(x,y)]=strong_values[slot];
   }
 
-  // Remove only background connected to the ROI exterior. A painted patch
-  // matching the background inside the canvas is not exterior background.
-  // Seed every exterior component, including L/U shapes and opposite bands.
+  // Grow only from strict background pixels on the ROI rim, through the weak
+  // narrow mask. Four-connectivity and a fixed model prevent colour drift.
   std::vector<size_t> pending;
   pending.reserve(count);
   auto seed=[&](int x,int y) {
     const size_t i=index(x,y);
-    if (background[i] && !exterior[i]) {exterior[i]=1;pending.push_back(i);}
+    if (strong_background[i] && !exterior[i]) {exterior[i]=1;pending.push_back(i);}
   };
   for (int x=0;x<rw;++x) {seed(x,0);seed(x,rh-1);}
   for (int y=0;y<rh;++y) {seed(0,y);seed(rw-1,y);}
+  if (pending.empty()) return fail("no strict UI background on roi boundary");
   for (size_t head=0;head<pending.size();++head) {
     const size_t i=pending[head];const int x=int(i%rw),y=int(i/rw);
-    if(x>0)seed(x-1,y);if(x+1<rw)seed(x+1,y);
-    if(y>0)seed(x,y-1);if(y+1<rh)seed(x,y+1);
+    auto grow=[&](int nx,int ny) {
+      const size_t ni=index(nx,ny);
+      if(background[ni]&&!exterior[ni]) {exterior[ni]=1;pending.push_back(ni);}
+    };
+    if(x>0)grow(x-1,y);if(x+1<rw)grow(x+1,y);
+    if(y>0)grow(x,y-1);if(y+1<rh)grow(x,y+1);
   }
   // The workspace can contain small non-background UI remnants near its rim.
   // They must not be merged into the displayed canvas. Select one connected
   // foreground body; a canvas with artwork remains connected to its paper.
-  std::vector<uint8_t> visited(count,0);
+  std::vector<uint8_t> visited(count,0), canvas_component(count,0);
   int minx=rw,miny=rh,maxx=-1,maxy=-1,best_area=0;
   for(int sy=0;sy<rh;++sy) for(int sx=0;sx<rw;++sx) {
     const size_t initial=index(sx,sy);
@@ -87,6 +177,8 @@ CanvasObservation ObserveCanvasExcludingBackground(
     }
     if(static_cast<int>(component.size())>best_area) {
       best_area=static_cast<int>(component.size());minx=cx0;maxx=cx1;miny=cy0;maxy=cy1;
+      std::fill(canvas_component.begin(),canvas_component.end(),0);
+      for(const size_t i:component) canvas_component[i]=1;
     }
   }
   if(maxx<minx || maxy<miny) return fail("no separable foreground canvas");
@@ -112,25 +204,125 @@ CanvasObservation ObserveCanvasExcludingBackground(
     while(maxy>=miny && rows[maxy]<minRow) --maxy;
     if(maxx<minx || maxy<miny) return fail("no supported navigator canvas body");
   }
+  if (navigator && canvas_pixel_width > 0 && canvas_pixel_height > 0) {
+    const double expected_aspect = double(canvas_pixel_width) / canvas_pixel_height;
+    const int observed_w = maxx - minx + 1, observed_h = maxy - miny + 1;
+    const double observed_aspect = double(observed_w) / observed_h;
+    const double tolerance = std::max(0.04, 2.0 / std::min(observed_w, observed_h));
+    if (std::abs(observed_aspect / expected_aspect - 1.0) > tolerance) {
+      // Validate both the retained anchor and the inferred opposite edge in
+      // the frozen capture. Looking one pixel beyond the ROI is intentional:
+      // C-II can crop a genuine image edge exactly at its own boundary.
+      auto is_background_at = [&](int x, int y) {
+        x += roi.left; y += roi.top;
+        if (x < 0 || y < 0 || x >= width || y >= height) return false;
+        return BgrDistance(bgra + size_t(y) * stride + size_t(x) * 4, model_bg) <= 3;
+      };
+      auto edge_score = [&](bool vertical, bool start, int edge, int first, int last) {
+        double best = 0.0;
+        // Segmentation and line overlays can leave a one or two pixel fringe.
+        for (int shift = -3; shift <= 3; ++shift) {
+          int hits = 0, total = 0;
+          const int candidate_edge = edge + shift;
+          for (int along = first + 2; along <= last - 2; ++along) {
+            const int outside = candidate_edge + (start ? -1 : 1);
+            const bool exterior = vertical ? is_background_at(outside, along)
+                                           : is_background_at(along, outside);
+            bool interior = false;
+            for (int depth = 0; depth < 3; ++depth) {
+              const int inside = candidate_edge + (start ? depth : -depth);
+              interior |= vertical ? !is_background_at(inside, along)
+                                   : !is_background_at(along, inside);
+            }
+            ++total;
+            hits += exterior && interior;
+          }
+          if (total > 0) best = std::max(best, double(hits) / total);
+        }
+        return best;
+      };
+      struct Candidate { int l, t, r, b; double score; };
+      std::vector<Candidate> proposals;
+      const double target_width = observed_h * expected_aspect;
+      if (target_width >= 2 && target_width <= rw) {
+        const int candidate_w = int(std::lround(target_width));
+        if (candidate_w != observed_w) {
+          const int left = maxx - candidate_w + 1;
+          if (left >= 0 && left < maxx)
+            proposals.push_back({left, miny, maxx, maxy,
+                std::min(edge_score(true, true, left, miny, maxy),
+                         edge_score(true, false, maxx, miny, maxy))});
+          const int right = minx + candidate_w - 1;
+          if (right > minx && right < rw)
+            proposals.push_back({minx, miny, right, maxy,
+                std::min(edge_score(true, false, right, miny, maxy),
+                         edge_score(true, true, minx, miny, maxy))});
+        }
+      }
+      const double target_height = observed_w / expected_aspect;
+      if (target_height >= 2 && target_height <= rh) {
+        const int candidate_h = int(std::lround(target_height));
+        if (candidate_h != observed_h) {
+          const int top = maxy - candidate_h + 1;
+          if (top >= 0 && top < maxy)
+            proposals.push_back({minx, top, maxx, maxy,
+                std::min(edge_score(false, true, top, minx, maxx),
+                         edge_score(false, false, maxy, minx, maxx))});
+          const int bottom = miny + candidate_h - 1;
+          if (bottom > miny && bottom < rh)
+            proposals.push_back({minx, miny, maxx, bottom,
+                std::min(edge_score(false, false, bottom, minx, maxx),
+                         edge_score(false, true, miny, minx, maxx))});
+        }
+      }
+      std::sort(proposals.begin(), proposals.end(),
+                [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
+      if (proposals.empty() || proposals[0].score < 0.65 ||
+          (proposals.size() > 1 && proposals[1].score > proposals[0].score - 0.10))
+        return fail("navigator canvas aspect mismatch without unique supported edge");
+      minx = proposals[0].l; miny = proposals[0].t;
+      maxx = proposals[0].r; maxy = proposals[0].b;
+    }
+  }
   out.bounds_capture={roi.left+minx,roi.top+miny,roi.left+maxx+1,roi.top+maxy+1};
   out.bounds_screen={out.bounds_capture.left+origin_x,out.bounds_capture.top+origin_y,
                      out.bounds_capture.right+origin_x,out.bounds_capture.bottom+origin_y};
   const int bw=maxx-minx+1,bh=maxy-miny+1;
   out.aspect_ratio=float(bw)/bh;
 
-  // AABB line support is a separate diagnostic for rectangular direct mapping.
-  // It does not decide whether an arbitrary foreground is surrounded.
+  // Require the actual two-sided transition at each proposed edge: canvas on
+  // the inside and exterior background immediately outside. Merely having a
+  // background band around an arbitrary foreground no longer invents 4 edges.
+  const int edge_depth=std::clamp(int(std::lround(2*(std::isfinite(dpi_scale)?dpi_scale:1.f))),1,4);
   for(int side=0;side<4;++side) {
     int hits=0,total=0;
     if(side==0 || side==2) {
-      int x=side==0?minx:maxx;
-      for(int y=miny;y<=maxy;++y) {++total;hits+=!exterior[index(x,y)];}
+      const int inside_x=side==0?minx:maxx;
+      const int outside_x=side==0?minx-1:maxx+1;
+      if(outside_x>=0&&outside_x<rw) for(int y=miny;y<=maxy;++y) {
+        ++total;
+        bool inside=false;
+        for(int k=0;k<edge_depth;++k) {
+          const int x=side==0?inside_x+k:inside_x-k;
+          if(x>=0&&x<rw&&canvas_component[index(x,y)]) {inside=true;break;}
+        }
+        hits+=inside&&exterior[index(outside_x,y)];
+      }
     } else {
-      int y=side==1?miny:maxy;
-      for(int x=minx;x<=maxx;++x) {++total;hits+=!exterior[index(x,y)];}
+      const int inside_y=side==1?miny:maxy;
+      const int outside_y=side==1?miny-1:maxy+1;
+      if(outside_y>=0&&outside_y<rh) for(int x=minx;x<=maxx;++x) {
+        ++total;
+        bool inside=false;
+        for(int k=0;k<edge_depth;++k) {
+          const int y=side==1?inside_y+k:inside_y-k;
+          if(y>=0&&y<rh&&canvas_component[index(x,y)]) {inside=true;break;}
+        }
+        hits+=inside&&exterior[index(x,outside_y)];
+      }
     }
-    out.boundary_support[side]=float(hits)/total;
-    if(out.boundary_support[side]>=0.55f) out.visible_edges_mask|=1<<side;
+    out.boundary_support[side]=total>0?float(hits)/total:0.f;
+    if(out.boundary_support[side]>=0.90f) out.visible_edges_mask|=1<<side;
   }
   const int depth=std::clamp(int(std::lround(2*(std::isfinite(dpi_scale)?dpi_scale:1.f))),1,4);
   const int gaps[4]={minx,miny,rw-1-maxx,rh-1-maxy};
@@ -152,8 +344,10 @@ CanvasObservation ObserveCanvasExcludingBackground(
     }
     if(total>0 && float(hits)/total>=0.95f)++surrounded_sides;
   }
-  out.four_sides_complete=surrounded_sides==4;
-  out.confidence=0.5f+0.125f*surrounded_sides;
+  out.four_sides_complete=surrounded_sides==4&&out.visible_edges_mask==0xF;
+  int supported_edges=0;
+  for(int side=0;side<4;++side) supported_edges+=(out.visible_edges_mask&(1<<side))?1:0;
+  out.confidence=0.35f+0.10f*surrounded_sides+0.0625f*supported_edges;
   return out;
 }
 }  // namespace sct

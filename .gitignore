@@ -1,9 +1,15 @@
 # Build / tooling
 build/
+build_*/
+build-*/
+**/build_*/
+**/build-*/
 cmake-build-*/
 .tools/
 **/bin/
 **/obj/
+**/bin-*/
+**/obj-*/
 *.user
 .vs/
 out/
@@ -22,8 +28,19 @@ __pycache__/
 stroke/*.strokebin
 stroke/*.part
 stroke/*.json
+**/procedure/stroke/
+
+# Generated local assets and diagnostics
+recognizer/CSPevent/extracted_icons/
+recognizer/csp_layer_state_reader/关键事件记录/
+recognizer/screen_canvas_transform/_roi_border_dump.txt
+recognizer/screen_canvas_transform/releases/ScreenCanvasTransform-20260922-speed/
+red-frame-*.png
+*.bak
 
 # Large / local runtime logs
 run_log.txt
 *_debug.log
 debug_runtime*.log
+**/build_*.log
+**/build_*.err.log

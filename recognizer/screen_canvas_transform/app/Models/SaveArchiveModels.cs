@@ -32,12 +32,21 @@ public sealed class OcrLayoutDto
 {
     public ScreenPhysicalRectDto ScaleSlotScreen { get; init; } = null!;
     public ScreenPhysicalRectDto RotationSlotScreen { get; init; } = null!;
+    public ScreenPhysicalRectDto? ScaleDigitsScreen { get; init; }
+    public ScreenPhysicalRectDto? RotationDigitsScreen { get; init; }
 }
 
 public readonly record struct OcrLayoutScreen(IntRect ScaleSlotScreen, IntRect RotationSlotScreen)
 {
+    public IntRect? ScaleDigitsScreen { get; init; }
+    public IntRect? RotationDigitsScreen { get; init; }
+
     public static OcrLayoutScreen FromDto(OcrLayoutDto dto)
-        => new(dto.ScaleSlotScreen.ToIntRect(), dto.RotationSlotScreen.ToIntRect());
+        => new(dto.ScaleSlotScreen.ToIntRect(), dto.RotationSlotScreen.ToIntRect())
+        {
+            ScaleDigitsScreen = dto.ScaleDigitsScreen?.ToIntRect(),
+            RotationDigitsScreen = dto.RotationDigitsScreen?.ToIntRect()
+        };
 }
 
 public sealed class SaveArchiveProvenance

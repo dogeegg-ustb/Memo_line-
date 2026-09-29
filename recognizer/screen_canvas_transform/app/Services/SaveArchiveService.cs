@@ -148,7 +148,11 @@ public sealed class SaveArchiveService
             OcrLayout = new OcrLayoutDto
             {
                 ScaleSlotScreen = ScreenPhysicalRectDto.FromIntRect(ocrLayout.ScaleSlotScreen),
-                RotationSlotScreen = ScreenPhysicalRectDto.FromIntRect(ocrLayout.RotationSlotScreen)
+                RotationSlotScreen = ScreenPhysicalRectDto.FromIntRect(ocrLayout.RotationSlotScreen),
+                ScaleDigitsScreen = ocrLayout.ScaleDigitsScreen is { } scaleDigits
+                    ? ScreenPhysicalRectDto.FromIntRect(scaleDigits) : null,
+                RotationDigitsScreen = ocrLayout.RotationDigitsScreen is { } rotationDigits
+                    ? ScreenPhysicalRectDto.FromIntRect(rotationDigits) : null
             },
             VisualFingerprint = visualFingerprint,
             Provenance = new SaveArchiveProvenance
@@ -243,6 +247,17 @@ public sealed class SaveArchiveService
         rectError = ValidateScreenRect(archive.OcrLayout?.RotationSlotScreen, "OcrLayout.RotationSlotScreen", minSizePx: 8);
         if (rectError is not null)
             return rectError;
+
+        if (archive.OcrLayout?.ScaleDigitsScreen is not null)
+        {
+            rectError = ValidateScreenRect(archive.OcrLayout.ScaleDigitsScreen, "OcrLayout.ScaleDigitsScreen", minSizePx: 8);
+            if (rectError is not null) return rectError;
+        }
+        if (archive.OcrLayout?.RotationDigitsScreen is not null)
+        {
+            rectError = ValidateScreenRect(archive.OcrLayout.RotationDigitsScreen, "OcrLayout.RotationDigitsScreen", minSizePx: 8);
+            if (rectError is not null) return rectError;
+        }
 
         string? fingerprintError = ArchiveVisualFingerprintService.ValidateFingerprint(archive.VisualFingerprint);
         if (fingerprintError is not null)

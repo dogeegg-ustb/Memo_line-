@@ -1,0 +1,27 @@
+{
+  "scope": "one supplied screenshot; warm model, 5 alternating trials; no desktop capture",
+  "timings_ms": {
+    "full_list": [
+      291.08,
+      330.93,
+      283.47,
+      301.6,
+      359.45
+    ],
+    "highlight_only": [
+      217.75,
+      244.49,
+      279.76,
+      196.77,
+      254.65
+    ]
+  },
+  "median_ms": {
+    "full_list": 301.6,
+    "highlight_only": 244.49
+  },
+  "pixels": {
+    "full_list": 107244,
+    "highlight_only": 34768
+  }
+}
