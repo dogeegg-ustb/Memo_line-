@@ -192,14 +192,12 @@ void TestViewportPattern02IntersectingNoComplete() {
          "0.2 origin near L corner x");
   Expect(std::abs(out.frame.origin_top_left_displayed.y - (Y + 0.5)) < 2.0,
          "0.2 origin near L corner y");
-  // The independent centerline spans are 45 and 40 px. With 400×300 px of
-  // visible workspace contact, the symmetric common-scale fit is 0.12, hence
-  // a 96×72 px workspace viewport. The old expectation included the dilation
-  // halo and therefore encoded the bug this test is meant to catch.
+  // Independently restore 45/(400/800)=90 and 40/(300/600)=80.
+  // 0.2 places those two lengths at their factual shared corner.
   std::printf("PRECISION 0.2 width=%.6f height=%.6f\n", out.frame.width, out.frame.height);
-  Expect(std::abs(out.frame.width - 96.0) < 1.0 &&
-             std::abs(out.frame.height - 72.0) < 1.0,
-         "0.2 recovers size from both orthogonal segment lengths");
+  Expect(std::abs(out.frame.width - 90.0) < 1.0 &&
+             std::abs(out.frame.height - 80.0) < 1.0,
+         "0.2 recovers each orthogonal segment length independently");
 }
 
 void TestLargePinkPlateauIsNotMistakenForManyRedLines() {
@@ -791,6 +789,9 @@ void TestPartial180SingleCuttingHorizontal() {
   DrawRedHLine(buf, stride, T, L, R, 0, 0, 220);
   DrawRedHLine(buf, stride, B_out, L, R, 0, 0, 220);
   auto in = MakeViewportInput(buf, W, H, stride, thumb);
+  // This fixture's actual viewport is 60x80. Its independent workspace must
+  // have the same aspect; the paper rectangle has a different aspect.
+  in.workspace_canvas_relation.workspace_roi = {0, 0, 600, 800};
   in.navigator_canvas_bounds = canvas;
   in.workspace_canvas_relation.canvas_crop_sides = kTestEdgeB;
   in.display_rotation_degrees = 180.f;

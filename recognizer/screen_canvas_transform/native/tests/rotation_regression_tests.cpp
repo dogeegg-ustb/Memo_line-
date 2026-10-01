@@ -189,12 +189,9 @@ void SingleClippedEdgeTest() {
   Check(!std::isfinite(bad.m[0]),"FromCorners rejects collinear inputs",0);
 }
 
-void OneCompleteEdgeUsesAnchoredWorkspaceCanvasRelation() {
-  // The paper is fully visible across X but starts well inside the workspace
-  // and is clipped at its bottom. The Navigator's complete horizontal red side
-  // is therefore clipped to the paper width. Mapping the complete workspace to
-  // that segment moves canvas (0,0) to the workspace's upper-left instead of
-  // the observed paper corner.
+void OneCompleteEdgeUsesMeasuredViewport() {
+  // A factual 1.0 side is already complete. Its frame must reach the matrix
+  // solver unchanged, even when WCR supplies a different paper model.
   sct::SolveInput in;
   std::snprintf(in.capture_id, sizeof(in.capture_id), "one-complete-offset");
   in.canvas_pixel_width = 4961;
@@ -225,18 +222,22 @@ void OneCompleteEdgeUsesAnchoredWorkspaceCanvasRelation() {
 
   const auto paper_tl = result.snapshot.canvas_to_screen.Apply({0,0});
   const auto paper_br = result.snapshot.canvas_to_screen.Apply({1,1});
-  Check(std::hypot(paper_tl.x - 582.0, paper_tl.y - 658.0) < 1e-6,
-        "one complete edge preserves visible paper top-left translation", 0);
-  Check(std::hypot(paper_br.x - 2070.0, paper_br.y - 2762.0) < 1e-6,
-        "one complete edge keeps archived full-paper scale", 0);
-  const auto canvas_tl = result.snapshot.screen_to_canvas.Apply({582,658});
+  const double expected_left = 409.0 + (2244.0 - 2244.5) * 1765.0 / 275.9;
+  const double expected_top = 149.0 + (143.0 - 64.0) * 1282.0 / 200.4;
+  const double expected_right = 409.0 + (2521.0 - 2244.5) * 1765.0 / 275.9;
+  const double expected_bottom = 149.0 + (473.0 - 64.0) * 1282.0 / 200.4;
+  Check(std::hypot(paper_tl.x - expected_left, paper_tl.y - expected_top) < 1e-6,
+        "one complete edge supplies viewport translation", 0);
+  Check(std::hypot(paper_br.x - expected_right, paper_br.y - expected_bottom) < 1e-6,
+        "one complete edge supplies viewport scale", 0);
+  const auto canvas_tl = result.snapshot.screen_to_canvas.Apply({expected_left, expected_top});
   Check(std::hypot(canvas_tl.x, canvas_tl.y) < 1e-9,
-        "observed paper top-left maps to canvas origin", 0);
+        "red-frame-derived paper corner maps to canvas origin", 0);
 }
 }
 int main() {
   SingleClippedEdgeTest();
-  OneCompleteEdgeUsesAnchoredWorkspaceCanvasRelation();
+  OneCompleteEdgeUsesMeasuredViewport();
   DirectPathRotationTest();
   for(double a:{0.,5.,25.,-30.,45.,60.,89.,90.,135.,180.,-135.,-90.}) {
     Test(a,false);Test(a,true);MatrixTest(a);

@@ -1,0 +1,39 @@
+{
+  "metadata": {
+    "catalog_version": "2026.09.26.1",
+    "source": "Curated CSP layer-panel vocabulary; aliases are recognition hints, not proof of document internals.",
+    "fuzzy_min_score": 0.82,
+    "fuzzy_min_margin": 0.12
+  },
+  "blend_modes": [
+    {"canonical": "正常", "aliases": ["正常", "普通", "normal"]},
+    {"canonical": "通过", "aliases": ["通過", "透過", "pass through", "passthrough"]},
+    {"canonical": "变暗", "aliases": ["變暗", "变暗", "darken"]},
+    {"canonical": "正片叠底", "aliases": ["正片疊底", "正片叠底", "乘算", "multiply"]},
+    {"canonical": "颜色加深", "aliases": ["顏色加深", "颜色加深", "color burn"]},
+    {"canonical": "线性加深", "aliases": ["線性加深", "线性加深", "linear burn"]},
+    {"canonical": "变亮", "aliases": ["變亮", "变亮", "lighten"]},
+    {"canonical": "滤色", "aliases": ["濾色", "滤色", "screen"]},
+    {"canonical": "颜色减淡", "aliases": ["顏色減淡", "颜色减淡", "color dodge"]},
+    {"canonical": "发光减淡", "aliases": ["發光減淡", "发光减淡", "glow dodge"]},
+    {"canonical": "添加", "aliases": ["添加", "add"]},
+    {"canonical": "线性减淡", "aliases": ["線性減淡", "线性减淡", "linear dodge", "add glow"]},
+    {"canonical": "叠加", "aliases": ["疊加", "叠加", "overlay"]},
+    {"canonical": "柔光", "aliases": ["柔光", "soft light"]},
+    {"canonical": "强光", "aliases": ["強光", "强光", "hard light"]},
+    {"canonical": "亮光", "aliases": ["亮光", "vivid light"]},
+    {"canonical": "线性光", "aliases": ["線性光", "线性光", "linear light"]},
+    {"canonical": "点光", "aliases": ["點光", "点光", "pin light"]},
+    {"canonical": "实色混合", "aliases": ["實色混合", "实色混合", "hard mix"]},
+    {"canonical": "差值", "aliases": ["差值", "difference"]},
+    {"canonical": "排除", "aliases": ["排除", "exclusion"]},
+    {"canonical": "色相", "aliases": ["色相", "hue"]},
+    {"canonical": "饱和度", "aliases": ["飽和度", "饱和度", "saturation"]},
+    {"canonical": "颜色", "aliases": ["顏色", "颜色", "color"]},
+    {"canonical": "亮度", "aliases": ["亮度", "luminosity"]}
+  ],
+  "row_markers": {
+    "paper": ["紙張", "纸张", "paper"],
+    "group_name_prefixes": ["組", "组", "文件夾", "文件夹", "group", "folder"]
+  }
+}

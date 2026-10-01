@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>BehaviorRecognizer</RootNamespace>
+    <AssemblyName>BehaviorRecognizer</AssemblyName>
+    <Description>Personal tablet input collector embedding OpenTabletDriver capture core</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- The repository ships the exact managed dependencies used by its Windows release.
+       Referencing them here keeps the source build independent of a missing OTD checkout
+       and of network package restore. Build output receives private copies. -->
+  <PropertyGroup>
+    <BundledRuntimeDir>$(MSBuildThisFileDirectory)..\..\publish\win-x64\</BundledRuntimeDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <BundledAssembly Include="$(BundledRuntimeDir)OpenTabletDriver*.dll" />
+    <BundledAssembly Include="$(BundledRuntimeDir)Microsoft.Extensions*.dll" />
+    <BundledAssembly Include="$(BundledRuntimeDir)System.IO.Hashing.dll" />
+    <BundledAssembly Include="$(BundledRuntimeDir)System.Diagnostics.EventLog.dll" />
+    <BundledAssembly Include="$(BundledRuntimeDir)HidSharpCore.dll" />
+    <BundledAssembly Include="$(BundledRuntimeDir)Newtonsoft.Json.dll" />
+    <BundledAssembly Include="$(BundledRuntimeDir)JetBrains.Annotations.dll" />
+    <Reference Include="@(BundledAssembly)">
+      <HintPath>%(BundledAssembly.FullPath)</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\config\**\*" Link="config\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\NOTICE.md" Link="NOTICE.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\recorder_integration\settings.json;..\..\..\recorder_integration\requirements.txt" Link="integration\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\..\..\CSP_SaveBeforeClick.ahk" Link="integration\CSP_SaveBeforeClick.ahk" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\..\recognizer_core\**\*.py;..\..\..\recognizer_core\**\*.sqlite3;..\..\..\recognizer_core\**\*.json" Exclude="..\..\..\recognizer_core\**\obj\**;..\..\..\recognizer_core\**\bin\**" Link="integration\recognizer_core\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\..\recorder_integration\*.py" Link="integration\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\..\csp_workspace_layout.py;..\..\..\csp_workspace_overlay.py;..\..\..\..\CSP_Shortcut_Manager\csp_shortcuts.py" Link="integration\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\..\csp_panel_validator\csp_panel_validator\window_service.py;..\..\..\csp_panel_validator\csp_panel_validator\models.py;..\..\..\csp_panel_validator\csp_panel_validator\__init__.py" Link="integration\csp_panel_validator\csp_panel_validator\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

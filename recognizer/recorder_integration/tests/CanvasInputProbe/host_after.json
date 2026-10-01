@@ -1,0 +1,58 @@
+{
+  "input": {
+    "initialize": true,
+    "width": 4961,
+    "height": 7016,
+    "dpi": 144,
+    "frame": {
+      "path": "C:/Users/dogeegg/AppData/Local/Temp/codex-clipboard-6b98953a-f6ca-4b08-811b-6d1ff32f2a9f.png",
+      "roi": [
+        0,
+        0,
+        2152,
+        1345
+      ]
+    },
+    "crops": {
+      "workspace": {
+        "roi": [
+          0,
+          29,
+          1790,
+          1301
+        ]
+      },
+      "navigator": {
+        "roi": [
+          1810,
+          0,
+          342,
+          438
+        ]
+      },
+      "numbers": {
+        "roi": [
+          1810,
+          365,
+          133,
+          70
+        ]
+      }
+    }
+  },
+  "elapsedMs": 1116.5768999999273,
+  "result": {
+    "success": false,
+    "canvasWindowRoiScreenPx": null,
+    "navigatorThumbnailRoiScreenPx": null,
+    "screenCoordinateOriginScreenPx": null,
+    "canvasOriginScreenPx": null,
+    "ocrScalePercent": null,
+    "ocrRotationDegrees": null,
+    "completedViewportScreenPx": null,
+    "snapshot": null,
+    "failedStage": 5,
+    "status": 104,
+    "message": "AmbiguousCandidates [1813,34,2131,322] vs [1813,327,2152,360]"
+  }
+}

@@ -206,7 +206,7 @@ public sealed class SctNativeService
         float displayRotationConfidence = 0f)
     {
         using var timing = new StageTimer("viewport", session.CaptureId);
-        return WithLockedFrame(session, (scan0, stride) =>
+        var viewport = WithLockedFrame(session, (scan0, stride) =>
         {
             var request = new NativeSct.SctViewportRequest
             {
@@ -226,6 +226,49 @@ public sealed class SctNativeService
             _ = NativeSct.sct_complete_viewport_frame(in request, ref result);
             return result;
         });
+        SaveViewportDebugCapture(session, thumbnailRoiCapturePx, navigatorCanvasBoundsCapturePx,
+            workspaceCanvasRelation, displayRotationDegrees, displayRotationConfidence, viewport);
+        return viewport;
+    }
+
+    private static void SaveViewportDebugCapture(
+        CaptureSession session, IntRect thumbnail, IntRect canvas,
+        NativeSct.SctWorkspaceCanvasRelation relation, float rotation, float rotationConfidence,
+        NativeSct.SctViewportFrame viewport)
+    {
+        try
+        {
+            // Keep the latest frozen source pixels, before screen overlays.
+            // Padding includes factual red sides that continue outside the ROI.
+            var crop = new IntRect(thumbnail.Left - 96, thumbnail.Top - 96,
+                thumbnail.Right + 96, thumbnail.Bottom + 96).ClampTo(
+                    new IntRect(0, 0, session.FrozenCapture.Width, session.FrozenCapture.Height));
+            if (crop.IsEmpty) return;
+            string dir = Path.Combine(Path.GetTempPath(), "sct_viewport_debug");
+            Directory.CreateDirectory(dir);
+            using var image = session.FrozenCapture.Clone(
+                new Rectangle(crop.Left, crop.Top, crop.Width, crop.Height), PixelFormat.Format32bppArgb);
+            image.Save(Path.Combine(dir, "last_capture.png"), ImageFormat.Png);
+            // Workspace contact geometry is also an input to all 0.x modes.
+            // Retain its original pixels so a bad relation can be diagnosed.
+            session.FrozenCapture.Save(Path.Combine(dir, "last_full_capture.png"), ImageFormat.Png);
+            image.Save(Path.Combine(dir, $"{session.CaptureId}_capture.png"), ImageFormat.Png);
+            string metadata = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    session.CaptureId, session.OriginX, session.OriginY,
+                    FrameWidth = session.FrozenCapture.Width, FrameHeight = session.FrozenCapture.Height,
+                    CropCapture = crop, ThumbnailCapture = thumbnail, CanvasCapture = canvas,
+                    Relation = relation, Rotation = rotation, RotationConfidence = rotationConfidence,
+                    Viewport = viewport
+                }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true, IncludeFields = true });
+            File.WriteAllText(Path.Combine(dir, "last_meta.json"), metadata);
+            File.WriteAllText(Path.Combine(dir, $"{session.CaptureId}_meta.json"), metadata);
+            LiveDebugLog.Write($"[ViewportDebug] 原始缩略图及参数已保存: {dir} capture={session.CaptureId}");
+        }
+        catch (Exception ex)
+        {
+            LiveDebugLog.Write($"[ViewportDebug] 保存调试帧失败: {ex.Message}");
+        }
     }
 
     public TransformSnapshotDto SolveTransform(NativeSct.SctSolveRequest request)

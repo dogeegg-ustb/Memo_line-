@@ -1,0 +1,1216 @@
+{
+  "label": "afterTight",
+  "inputPath": "C:/Users/dogeegg/AppData/Local/Temp/codex-clipboard-6b98953a-f6ca-4b08-811b-6d1ff32f2a9f.png",
+  "inputSha256": "3EB7A2141F15518304ECFF8D6EFEFCA77B19ACD9D083294CA2CDA6424553D037",
+  "imageWidth": 2152,
+  "imageHeight": 1345,
+  "imagePixelFormat": "Format32bppArgb",
+  "imageDpiX": 143.9926,
+  "imageDpiY": 143.9926,
+  "coordinateSystem": "Attachment pixels; origin=(0,0), no resampling. The attachment is a cropped screen, not a whole desktop.",
+  "dpi": 144,
+  "canvasWidth": 4961,
+  "canvasHeight": 7016,
+  "initialWorkspaceRoi": [
+    0,
+    29,
+    1790,
+    1301
+  ],
+  "initialNavigatorRoi": [
+    1810,
+    0,
+    342,
+    326
+  ],
+  "numbersRoi": [
+    1810,
+    365,
+    133,
+    70
+  ],
+  "coreAssembly": "D:\\Memo_Line\\Memo_Line\\recognizer\\recorder_integration\\tests\\CanvasInputProbe\\artifacts\\after\\ScreenCanvasTransform.Core.dll",
+  "coreSha256": "3C4949D40CF77F03101A665C5567888407296D022A8AF2FB1743FC4D3A650B37",
+  "nativeSha256": "C621E19CF962EF50D467FFFAF7C82BA55206A8024B16E0D06DDCA72D88C77A2E",
+  "loadedNativeModules": [
+    {
+      "FileName": "D:\\Memo_Line\\Memo_Line\\recognizer\\recorder_integration\\tests\\CanvasInputProbe\\artifacts\\after\\ScreenCanvasNative.dll",
+      "sha256": "C621E19CF962EF50D467FFFAF7C82BA55206A8024B16E0D06DDCA72D88C77A2E"
+    }
+  ],
+  "results": [
+    {
+      "name": "bitmap_conversion_pixel_audit",
+      "elapsedMs": 1477.8244,
+      "result": {
+        "originalDpi": 143.9926,
+        "convertedDpi": 143.9926,
+        "originalHash": "ED35F768B3F90170E489397284A24478EC75B75FF27726BA8894BD25FA90EF6A",
+        "convertedHash": "ED35F768B3F90170E489397284A24478EC75B75FF27726BA8894BD25FA90EF6A",
+        "exactCloneHash": "ED35F768B3F90170E489397284A24478EC75B75FF27726BA8894BD25FA90EF6A",
+        "differentPixels": 0,
+        "differenceBounds": [
+          2152,
+          1345,
+          -1,
+          -1
+        ],
+        "originalPixelDetect": {
+          "Success": true,
+          "Status": 0,
+          "StatusName": "Ok",
+          "Message": "ok",
+          "SourceCaptureId": "probe-pixels-original",
+          "SourceRevision": "workspace-border-shared-v2",
+          "RectCapturePx": {
+            "Left": 4,
+            "Top": 38,
+            "Right": 1769,
+            "Bottom": 1320,
+            "Width": 1765,
+            "Height": 1282,
+            "IsEmpty": false
+          },
+          "RectScreenPhysicalPx": {
+            "Left": 4,
+            "Top": 38,
+            "Right": 1769,
+            "Bottom": 1320,
+            "Width": 1765,
+            "Height": 1282,
+            "IsEmpty": false
+          },
+          "EvidenceGrade": 3,
+          "Confidence": 1,
+          "Background": {
+            "CenterLabL": 16.589066,
+            "CenterLabA": 0,
+            "CenterLabB": 0,
+            "StrongDeltaE": 3.5,
+            "WeakDeltaE": 6,
+            "Confidence": 1,
+            "SourceCaptureId": "probe-pixels-original",
+            "SourceRevision": "workspace-border-shared-v2"
+          },
+          "SourceBackend": 0
+        },
+        "convertedPixelDetect": {
+          "Success": true,
+          "Status": 0,
+          "StatusName": "Ok",
+          "Message": "ok",
+          "SourceCaptureId": "probe-pixels-converted",
+          "SourceRevision": "workspace-border-shared-v2",
+          "RectCapturePx": {
+            "Left": 4,
+            "Top": 38,
+            "Right": 1769,
+            "Bottom": 1320,
+            "Width": 1765,
+            "Height": 1282,
+            "IsEmpty": false
+          },
+          "RectScreenPhysicalPx": {
+            "Left": 4,
+            "Top": 38,
+            "Right": 1769,
+            "Bottom": 1320,
+            "Width": 1765,
+            "Height": 1282,
+            "IsEmpty": false
+          },
+          "EvidenceGrade": 3,
+          "Confidence": 1,
+          "Background": {
+            "CenterLabL": 16.589066,
+            "CenterLabA": 0,
+            "CenterLabB": 0,
+            "StrongDeltaE": 3.5,
+            "WeakDeltaE": 6,
+            "Confidence": 1,
+            "SourceCaptureId": "probe-pixels-converted",
+            "SourceRevision": "workspace-border-shared-v2"
+          },
+          "SourceBackend": 0
+        }
+      }
+    },
+    {
+      "name": "three_crop_composition_pixel_audit",
+      "elapsedMs": 47.1786,
+      "result": {
+        "Width": 2152,
+        "Height": 1330,
+        "originX": 0,
+        "originY": 0,
+        "workspace": {
+          "roi": {
+            "Left": 0,
+            "Top": 29,
+            "Right": 1790,
+            "Bottom": 1330,
+            "Width": 1790,
+            "Height": 1301,
+            "IsEmpty": false
+          },
+          "sourceDpi": 143.9926,
+          "sourceSha256": "96C5829C01811CAFAE8C3DC0F3BE052AB646D976064A8C22D5C0A7AAF53C94A9",
+          "composedRegionSha256": "96C5829C01811CAFAE8C3DC0F3BE052AB646D976064A8C22D5C0A7AAF53C94A9",
+          "differentPixels": 0
+        },
+        "navigator": {
+          "roi": {
+            "Left": 1810,
+            "Top": 0,
+            "Right": 2152,
+            "Bottom": 326,
+            "Width": 342,
+            "Height": 326,
+            "IsEmpty": false
+          },
+          "sourceDpi": 143.9926,
+          "sourceSha256": "D309531F62B87451F666A983FB0069C898F0A49CD0D61D4572FA4B9E9022D8F8",
+          "composedRegionSha256": "D309531F62B87451F666A983FB0069C898F0A49CD0D61D4572FA4B9E9022D8F8",
+          "differentPixels": 0
+        },
+        "numbers": {
+          "roi": {
+            "Left": 1810,
+            "Top": 365,
+            "Right": 1943,
+            "Bottom": 435,
+            "Width": 133,
+            "Height": 70,
+            "IsEmpty": false
+          },
+          "sourceDpi": 143.9926,
+          "sourceSha256": "B76DE9A129728F7F973B5D7DA635C0BFE6103A49C65C700A05A2B2DC064E0F82",
+          "composedRegionSha256": "B76DE9A129728F7F973B5D7DA635C0BFE6103A49C65C700A05A2B2DC064E0F82",
+          "differentPixels": 0
+        },
+        "note": "Coarse navigation and numeric ROIs overlap, so workspace is the clean invariant; overlap can intentionally overwrite crop pixels."
+      }
+    },
+    {
+      "name": "original_complete_frame",
+      "elapsedMs": 2376.042,
+      "result": {
+        "success": false,
+        "stage": 7,
+        "status": 105,
+        "message": "navigator canvas aspect mismatch without unique supported edge",
+        "evidence": "NavigatorCanvasAmbiguous",
+        "workspace": {
+          "Success": true,
+          "Status": 0,
+          "StatusName": "Ok",
+          "Message": "ok",
+          "SourceCaptureId": "probe-original",
+          "SourceRevision": "workspace-border-shared-v2",
+          "RectCapturePx": {
+            "Left": 4,
+            "Top": 38,
+            "Right": 1769,
+            "Bottom": 1320,
+            "Width": 1765,
+            "Height": 1282,
+            "IsEmpty": false
+          },
+          "RectScreenPhysicalPx": {
+            "Left": 4,
+            "Top": 38,
+            "Right": 1769,
+            "Bottom": 1320,
+            "Width": 1765,
+            "Height": 1282,
+            "IsEmpty": false
+          },
+          "EvidenceGrade": 3,
+          "Confidence": 1,
+          "Background": {
+            "CenterLabL": 16.589066,
+            "CenterLabA": 0,
+            "CenterLabB": 0,
+            "StrongDeltaE": 3.5,
+            "WeakDeltaE": 6,
+            "Confidence": 1,
+            "SourceCaptureId": "probe-original",
+            "SourceRevision": "workspace-border-shared-v2"
+          },
+          "SourceBackend": 0
+        },
+        "thumbnail": {
+          "Success": true,
+          "Status": 0,
+          "StatusName": "Ok",
+          "Message": "ok-cii-background-components",
+          "SourceCaptureId": "probe-original",
+          "SourceRevision": "sct-cii-v4-orientation",
+          "RectCapturePx": {
+            "Left": 1810,
+            "Top": 31,
+            "Right": 2132,
+            "Bottom": 325,
+            "Width": 322,
+            "Height": 294,
+            "IsEmpty": false
+          },
+          "RectScreenPhysicalPx": {
+            "Left": 1810,
+            "Top": 31,
+            "Right": 2132,
+            "Bottom": 325,
+            "Width": 322,
+            "Height": 294,
+            "IsEmpty": false
+          },
+          "EvidenceGrade": 4,
+          "Confidence": 1,
+          "Background": {
+            "CenterLabL": 16.589066,
+            "CenterLabA": 0,
+            "CenterLabB": 0,
+            "StrongDeltaE": 3.5,
+            "WeakDeltaE": 6,
+            "Confidence": 1,
+            "SourceCaptureId": "probe-original",
+            "SourceRevision": "sct-cii-v4-orientation"
+          },
+          "SourceBackend": 0
+        },
+        "numbers": {
+          "ScalePercent": 16.8,
+          "RotationDegrees": 0,
+          "ScaleConfidence": 0.85,
+          "RotationConfidence": 0.85,
+          "ScaleRawText": "16.8",
+          "RotationRawText": "0.0",
+          "ScaleDigitsCapture": {
+            "Left": 1888,
+            "Top": 367,
+            "Right": 1943,
+            "Bottom": 397,
+            "Width": 55,
+            "Height": 30,
+            "IsEmpty": false
+          },
+          "RotationDigitsCapture": {
+            "Left": 1822,
+            "Top": 403,
+            "Right": 1876,
+            "Bottom": 433,
+            "Width": 54,
+            "Height": 30,
+            "IsEmpty": false
+          },
+          "SourceCaptureId": "probe-original",
+          "CapturedAt": "2026-10-01T09:02:46.9948233Z"
+        }
+      }
+    },
+    {
+      "name": "diagnostic_native_same_frozen_roi_image_coverage",
+      "elapsedMs": 204.6706,
+      "result": {
+        "manualFrozenThumbnail": [
+          1810,
+          30,
+          342,
+          332
+        ],
+        "workspace": {
+          "Status": 0,
+          "BoundsCapture": {
+            "Left": 812,
+            "Top": 275,
+            "Right": 1647,
+            "Bottom": 1320,
+            "Width": 835,
+            "Height": 1045,
+            "IsEmpty": false
+          },
+          "BoundsScreen": {
+            "Left": 812,
+            "Top": 275,
+            "Right": 1647,
+            "Bottom": 1320,
+            "Width": 835,
+            "Height": 1045,
+            "IsEmpty": false
+          },
+          "AspectRatio": 0.79904306,
+          "Confidence": 0.8375,
+          "VisibleEdgesMask": 7,
+          "BoundarySupport": [
+            1,
+            1,
+            1,
+            0
+          ],
+          "FourSidesComplete": false,
+          "HasAxisAlignedBoundary": false,
+          "Ambiguous": false,
+          "AmbiguityReason": ""
+        },
+        "navigator": {
+          "Status": 0,
+          "BoundsCapture": {
+            "Left": 1864,
+            "Top": 30,
+            "Right": 2099,
+            "Bottom": 362,
+            "Width": 235,
+            "Height": 332,
+            "IsEmpty": false
+          },
+          "BoundsScreen": {
+            "Left": 1864,
+            "Top": 30,
+            "Right": 2099,
+            "Bottom": 362,
+            "Width": 235,
+            "Height": 332,
+            "IsEmpty": false
+          },
+          "AspectRatio": 0.7078313,
+          "Confidence": 0.35,
+          "VisibleEdgesMask": 0,
+          "BoundarySupport": [
+            0.111445785,
+            0,
+            0.111445785,
+            0
+          ],
+          "FourSidesComplete": false,
+          "HasAxisAlignedBoundary": false,
+          "Ambiguous": false,
+          "AmbiguityReason": ""
+        },
+        "relation": {
+          "WorkspaceRoi": {
+            "Left": 4,
+            "Top": 38,
+            "Right": 1769,
+            "Bottom": 1320
+          },
+          "FullCanvasModelWorkspaceLocal": {
+            "Left": 808,
+            "Top": 237,
+            "Right": 1643,
+            "Bottom": 1418
+          },
+          "VisibleCanvasBoundsWorkspaceLocal": {
+            "Left": 808,
+            "Top": 237,
+            "Right": 1643,
+            "Bottom": 1282
+          },
+          "VisibleCanvasBoundsScreen": {
+            "Left": 812,
+            "Top": 275,
+            "Right": 1647,
+            "Bottom": 1320
+          },
+          "CanvasAxisXWorkspaceLocal": {
+            "X": 1,
+            "Y": 0
+          },
+          "CanvasAxisYWorkspaceLocal": {
+            "X": 0,
+            "Y": 1
+          },
+          "CanvasEdgesInWorkspace": 7,
+          "FullCanvasEdgeEvidence": 7,
+          "VisibleCanvasEdgeEvidence": 7,
+          "OccludedCanvasEdges": 8,
+          "CanvasCropSides": 8,
+          "CanvasAspectRatio": 0.70709807,
+          "CanvasPixelWidth": 4961,
+          "CanvasPixelHeight": 7016,
+          "WorkspaceWidth": 1765,
+          "WorkspaceHeight": 1282,
+          "CanvasToWorkspaceScaleX": 0.16831283,
+          "CanvasToWorkspaceScaleY": 0.16831285,
+          "VisibleCanvasWorkspaceFractionX": 0.47308782,
+          "VisibleCanvasWorkspaceFractionY": 0.8151326,
+          "VisibleCanvasFractionX": 1,
+          "VisibleCanvasFractionY": 0.8849311,
+          "Confidence": 0.8375,
+          "Ambiguous": 0,
+          "AmbiguityReason": "",
+          "SourceCaptureId": "probe-direct-full",
+          "SourceRevision": "sct-embedded-wb"
+        },
+        "full": {
+          "Status": 111,
+          "OriginTopLeftDisplayed": {
+            "X": 0,
+            "Y": 0
+          },
+          "AxisXDisplayed": {
+            "X": 0,
+            "Y": 0
+          },
+          "AxisYDisplayed": {
+            "X": 0,
+            "Y": 0
+          },
+          "Width": 0,
+          "Height": 0,
+          "Corner0": {
+            "X": 0,
+            "Y": 0
+          },
+          "Corner1": {
+            "X": 0,
+            "Y": 0
+          },
+          "Corner2": {
+            "X": 0,
+            "Y": 0
+          },
+          "Corner3": {
+            "X": 0,
+            "Y": 0
+          },
+          "VisibleEdgeCount": 0,
+          "CompletionStrategy": 0,
+          "Confidence": 0,
+          "Message": "0.2 independent side recovery conflicts with workspace contact",
+          "ConfirmedCompleteEdgeCount": 0,
+          "CompleteEdge0": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "CompleteEdge1": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "CompleteEdge2": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "CompleteEdge3": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "ObservedRedEdgeCount": 0,
+          "ObservedRedEdge0": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge1": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge2": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge3": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge4": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge5": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge6": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge7": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          }
+        },
+        "thumbnailOnly": {
+          "Status": 111,
+          "OriginTopLeftDisplayed": {
+            "X": 0,
+            "Y": 0
+          },
+          "AxisXDisplayed": {
+            "X": 0,
+            "Y": 0
+          },
+          "AxisYDisplayed": {
+            "X": 0,
+            "Y": 0
+          },
+          "Width": 0,
+          "Height": 0,
+          "Corner0": {
+            "X": 0,
+            "Y": 0
+          },
+          "Corner1": {
+            "X": 0,
+            "Y": 0
+          },
+          "Corner2": {
+            "X": 0,
+            "Y": 0
+          },
+          "Corner3": {
+            "X": 0,
+            "Y": 0
+          },
+          "VisibleEdgeCount": 0,
+          "CompletionStrategy": 0,
+          "Confidence": 0,
+          "Message": "0.2 independent side recovery conflicts with workspace contact",
+          "ConfirmedCompleteEdgeCount": 0,
+          "CompleteEdge0": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "CompleteEdge1": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "CompleteEdge2": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "CompleteEdge3": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "ObservedRedEdgeCount": 0,
+          "ObservedRedEdge0": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge1": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge2": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge3": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge4": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge5": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge6": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge7": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          }
+        },
+        "extractedImplicit": {
+          "Status": 111,
+          "OriginTopLeftDisplayed": {
+            "X": 0,
+            "Y": 0
+          },
+          "AxisXDisplayed": {
+            "X": 0,
+            "Y": 0
+          },
+          "AxisYDisplayed": {
+            "X": 0,
+            "Y": 0
+          },
+          "Width": 0,
+          "Height": 0,
+          "Corner0": {
+            "X": 0,
+            "Y": 0
+          },
+          "Corner1": {
+            "X": 0,
+            "Y": 0
+          },
+          "Corner2": {
+            "X": 0,
+            "Y": 0
+          },
+          "Corner3": {
+            "X": 0,
+            "Y": 0
+          },
+          "VisibleEdgeCount": 0,
+          "CompletionStrategy": 0,
+          "Confidence": 0,
+          "Message": "0.2 independent side recovery conflicts with workspace contact",
+          "ConfirmedCompleteEdgeCount": 0,
+          "CompleteEdge0": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "CompleteEdge1": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "CompleteEdge2": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "CompleteEdge3": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "ObservedRedEdgeCount": 0,
+          "ObservedRedEdge0": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge1": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge2": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge3": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge4": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge5": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge6": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge7": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          }
+        },
+        "extractedFullEvidence": {
+          "Status": 111,
+          "OriginTopLeftDisplayed": {
+            "X": 0,
+            "Y": 0
+          },
+          "AxisXDisplayed": {
+            "X": 0,
+            "Y": 0
+          },
+          "AxisYDisplayed": {
+            "X": 0,
+            "Y": 0
+          },
+          "Width": 0,
+          "Height": 0,
+          "Corner0": {
+            "X": 0,
+            "Y": 0
+          },
+          "Corner1": {
+            "X": 0,
+            "Y": 0
+          },
+          "Corner2": {
+            "X": 0,
+            "Y": 0
+          },
+          "Corner3": {
+            "X": 0,
+            "Y": 0
+          },
+          "VisibleEdgeCount": 0,
+          "CompletionStrategy": 0,
+          "Confidence": 0,
+          "Message": "0.2 independent side recovery conflicts with workspace contact",
+          "ConfirmedCompleteEdgeCount": 0,
+          "CompleteEdge0": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "CompleteEdge1": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "CompleteEdge2": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "CompleteEdge3": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "Reserved": 0
+          },
+          "ObservedRedEdgeCount": 0,
+          "ObservedRedEdge0": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge1": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge2": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge3": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge4": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge5": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge6": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          },
+          "ObservedRedEdge7": {
+            "P0Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "P1Capture": {
+              "X": 0,
+              "Y": 0
+            },
+            "WorkspaceEdge": 0,
+            "IsComplete": 0
+          }
+        },
+        "note": "Full endpoints are attachment-local; thumbnailOnly endpoints are thumbnail-local. Same native DLL, same frozen ROIs and relation, only image coverage differs."
+      }
+    },
+    {
+      "name": "extracted_initialize_complete_frame",
+      "elapsedMs": 1498.4562,
+      "result": {
+        "Success": false,
+        "CanvasWindowRoiScreenPx": null,
+        "NavigatorThumbnailRoiScreenPx": null,
+        "ScreenCoordinateOriginScreenPx": null,
+        "CanvasOriginScreenPx": null,
+        "OcrScalePercent": null,
+        "OcrRotationDegrees": null,
+        "Snapshot": null,
+        "FailedStage": 7,
+        "Status": 105,
+        "Message": "navigator canvas aspect mismatch without unique supported edge",
+        "PipelineState": null
+      }
+    },
+    {
+      "name": "extracted_initialize_three_coarse_crops",
+      "elapsedMs": 1132.0638,
+      "result": {
+        "Success": false,
+        "CanvasWindowRoiScreenPx": null,
+        "NavigatorThumbnailRoiScreenPx": null,
+        "ScreenCoordinateOriginScreenPx": null,
+        "CanvasOriginScreenPx": null,
+        "OcrScalePercent": null,
+        "OcrRotationDegrees": null,
+        "Snapshot": null,
+        "FailedStage": 7,
+        "Status": 105,
+        "Message": "navigator canvas aspect mismatch without unique supported edge",
+        "PipelineState": null
+      }
+    }
+  ]
+}

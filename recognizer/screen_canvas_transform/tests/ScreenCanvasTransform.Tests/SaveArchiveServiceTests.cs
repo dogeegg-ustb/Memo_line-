@@ -12,6 +12,7 @@ public sealed class SaveArchiveServiceTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly SaveArchiveService _service;
+    private readonly List<CaptureSession> _captures = [];
 
     public SaveArchiveServiceTests()
     {
@@ -22,6 +23,7 @@ public sealed class SaveArchiveServiceTests : IDisposable
 
     public void Dispose()
     {
+        foreach (var capture in _captures) capture.Dispose();
         try
         {
             if (Directory.Exists(_tempDir))
@@ -147,10 +149,15 @@ public sealed class SaveArchiveServiceTests : IDisposable
         IntRect navigator = new(920, 100, 1100, 700);
         IntRect thumb = new(940, 120, 1080, 260);
         var layout = NavigatorOcrService.LayoutFromUserRegion(new IntRect(940, 280, 1040, 400));
+        string captureId = Guid.NewGuid().ToString("N");
+        var frame = new System.Drawing.Bitmap(1200, 800, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var capture = new CaptureSession(captureId, frame, new IntRect(0, 0, 1200, 800), 96, 96);
+        _captures.Add(capture);
 
         return new InitSuccessBundle
         {
-            InitCaptureId = Guid.NewGuid().ToString("N"),
+            InitCaptureId = captureId,
+            CaptureSession = capture,
             NavigatorPanelScreenAtInit = navigator,
             Result = new PipelineResult
             {

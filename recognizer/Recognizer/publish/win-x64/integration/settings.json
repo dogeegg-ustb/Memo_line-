@@ -1,0 +1,71 @@
+{
+  "flashBorders": true,
+  "analysisConcurrency": 3,
+  "interactionCaptureIntervalMs": 150,
+  "settleCaptureMs": 30,
+  "saveSettleMs": 0,
+  "autoHotkeyPath": "",
+  "clipPath": "D:/感官解冻原画及参考/插画5.clip",
+  "captureBudgetMs": 100,
+  "navigatorOcrSelection": {
+    "layout": {
+      "clientRect": [
+        0,
+        0,
+        2560,
+        1527
+      ],
+      "regions": {
+        "笔刷属性": [
+          65,
+          700,
+          345,
+          478
+        ],
+        "画布视口": [
+          410,
+          72,
+          1783,
+          1387
+        ],
+        "导航器": [
+          2214,
+          102,
+          346,
+          448
+        ],
+        "图层": [
+          2214,
+          789,
+          346,
+          738
+        ],
+        "工具组": [
+          65,
+          102,
+          345,
+          598
+        ],
+        "工具栏": [
+          0,
+          72,
+          65,
+          1455
+        ],
+        "色彩": [
+          65,
+          1178,
+          345,
+          349
+        ]
+      },
+      "dpi": 144
+    },
+    "roi": [
+      2222,
+      476,
+      125,
+      69
+    ]
+  }
+}

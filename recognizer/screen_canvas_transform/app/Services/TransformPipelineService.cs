@@ -397,7 +397,8 @@ public sealed class TransformPipelineService
                 $"[ViewportRaw] status={viewport.Status} strategy={viewport.CompletionStrategy} " +
                 $"message={viewport.Message ?? ""} " +
                 $"canvasCapture={navCanvasCapture} workspace={workspaceRoiScreen} " +
-                $"visibleLocal={wsRelation.VisibleCanvasBoundsWorkspaceLocal} " +
+                $"visibleLocal={wsRelation.VisibleCanvasBoundsWorkspaceLocal.ToIntRect()} " +
+                $"fullLocal={wsRelation.FullCanvasModelWorkspaceLocal.ToIntRect()} relationConf={wsRelation.Confidence:F2} " +
                 $"crop=0x{wsRelation.CanvasCropSides:X} " +
                 $"fraction=({wsRelation.VisibleCanvasWorkspaceFractionX:F4},{wsRelation.VisibleCanvasWorkspaceFractionY:F4}) " +
                 $"origin=({viewport.OriginTopLeftDisplayed.X:F1},{viewport.OriginTopLeftDisplayed.Y:F1}) " +

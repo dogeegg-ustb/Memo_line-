@@ -1,0 +1,10 @@
+{
+  "flashBorders": true,
+  "analysisConcurrency": 2,
+  "interactionCaptureIntervalMs": 150,
+  "settleCaptureMs": 30,
+  "saveSettleMs": 0,
+  "autoHotkeyPath": "",
+  "clipPath": "",
+  "captureBudgetMs": 100
+}

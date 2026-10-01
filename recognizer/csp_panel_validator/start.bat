@@ -56,7 +56,14 @@ echo Installing required packages from PyPI. This is only needed when packages a
 if errorlevel 1 goto dependency_error
 
 :run_application
+if /i "%~1"=="color-reader" goto run_color_reader
 ".venv\Scripts\python.exe" -X utf8 -m csp_panel_validator.main
+set "APP_EXIT=%ERRORLEVEL%"
+if not "%APP_EXIT%"=="0" pause
+exit /b %APP_EXIT%
+
+:run_color_reader
+".venv\Scripts\python.exe" -X utf8 -m csp_panel_validator.color_reader
 set "APP_EXIT=%ERRORLEVEL%"
 if not "%APP_EXIT%"=="0" pause
 exit /b %APP_EXIT%

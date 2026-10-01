@@ -104,7 +104,7 @@ $testObjs = @(
   (Join-Path $Build "geometry.obj"),
   (Join-Path $Build "canvas_observe.obj")
 )
-foreach ($testName in @("contract_tests", "rotation_regression_tests", "workspace_regression_tests", "navigator_thumbnail_regression_tests")) {
+foreach ($testName in @("contract_tests", "rotation_regression_tests", "workspace_regression_tests", "navigator_thumbnail_regression_tests", "viewport_robustness_tests")) {
   $testSrc = Join-Path $Native "tests\$testName.cpp"
   & cl.exe @common /c $testSrc "/Fo$Build\$testName.obj"
   if ($LASTEXITCODE -ne 0) { throw "$testName compile failed" }

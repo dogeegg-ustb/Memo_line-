@@ -55,7 +55,10 @@ internal static class Program
                     highlight.HasBounds ? null : cx - cropBounds.Left);
                 using Bitmap? detectedText = textPresence.HasText ? CropDetectedText(region, textPresence) : null;
                 string recognized = detectedText is not null ? ocr.Read(detectedText).Text : "";
-                string? matchLabel = textPresence.HasText ? stringCatalog.Match("chinese_sc", recognized).Label : null;
+                MatchResult textMatch = textPresence.HasText
+                    ? stringCatalog.Match("chinese_sc", recognized)
+                    : new MatchResult(null, 0, "未检测到文字区域");
+                string? matchLabel = textMatch.Label;
 
                 IconMatchResult iconMatch = textPresence.HasText ? IconMatchResult.NoMatch :
                     IconMatcher.Match(iconCatalog, image, after, cx, cy, h2d, "chinese_sc");
@@ -67,11 +70,13 @@ internal static class Program
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(testCropPath)!);
                     using var annotated = (Bitmap)image.Clone();
-                    Rectangle? box = h2d.Has2DBounds ? h2d.Bounds : iconRect;
+                    Rectangle? box = GetActionBounds(image, iconMatch, textMatch,
+                        textPresence, cropBounds, h2d, cx, cy);
                     if (box is not null)
                     {
                         using var g = Graphics.FromImage(annotated);
-                        Color boxColor = iconMatch.IsMatched
+                        bool recognizedTarget = iconMatch.IsMatched || iconMatch.IsCandidate || textMatch.Label is not null;
+                        Color boxColor = recognizedTarget
                             ? Color.FromArgb(220, 60, 180, 255)
                             : Color.FromArgb(200, 255, 180, 60);
                         using var pen = new Pen(boxColor, 1.5f);
@@ -381,6 +386,25 @@ internal static class Program
         bounds.Intersect(new Rectangle(0, 0, source.Width, source.Height));
         return source.Clone(bounds, PixelFormat.Format32bppArgb);
     }
+
+    internal static Rectangle? GetActionBounds(Bitmap image, IconMatchResult? iconMatch,
+        MatchResult textMatch, TextPresence textPresence, Rectangle textCropBounds,
+        Highlight2DEvidence highlight, int clickX, int clickY)
+    {
+        if (iconMatch is not null && (iconMatch.IsMatched || iconMatch.IsCandidate))
+            return iconMatch.ButtonRect ?? IconMatcher.DetermineButtonRegion(image, highlight, clickX, clickY);
+
+        if (textMatch.Label is not null && textPresence.Bounds is Rectangle textBounds)
+        {
+            textBounds.Offset(textCropBounds.Location);
+            textBounds.Inflate(2, 2);
+            textBounds.Intersect(new Rectangle(0, 0, image.Width, image.Height));
+            return textBounds;
+        }
+
+        if (highlight.Has2DBounds) return highlight.Bounds;
+        return IconMatcher.DetermineButtonRegion(image, highlight, clickX, clickY);
+    }
 }
 
 internal sealed class EventContext : ApplicationContext
@@ -655,39 +679,21 @@ internal sealed class EventContext : ApplicationContext
                         entry.X - entry.Left, entry.Y - entry.Top, highlight2d, entry.Language);
                 }
 
-                // 生成匹配截屏：以完整 before 截图为底，用彩色矩形标注实际匹配的子区域
-                // 核心依据：高光在哪为最高优先级标注依据！
-                Rectangle? annotateRect = null;
-                if (highlight2d.Has2DBounds)
-                {
-                    annotateRect = highlight2d.Bounds;
-                }
-                else if (iconMatch is not null && (iconMatch.IsMatched || iconMatch.IsCandidate))
-                {
-                    annotateRect = iconMatch.ButtonRect ?? IconMatcher.DetermineButtonRegion(before, highlight2d, entry.X - entry.Left, entry.Y - entry.Top);
-                }
-                else if (match.Label is not null && highlight.HasSelectedSpan)
-                {
-                    int left = Math.Max(0, highlight.Left!.Value - 2);
-                    int right = Math.Min(before.Width, highlight.Right!.Value + 2);
-                    int top = highlight.Top ?? 0;
-                    int bottom = highlight.Bottom ?? before.Height;
-                    annotateRect = new Rectangle(left, top, right - left, bottom - top);
-                }
-                else
-                {
-                    annotateRect = IconMatcher.DetermineButtonRegion(before, highlight2d, entry.X - entry.Left, entry.Y - entry.Top);
-                }
+                // Frame the recognized item itself; use the highlight region when no
+                // semantic result is available.
+                Rectangle? annotateRect = Program.GetActionBounds(before, iconMatch,
+                    match, textPresence, cropBounds, highlight2d,
+                    entry.X - entry.Left, entry.Y - entry.Top);
 
                 matchCrop = (Bitmap)before.Clone();
                 if (annotateRect is not null)
                 {
                     using var g = Graphics.FromImage(matchCrop);
-                    Color boxColor = iconMatch is not null && (iconMatch.IsMatched || iconMatch.IsCandidate)
-                        ? Color.FromArgb(200, 60, 180, 255)   // 图标匹配：蓝色框
-                        : match.Label is not null
-                            ? Color.FromArgb(200, 80, 230, 120) // 文字匹配：绿色框
-                            : Color.FromArgb(200, 255, 180, 60); // 未识别：橙色框
+                    bool recognizedTarget = iconMatch is not null && (iconMatch.IsMatched || iconMatch.IsCandidate)
+                        || match.Label is not null;
+                    Color boxColor = recognizedTarget
+                        ? Color.FromArgb(200, 60, 180, 255)   // 已识别目标：蓝色框
+                        : Color.FromArgb(200, 255, 180, 60); // 未识别：橙色框
                     using var pen = new Pen(boxColor, 1.5f);
                     var r = annotateRect.Value;
                     r.Intersect(new Rectangle(0, 0, matchCrop.Width, matchCrop.Height));

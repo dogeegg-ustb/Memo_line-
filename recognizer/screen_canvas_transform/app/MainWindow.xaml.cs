@@ -763,7 +763,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Human-readable viewport completion path: 0.0 / 0.1 / 0.2 / 1.0 / 2.0 / 2.1 / 3.0 / 4.0.
+    /// Human-readable viewport completion path: 0.0 / 0.1 / 0.2 / 0.3 / 1.0 / 2.0 / 2.1 / 3.0 / 4.0.
     /// </summary>
     private static string FormatViewportCompletionPath(TransformSnapshotDto snapshot)
     {
@@ -775,6 +775,7 @@ public partial class MainWindow : Window
             0 => "0.0",
             1 => "0.1",
             2 => "0.2",
+            3 => "0.3",
             10 => "1.0",
             20 => "2.0",
             21 => "2.1",

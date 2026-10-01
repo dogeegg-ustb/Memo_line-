@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <CoreSnapshot Condition="'$(CoreSnapshot)' == ''">false</CoreSnapshot>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../screen_canvas_transform/app/ScreenCanvasTransform.csproj" Aliases="original" />
+    <Reference Condition="'$(CoreSnapshot)' != 'true'" Include="ScreenCanvasTransform.Core">
+      <HintPath>../../../recognizer_core/screen_canvas_transform/bin/Release/net8.0-windows10.0.19041.0/ScreenCanvasTransform.Core.dll</HintPath>
+      <Aliases>extracted</Aliases>
+    </Reference>
+    <Reference Condition="'$(CoreSnapshot)' == 'true'" Include="ScreenCanvasTransform.Core">
+      <HintPath>fixtures/ScreenCanvasTransform.Core.dll</HintPath>
+      <Aliases>extracted</Aliases>
+    </Reference>
+    <None Include="../../../screen_canvas_transform/app/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64/models/v5/*" CopyToOutputDirectory="PreserveNewest" Link="models/v5/%(Filename)%(Extension)" />
+    <None Condition="'$(CoreSnapshot)' == 'true'" Include="fixtures/ScreenCanvasNative.dll" CopyToOutputDirectory="Always" Link="ScreenCanvasNative.dll" />
+    <None Condition="'$(CoreSnapshot)' != 'true'" Include="../../../recognizer_core/screen_canvas_transform/ScreenCanvasNative.dll" CopyToOutputDirectory="Always" Link="ScreenCanvasNative.dll" />
+  </ItemGroup>
+  <Target Name="CopySelectedCoreBinary" AfterTargets="Build">
+    <Copy Condition="'$(CoreSnapshot)' == 'true'" SourceFiles="fixtures/ScreenCanvasTransform.Core.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="false" />
+    <Copy Condition="'$(CoreSnapshot)' != 'true'" SourceFiles="../../../recognizer_core/screen_canvas_transform/bin/Release/net8.0-windows10.0.19041.0/ScreenCanvasTransform.Core.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="false" />
+  </Target>
+</Project>
