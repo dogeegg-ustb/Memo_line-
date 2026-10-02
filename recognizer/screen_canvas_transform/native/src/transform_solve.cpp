@@ -14,11 +14,16 @@ constexpr double kRotationAxisToleranceDeg = 5.0;
 // Must match TransformPipelineService's direct-workspace aspect gate.
 constexpr double kDirectAspectRelativeTolerance = 0.04;
 
-// Navigator-path anchoring to paper edges observed in the workspace.
-constexpr double kAnchorAxisSinMax = 0.0087;  // within ~0.5 degrees of a screen axis
-constexpr double kAnchorAnisotropyMax = kDirectAspectRelativeTolerance;
-constexpr double kAnchorZoomRelativeMax = 0.10;
-constexpr float kAnchorEdgeSupportMin = 0.90f;
+// Navigator-route refinement by the scale reading and workspace paper edges.
+constexpr double kRefineAxisSinMax = 0.0087;  // within ~0.5 degrees of a screen axis
+constexpr double kNavigatorAnisotropyMax = kDirectAspectRelativeTolerance;
+// Red-frame zoom error stays within ~7% per axis; a misread digit or decimal
+// point does not.
+constexpr double kNavigatorZoomRelativeMax = 0.10;
+constexpr double kReadingPaperRelativeMax = 0.03;
+constexpr double kReadingDisplayStepPercent = 0.1;  // CSP shows one decimal
+constexpr double kPaperSizeSlackPx = 2.0;
+constexpr float kPaperEdgeSupportMin = 0.90f;
 
 bool DirectCanvasAspectMatches(const CanvasObservation& canvas, int canvas_pixel_width,
                                int canvas_pixel_height) {
@@ -135,147 +140,192 @@ MarkerGeometry BuildMarkerGeometry(const Affine2D& canvas_to_screen, int canvas_
 
 // The Navigator route measures the paper and red frame on a thumbnail several
 // times smaller than the workspace: one thumbnail pixel of paper-bound or red
-// line error becomes a visible offset of many screen pixels. A paper edge the
-// workspace observed directly is a screen-pixel measurement of the same
-// canvas boundary. Each such edge replaces the Navigator translation along
-// its screen axis; two opposite edges also replace the zoom. CSP zoom is
-// isotropic, so the remaining Navigator zoom is the mean of both axes.
-// The edge's canvas boundary follows from which side the paper lies on and
-// the Navigator's axis direction, never from the Navigator translation, so a
-// stale or misplaced red frame is corrected rather than trusted. The
-// observation must be a clean paper rectangle clipped by the workspace whose
-// size agrees with the Navigator zoom; anything else (artwork on an edge, a
-// floating panel as largest foreground) leaves the Navigator matrix alone.
-// Only axis-aligned displays qualify: a rotated paper has no straight
-// bounding-box sides. Returns the workspace sides (L/T/R/B bits) used; 0
-// leaves t_w_to_c untouched.
-int AnchorNavigatorPathToWorkspaceEdges(const SolveInput& in, Affine2D& t_w_to_c) {
-  const auto& obs = in.workspace_canvas;
-  const auto& ws = in.workspace_roi_screen;
-  if (obs.ambiguous || !obs.bounds_screen.valid() || !ws.valid()) return 0;
+// line error becomes a visible offset of many screen pixels. Two independent
+// measurements are far finer and replace parts of the red-frame matrix:
+//
+// Zoom. The scale reading is CSP's own zoom, exact up to its displayed
+// decimal (CSP 100% = one canvas px per physical screen px), and isotropic.
+// It replaces the red-frame zoom unless the two disagree beyond the frame's
+// error, which exposes a misread. Two opposite paper edges observed in the
+// workspace measure the displayed size directly and take precedence.
+//
+// Translation. A paper edge the workspace observed directly fixes the
+// translation along its screen axis. Its canvas boundary follows from which
+// side the paper lies on and the Navigator's axis direction, never from the
+// Navigator translation, so a stale or misplaced red frame is corrected. An
+// axis without such an edge keeps the red-frame mapping where it was
+// measured: on its observed red sides, otherwise at the workspace centre.
+//
+// Paper edges qualify only on an axis-aligned display (a rotated paper has no
+// straight bounding-box sides) and only as a clean paper rectangle clipped by
+// the workspace whose size agrees with the reference zoom; anything else
+// (artwork on an edge, a floating panel as largest foreground) is ignored.
+// t_w_to_c is left untouched when neither measurement applies.
+struct NavigatorRefinement {
+  int anchor_mask = 0;  // workspace paper sides (L/T/R/B bits) used
+  MatrixZoomSource zoom_source = MatrixZoomSource::NavigatorFrame;
+};
 
+NavigatorRefinement RefineNavigatorMatrix(const SolveInput& in, float scale_percent,
+                                          const wb::IntRect& nav_canvas, Affine2D& t_w_to_c) {
+  NavigatorRefinement out;
+  const auto& ws = in.workspace_roi_screen;
+  const auto& obs = in.workspace_canvas;
   bool ok = false;
   const Affine2D c2w = InvertAffine(t_w_to_c, &ok);
-  if (!ok) return 0;
-  // Workspace px per normalized unit along canvas u and v.
-  const Vec2 col_u{c2w.m[0], c2w.m[3]};
-  const Vec2 col_v{c2w.m[1], c2w.m[4]};
-  const double len_u = std::hypot(col_u.x, col_u.y);
-  const double len_v = std::hypot(col_v.x, col_v.y);
-  if (!(len_u > 1e-6) || !(len_v > 1e-6)) return 0;
-  auto screen_axis_of = [](const Vec2& c, double len) {
-    if (std::abs(c.y) <= kAnchorAxisSinMax * len) return 0;
-    if (std::abs(c.x) <= kAnchorAxisSinMax * len) return 1;
+  if (!ok || !ws.valid() || !nav_canvas.valid()) return out;
+
+  // Workspace px per normalized unit along canvas u (k=0) and v (k=1).
+  const Vec2 col[2] = {{c2w.m[0], c2w.m[3]}, {c2w.m[1], c2w.m[4]}};
+  const double canvas_px[2] = {double(in.canvas_pixel_width), double(in.canvas_pixel_height)};
+  double len[2], zoom[2];
+  for (int k = 0; k < 2; ++k) {
+    len[k] = std::hypot(col[k].x, col[k].y);
+    if (!(len[k] > 1e-6)) return out;
+    zoom[k] = len[k] / canvas_px[k];
+  }
+  const double navigator_zoom = std::sqrt(zoom[0] * zoom[1]);
+  const double reading = scale_percent / 100.0;
+  const bool reading_ok = std::isfinite(reading) && reading > 0 &&
+                          std::abs(zoom[0] / reading - 1.0) <= kNavigatorZoomRelativeMax &&
+                          std::abs(zoom[1] / reading - 1.0) <= kNavigatorZoomRelativeMax;
+  if (!reading_ok && std::abs(zoom[0] / zoom[1] - 1.0) > kNavigatorAnisotropyMax) return out;
+  const double reference_zoom = reading_ok ? reading : navigator_zoom;
+
+  auto screen_axis_of = [](const Vec2& c, double l) {
+    if (std::abs(c.y) <= kRefineAxisSinMax * l) return 0;
+    if (std::abs(c.x) <= kRefineAxisSinMax * l) return 1;
     return -1;
   };
-  const int u_axis = screen_axis_of(col_u, len_u);
-  const int v_axis = screen_axis_of(col_v, len_v);
-  if (u_axis < 0 || v_axis < 0 || u_axis == v_axis) return 0;
-  const double zoom_u = len_u / in.canvas_pixel_width;
-  const double zoom_v = len_v / in.canvas_pixel_height;
-  if (std::abs(zoom_u / zoom_v - 1.0) > kAnchorAnisotropyMax) return 0;
+  const int axis_of[2] = {screen_axis_of(col[0], len[0]), screen_axis_of(col[1], len[1])};
+  const bool axis_aligned = axis_of[0] >= 0 && axis_of[1] >= 0 && axis_of[0] != axis_of[1];
+  // Canvas axis driving screen axis a on an axis-aligned display.
+  auto canvas_axis_on = [&](int a) { return axis_of[0] == a ? 0 : 1; };
+  auto component = [](const Vec2& p, int a) { return a == 0 ? p.x : p.y; };
 
-  // One screen axis is driven by exactly one canvas coordinate:
-  // w = offset + scale * coordinate.
-  struct ScreenAxis {
-    double scale = 0;
-    double offset = 0;
-    double canvas_px = 0;
-    double length = 0;
-    double edge[2] = {0, 0};
-    double boundary[2] = {0, 0};
-    int edges = 0;
-    int red_sides = 0;  // 1 = start side observed in red, 2 = end side
-  };
-  ScreenAxis axes[2];
-  for (int a = 0; a < 2; ++a) {
-    const bool by_u = (u_axis == a);
-    auto& ax = axes[a];
-    ax.scale = a == 0 ? (by_u ? col_u.x : col_v.x) : (by_u ? col_u.y : col_v.y);
-    ax.offset = a == 0 ? c2w.m[2] : c2w.m[5];
-    ax.canvas_px = by_u ? in.canvas_pixel_width : in.canvas_pixel_height;
-    ax.length = a == 0 ? ws.width() : ws.height();
-  }
-  for (int i = 0; i < in.viewport.observed_red_edge_export_count; ++i) {
-    switch (in.viewport.observed_red_edges[i].workspace_edge) {
-      case 1: axes[0].red_sides |= 1; break;
-      case 2: axes[1].red_sides |= 1; break;
-      case 4: axes[0].red_sides |= 2; break;
-      case 8: axes[1].red_sides |= 2; break;
-      default: break;
+  // Workspace paper edges per screen axis: position and canvas boundary (0/1).
+  double edge_pos[2][2] = {}, edge_boundary[2][2] = {};
+  int edge_count[2] = {0, 0};
+  if (axis_aligned && !obs.ambiguous && obs.bounds_screen.valid()) {
+    // Bounds are pixel edges in the direct-path convention: the first paper
+    // column is canvas coordinate 0 at its left edge.
+    const double position[4] = {double(obs.bounds_screen.left - ws.left),
+                                double(obs.bounds_screen.top - ws.top),
+                                double(obs.bounds_screen.right - ws.left),
+                                double(obs.bounds_screen.bottom - ws.top)};
+    const int cropped = in.workspace_canvas_relation.canvas_crop_sides;
+    bool paper = true;
+    int mask = 0;
+    for (int side = 0; side < 4 && paper; ++side) {
+      const int bit = 1 << side;
+      if (cropped & bit) continue;
+      // Every side is either a measured straight paper edge or clipped by the
+      // workspace. A side that is neither is no axis-aligned paper rectangle.
+      if (!(obs.visible_edges_mask & bit) || !(obs.boundary_support[side] >= kPaperEdgeSupportMin)) {
+        paper = false;
+        break;
+      }
+      const int a = side % 2;
+      // L/T have the paper after them, R/B before. Under a flipped axis (e.g.
+      // a 180-degree display) the paper-start side is canvas coordinate 1.
+      const bool forward = component(col[canvas_axis_on(a)], a) > 0;
+      edge_pos[a][edge_count[a]] = position[side];
+      edge_boundary[a][edge_count[a]] = (side < 2) == forward ? 0.0 : 1.0;
+      ++edge_count[a];
+      mask |= bit;
+    }
+    // The paper must have the size the reference zoom predicts: complete on an
+    // axis with both edges, at most that size where the workspace clips it.
+    const double tolerance =
+        reading_ok ? kReadingPaperRelativeMax + 0.5 * kReadingDisplayStepPercent / scale_percent
+                   : kNavigatorZoomRelativeMax;
+    for (int a = 0; a < 2 && paper; ++a) {
+      const double expected = reference_zoom * canvas_px[canvas_axis_on(a)];
+      const double visible = a == 0 ? obs.bounds_screen.width() : obs.bounds_screen.height();
+      paper = edge_count[a] == 2
+                  ? std::abs(visible - expected) <= tolerance * expected + kPaperSizeSlackPx
+                  : visible <= expected * (1.0 + tolerance) + kPaperSizeSlackPx;
+    }
+    if (paper) {
+      out.anchor_mask = mask;
+    } else {
+      edge_count[0] = edge_count[1] = 0;
     }
   }
 
-  // Bounds are pixel edges in the direct-path convention: the first paper
-  // column is canvas coordinate 0 at its left edge.
-  const double position[4] = {double(obs.bounds_screen.left - ws.left),
-                              double(obs.bounds_screen.top - ws.top),
-                              double(obs.bounds_screen.right - ws.left),
-                              double(obs.bounds_screen.bottom - ws.top)};
-  const int cropped = in.workspace_canvas_relation.canvas_crop_sides;
-  int used = 0;
-  for (int side = 0; side < 4; ++side) {
-    const int bit = 1 << side;
-    if (cropped & bit) continue;
-    // Every side is either a measured straight paper edge or clipped by the
-    // workspace. A side that is neither is no axis-aligned paper rectangle.
-    if (!(obs.visible_edges_mask & bit) || !(obs.boundary_support[side] >= kAnchorEdgeSupportMin))
-      return 0;
-    auto& ax = axes[side % 2];
-    // L/T have the paper after them, R/B before. Under a flipped axis (e.g.
-    // a 180-degree display) the paper-start side is canvas coordinate 1.
-    const bool paper_after = side < 2;
-    ax.edge[ax.edges] = position[side];
-    ax.boundary[ax.edges] = (paper_after == (ax.scale > 0)) ? 0.0 : 1.0;
-    ++ax.edges;
-    used |= bit;
-  }
-  if (!used) return 0;
-
-  const double navigator_zoom = std::sqrt(zoom_u * zoom_v);
-  double zoom = 0;
+  double new_zoom = 0;
   int measured = 0;
   for (int a = 0; a < 2; ++a) {
-    const auto& ax = axes[a];
-    const double paper_px = navigator_zoom * ax.canvas_px;
-    if (ax.edges == 2) {
-      const double axis_zoom = (ax.edge[1] - ax.edge[0]) / ax.canvas_px;
-      if (!(std::abs(axis_zoom / navigator_zoom - 1.0) <= kAnchorZoomRelativeMax)) return 0;
-      zoom += axis_zoom;
-      ++measured;
-    } else {
-      // A clipped axis shows at most the paper the Navigator zoom predicts.
-      const double visible = a == 0 ? obs.bounds_screen.width() : obs.bounds_screen.height();
-      if (!(visible <= paper_px * (1.0 + kAnchorZoomRelativeMax))) return 0;
-    }
+    if (edge_count[a] != 2) continue;
+    new_zoom += (edge_pos[a][1] - edge_pos[a][0]) / canvas_px[canvas_axis_on(a)];
+    ++measured;
   }
-  zoom = measured ? zoom / measured : navigator_zoom;
-  if (!std::isfinite(zoom) || !(zoom > 0)) return 0;
+  if (measured) {
+    new_zoom /= measured;
+    out.zoom_source = MatrixZoomSource::WorkspacePaperEdges;
+  } else if (reading_ok) {
+    new_zoom = reading;
+    out.zoom_source = MatrixZoomSource::ScaleReading;
+  } else {
+    new_zoom = navigator_zoom;
+  }
+  if (out.zoom_source == MatrixZoomSource::NavigatorFrame && !out.anchor_mask) return out;
+  if (!std::isfinite(new_zoom) || !(new_zoom > 0)) return {};
 
-  Affine2D anchored;
-  anchored.m = {0, 0, 0, 0, 0, 0};
-  for (int a = 0; a < 2; ++a) {
-    const auto& ax = axes[a];
-    const double scale = std::copysign(zoom * ax.canvas_px, ax.scale);
-    double offset = 0;
-    if (ax.edges > 0) {
-      for (int e = 0; e < ax.edges; ++e) offset += ax.edge[e] - scale * ax.boundary[e];
-      offset /= ax.edges;
-    } else {
-      // Keep the Navigator coordinate where it was measured: at an observed
-      // red side if only one is, otherwise at the workspace centre.
-      const double pivot = ax.red_sides == 1 ? 0.0 : ax.red_sides == 2 ? ax.length
-                                                                       : 0.5 * ax.length;
-      offset = pivot - scale * (pivot - ax.offset) / ax.scale;
+  // Linear part: Navigator axis directions (snapped when axis aligned), one zoom.
+  Affine2D refined;
+  refined.m = {0, 0, 0, 0, 0, 0};
+  for (int k = 0; k < 2; ++k) {
+    Vec2 dir{col[k].x / len[k], col[k].y / len[k]};
+    if (axis_aligned) {
+      dir = axis_of[k] == 0 ? Vec2{std::copysign(1.0, col[k].x), 0}
+                            : Vec2{0, std::copysign(1.0, col[k].y)};
     }
-    const bool by_u = (u_axis == a);
-    anchored.m[a * 3 + (by_u ? 0 : 1)] = scale;
-    anchored.m[a * 3 + 2] = offset;
+    refined.m[k] = dir.x * new_zoom * canvas_px[k];
+    refined.m[3 + k] = dir.y * new_zoom * canvas_px[k];
   }
-  const Affine2D t = InvertAffine(anchored, &ok);
-  if (!ok) return 0;
+  auto linear = [&](const Vec2& u) {
+    return Vec2{refined.m[0] * u.x + refined.m[1] * u.y, refined.m[3] * u.x + refined.m[4] * u.y};
+  };
+  auto nav_to_canvas = [&](const Vec2& p) {
+    return Vec2{(p.x - nav_canvas.left) / nav_canvas.width(),
+                (p.y - nav_canvas.top) / nav_canvas.height()};
+  };
+
+  for (int a = 0; a < 2; ++a) {
+    double sum = 0;
+    int n = 0;
+    for (int e = 0; e < edge_count[a]; ++e) {
+      Vec2 u{0, 0};
+      (canvas_axis_on(a) == 0 ? u.x : u.y) = edge_boundary[a][e];
+      sum += edge_pos[a][e] - component(linear(u), a);
+      ++n;
+    }
+    if (n == 0) {
+      // Each observed red side is a workspace side: vertical ones fix x,
+      // horizontal ones y. Keep the red-frame mapping at their midpoints.
+      for (int i = 0; i < in.viewport.observed_red_edge_export_count; ++i) {
+        const auto& red = in.viewport.observed_red_edges[i];
+        const Vec2 u0 = nav_to_canvas(red.p0), u1 = nav_to_canvas(red.p1);
+        const Vec2 w0 = c2w.Apply(u0), w1 = c2w.Apply(u1);
+        const double dx = std::abs(w1.x - w0.x), dy = std::abs(w1.y - w0.y);
+        if (std::max(dx, dy) < 1.0 || (a == 0) != (dx < dy)) continue;
+        const Vec2 um{0.5 * (u0.x + u1.x), 0.5 * (u0.y + u1.y)};
+        sum += component(c2w.Apply(um), a) - component(linear(um), a);
+        ++n;
+      }
+    }
+    if (n == 0) {
+      const Vec2 centre{0.5 * ws.width(), 0.5 * ws.height()};
+      sum = component(centre, a) - component(linear(t_w_to_c.Apply(centre)), a);
+      n = 1;
+    }
+    refined.m[a * 3 + 2] = sum / n;
+  }
+  const Affine2D t = InvertAffine(refined, &ok);
+  if (!ok) return {};
   t_w_to_c = t;
-  return used;
+  return out;
 }
 
 SolveResult FailSolve(Stage stage, FailStatus st, const char* msg, const SolveInput& in) {
@@ -495,7 +545,9 @@ SolveResult SolveTransform(const SolveInput& in) {
     // map screen +X/+Y into it. Applying another inverse rotation here cancels
     // the real rotation (and distorts a non-square normalized canvas).
     t_w_to_c = Multiply(t_d_to_u, t_w_to_d);
-    snap.workspace_edge_anchor_mask = AnchorNavigatorPathToWorkspaceEdges(in, t_w_to_c);
+    const auto refinement = RefineNavigatorMatrix(in, scale_percent, nc, t_w_to_c);
+    snap.workspace_edge_anchor_mask = refinement.anchor_mask;
+    snap.matrix_zoom_source = refinement.zoom_source;
 
     t_c_to_w = InvertAffine(t_w_to_c, &inv_ok);
     if (!inv_ok) {
@@ -519,7 +571,7 @@ SolveResult SolveTransform(const SolveInput& in) {
                      in);
   }
 
-  // Scale consistency diagnostic only — never applied to matrix.
+  // Published geometry zoom versus the reading; near zero once the reading set the zoom.
   {
     const double sx = std::hypot(snap.canvas_to_screen.m[0], snap.canvas_to_screen.m[3])
                       / in.canvas_pixel_width;

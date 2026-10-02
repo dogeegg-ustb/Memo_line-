@@ -314,56 +314,125 @@ void TestViewportNoRedPixelsIsEdgeFailureNotFrameFound() {
          "no red edge evidence → InsufficientViewportGeometry");
 }
 
-void TestScalePercentDoesNotChangeMatrix() {
-  sct::SolveInput base;
-  std::snprintf(base.capture_id, sizeof(base.capture_id), "test");
-  base.generation = 1;
-  base.canvas_pixel_width = 1000;
-  base.canvas_pixel_height = 1000;
-  base.workspace_roi_screen = {0, 0, 500, 400};
-  base.navigator_roi_screen = {600, 0, 900, 300};
-  base.navigator_thumbnail_roi_screen = {610, 40, 890, 260};
-  base.workspace_canvas.four_sides_complete = 0;
-  base.workspace_canvas.ambiguous = 1;
-  base.navigator_canvas.bounds_screen = {620, 50, 880, 250};
-  base.navigator_canvas.confidence = 0.9f;
-  base.viewport.origin_top_left_displayed = {650, 80};
-  base.viewport.axis_x_displayed = {200, 0};
-  base.viewport.axis_y_displayed = {0, 150};
-  base.viewport.width = 200;
-  base.viewport.height = 150;
-  base.viewport.confidence = 0.8f;
-  base.numbers.scale_percent = 100.f;
-  base.numbers.scale_confidence = 1.f;
-  base.numbers.rotation_confidence = 0.f;
-  base.injected_scale_percent = 100.f;
+// Navigator-route fixture: workspace 500x400, a square canvas whose Navigator
+// paper spans 260 thumbnail px, and a 200x160 red frame: 2.5 workspace px per
+// thumbnail px, so the red frame alone measures a 65% zoom on both axes.
+sct::SolveInput MakeScaleReadingInput(float scale_percent) {
+  sct::SolveInput in;
+  std::snprintf(in.capture_id, sizeof(in.capture_id), "test");
+  in.generation = 1;
+  in.canvas_pixel_width = 1000;
+  in.canvas_pixel_height = 1000;
+  in.workspace_roi_screen = {0, 0, 500, 400};
+  in.navigator_roi_screen = {600, 0, 900, 300};
+  in.navigator_thumbnail_roi_screen = {610, 40, 890, 320};
+  in.workspace_canvas.four_sides_complete = 0;
+  in.workspace_canvas.ambiguous = 1;
+  in.navigator_canvas.bounds_screen = {620, 50, 880, 310};
+  in.navigator_canvas.confidence = 0.9f;
+  in.viewport.origin_top_left_displayed = {650, 80};
+  in.viewport.axis_x_displayed = {200, 0};
+  in.viewport.axis_y_displayed = {0, 160};
+  in.viewport.width = 200;
+  in.viewport.height = 160;
+  in.viewport.confidence = 0.8f;
+  in.numbers.scale_percent = scale_percent;
+  in.numbers.scale_confidence = 1.f;
+  in.numbers.rotation_confidence = 0.f;
+  in.injected_scale_percent = scale_percent;
+  return in;
+}
 
-  auto r100 = sct::SolveTransform(base);
-  Expect(r100.status == sct::FailStatus::Ok, "solve 100% ok");
-
-  base.injected_scale_percent = 200.f;
-  base.numbers.scale_percent = 200.f;
-  auto r200 = sct::SolveTransform(base);
-  Expect(r200.status == sct::FailStatus::Ok, "solve 200% ok");
-
-  const auto& m100 = r100.snapshot.screen_to_canvas;
-  const auto& m200 = r200.snapshot.screen_to_canvas;
+bool SameMatrix(const sct::Affine2D& a, const sct::Affine2D& b, double tolerance = 1e-9) {
   for (int i = 0; i < 6; ++i) {
-    Expect(std::abs(m100.m[i] - m200.m[i]) < 1e-9, "ScreenToCanvas invariant to ScalePercent");
+    if (std::abs(a.m[i] - b.m[i]) > tolerance) return false;
   }
+  return true;
+}
 
-  Expect(r200.snapshot.marker.target_arm_display_px >
-             r100.snapshot.marker.target_arm_display_px,
+void TestScaleReadingSetsNavigatorZoom() {
+  const auto r65 = sct::SolveTransform(MakeScaleReadingInput(65.f));
+  const auto r66 = sct::SolveTransform(MakeScaleReadingInput(66.f));
+  Expect(r65.status == sct::FailStatus::Ok && r66.status == sct::FailStatus::Ok,
+         "scale reading solves");
+  if (r65.status != sct::FailStatus::Ok || r66.status != sct::FailStatus::Ok) return;
+
+  // The reading is CSP's own zoom: it replaces the red-frame measurement.
+  const auto& c2s = r66.snapshot.canvas_to_screen;
+  Expect(r66.snapshot.matrix_zoom_source == sct::MatrixZoomSource::ScaleReading,
+         "consistent reading sets the zoom");
+  Expect(std::abs(c2s.m[0] - 660.0) < 1e-9 && std::abs(c2s.m[4] - 660.0) < 1e-9 &&
+             std::abs(c2s.m[1]) < 1e-9 && std::abs(c2s.m[3]) < 1e-9,
+         "published zoom is exactly the reading on both axes");
+  Expect(std::abs(r66.snapshot.scale_geometry_estimate - 66.f) < 1e-3 &&
+             r66.snapshot.scale_consistency_error < 1e-4,
+         "geometry zoom diagnostic reports the reading");
+  // Without observed red sides the red frame is kept at the workspace centre.
+  const auto c65 = r65.snapshot.screen_to_canvas.Apply({250, 200});
+  const auto c66 = r66.snapshot.screen_to_canvas.Apply({250, 200});
+  Expect(std::hypot(c65.x - c66.x, c65.y - c66.y) < 1e-12,
+         "reading pivots on the workspace centre");
+
+  // A lost decimal point (650 for 65.0) contradicts the red frame by 10x.
+  const auto misread = sct::SolveTransform(MakeScaleReadingInput(650.f));
+  Expect(misread.status == sct::FailStatus::Ok &&
+             misread.snapshot.matrix_zoom_source == sct::MatrixZoomSource::NavigatorFrame,
+         "misread reading is not used");
+  Expect(SameMatrix(misread.snapshot.screen_to_canvas, r65.snapshot.screen_to_canvas),
+         "misread reading keeps the red-frame matrix");
+
+  Expect(r66.snapshot.marker.target_arm_display_px > r65.snapshot.marker.target_arm_display_px,
          "marker arm grows with scale");
-
-  const auto& c2s = r100.snapshot.canvas_to_screen;
-  Expect(std::abs(r100.snapshot.marker.anchor_screen.x - c2s.m[2]) < 1e-9 &&
-             std::abs(r100.snapshot.marker.anchor_screen.y - c2s.m[5]) < 1e-9,
+  Expect(std::abs(r65.snapshot.marker.anchor_screen.x - r65.snapshot.canvas_to_screen.m[2]) < 1e-9 &&
+             std::abs(r65.snapshot.marker.anchor_screen.y - r65.snapshot.canvas_to_screen.m[5]) < 1e-9,
          "marker anchor is normalized canvas top-left (0,0)");
-  Expect(r100.snapshot.marker.x_arm_end_screen.x > r100.snapshot.marker.anchor_screen.x,
+  Expect(r65.snapshot.marker.x_arm_end_screen.x > r65.snapshot.marker.anchor_screen.x,
          "top-left marker X arm points along canvas +X");
-  Expect(r100.snapshot.marker.y_arm_end_screen.y > r100.snapshot.marker.anchor_screen.y,
+  Expect(r65.snapshot.marker.y_arm_end_screen.y > r65.snapshot.marker.anchor_screen.y,
          "top-left marker Y arm points along canvas +Y");
+}
+
+void TestScaleReadingRefinesRotatedNavigatorRoute() {
+  // Physical fixture: canvas 2400x1200 at 50%, displayed at 25 degrees. The
+  // Navigator paper is measured one thumbnail pixel too wide (0.4% zoom).
+  const double a = 25.0 * 3.14159265358979323846 / 180.0, c = std::cos(a), s = std::sin(a);
+  sct::SolveInput in;
+  std::snprintf(in.capture_id, sizeof(in.capture_id), "rotated-reading");
+  in.canvas_pixel_width = 2400;
+  in.canvas_pixel_height = 1200;
+  in.injected_scale_percent = 50;
+  in.workspace_roi_screen = {-1700, 100, -800, 700};
+  in.navigator_canvas.bounds_capture = {2200, 50, 2441, 170};
+  auto nav = [&](double x, double y) {
+    const double dx = x + 1350, dy = y - 250;
+    return sct::Vec2{2200 + (c * dx + s * dy) * 0.2, 50 + (-s * dx + c * dy) * 0.2};
+  };
+  const auto o = nav(-1700, 100), x = nav(-800, 100), y = nav(-1700, 700);
+  in.viewport.origin_top_left_displayed = o;
+  in.viewport.axis_x_displayed = {x.x - o.x, x.y - o.y};
+  in.viewport.axis_y_displayed = {y.x - o.x, y.y - o.y};
+  in.viewport.width = 180;
+  in.viewport.height = 120;
+  const auto refined = sct::SolveTransform(in);
+  in.injected_scale_percent = 500;
+  const auto navigator_only = sct::SolveTransform(in);
+  Expect(refined.status == sct::FailStatus::Ok && navigator_only.status == sct::FailStatus::Ok,
+         "rotated reading solves");
+  if (refined.status != sct::FailStatus::Ok || navigator_only.status != sct::FailStatus::Ok) return;
+  Expect(refined.snapshot.matrix_zoom_source == sct::MatrixZoomSource::ScaleReading &&
+             navigator_only.snapshot.matrix_zoom_source == sct::MatrixZoomSource::NavigatorFrame,
+         "rotated display uses a consistent reading only");
+  const auto& m = refined.snapshot.canvas_to_screen.m;
+  const auto& n = navigator_only.snapshot.canvas_to_screen.m;
+  Expect(std::abs(std::hypot(m[0], m[3]) - 1200.0) < 1e-6 &&
+             std::abs(std::hypot(m[1], m[4]) - 600.0) < 1e-6,
+         "rotated zoom is exactly the reading");
+  Expect(std::abs(std::atan2(m[3], m[0]) - std::atan2(n[3], n[0])) < 1e-12 &&
+             std::abs(std::atan2(m[4], m[1]) - std::atan2(n[4], n[1])) < 1e-12,
+         "reading keeps the red-frame rotation");
+  const auto cr = refined.snapshot.screen_to_canvas.Apply({-1250, 400});
+  const auto cn = navigator_only.snapshot.screen_to_canvas.Apply({-1250, 400});
+  Expect(std::hypot(cr.x - cn.x, cr.y - cn.y) < 1e-12, "rotated reading pivots on the workspace centre");
 }
 
 // Captured CSP frame at 50%: the paper's top-left corner is visible at
@@ -400,18 +469,18 @@ sct::SolveInput MakeTopLeftVisibleNavigatorRouteInput() {
   return in;
 }
 
-// Canvas origin implied by the red frame alone (unrotated Navigator route).
-sct::Vec2 NavigatorOnlyOrigin(const sct::SolveInput& in) {
+// Screen point of normalized canvas (u,v) by the red frame alone (unrotated).
+sct::Vec2 NavigatorOnlyScreen(const sct::SolveInput& in, double u, double v) {
   const auto& ws = in.workspace_roi_screen;
   const auto& nav = in.navigator_canvas.bounds_capture;
-  return {ws.left + (nav.left - in.viewport.origin_top_left_displayed.x) * ws.width() /
-                        in.viewport.axis_x_displayed.x,
-          ws.top + (nav.top - in.viewport.origin_top_left_displayed.y) * ws.height() /
-                       in.viewport.axis_y_displayed.y};
+  const double sx = ws.width() / in.viewport.axis_x_displayed.x;
+  const double sy = ws.height() / in.viewport.axis_y_displayed.y;
+  return {ws.left + (nav.left + u * nav.width() - in.viewport.origin_top_left_displayed.x) * sx,
+          ws.top + (nav.top + v * nav.height() - in.viewport.origin_top_left_displayed.y) * sy};
 }
 
 bool AtNavigatorOnlyOrigin(const sct::TransformSnapshot& s, const sct::SolveInput& in) {
-  const auto want = NavigatorOnlyOrigin(in);
+  const auto want = NavigatorOnlyScreen(in, 0, 0);
   return std::abs(s.marker.anchor_screen.x - want.x) < 1e-6 &&
          std::abs(s.marker.anchor_screen.y - want.y) < 1e-6;
 }
@@ -424,6 +493,8 @@ void TestNavigatorRouteAnchorsToWorkspacePaperEdges() {
   const auto& s = r.snapshot;
   Expect(!s.used_direct_workspace_path, "cropped paper stays on the navigator route");
   Expect(s.workspace_edge_anchor_mask == (1 | 2), "observed left/top paper edges anchor the matrix");
+  Expect(s.matrix_zoom_source == sct::MatrixZoomSource::ScaleReading,
+         "one edge per axis takes the zoom from the reading");
   Expect(std::abs(s.marker.anchor_screen.x - 1293.0) < 1e-6 &&
              std::abs(s.marker.anchor_screen.y - 392.0) < 1e-6,
          "canvas origin is the workspace-observed paper corner");
@@ -431,17 +502,35 @@ void TestNavigatorRouteAnchorsToWorkspacePaperEdges() {
   const double zoom_y = s.canvas_to_screen.m[4] / in.canvas_pixel_height;
   std::printf("PRECISION anchored origin=(%.3f,%.3f) zoom=%.5fx%.5f (CSP 50%%)\n",
               s.marker.anchor_screen.x, s.marker.anchor_screen.y, zoom_x, zoom_y);
-  Expect(std::abs(zoom_x - zoom_y) < 1e-9, "anchored zoom is isotropic");
-  Expect(std::abs(zoom_x - 0.5) < 0.0025, "anchored zoom keeps the navigator measurement");
+  Expect(std::abs(zoom_x - 0.5) < 1e-12 && std::abs(zoom_y - 0.5) < 1e-12,
+         "anchored zoom is the reading");
   Expect(std::abs(s.canvas_to_screen.m[1]) < 1e-9 && std::abs(s.canvas_to_screen.m[3]) < 1e-9,
          "anchored matrix stays axis aligned");
 
-  // Without workspace paper edges the Navigator matrix is published unchanged.
+  // Without workspace paper edges the reading still sets the zoom, and the
+  // red frame stays where it was observed: on its right and bottom sides.
   in.workspace_canvas.visible_edges_mask = 0;
+  const auto red_only = sct::SolveTransform(in);
+  Expect(red_only.status == sct::FailStatus::Ok &&
+             red_only.snapshot.workspace_edge_anchor_mask == 0 &&
+             red_only.snapshot.matrix_zoom_source == sct::MatrixZoomSource::ScaleReading,
+         "no workspace paper edge, reading zoom only");
+  const auto& nav = in.navigator_canvas.bounds_capture;
+  const double u_right = (2260.5 - nav.left) / nav.width();
+  const double v_bottom = (272.5 - nav.top) / nav.height();
+  const auto p = red_only.snapshot.canvas_to_screen.Apply({u_right, v_bottom});
+  const auto q = NavigatorOnlyScreen(in, u_right, v_bottom);
+  Expect(std::abs(p.x - q.x) < 1e-6 && std::abs(p.y - q.y) < 1e-6,
+         "reading zoom keeps the observed red sides in place");
+  Expect(std::abs(red_only.snapshot.canvas_to_screen.m[0] - 0.5 * in.canvas_pixel_width) < 1e-9,
+         "red-only route zoom is the reading");
+
+  // A misread reading and no paper edges publish the red-frame matrix.
+  in.numbers.scale_percent = 500.f;
   const auto nav_only = sct::SolveTransform(in);
   Expect(nav_only.status == sct::FailStatus::Ok &&
-             nav_only.snapshot.workspace_edge_anchor_mask == 0,
-         "no workspace paper edge, no anchoring");
+             nav_only.snapshot.matrix_zoom_source == sct::MatrixZoomSource::NavigatorFrame,
+         "misread reading is not used");
   Expect(AtNavigatorOnlyOrigin(nav_only.snapshot, in), "navigator-only origin unchanged");
 }
 
@@ -461,6 +550,10 @@ void TestNavigatorRouteAnchorCorrectsStaleNavigator() {
 }
 
 void TestNavigatorRouteAnchorRejectsNonPaperObservation() {
+  auto without_paper = MakeTopLeftVisibleNavigatorRouteInput();
+  without_paper.workspace_canvas.visible_edges_mask = 0;
+  const auto red_only = sct::SolveTransform(without_paper);
+
   // A side that is neither a measured straight edge nor clipped by the
   // workspace (artwork on the edge, rotated paper) is no paper rectangle.
   auto in = MakeTopLeftVisibleNavigatorRouteInput();
@@ -469,10 +562,11 @@ void TestNavigatorRouteAnchorRejectsNonPaperObservation() {
   auto r = sct::SolveTransform(in);
   Expect(r.status == sct::FailStatus::Ok && r.snapshot.workspace_edge_anchor_mask == 0,
          "irregular paper side is not used");
-  Expect(AtNavigatorOnlyOrigin(r.snapshot, in), "irregular paper side keeps the navigator matrix");
+  Expect(SameMatrix(r.snapshot.canvas_to_screen, red_only.snapshot.canvas_to_screen),
+         "irregular paper side is treated as no paper evidence");
 
   // A 600x300 foreground (e.g. a floating panel) is not the 4961x7016 paper
-  // at the Navigator's ~50% zoom.
+  // at the read 50% zoom.
   in = MakeTopLeftVisibleNavigatorRouteInput();
   in.workspace_canvas.bounds_screen = {1293, 392, 1893, 692};
   in.workspace_canvas.bounds_capture = in.workspace_canvas.bounds_screen;
@@ -540,9 +634,10 @@ void TestNavigatorRouteAnchorFollowsDisplayRotation() {
     const auto got = result.snapshot.marker.anchor_screen;
     Expect(std::hypot(want.x - got.x, want.y - got.y) < 1e-6,
            "rotated display origin is the matching workspace paper corner");
+    // One paper edge per axis plus the reading's zoom pin the whole canvas.
     for (double u : {0.0, 0.5, 1.0}) for (double v : {0.0, 0.5, 1.0}) {
       const auto p = screen(u, v), q = result.snapshot.canvas_to_screen.Apply({u, v});
-      Expect(std::hypot(p.x - q.x, p.y - q.y) < 8.0, "rotated anchored canvas stays within navigator zoom error");
+      Expect(std::hypot(p.x - q.x, p.y - q.y) < 1e-6, "rotated anchored canvas matches the display");
     }
   }
 }
@@ -1225,7 +1320,8 @@ int main() {
   TestViewportPattern02IntersectingNoComplete();
   TestPattern01UnknownRotationDeduplicatesEquivalentCropAssignments();
   TestViewportNoRedPixelsIsEdgeFailureNotFrameFound();
-  TestScalePercentDoesNotChangeMatrix();
+  TestScaleReadingSetsNavigatorZoom();
+  TestScaleReadingRefinesRotatedNavigatorRoute();
   TestNavigatorRouteAnchorsToWorkspacePaperEdges();
   TestNavigatorRouteAnchorCorrectsStaleNavigator();
   TestNavigatorRouteAnchorRejectsNonPaperObservation();
