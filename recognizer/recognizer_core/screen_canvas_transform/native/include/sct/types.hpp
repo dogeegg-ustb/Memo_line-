@@ -306,6 +306,8 @@ struct TransformSnapshot {
   MarkerGeometry marker{};
   float confidence = 0.f;
   int used_direct_workspace_path = 0;
+  // Navigator route: workspace paper sides (L/T/R/B bits) that anchored the matrix.
+  int workspace_edge_anchor_mask = 0;
   char source_revision[64] = {};
   int coordinate_convention_version = 1;
 };
