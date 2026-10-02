@@ -11,12 +11,13 @@ import os
 from pathlib import Path
 import queue
 import sys
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 import uuid
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 INTEGRATION = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(INTEGRATION), str(INTEGRATION.parents[1] / "CSP_Shortcut_Manager")]
@@ -54,6 +55,22 @@ class RecordedDesktop:
         self.closed = True
 
 
+class RepaintingDesktop(RecordedDesktop):
+    """Swaps the visible image before a grab, as CSP repaints between captures."""
+    def __init__(self, image, before_grab):
+        super().__init__(image)
+        self.before_grab = before_grab
+        self.full_frame_times = []
+
+    def grab(self, rectangle):
+        replacement = self.before_grab(len(self.calls), dict(rectangle))
+        if replacement is not None:
+            self.image = replacement
+        if dict(rectangle) == self.monitors[0]:
+            self.full_frame_times.append(time.monotonic())
+        return super().grab(rectangle)
+
+
 class CanvasFrameCaptureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -88,7 +105,11 @@ class CanvasFrameCaptureTests(unittest.TestCase):
         self.regions = {CANVAS: (80, 20, 1360, 1110),
                         NAVIGATOR: (1620, 0, 330, 440), BRUSH: self.brush}
         self.pipe = pipeline.Pipeline.__new__(pipeline.Pipeline)
-        self.pipe.settings = dict(captureBudgetMs=100, navigatorCaptureMarginPx=32)
+        # Zero settle times keep the pixel tests fast; settle tests set their own.
+        self.pipe.settings = dict(captureBudgetMs=100, navigatorCaptureMarginPx=32,
+                                  canvasSettleMinMs=0, canvasSettleQuietMs=0,
+                                  canvasSettleMaxMs=1000, canvasSettlePollMs=5)
+        self.pipe.canvas_settle = None
         self.pipe.capture_queue = queue.Queue()
         self.pipe.evidence_queue = queue.Queue()
         self.pipe.directory = directory
@@ -152,7 +173,13 @@ class CanvasFrameCaptureTests(unittest.TestCase):
         item = self.capture((CANVAS, BRUSH))
         frames, selected, spans = item[:3]
         try:
-            self.assertEqual(self.desktop.calls, [self.desktop.monitors[0]])
+            # One full-desktop grab; the other grabs only sample the watched ROIs.
+            full = [call for call in self.desktop.calls if call == self.desktop.monitors[0]]
+            self.assertEqual(len(full), 1)
+            watched = [dict(left=x, top=y, width=w, height=h)
+                       for x, y, w, h in (self.navigator, self.numbers)]
+            for call in self.desktop.calls:
+                self.assertIn(call, watched + full)
             self.assertTrue(self.desktop.closed)
             self.assertEqual(selected[CANVAS], self.canvas)
             self.assertEqual(selected[NAVIGATOR], self.navigator)
@@ -172,7 +199,7 @@ class CanvasFrameCaptureTests(unittest.TestCase):
         item = self.capture(initialize=True)
         frames, selected = item[:2]
         try:
-            self.assertEqual(len(self.desktop.calls), 1)
+            self.assertEqual(self.desktop.calls.count(self.desktop.monitors[0]), 1)
             self.assertEqual(selected[CANVAS], self.regions[CANVAS])
             self.assertEqual(selected[NAVIGATOR], self.regions[NAVIGATOR])
             for panel in frames:
@@ -200,6 +227,7 @@ class CanvasFrameCaptureTests(unittest.TestCase):
         canvas = next(job for job in jobs if job["module"] == CANVAS)
         self.assertEqual(set(canvas["crops"]), {CANVAS, NAVIGATOR, NUMBERS, FRAME})
         self.assertTrue(canvas["canvasCaptureValidation"]["sameFrame"])
+        self.assertTrue(canvas["canvasCaptureValidation"]["stable"])
         evidence = [entry for entry in self.records if entry["kind"] == "screenshotBlob"]
         self.assertEqual({entry["data"]["panel"] for entry in evidence},
                          {CANVAS, NAVIGATOR, NUMBERS, BRUSH, FRAME})
@@ -229,6 +257,117 @@ class CanvasFrameCaptureTests(unittest.TestCase):
         self.assertEqual(set(sent[0]["crops"]), {"workspace", "navigator", "numbers"})
         for key, panel in (("workspace", CANVAS), ("navigator", NAVIGATOR), ("numbers", NUMBERS)):
             self.assertEqual(sent[0]["crops"][key], job["crops"][panel])
+
+    # CSP repaints the Navigator after the canvas view. These model that lag.
+    def settle(self, **values):
+        self.pipe.settings.update({f"canvasSettle{key}Ms": value for key, value in values.items()})
+
+    def repainted(self, image=None, offset=0):
+        """Draws a red-frame edge into the Navigator thumbnail of a fixture copy."""
+        image = image or self.image.copy()
+        x, y, w, _ = self.navigator
+        left, top = x - self.desktop.monitors[0]["left"], y - self.desktop.monitors[0]["top"]
+        ImageDraw.Draw(image).line((left+5, top+10+offset, left+w-5, top+10+offset), fill=(255, 0, 0))
+        return image
+
+    def repainting(self, before_grab):
+        self.desktop = RepaintingDesktop(self.image, before_grab)
+        return self.desktop
+
+    @staticmethod
+    def release(item):
+        for image in item[0].values():
+            image.close()
+
+    def test_canvas_frame_waits_for_late_navigator_repaint(self):
+        self.settle(Min=40, Quiet=20)
+        repaint = self.repainted()
+        self.addCleanup(repaint.close)
+        repaint_at = time.monotonic() + 0.03
+        desktop = self.repainting(lambda n, rect: repaint if time.monotonic() >= repaint_at else None)
+        item = self.capture()
+        try:
+            validation = item[14]
+            self.assertTrue(validation["stable"])
+            self.assertEqual(len(validation["navigatorChangeAfterTriggerMs"]), 1)
+            self.assertGreaterEqual(desktop.full_frame_times[0], repaint_at + 0.02)
+            x, y, w, h = self.navigator
+            left, top = x - desktop.monitors[0]["left"], y - desktop.monitors[0]["top"]
+            with repaint.crop((left, top, left+w, top+h)) as expected:
+                self.assertEqual(item[0][NAVIGATOR].tobytes(), expected.tobytes())
+        finally:
+            self.release(item)
+
+    def test_minimum_wait_applies_although_stale_navigator_looks_stable(self):
+        self.settle(Min=80, Quiet=0)
+        desktop = self.repainting(lambda n, rect: None)
+        started = time.monotonic()
+        item = self.capture()
+        try:
+            self.assertGreaterEqual(desktop.full_frame_times[0] - started, 0.079)
+            self.assertTrue(item[14]["stable"])
+            self.assertGreater(item[14]["samples"], 1)
+        finally:
+            self.release(item)
+
+    def test_navigator_repaint_during_full_frame_grab_is_resettled(self):
+        self.settle(Quiet=10)
+        repaint = self.repainted()
+        self.addCleanup(repaint.close)
+        desktop = self.repainting(lambda n, rect: repaint if rect == self.desktop.monitors[0] else None)
+        item = self.capture()
+        try:
+            validation = item[14]
+            self.assertEqual(validation["attempts"], 2)
+            self.assertTrue(validation["stable"])
+            self.assertEqual(len(desktop.full_frame_times), 2)
+            self.assertEqual(item[0][FRAME].tobytes(), repaint.tobytes())
+        finally:
+            self.release(item)
+
+    def test_navigator_that_never_settles_is_rejected_before_the_core(self):
+        self.settle(Quiet=30, Max=60)
+        moving = self.image.copy()
+        self.addCleanup(moving.close)
+        self.repainting(lambda n, rect: self.repainted(moving, offset=n % 200))
+        item = self.capture()
+        validation = item[14]
+        self.assertFalse(validation["stable"])
+        self.assertTrue(validation["timedOut"])
+        job = self.persist(item)[0]
+        sent = []
+        self.pipe.transform = SimpleNamespace(poll=lambda: None)
+        self.pipe.transform_ready = True
+        self.pipe.transform_initial_payload = None
+        self.pipe._transform_call = sent.append
+        self.pipe._analyze(job)
+        self.assertEqual(sent, [])
+        errors = [entry for entry in self.records if entry["kind"] == "analysisError"]
+        self.assertEqual(len(errors), 1)
+        self.assertIn("仍在变化", errors[0]["data"]["error"])
+        self.assertTrue(any(notice["type"] == "canvasRetry" for notice in self.notices))
+
+    def test_back_to_back_requests_continue_the_quiet_window_after_their_trigger(self):
+        self.settle(Quiet=100)
+        desktop = self.repainting(lambda n, rect: None)
+        one_second_ago, in_future = -10_000_000, 10**15
+        for trigger in (one_second_ago, one_second_ago, in_future):
+            self.pipe.capture_queue.put(({CANVAS}, self.regions.copy(), trigger, [3],
+                                         "mouseWheel", False, None))
+        self.pipe.capture_queue.put(None)
+        self.pipe._capture_loop()
+        items = [self.pipe.evidence_queue.get_nowait() for _ in range(3)]
+        try:
+            first, second, third = desktop.full_frame_times
+            # The second request's old trigger is already covered by the first's quiet window.
+            self.assertLess(second - first, 0.05)
+            self.assertLess(items[1][14]["settleWaitMs"], 50)
+            # A newer trigger restarts the quiet window from the trigger itself.
+            self.assertGreaterEqual(third - second, 0.099)
+            self.assertTrue(all(item[14]["stable"] for item in items))
+        finally:
+            for item in items:
+                self.release(item)
 
 
 if __name__ == "__main__":

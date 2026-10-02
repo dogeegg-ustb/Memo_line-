@@ -14,11 +14,11 @@ BehaviorRecognizer 自动启动这个辅助进程，并在会话结束时关闭�
 
 画布任务的 `crops.__canvas_frame__` 保存完整原始帧的路径、屏幕矩形及 screenshotId；Host 的 `frame` 引用这份证据，`crops.workspace/navigator/numbers` 提供同一帧的 ROI。完整帧也以 screenshotBlob 存证，但不建立额外状态模块。各 ROI 图片逐像素裁自该帧，共享采集起止 ticks；其他核心仍接收自己的 ROI 图片。
 
-光标悬停只做准备；按住操作在松开后更新，工具属性等待 150ms 无新操作，普通操作默认等待 CSP 响应 30ms、隐藏边框后再等 16ms 取像。PNG 编码、存盘与分发在另一线程进行，原图队列最多暂存 4 批，饱和时施加背压。100ms 是普通触发到取像完成的目标预算，不是硬实时保证；工具属性的 150ms 静默等待另计，实际证据记录完整触发延迟。图层保存保护由预热的 AHK 常驻进程发出 Ctrl+S 后立即确认并释放原操作，文件稳定等待仅在独立文件解析队列中进行。
+光标悬停只做准备；按住操作在松开后更新，工具属性等待 150ms 无新操作，普通操作默认等待 CSP 响应 30ms、隐藏边框后再等 16ms 取像。PNG 编码、存盘与分发在另一线程进行，原图队列最多暂存 4 批，饱和时施加背压。100ms 是普通触发到取像完成的目标预算，不是硬实时保证；工具属性的 150ms 静默等待和画布的导航器稳定等待另计，实际证据记录完整触发延迟。图层保存保护由预热的 AHK 常驻进程发出 Ctrl+S 后立即确认并释放原操作，文件稳定等待仅在独立文件解析队列中进行。
 
 截图先以 `screenshotBlob`（PNG/base64）立即写入 `.memoline`，再把分析任务描述追加到会话旁的 `<sessionId>.spool`。队列只加载正在分析的图像；总并发数受限，同一个核心始终串行。笔刷/图层 OCR 各限制内部线程，减少并发争用。原图和任务暂存保留在会话目录，解析失败也能保留证据。停止时等待已进入队列的任务收尾，随后提交文件 footer。
 
-`settings.json` 是软件设置文件；初始化界面可修改 `flashBorders` 与 `analysisConcurrency`，`settleCaptureMs` 控制普通松开／快捷键操作后的渲染等待（默认 30ms）；工具属性固定等待 150ms 无新操作。`interactionCaptureIntervalMs` 不再用于拖动期间取样，保存保护不额外等待，AHK 路径可配置。
+`settings.json` 是软件设置文件；初始化界面可修改 `flashBorders` 与 `analysisConcurrency`，`settleCaptureMs` 控制普通松开／快捷键操作后的渲染等待（默认 30ms）；工具属性固定等待 150ms 无新操作。`canvasSettleMinMs`／`canvasSettleQuietMs`／`canvasSettleMaxMs`／`canvasSettlePollMs`（默认 400／150／1500／30ms）控制画布取证前的导航器稳定等待，见下文。发布脚本保留已有的发布设置，缺少这些键时使用默认值。`interactionCaptureIntervalMs` 不再用于拖动期间取样，保存保护不额外等待，AHK 路径可配置。
 
 ## 图层操作与独立文件路径
 
@@ -116,6 +116,8 @@ mouseWheel 是独立有效输入，包含坐标、带符号的 delta、轴和 he
 画布核心返回的工作区 ROI（画布和深灰背景）以橙色常驻边框显示，导航器缩略图 ROI 以紫色常驻边框显示，均为 4 屏幕像素宽。独立于更新闪烁开关，CSP 前台且工作区有效时显示；全部覆盖层在取证前隐藏，不进入核心输入。Native DLL 已与原程序 app/Native/ScreenCanvasNative.dll 对齐，格式转换使用 DrawImageUnscaled 和 SourceCopy，不经过缩放绘制。
 
 画布取证失败或红框补全失败时，允许最多一次新的完整帧取证与重算，不用旧图重复调用核心。首批证据与失败结果保留，重取结果的 retryOfCaptureId 引用首批，状态包在最后尝试完成后解析；保持原触发时刻及逻辑位置，若已越过后续输入仍标记 causalAmbiguous。重取可能超过 100ms 目标预算，实际延迟原样记录。红框种子检测使用固定导航器缩略图 ROI，延伸和端点确认可读取完整帧中的真实上下文；不能把人为填充的黑色间隙当作证据。原算法要求部分红边与白纸接触，缺少端点或有效接触证据时仍可能明确失败。
+
+CSP 先重绘画布视图，导航器红框与缩放／旋转数字要晚约 150–400ms 才刷新；中间时刻的完整帧把新工作区和旧红框配在一起，核心会以补全冲突拒绝。因此画布取证先只采样固定的缩略图 ROI 与数字 ROI（不看工作区，因为其中有 CSP 自绘的笔刷光标）：至少等到触发后 `canvasSettleMinMs`，并且这两个 ROI 连续 `canvasSettleQuietMs` 不变后，才截取完整帧；完整帧中的这两块像素还须与最后一次采样相同，否则继续等待。最短等待不可省略，因为尚未刷新的导航器同样“不变”。连续的请求（如滚轮）沿用上一次的观察，但静默窗口不早于各自的触发时刻。超过 `canvasSettleMaxMs` 仍未稳定时照常存证，但 `canvasCaptureValidation.stable=false`，分析阶段拒绝送入核心并按上述规则重取一次。`canvasCaptureValidation` 记录 `stable`、`timedOut`、`attempts`、`samples`、`settleWaitMs`、`quietObservedMs`，以及 `navigatorChangeAfterTriggerMs`（观察到导航器变化时距触发的毫秒数），可据此按实机延迟调整设置。画布取证因此通常超过 100ms 目标预算，并会推迟采集队列中排在其后的截图；批次的 `capturedTicks` 与 `captureDurationMs` 只描述完整帧本身。
 
 画布宿主异常退出后，用会话中成功初始化的完整原始帧与初始化 ROI 证据恢复核心，再分析当前帧，并检查恢复出的两个固定 ROI 是否一致；不会把旧初始化图作为当前状态结果写入。恢复失败明确报错，不把未初始化的 Host 当作已初始化。
 

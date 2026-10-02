@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <PlatformTarget>x64</PlatformTarget>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>dirty matrix</AssemblyName>
+    <RootNamespace>DirtyMatrix</RootNamespace>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../recognizer/behavior_recognizer/src/BehaviorRecognizer/Abstractions/Stroke/StrokeModels.cs" Link="Recognizer/StrokeModels.cs" />
+    <Compile Include="../../../recognizer/behavior_recognizer/src/BehaviorRecognizer/Storage/Strokebin/StrokeBinaryReader.cs" Link="Recognizer/StrokeBinaryReader.cs" />
+  </ItemGroup>
+</Project>

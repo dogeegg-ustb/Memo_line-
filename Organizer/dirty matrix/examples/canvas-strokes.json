@@ -1,0 +1,12 @@
+{
+  "coordinateSpace": "canvas",
+  "strokes": [
+    { "strokeId": 1, "points": [
+      { "x": 200, "y": 200 }, { "x": 340, "y": 270 }, { "x": 500, "y": 260 }
+    ] },
+    { "strokeId": 2, "points": [
+      { "x": 380, "y": 230 }, { "x": 470, "y": 400 }, { "x": 600, "y": 500 }
+    ] },
+    { "strokeId": 3, "points": [ { "x": 800, "y": 350 } ] }
+  ]
+}

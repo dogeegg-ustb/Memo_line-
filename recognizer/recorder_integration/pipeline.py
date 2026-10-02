@@ -19,6 +19,8 @@ from catalog import BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR
 from state_timeline import StateTimeline, MODULES
 
 CANVAS_FRAME = "__canvas_frame__"
+# CSP repaints these after the canvas view; the canvas frame waits for them to settle.
+NAVIGATOR_EVIDENCE = (NAVIGATOR, "导航器数字")
 
 
 def now_ticks():
@@ -51,6 +53,7 @@ class Pipeline:
         self.watermarks = {}
         self.watermark_lock = threading.Lock()
         self.last_event_id = 0
+        self.canvas_settle = None
         self.closing = False
         self.executor = ThreadPoolExecutor(max_workers=settings["analysisConcurrency"], thread_name_prefix="state-core")
         self.clip_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clip-parser")
@@ -156,6 +159,8 @@ class Pipeline:
         from PIL import Image
         import mss
         grabber = mss.mss()
+        frequency = ctypes.c_longlong()
+        ctypes.windll.kernel32.QueryPerformanceFrequency(ctypes.byref(frequency))
         while True:
             request = self.capture_queue.get()
             if request is None:
@@ -203,18 +208,19 @@ class Pipeline:
                     # Capture once; ROI evidence and native context share this frame,
                     # with no resize, padding, synthetic gaps or navigator expansion.
                     selected[CANVAS_FRAME] = tuple(desktop[k] for k in ("left","top","width","height"))
-                    pixels,span = acquire(CANVAS_FRAME)
-                    capture_end = span[1]
+                    span,image,settle = self._acquire_settled_canvas_frame(
+                        acquire,selected,desktop,ticks,frequency.value)
+                    frames[CANVAS_FRAME] = image
+                    # Batch timing describes the frame itself; the settle wait is in settle.
+                    captured,capture_end = span
                     if user.GetForegroundWindow() != hwnd:
                         raise RuntimeError("完整帧截图过程中 CSP 失去前台，已丢弃该批截图")
-                    image = Image.frombytes("RGB",pixels.size,pixels.bgra,"raw","BGRX")
-                    frames[CANVAS_FRAME] = image
                     for panel,(x,y,w,h) in selected.items():
                         capture_times[panel] = span
                         if panel != CANVAS_FRAME:
                             left,top = x-desktop["left"],y-desktop["top"]
                             frames[panel] = image.crop((left,top,left+w,top+h))
-                    canvas_validation = dict(sameFrame=True,attempts=1,verifiedTicks=capture_end)
+                    canvas_validation = dict(sameFrame=True,verifiedTicks=capture_end,**settle)
                     capture_backend = "MSS_FRAME_ROI"
                 else:
                     for panel in selected:
@@ -242,6 +248,68 @@ class Pipeline:
                     for image in frames.values():
                         image.close()
                 self.notify(dict(type="captureFinished",success=captured_success,panels=sorted(panels)))
+
+    def _acquire_settled_canvas_frame(self, acquire, selected, desktop, trigger, frequency):
+        # CSP repaints the Navigator red frame and numbers some 150-400ms after the
+        # canvas view itself; a stale Navigator looks just as unchanging as a settled
+        # one. So wait a minimum time after the trigger, then until the watched ROIs
+        # stay unchanged for a quiet window. The workspace is not watched: it shows
+        # CSP's own brush cursor. The full frame must still match the last samples.
+        from PIL import Image
+        def ms(key, default):
+            return max(0.0, float(self.settings.get(key, default)))/1000
+        minimum, quiet = ms("canvasSettleMinMs",400), ms("canvasSettleQuietMs",150)
+        limit, poll = ms("canvasSettleMaxMs",1500), max(0.005, ms("canvasSettlePollMs",30))
+        started, started_ticks = time.monotonic(), now_ticks()
+        trigger_at = started-max(0.0,(started_ticks-trigger)/frequency)
+        earliest, deadline = trigger_at+minimum, started+limit
+        rois = tuple(selected[panel] for panel in NAVIGATOR_EVIDENCE)
+        def local(roi):
+            x,y,w,h = roi
+            return (x-desktop["left"],y-desktop["top"],x-desktop["left"]+w,y-desktop["top"]+h)
+        def sample():
+            shots = [acquire(panel)[0] for panel in NAVIGATOR_EVIDENCE]
+            return tuple(Image.frombytes("RGB",s.size,s.bgra,"raw","BGRX").tobytes() for s in shots)
+        reference, samples, attempts, changes = sample(), 1, 0, []
+        stable_since = time.monotonic()
+        previous = self.canvas_settle
+        # Back-to-back requests (wheel ticks) continue the previous observation, but
+        # the quiet window never starts before this request's own trigger.
+        if (previous and previous[0] == rois and previous[1] == reference
+                and stable_since-previous[3] <= max(0.25, 2*poll)):
+            stable_since = max(previous[2], trigger_at)
+        def changed(pixels):
+            nonlocal reference, stable_since
+            reference, stable_since = pixels, time.monotonic()
+            if len(changes) < 32:
+                changes.append(round((stable_since-trigger_at)*1000, 1))
+        while True:
+            now = time.monotonic()
+            settled = now >= earliest and now-stable_since >= quiet
+            if settled or now >= deadline:
+                attempts += 1
+                quiet_observed = now-stable_since
+                pixels, span = acquire(CANVAS_FRAME)
+                image = Image.frombytes("RGB",pixels.size,pixels.bgra,"raw","BGRX")
+                observed = tuple(image.crop(local(roi)).tobytes() for roi in rois)
+                if observed != reference:
+                    changed(observed)
+                    settled = False
+                if settled or time.monotonic() >= deadline:
+                    self.canvas_settle = (rois, reference, stable_since, time.monotonic())
+                    return span, image, dict(stable=settled, timedOut=not settled,
+                        attempts=attempts, samples=samples, settleStartTicks=started_ticks,
+                        settleWaitMs=round((now-started)*1000, 1),
+                        quietObservedMs=round(quiet_observed*1000, 1),
+                        navigatorChangeAfterTriggerMs=changes,
+                        settleMinMs=minimum*1000, settleQuietMs=quiet*1000, settleMaxMs=limit*1000)
+                image.close()
+                continue
+            time.sleep(max(0.0, min(poll, max(earliest, stable_since+quiet)-now, deadline-now)))
+            current = sample()
+            samples += 1
+            if current != reference:
+                changed(current)
 
     def _persist_loop(self):
         frequency = ctypes.c_longlong()

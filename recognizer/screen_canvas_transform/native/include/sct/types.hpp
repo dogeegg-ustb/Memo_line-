@@ -62,6 +62,13 @@ enum class ViewportCompletionPattern : int {
   FourCompleteEdges = 40,                // 4.0
 };
 
+// Where the Navigator route took the published canvas zoom from.
+enum class MatrixZoomSource : int {
+  NavigatorFrame = 0,       // red frame vs Navigator paper, per axis
+  ScaleReading = 1,         // OCR or injected scale percent
+  WorkspacePaperEdges = 2,  // two opposite paper edges observed in the workspace
+};
+
 inline const char* FailStatusName(FailStatus s) {
   switch (s) {
     case FailStatus::Ok:
@@ -169,7 +176,7 @@ struct CanvasObservation {
 };
 
 struct NavigatorNumericReading {
-  float scale_percent = 0.f;  // OCR or injected; marker/diagnostics only for matrix
+  float scale_percent = 0.f;  // OCR or injected; Navigator-route zoom when it agrees with the red frame
   float rotation_degrees = 0.f;  // OCR or injected; diagnostic/validation only
   float scale_confidence = 0.f;
   float rotation_confidence = 0.f;
@@ -306,6 +313,9 @@ struct TransformSnapshot {
   MarkerGeometry marker{};
   float confidence = 0.f;
   int used_direct_workspace_path = 0;
+  // Navigator route: workspace paper sides (L/T/R/B bits) that anchored the matrix.
+  int workspace_edge_anchor_mask = 0;
+  MatrixZoomSource matrix_zoom_source = MatrixZoomSource::NavigatorFrame;
   char source_revision[64] = {};
   int coordinate_convention_version = 1;
 };

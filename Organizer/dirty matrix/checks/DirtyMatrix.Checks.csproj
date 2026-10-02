@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../source/Core/Coverage.cs" Link="Coverage.cs" />
+    <Compile Include="../source/IO/StrokeFiles.cs" Link="StrokeFiles.cs" />
+    <Compile Include="../../../recognizer/behavior_recognizer/src/BehaviorRecognizer/Abstractions/Stroke/StrokeModels.cs" Link="StrokeModels.cs" />
+    <Compile Include="../../../recognizer/behavior_recognizer/src/BehaviorRecognizer/Storage/Strokebin/StrokeBinaryReader.cs" Link="StrokeBinaryReader.cs" />
+    <Compile Include="../../../recognizer/behavior_recognizer/src/BehaviorRecognizer/Storage/Strokebin/StrokeBinaryEncoder.cs" Link="StrokeBinaryEncoder.cs" />
+  </ItemGroup>
+</Project>

@@ -349,6 +349,16 @@ public static class DriverProfileParser
 
     private static DriverProfile ParseWacomXmlOrText(string content, string sourcePath)
     {
+        bool hasWacomKeyword = content.Contains("Wacom", StringComparison.OrdinalIgnoreCase) ||
+                               content.Contains("<Tablet", StringComparison.OrdinalIgnoreCase) ||
+                               content.Contains("TipFeel", StringComparison.OrdinalIgnoreCase) ||
+                               content.Contains("PressureCurve", StringComparison.OrdinalIgnoreCase);
+
+        if (!hasWacomKeyword)
+        {
+            throw new InvalidDataException("所选文件不包含 Wacom 驱动配置特征。");
+        }
+
         string deviceName = "Wacom Tablet";
         double? maxPressure = 8192;
         double? width = null;
@@ -357,6 +367,7 @@ public static class DriverProfileParser
         double? gamma = null;
         double thresholdRatio = 0.0;
         string curveSummary = "Wacom 默认线性压感";
+        bool matchedAnyElement = false;
 
         // 尝试使用 XML LINQ 解析
         try
@@ -366,6 +377,13 @@ public static class DriverProfileParser
 
             if (root != null)
             {
+                if (root.Name.LocalName.Contains("Wacom", StringComparison.OrdinalIgnoreCase) ||
+                    root.Name.LocalName.Contains("Tablet", StringComparison.OrdinalIgnoreCase) ||
+                    root.Name.LocalName.Contains("Preference", StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedAnyElement = true;
+                }
+
                 // 查找设备名
                 var nameElem = root.Descendants().FirstOrDefault(e =>
                     e.Name.LocalName.Equals("DeviceName", StringComparison.OrdinalIgnoreCase) ||
@@ -373,22 +391,34 @@ public static class DriverProfileParser
                     e.Name.LocalName.Equals("TabletModel", StringComparison.OrdinalIgnoreCase) ||
                     e.Name.LocalName.Equals("Model", StringComparison.OrdinalIgnoreCase));
                 if (nameElem != null && !string.IsNullOrWhiteSpace(nameElem.Value))
+                {
                     deviceName = nameElem.Value.Trim();
+                    matchedAnyElement = true;
+                }
 
                 // 查找最大压感
                 var maxPressElem = root.Descendants().FirstOrDefault(e =>
                     e.Name.LocalName.Equals("MaxPressure", StringComparison.OrdinalIgnoreCase) ||
                     e.Name.LocalName.Equals("MaxPressureLevels", StringComparison.OrdinalIgnoreCase));
                 if (maxPressElem != null && double.TryParse(maxPressElem.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var mp))
+                {
                     maxPressure = mp;
+                    matchedAnyElement = true;
+                }
 
                 // 查找活动区域
                 var rightElem = root.Descendants().FirstOrDefault(e => e.Name.LocalName.Equals("CoordMaxX", StringComparison.OrdinalIgnoreCase) || e.Name.LocalName.Equals("Right", StringComparison.OrdinalIgnoreCase));
                 var bottomElem = root.Descendants().FirstOrDefault(e => e.Name.LocalName.Equals("CoordMaxY", StringComparison.OrdinalIgnoreCase) || e.Name.LocalName.Equals("Bottom", StringComparison.OrdinalIgnoreCase));
                 if (rightElem != null && double.TryParse(rightElem.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var r))
+                {
                     width = r;
+                    matchedAnyElement = true;
+                }
                 if (bottomElem != null && double.TryParse(bottomElem.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var b))
+                {
                     height = b;
+                    matchedAnyElement = true;
+                }
 
                 // 查找起笔阈值 (ClickThreshold / PressureThreshold)
                 var threshElem = root.Descendants().FirstOrDefault(e =>
@@ -397,6 +427,7 @@ public static class DriverProfileParser
                 if (threshElem != null && double.TryParse(threshElem.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var thVal))
                 {
                     thresholdRatio = Math.Clamp(thVal / (maxPressure ?? 8192), 0.0, 0.3);
+                    matchedAnyElement = true;
                 }
 
                 // 查找 TipFeel / SoftFirmIndex / PressureCurve
@@ -407,6 +438,7 @@ public static class DriverProfileParser
 
                 if (feelElem != null && int.TryParse(feelElem.Value, out int feelInt))
                 {
+                    matchedAnyElement = true;
                     // Wacom TipFeel 档位通常在 -3..+3 或 1..7 (4 为居中)
                     int feelShift = feelInt;
                     if (feelInt >= 1 && feelInt <= 7) feelShift = feelInt - 4; // 换算到 -3..+3
@@ -436,6 +468,7 @@ public static class DriverProfileParser
                     var match = Regex.Match(curveElem.Value, @"(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)");
                     if (match.Success)
                     {
+                        matchedAnyElement = true;
                         double x1 = double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
                         double y1 = double.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
                         double x2 = double.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
@@ -452,15 +485,25 @@ public static class DriverProfileParser
         {
             // 如果不是标准 XML，采用正则匹配
             var nameMatch = Regex.Match(content, @"<DeviceName[^>]*>([^<]+)</DeviceName>", RegexOptions.IgnoreCase);
-            if (nameMatch.Success) deviceName = nameMatch.Groups[1].Value.Trim();
+            if (nameMatch.Success)
+            {
+                deviceName = nameMatch.Groups[1].Value.Trim();
+                matchedAnyElement = true;
+            }
 
             var feelMatch = Regex.Match(content, @"<(TipFeel|SoftFirmIndex)[^>]*>(-?\d+)</", RegexOptions.IgnoreCase);
             if (feelMatch.Success && int.TryParse(feelMatch.Groups[2].Value, out int feel))
             {
+                matchedAnyElement = true;
                 int shift = feel >= 1 && feel <= 7 ? feel - 4 : feel;
                 gamma = shift < 0 ? (1.0 - Math.Abs(shift) / 3.0 * 0.6) : (1.0 + shift / 3.0 * 1.4);
                 curveSummary = $"Wacom TipFeel (指数={gamma:0.##})";
             }
+        }
+
+        if (!matchedAnyElement)
+        {
+            throw new InvalidDataException("所选文件中未解析出任何有效的 Wacom 设备或压感参数。");
         }
 
         return new DriverProfile
@@ -487,15 +530,52 @@ public static class DriverProfileParser
         using var doc = JsonDocument.Parse(text);
         var root = doc.RootElement;
 
+        if (root.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("所选文件不是有效的 JSON 对象。");
+
+        if (!root.TryGetProperty("Profiles", out var profiles) || profiles.ValueKind != JsonValueKind.Array || profiles.GetArrayLength() == 0)
+            throw new InvalidDataException("所选 JSON 不是有效的 OpenTabletDriver settings.json（未找到有效 Profiles 条目）。");
+
         string deviceName = "OpenTabletDriver 设备";
-        if (root.TryGetProperty("Profiles", out var profiles) && profiles.ValueKind == JsonValueKind.Array)
+        double? width = null;
+        double? height = null;
+        double thresholdRatio = 0.0;
+        string curveSummary = "OTD 线性压感配置";
+
+        var firstProfile = profiles[0];
+        if (firstProfile.ValueKind == JsonValueKind.Object)
         {
-            foreach (var p in profiles.EnumerateArray())
+            if (firstProfile.TryGetProperty("Tablet", out var t) && t.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(t.GetString()))
             {
-                if (p.TryGetProperty("Tablet", out var t) && t.ValueKind == JsonValueKind.String)
+                deviceName = $"OTD · {t.GetString()}";
+            }
+
+            if (firstProfile.TryGetProperty("AbsoluteModeSettings", out var absMode) && absMode.ValueKind == JsonValueKind.Object &&
+                absMode.TryGetProperty("Tablet", out var tabArea) && tabArea.ValueKind == JsonValueKind.Object)
+            {
+                if (tabArea.TryGetProperty("Width", out var wElem) && wElem.TryGetDouble(out var w)) width = w;
+                if (tabArea.TryGetProperty("Height", out var hElem) && hElem.TryGetDouble(out var h)) height = h;
+            }
+
+            if (firstProfile.TryGetProperty("Bindings", out var bindings) && bindings.ValueKind == JsonValueKind.Object)
+            {
+                if (bindings.TryGetProperty("TipActivationThreshold", out var thElem) && thElem.TryGetDouble(out var thVal) && thVal > 0)
                 {
-                    deviceName = $"OTD · {t.GetString()}";
-                    break;
+                    thresholdRatio = Math.Clamp(thVal / 100.0, 0.0, 0.5);
+                }
+            }
+
+            if (firstProfile.TryGetProperty("Filters", out var filters) && filters.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var filter in filters.EnumerateArray())
+                {
+                    if (filter.TryGetProperty("Path", out var filterPath) &&
+                        filterPath.GetString()?.Contains("Pressure", StringComparison.OrdinalIgnoreCase) == true &&
+                        filter.TryGetProperty("Enable", out var enabled) && enabled.GetBoolean())
+                    {
+                        curveSummary = $"OTD 激活滤镜: {Path.GetFileNameWithoutExtension(filterPath.GetString())}";
+                        break;
+                    }
                 }
             }
         }
@@ -505,12 +585,12 @@ public static class DriverProfileParser
             Vendor = "OpenTabletDriver",
             DeviceName = deviceName,
             ConfigPath = filePath,
-            CurveSummary = "OTD 线性配置",
+            CurveSummary = curveSummary,
             RecommendedPressureMax = 16383,
-            PhysicalWidth = null,
-            PhysicalHeight = null,
+            PhysicalWidth = width,
+            PhysicalHeight = height,
             BezierCurve = null,
-            ThresholdRatio = 0
+            ThresholdRatio = thresholdRatio
         };
     }
 }

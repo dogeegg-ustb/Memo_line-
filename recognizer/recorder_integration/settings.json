@@ -6,5 +6,9 @@
   "saveSettleMs": 0,
   "autoHotkeyPath": "",
   "clipPath": "",
-  "captureBudgetMs": 100
+  "captureBudgetMs": 100,
+  "canvasSettleMinMs": 400,
+  "canvasSettleQuietMs": 150,
+  "canvasSettleMaxMs": 1500,
+  "canvasSettlePollMs": 30
 }

@@ -452,7 +452,10 @@ public sealed class TransformPipelineService
             $"S2C=[{snapshot.Raw.ScreenToCanvas.M0:F6},{snapshot.Raw.ScreenToCanvas.M1:F6},{snapshot.Raw.ScreenToCanvas.M2:F3};" +
             $"{snapshot.Raw.ScreenToCanvas.M3:F6},{snapshot.Raw.ScreenToCanvas.M4:F6},{snapshot.Raw.ScreenToCanvas.M5:F3}] " +
             $"C2S=[{snapshot.Raw.CanvasToScreen.M0:F2},{snapshot.Raw.CanvasToScreen.M1:F2},{snapshot.Raw.CanvasToScreen.M2:F1};" +
-            $"{snapshot.Raw.CanvasToScreen.M3:F2},{snapshot.Raw.CanvasToScreen.M4:F2},{snapshot.Raw.CanvasToScreen.M5:F1}]");
+            $"{snapshot.Raw.CanvasToScreen.M3:F2},{snapshot.Raw.CanvasToScreen.M4:F2},{snapshot.Raw.CanvasToScreen.M5:F1}] " +
+            // Navigator route: zoom equals the reading when the reading set it.
+            $"zoom={snapshot.ScaleGeometryEstimate:F3}% reading={snapshot.ScalePercentOcrOrInjected:F1}% " +
+            $"diff={snapshot.ScaleConsistencyError * 100:F2}%");
         if (snapshot.Status != NativeSct.StatusOk && snapshot.FailureStatus != 117)
         {
             if (snapshot.Status != NativeSct.StatusOk)
