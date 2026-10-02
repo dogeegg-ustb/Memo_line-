@@ -200,6 +200,75 @@ void TestViewportPattern02IntersectingNoComplete() {
          "0.2 recovers each orthogonal segment length independently");
 }
 
+// The viewport is wider than the canvas: its left side lies in the Navigator's
+// gray margin beside the paper, its bottom crosses the paper, and the workspace
+// shows the canvas left/top/right with its bottom cropped (zoom ~22% in CSP).
+// Pixel-edge coordinates: the paper covers [60,140)x[10,150) and the 1px red
+// centerlines are left x=40.5, bottom y=100.5. At nav scale 0.25 the viewport
+// is 200x150 from (40.5,-49.5), so the workspace sees the canvas from
+// (60-40.5)/0.25 = 78 to 398 and from (10+49.5)/0.25 = 238 down past 600.
+sct::ViewportCompletionInput MakeBesidePaperCornerInput(std::vector<uint8_t>& buf, int w, int h,
+                                                        int stride, int workspace_shift_x) {
+  FillRect(buf, stride, 60, 10, 140, 150, 230, 230, 230);
+  DrawRedVLine(buf, stride, 40, 5, 100, 0, 0, 220);
+  DrawRedHLine(buf, stride, 100, 40, 194, 0, 0, 220);
+  auto in = MakeViewportInput(buf, w, h, stride, {5, 5, 195, 155});
+  in.navigator_canvas_bounds = {60, 10, 140, 150};
+  auto& rel = in.workspace_canvas_relation;
+  rel.canvas_aspect_ratio = 80.0 / 140.0;
+  rel.canvas_crop_sides = 8;  // Bottom
+  rel.visible_canvas_bounds_workspace_local = {78 + workspace_shift_x, 238,
+                                               398 + workspace_shift_x, 600};
+  rel.visible_canvas_workspace_fraction_x = 320.f / 800.f;
+  rel.visible_canvas_workspace_fraction_y = 362.f / 600.f;
+  rel.visible_canvas_fraction_x = 1.0f;
+  rel.visible_canvas_fraction_y = 362.f / 560.f;
+  in.display_rotation_degrees = 0.f;
+  in.display_rotation_confidence = 0.85f;
+  return in;
+}
+
+void TestViewportPattern02SideBesidePaper() {
+  constexpr int W = 200;
+  constexpr int H = 160;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
+  auto in = MakeBesidePaperCornerInput(buf, W, H, stride, 0);
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "0.2 completes a corner whose side lies beside the paper");
+  if (out.status != sct::FailStatus::Ok) {
+    std::printf("  %s\n", out.message);
+    return;
+  }
+  Expect(out.frame.completion_strategy ==
+             static_cast<int>(sct::ViewportCompletionPattern::IntersectingSegmentsNoCompleteEdge),
+         "side beside the paper remains pattern 0.2");
+  std::printf("PRECISION 0.2 beside paper origin=(%.3f,%.3f) size=%.3fx%.3f\n",
+              out.frame.origin_top_left_displayed.x, out.frame.origin_top_left_displayed.y,
+              out.frame.width, out.frame.height);
+  Expect(std::abs(out.frame.origin_top_left_displayed.x - 40.5) < 0.5 &&
+             std::abs(out.frame.origin_top_left_displayed.y + 49.5) < 0.5,
+         "0.2 beside paper keeps the factual corner and extends above the view");
+  // 80/(320/800)=200, and the paper's 90.5px from its top to the corner
+  // /(362/600)=150. The red fragment itself starts above the paper.
+  Expect(std::abs(out.frame.width - 200.0) < 0.5 && std::abs(out.frame.height - 150.0) < 0.5,
+         "0.2 beside paper measures its height from the paper extent to the corner");
+}
+
+void TestViewportPattern02SideBesidePaperRejectsStaleNavigator() {
+  // Same Navigator, but the workspace already shows the canvas 150 px further
+  // right: the Navigator has not repainted after a pan. Both lengths still
+  // agree with the workspace aspect, so only the corner position exposes it.
+  constexpr int W = 200;
+  constexpr int H = 160;
+  constexpr int stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
+  auto in = MakeBesidePaperCornerInput(buf, W, H, stride, 150);
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status != sct::FailStatus::Ok,
+         "0.2 beside paper rejects a corner that contradicts the workspace offset");
+}
+
 void TestLargePinkPlateauIsNotMistakenForManyRedLines() {
   constexpr int W = 100;
   constexpr int H = 80;
@@ -991,6 +1060,8 @@ int main() {
   TestFourEdges180RotationLabelsWithoutCrop();
   TestNoWorkspaceCropDoesNotForceCropPath();
   TestViewportRotatedRectangleRelativeOrthogonal();
+  TestViewportPattern02SideBesidePaper();
+  TestViewportPattern02SideBesidePaperRejectsStaleNavigator();
   if (g_failures == 0) {
     std::printf("OK: all contract tests passed; max_navigator_canvas_boundary_error=%.6f\n",
                 g_max_navigator_canvas_boundary_error);

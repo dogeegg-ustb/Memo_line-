@@ -33,6 +33,12 @@ constexpr double kTheorySizeAbsPx = 8.0;
 constexpr double kTheorySizeRel = 0.18;
 constexpr double kViewportAspectRelTol = 0.22;
 
+// A partial side beside the Navigator paper (in its gray margin) measures its
+// canvas overlap from the paper extent only when it is axis-aligned with the
+// paper and its clipped end runs past the paper.
+constexpr double kBesideCanvasAxisSinMax = 0.01;  // within ~0.6 degrees
+constexpr double kBesideCanvasReachTolPx = 2.0;
+
 // 多组消歧：窄红色度（严于观测门控 IsNavigatorRedPixel）
 constexpr float kNarrowRedSatMin = 0.28f;
 constexpr float kNarrowRedSupportMin = 0.45f;
@@ -1452,15 +1458,59 @@ struct RecoveredSide {
   double normal = 0;
   double observed_start = 0;
   double observed_end = 0;
+  bool beside_canvas = false;  // measured by OverlapBesideCanvas
   double length() const { return end - start; }
 };
 
+// Interval, along the side, where a partial side beside the paper overlaps the
+// canvas. No red ink touches the paper, so the overlap is the paper's extent
+// within the side, from its corner (where raster extraction may stop the
+// fragment short) to its clipped end. That holds only if the clipped end
+// reaches past the paper; one cut short on the paper's span understates it.
+bool OverlapBesideCanvas(const wb::IntRect& canvas_local, Vec2 tangent, Vec2 normal,
+                         const RecoveredSide& side, double corner, double& p0, double& p1) {
+  if (!canvas_local.valid() ||
+      std::min(std::abs(tangent.x), std::abs(tangent.y)) > kBesideCanvasAxisSinMax) {
+    return false;
+  }
+  const double xs[2] = {canvas_local.left - 0.5, canvas_local.right - 0.5};
+  const double ys[2] = {canvas_local.top - 0.5, canvas_local.bottom - 0.5};
+  double t_min = std::numeric_limits<double>::infinity(), t_max = -t_min;
+  double n_min = t_min, n_max = -t_min;
+  for (double x : xs) {
+    for (double y : ys) {
+      const double t = Dot2(x, y, tangent.x, tangent.y);
+      const double n = Dot2(x, y, normal.x, normal.y);
+      t_min = std::min(t_min, t);
+      t_max = std::max(t_max, t);
+      n_min = std::min(n_min, n);
+      n_max = std::max(n_max, n);
+    }
+  }
+  // A side crossing the paper is measured by clipping its red ink instead.
+  if (side.normal >= n_min && side.normal <= n_max) return false;
+  double start = side.observed_start, end = side.observed_end;
+  const bool corner_at_end = std::abs(corner - end) <= std::abs(corner - start);
+  double& corner_end = corner_at_end ? end : start;
+  if (std::abs(corner - corner_end) > kGroupCornerTolPx) return false;
+  corner_end = corner;
+  p0 = std::max(start, t_min);
+  p1 = std::min(end, t_max);
+  if (p1 - p0 < 2) return false;
+  return corner_at_end ? start <= t_min + kBesideCanvasReachTolPx
+                       : end >= t_max - kBesideCanvasReachTolPx;
+}
+
 // Shared single-side length recovery for 0.1 / 0.2 / 0.3. Complete red sides
 // retain their entire observed interval, including pixels outside the paper.
-// Partial sides use both the workspace contact length and its offset.
+// Partial sides use both the workspace contact length and its offset. The
+// contact is the side's red ink on the paper. Only 0.2 may also measure a side
+// beside the paper: it passes the corner's position along the side, and the
+// corner then checks the side's position.
 bool RecoverSideLength(const ObservedEdge& edge, const ViewportCompletionInput& in,
                        const wb::IntRect& canvas_local, Vec2 tangent, Vec2 normal,
-                       bool along_workspace_x, RecoveredSide& side) {
+                       bool along_workspace_x, RecoveredSide& side,
+                       const double* beside_canvas_corner = nullptr) {
   if (!DirsParallel(edge.ux, edge.uy, tangent.x, tangent.y)) return false;
   const double observed0 = Dot2(edge.seg.x0, edge.seg.y0, tangent.x, tangent.y);
   const double observed1 = Dot2(edge.seg.x1, edge.seg.y1, tangent.x, tangent.y);
@@ -1476,8 +1526,18 @@ bool RecoverSideLength(const ObservedEdge& edge, const ViewportCompletionInput& 
   const auto& workspace = rel.workspace_roi;
   const auto& visible = rel.visible_canvas_bounds_workspace_local;
   if (!workspace.valid() || rel.ambiguous) return false;
+  double p0 = 0, p1 = 0;
   Vec2 cut0{}, cut1{};
-  if (!ClipEdgeToCanvas(edge, canvas_local, &cut0, &cut1)) return false;
+  if (ClipEdgeToCanvas(edge, canvas_local, &cut0, &cut1)) {
+    p0 = Dot2(cut0.x, cut0.y, tangent.x, tangent.y);
+    p1 = Dot2(cut1.x, cut1.y, tangent.x, tangent.y);
+  } else if (beside_canvas_corner &&
+             OverlapBesideCanvas(canvas_local, tangent, normal, side, *beside_canvas_corner,
+                                 p0, p1)) {
+    side.beside_canvas = true;
+  } else {
+    return false;
+  }
   const double total = along_workspace_x ? workspace.width() : workspace.height();
   const double fraction = along_workspace_x ? rel.visible_canvas_workspace_fraction_x
                                             : rel.visible_canvas_workspace_fraction_y;
@@ -1486,14 +1546,29 @@ bool RecoverSideLength(const ObservedEdge& edge, const ViewportCompletionInput& 
   const double offset = visible.valid()
       ? (along_workspace_x ? visible.left : visible.top) : 0;
   if (!(contact > 1e-4 && contact <= total && std::isfinite(contact))) return false;
-  const double p0 = Dot2(cut0.x, cut0.y, tangent.x, tangent.y);
-  const double p1 = Dot2(cut1.x, cut1.y, tangent.x, tangent.y);
   const double contact_length = std::abs(p1 - p0);
   if (contact_length < 2) return false;
   const double scale = contact_length / contact;
   side.start = std::min(p0, p1) - offset * scale;
   side.end = side.start + total * scale;
   return side.length() > 4 && std::isfinite(side.start) && std::isfinite(side.end);
+}
+
+// In 0.2 each side's workspace-predicted end must meet the orthogonal side's
+// measured red line, within the corner-fitting tolerance. Lengths alone cannot
+// reject a Navigator not yet repainted after a pan, so this is required once a
+// side was measured beside the paper. along_x/along_y are the sides running
+// along the two axes; *_at_start tells whether the orthogonal side sits at that
+// side's start.
+bool BesideCanvasPositionsAgree(const RecoveredSide& along_x, const RecoveredSide& along_y,
+                                bool vertical_at_start, bool horizontal_at_start,
+                                char* failure, size_t failure_size) {
+  const double dx = (vertical_at_start ? along_x.start : along_x.end) - along_y.normal;
+  const double dy = (horizontal_at_start ? along_y.start : along_y.end) - along_x.normal;
+  if (std::abs(dx) <= kGroupCornerTolPx && std::abs(dy) <= kGroupCornerTolPx) return true;
+  std::snprintf(failure, failure_size,
+                "0.2 beside-canvas side position conflict: dx=%.1f dy=%.1f", dx, dy);
+  return false;
 }
 
 bool RecoveredSideContainsObservation(const RecoveredSide& side) {
@@ -1661,8 +1736,12 @@ bool CompleteDirectedGroup(GroupCandidate& g, const ViewportCompletionInput& in,
     // each arm independently with the shared single-side length recovery.
     RecoveredSide horizontal{}, vertical{};
     g.pattern=ViewportCompletionPattern::IntersectingSegmentsNoCompleteEdge;
-    if (!RecoverSideLength(*ys.front(), in, canvas_local, ax, ay, true, horizontal) ||
-        !RecoverSideLength(*xs.front(), in, canvas_local, ay, ax, false, vertical) ||
+    // Along each arm, the corner lies at the other arm's line.
+    const double corner_along_x = px(xs.front()), corner_along_y = py(ys.front());
+    if (!RecoverSideLength(*ys.front(), in, canvas_local, ax, ay, true, horizontal,
+                           &corner_along_x) ||
+        !RecoverSideLength(*xs.front(), in, canvas_local, ay, ax, false, vertical,
+                           &corner_along_y) ||
         horizontal.length() + kGroupCornerTolPx < horizontal.observed_end-horizontal.observed_start ||
         vertical.length() + kGroupCornerTolPx < vertical.observed_end-vertical.observed_start) {
       std::snprintf(g.completion_failure,sizeof(g.completion_failure),
@@ -1686,6 +1765,11 @@ bool CompleteDirectedGroup(GroupCandidate& g, const ViewportCompletionInput& in,
     // corner, so this works for all four corners without screen-axis guesses.
     const bool extends_right = px(ys.front()) >= corner_x;
     const bool extends_down = py(xs.front()) >= corner_y;
+    if ((horizontal.beside_canvas || vertical.beside_canvas) &&
+        !BesideCanvasPositionsAgree(horizontal, vertical, extends_right, extends_down,
+                                    g.completion_failure, sizeof(g.completion_failure))) {
+      return false;
+    }
     l = extends_right ? corner_x : corner_x - width;
     r = l + width;
     t = extends_down ? corner_y : corner_y - height;
@@ -1899,10 +1983,12 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
   // Use their intersection to place them later; no joint scale averaging.
   auto recover_size_from_orthogonal_pair = [&](const ObservedEdge& v,
                                                const ObservedEdge& h,
+                                               RecoveredSide& horizontal,
+                                               RecoveredSide& vertical,
                                                double& w, double& hgt) -> bool {
-    RecoveredSide horizontal{}, vertical{};
-    if (!RecoverSideLength(h, in, canvas_local, {1, 0}, {0, 1}, true, horizontal) ||
-        !RecoverSideLength(v, in, canvas_local, {0, 1}, {1, 0}, false, vertical) ||
+    const double corner_x = EdgePosX(v), corner_y = EdgePosY(h);
+    if (!RecoverSideLength(h, in, canvas_local, {1, 0}, {0, 1}, true, horizontal, &corner_x) ||
+        !RecoverSideLength(v, in, canvas_local, {0, 1}, {1, 0}, false, vertical, &corner_y) ||
         horizontal.length() + kGroupCornerTolPx < horizontal.observed_end-horizontal.observed_start ||
         vertical.length() + kGroupCornerTolPx < vertical.observed_end-vertical.observed_start) return false;
     w = horizontal.length();
@@ -2232,7 +2318,8 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
   if (!v || !hz) return false;
 
   double w = 0, h = 0;
-  if (!recover_size_from_orthogonal_pair(*v, *hz, w, h)) return false;
+  RecoveredSide horizontal{}, vertical{};
+  if (!recover_size_from_orthogonal_pair(*v, *hz, horizontal, vertical, w, h)) return false;
 
   // A visible L should meet at its inferred corner.  With a crop path the
   // corner may be clipped out of the navigator canvas, so the two infinite
@@ -2254,6 +2341,11 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
       : hz->workspace_edge == kEdgeB
           ? false
           : (0.5 * (canvas_local.top + canvas_local.bottom) > hy);
+  if ((horizontal.beside_canvas || vertical.beside_canvas) &&
+      !BesideCanvasPositionsAgree(horizontal, vertical, left, top,
+                                  g.completion_failure, sizeof(g.completion_failure))) {
+    return false;
+  }
   frame.origin_top_left_displayed = {left ? abs_x(vx) : abs_x(vx) - w,
                                      top ? abs_y(hy) : abs_y(hy) - h};
   frame.axis_x_displayed = {w, 0};
