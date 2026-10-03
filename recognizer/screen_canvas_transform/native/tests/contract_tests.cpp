@@ -314,6 +314,124 @@ void TestViewportNoRedPixelsIsEdgeFailureNotFrameFound() {
          "no red edge evidence → InsufficientViewportGeometry");
 }
 
+// The paper fills the Navigator view width (gray margins above and below);
+// the viewport is wider than the paper. Its top lies 2.5 Navigator px above
+// the paper top, so that red side sits in the margin with no ink on the
+// paper, and its bottom crosses the paper (CSP, 2026-10-03). Pixel-edge
+// coordinates: paper [20,180)x[60,210), red rows 57 and 177 (centerlines
+// 57.5 and 177.5). At 0.2 Navigator px per workspace px the 1000x600
+// workspace sees the paper from x=100 to 900 and from y=12.5 down past 600.
+sct::ViewportCompletionInput MakeBesidePaperOppositeInput(std::vector<uint8_t>& buf, int w, int h,
+                                                          int stride, int workspace_gap_top) {
+  FillRect(buf, stride, 20, 60, 180, 210, 230, 230, 230);
+  DrawRedHLine(buf, stride, 57, 20, 179, 0, 0, 220);
+  DrawRedHLine(buf, stride, 177, 20, 179, 0, 0, 220);
+  auto in = MakeViewportInput(buf, w, h, stride, {20, 10, 180, 230});
+  in.navigator_canvas_bounds = {20, 60, 180, 210};
+  auto& rel = in.workspace_canvas_relation;
+  rel.workspace_roi = {0, 0, 1000, 600};
+  rel.canvas_aspect_ratio = 160.f / 150.f;
+  rel.canvas_crop_sides = 8;  // Bottom
+  rel.visible_canvas_bounds_workspace_local = {100, workspace_gap_top, 900, 600};
+  rel.visible_canvas_workspace_fraction_x = 800.f / 1000.f;
+  rel.visible_canvas_workspace_fraction_y = float(600 - workspace_gap_top) / 600.f;
+  rel.visible_canvas_fraction_x = 1.0f;
+  rel.visible_canvas_fraction_y = float(600 - workspace_gap_top) / 750.f;
+  in.display_rotation_degrees = 0.f;
+  in.display_rotation_confidence = 0.85f;
+  return in;
+}
+
+void TestViewportPattern03SideBesidePaper() {
+  constexpr int W = 200, H = 240, stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
+  auto in = MakeBesidePaperOppositeInput(buf, W, H, stride, 12);
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status == sct::FailStatus::Ok, "0.3 completes when one side lies beside the paper");
+  if (out.status != sct::FailStatus::Ok) {
+    std::printf("  %s\n", out.message);
+    return;
+  }
+  Expect(out.frame.completion_strategy ==
+             static_cast<int>(sct::ViewportCompletionPattern::OppositeSegmentsNoCompleteEdge),
+         "side beside the paper remains pattern 0.3");
+  std::printf("PRECISION 0.3 beside paper origin=(%.3f,%.3f) size=%.3fx%.3f\n",
+              out.frame.origin_top_left_displayed.x, out.frame.origin_top_left_displayed.y,
+              out.frame.width, out.frame.height);
+  // The red ink ends at the paper edges: its extent is one pixel short of the
+  // 160 px paper, i.e. at most 0.7% of the recovered width.
+  Expect(std::abs(out.frame.origin_top_left_displayed.y - 57.5) < 0.5 &&
+             std::abs(out.frame.height - 120.0) < 0.5,
+         "0.3 beside paper keeps both measured red normals");
+  Expect(std::abs(out.frame.width - 200.0) < 1.5 &&
+             std::abs(out.frame.origin_top_left_displayed.x - 0.0) < 1.5,
+         "0.3 beside paper takes the span from the side crossing the paper");
+}
+
+void TestViewportPattern03SideBesidePaperRejectsWorkspaceConflict() {
+  constexpr int W = 200, H = 240, stride = W * 4;
+  // The workspace shows the paper top 60 px down, i.e. 12 Navigator px, not
+  // 2.5: the Navigator has not repainted after a pan.
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 40);
+  auto in = MakeBesidePaperOppositeInput(buf, W, H, stride, 60);
+  auto out = sct::CompleteViewportFrame(in);
+  Expect(out.status != sct::FailStatus::Ok,
+         "0.3 beside paper rejects a side contradicting the workspace gap");
+  // A cropped paper top puts the viewport top inside the paper, not beside it.
+  std::vector<uint8_t> buf2(static_cast<size_t>(stride) * H, 40);
+  auto cropped = MakeBesidePaperOppositeInput(buf2, W, H, stride, 12);
+  cropped.workspace_canvas_relation.canvas_crop_sides = 2 | 8;
+  Expect(sct::CompleteViewportFrame(cropped).status != sct::FailStatus::Ok,
+         "0.3 beside paper rejects a side whose workspace paper edge is cropped");
+}
+
+wb::BackgroundModel NavigatorGrayModel() {
+  wb::BackgroundModel model;
+  model.center_lab = wb::BgrToLab(41, 41, 41);
+  model.strong_delta_e = 6.f;
+  model.weak_delta_e = 12.f;
+  return model;
+}
+
+void TestNavigatorPaperExcludesViewFrameAndRecoversClippedEdge() {
+  // Paper fills the view width (CSP 2026-10-03): the view [20,200) is framed
+  // by 45-gray columns, and the frozen thumbnail ROI starts 2 px inside the
+  // paper and ends on the right frame.
+  constexpr int W = 220, H = 260, stride = W * 4;
+  std::vector<uint8_t> buf(static_cast<size_t>(stride) * H, 0);
+  FillRect(buf, stride, 0, 0, W, H, 51, 51, 51);
+  FillRect(buf, stride, 18, 8, 202, 252, 45, 45, 45);
+  FillRect(buf, stride, 20, 10, 200, 250, 41, 41, 41);
+  FillRect(buf, stride, 20, 60, 200, 190, 255, 255, 255);
+  DrawRedHLine(buf, stride, 57, 20, 199, 0, 0, 255);
+  DrawRedHLine(buf, stride, 170, 20, 199, 0, 0, 255);
+  auto out = sct::ObserveCanvasExcludingBackground(buf.data(), W, H, stride, {22, 12, 202, 248},
+                                                   0, 0, NavigatorGrayModel(), 1.5f, true, 180, 130);
+  std::printf("PRECISION navigator framed width bounds=[%d,%d,%d,%d)\n", out.bounds_capture.left,
+              out.bounds_capture.top, out.bounds_capture.right, out.bounds_capture.bottom);
+  Expect(!out.ambiguous && out.bounds_capture.left == 20 && out.bounds_capture.right == 200 &&
+             out.bounds_capture.top == 60 && out.bounds_capture.bottom == 190,
+         "navigator paper excludes the view frame and recovers the ROI-clipped edge");
+
+  // Paper fills the view height: 45-gray frame rows above and below the view
+  // touch it, the top one through a red viewport side ending on it.
+  constexpr int W2 = 220, H2 = 220, stride2 = W2 * 4;
+  std::vector<uint8_t> tall(static_cast<size_t>(stride2) * H2, 0);
+  FillRect(tall, stride2, 0, 0, W2, H2, 73, 73, 73);
+  FillRect(tall, stride2, 10, 20, 210, 201, 45, 45, 45);
+  FillRect(tall, stride2, 10, 21, 210, 200, 41, 41, 41);
+  FillRect(tall, stride2, 70, 22, 150, 200, 255, 255, 255);
+  DrawRedVLine(tall, stride2, 120, 21, 100, 0, 0, 255);
+  DrawRedHLine(tall, stride2, 100, 10, 120, 0, 0, 255);
+  out = sct::ObserveCanvasExcludingBackground(tall.data(), W2, H2, stride2, {10, 20, 210, 201},
+                                              0, 0, NavigatorGrayModel(), 1.5f, true, 80, 178);
+  std::printf("PRECISION navigator framed height bounds=[%d,%d,%d,%d)\n", out.bounds_capture.left,
+              out.bounds_capture.top, out.bounds_capture.right, out.bounds_capture.bottom);
+  Expect(!out.ambiguous && out.bounds_capture.left == 70 && out.bounds_capture.right == 150 &&
+             out.bounds_capture.top == 22 && out.bounds_capture.bottom == 200,
+         "navigator paper excludes frame rows joined through red viewport ink");
+}
+
 // Navigator-route fixture: workspace 500x400, a square canvas whose Navigator
 // paper spans 260 thumbnail px, and a 200x160 red frame: 2.5 workspace px per
 // thumbnail px, so the red frame alone measures a 65% zoom on both axes.
@@ -507,8 +625,10 @@ void TestNavigatorRouteAnchorsToWorkspacePaperEdges() {
   Expect(std::abs(s.canvas_to_screen.m[1]) < 1e-9 && std::abs(s.canvas_to_screen.m[3]) < 1e-9,
          "anchored matrix stays axis aligned");
 
-  // Without workspace paper edges the reading still sets the zoom, and the
-  // red frame stays where it was observed: on its right and bottom sides.
+  // Without workspace paper edges the reading still sets the zoom, and each
+  // observed red side is mapped onto the workspace side it draws. CSP paints
+  // an unrotated side on the pixel the boundary rounds to, so the stroke
+  // centre (2260.5, 272.5) is the boundary 2260 / 272 plus half a pixel.
   in.workspace_canvas.visible_edges_mask = 0;
   const auto red_only = sct::SolveTransform(in);
   Expect(red_only.status == sct::FailStatus::Ok &&
@@ -516,14 +636,27 @@ void TestNavigatorRouteAnchorsToWorkspacePaperEdges() {
              red_only.snapshot.matrix_zoom_source == sct::MatrixZoomSource::ScaleReading,
          "no workspace paper edge, reading zoom only");
   const auto& nav = in.navigator_canvas.bounds_capture;
-  const double u_right = (2260.5 - nav.left) / nav.width();
-  const double v_bottom = (272.5 - nav.top) / nav.height();
-  const auto p = red_only.snapshot.canvas_to_screen.Apply({u_right, v_bottom});
-  const auto q = NavigatorOnlyScreen(in, u_right, v_bottom);
-  Expect(std::abs(p.x - q.x) < 1e-6 && std::abs(p.y - q.y) < 1e-6,
-         "reading zoom keeps the observed red sides in place");
+  const auto right_bottom = red_only.snapshot.canvas_to_screen.Apply(
+      {(2260.0 - nav.left) / nav.width(), (272.0 - nav.top) / nav.height()});
+  Expect(std::abs(right_bottom.x - in.workspace_roi_screen.right) < 1e-6 &&
+             std::abs(right_bottom.y - in.workspace_roi_screen.bottom) < 1e-6,
+         "red-only route maps the red right/bottom boundaries onto the workspace sides");
   Expect(std::abs(red_only.snapshot.canvas_to_screen.m[0] - 0.5 * in.canvas_pixel_width) < 1e-9,
          "red-only route zoom is the reading");
+  // With the Navigator paper bounds measured without the view's frame row
+  // (2168,144)-(2473,575) the red frame alone lands within a few px of the
+  // workspace truth (1293,392).
+  auto measured_paper = in;
+  measured_paper.navigator_canvas.bounds_capture = {2168, 144, 2473, 575};
+  measured_paper.navigator_canvas.bounds_screen = measured_paper.navigator_canvas.bounds_capture;
+  const auto red_measured = sct::SolveTransform(measured_paper);
+  std::printf("PRECISION red-only origin=(%.3f,%.3f) truth=(1293,392)\n",
+              red_measured.snapshot.marker.anchor_screen.x,
+              red_measured.snapshot.marker.anchor_screen.y);
+  Expect(red_measured.status == sct::FailStatus::Ok &&
+             std::hypot(red_measured.snapshot.marker.anchor_screen.x - 1293.0,
+                        red_measured.snapshot.marker.anchor_screen.y - 392.0) < 4.0,
+         "red-only route origin stays within a few px of the paper corner");
 
   // A misread reading and no paper edges publish the red-frame matrix.
   in.numbers.scale_percent = 500.f;
@@ -1343,6 +1476,9 @@ int main() {
   TestViewportRotatedRectangleRelativeOrthogonal();
   TestViewportPattern02SideBesidePaper();
   TestViewportPattern02SideBesidePaperRejectsStaleNavigator();
+  TestViewportPattern03SideBesidePaper();
+  TestViewportPattern03SideBesidePaperRejectsWorkspaceConflict();
+  TestNavigatorPaperExcludesViewFrameAndRecoversClippedEdge();
   if (g_failures == 0) {
     std::printf("OK: all contract tests passed; max_navigator_canvas_boundary_error=%.6f\n",
                 g_max_navigator_canvas_boundary_error);

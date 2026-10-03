@@ -23,6 +23,8 @@ constexpr double kNavigatorZoomRelativeMax = 0.10;
 constexpr double kReadingPaperRelativeMax = 0.03;
 constexpr double kReadingDisplayStepPercent = 0.1;  // CSP shows one decimal
 constexpr double kPaperSizeSlackPx = 2.0;
+// Navigator px between an unrotated red stroke's centre and the boundary it draws.
+constexpr double kRedStrokeCentreOffsetPx = 0.5;
 constexpr float kPaperEdgeSupportMin = 0.90f;
 
 bool DirectCanvasAspectMatches(const CanvasObservation& canvas, int canvas_pixel_width,
@@ -303,15 +305,26 @@ NavigatorRefinement RefineNavigatorMatrix(const SolveInput& in, float scale_perc
     }
     if (n == 0) {
       // Each observed red side is a workspace side: vertical ones fix x,
-      // horizontal ones y. Keep the red-frame mapping at their midpoints.
+      // horizontal ones y. Map each one onto the workspace side it draws.
+      const double length = a == 0 ? ws.width() : ws.height();
       for (int i = 0; i < in.viewport.observed_red_edge_export_count; ++i) {
         const auto& red = in.viewport.observed_red_edges[i];
-        const Vec2 u0 = nav_to_canvas(red.p0), u1 = nav_to_canvas(red.p1);
+        Vec2 p0 = red.p0, p1 = red.p1;
+        const double ndx = std::abs(p1.x - p0.x), ndy = std::abs(p1.y - p0.y);
+        if (axis_aligned && std::min(ndx, ndy) <= kRefineAxisSinMax * std::max(ndx, ndy)) {
+          // CSP draws an unrotated viewport side on the Navigator pixel the
+          // boundary rounds to; its centre lies half a pixel past the
+          // boundary towards +x/+y, which the workspace zoom magnifies.
+          p0 = {p0.x - kRedStrokeCentreOffsetPx, p0.y - kRedStrokeCentreOffsetPx};
+          p1 = {p1.x - kRedStrokeCentreOffsetPx, p1.y - kRedStrokeCentreOffsetPx};
+        }
+        const Vec2 u0 = nav_to_canvas(p0), u1 = nav_to_canvas(p1);
         const Vec2 w0 = c2w.Apply(u0), w1 = c2w.Apply(u1);
         const double dx = std::abs(w1.x - w0.x), dy = std::abs(w1.y - w0.y);
         if (std::max(dx, dy) < 1.0 || (a == 0) != (dx < dy)) continue;
         const Vec2 um{0.5 * (u0.x + u1.x), 0.5 * (u0.y + u1.y)};
-        sum += component(c2w.Apply(um), a) - component(linear(um), a);
+        const double side = component(c2w.Apply(um), a) < 0.5 * length ? 0.0 : length;
+        sum += side - component(linear(um), a);
         ++n;
       }
     }
