@@ -8,11 +8,6 @@
     <AssemblyName>MemolineToJson</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="..\Recognizer\src\BehaviorRecognizer\Storage\Memoline\MemolineReader.cs" Link="MemolineReader.cs" />
-    <Compile Include="..\Recognizer\src\BehaviorRecognizer\Storage\Memoline\MemolineTimeline.cs" Link="MemolineTimeline.cs" />
-    <Reference Include="System.IO.Hashing">
-      <HintPath>..\Recognizer\publish\win-x64\System.IO.Hashing.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
+    <ProjectReference Include="..\core\memoline\Memoline.Core.csproj" />
   </ItemGroup>
 </Project>

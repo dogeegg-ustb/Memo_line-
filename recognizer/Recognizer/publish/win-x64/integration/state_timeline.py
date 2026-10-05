@@ -39,20 +39,25 @@ def semantic_state(module, result):
 
 
 class StateTimeline:
-    def __init__(self,emit,notify):
+    def __init__(self,emit,notify,on_update=None):
         self.emit,self.notify = emit,notify
+        self.on_update = on_update
         self.packages = {}
+        self.resolved = set()
         self.previous = {}
         self.lock = threading.RLock()
 
     @synchronized
     def expect(self,package_id,modules,initial=False):
+        if package_id in self.resolved:
+            return
         entry = self.packages.setdefault(package_id,dict(expected=set(),results={},initial=initial))
         entry["expected"].update(modules)
 
     @synchronized
     def not_requested(self,package_id):
-        if package_id not in self.packages:
+        if package_id not in self.packages and package_id not in self.resolved:
+            self.resolved.add(package_id)
             self.emit(dict(type="timelineResult",packageId=package_id,data=dict(status="unchanged",updates=[],reason="noStateActivation")))
 
     @synchronized
@@ -66,27 +71,20 @@ class StateTimeline:
                     "会话结束时未取得该状态结果")
 
     @synchronized
+    def complete_if_pending(self,package_id,module,result,evidence,error=None):
+        entry = self.packages.get(package_id)
+        if entry is None or module not in entry["expected"] or module in entry["results"]:
+            return False
+        self.complete(package_id,module,result,evidence,error)
+        return True
+
+    @synchronized
     def complete(self,package_id,module,result,evidence,error=None):
         entry = self.packages[package_id]
-        state = semantic_state(module,result)
-        canonical = json.dumps(state,sort_keys=True,ensure_ascii=False,separators=(",",":"))
-        uncertain = bool(evidence.get("causalAmbiguous"))
-        if error:
-            status = "error"
-        elif state is None:
-            status = "unknown"
-        elif uncertain:
-            status = "ambiguous"
-        elif entry["initial"] or module not in self.previous or self.previous[module] != canonical:
-            status = "changed"
-        else:
-            status = "unchanged"
-        if status in {"changed","unchanged"}:
-            self.previous[module] = canonical
-        entry["results"][module] = dict(module=module,status=status,state=state,error=error,evidence=evidence)
-        if state is None and result is not None:
-            # Preserve partial observations without promoting them to a confirmed state.
-            entry["results"][module]["observedState"] = result
+        update = self._update(module,result,evidence,error,entry["initial"])
+        entry["results"][module] = update
+        if self.on_update:
+            self.on_update(package_id,update,entry["initial"],result)
         if entry["expected"] <= entry["results"].keys():
             updates = [entry["results"][m] for m in sorted(entry["expected"])]
             statuses = {u["status"] for u in updates}
@@ -94,7 +92,37 @@ class StateTimeline:
             self.emit(dict(type="timelineResult",packageId=package_id,data=dict(status=package_status,
                 initial=entry["initial"],updates=updates)))
             if entry["initial"]:
-                # Finish the initialization attempt even when one core failed; keep its error in the timeline.
                 self.notify(dict(type="initialStateReady",degraded=bool(statuses & {"error","ambiguous","unknown"}),
                     unavailableModules=[u["module"] for u in updates if u["status"] in {"error","ambiguous","unknown"}]))
             del self.packages[package_id]
+            self.resolved.add(package_id)
+
+    @synchronized
+    def observe(self,module,result,evidence,error=None):
+        """Publish an independent observation, such as a parsed saved Clip file."""
+        update = self._update(module,result,evidence,error,False)
+        if self.on_update:
+            self.on_update(None,update,False,result)
+        return update
+
+    def _update(self,module,result,evidence,error,initial):
+        state = semantic_state(module,result)
+        canonical = json.dumps(state,sort_keys=True,ensure_ascii=False,separators=(",",":"))
+        if error:
+            status = "error"
+        elif state is None:
+            status = "unknown"
+        elif initial or module not in self.previous or self.previous[module] != canonical:
+            status = "changed"
+        else:
+            status = "unchanged"
+        # Capture timing describes attribution, not recognition quality. A valid
+        # latest observation stays usable even if another input arrived before
+        # the screenshot. Preserve causalAmbiguous in evidence for diagnostics.
+        if status in {"changed","unchanged"}:
+            self.previous[module] = canonical
+        update = dict(module=module,status=status,state=state,error=error,evidence=evidence)
+        if state is None and result is not None:
+            # Preserve partial observations without promoting them to a confirmed state.
+            update["observedState"] = result
+        return update

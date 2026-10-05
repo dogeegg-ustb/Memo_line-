@@ -17,8 +17,10 @@ $build = Join-Path $root "native\build_regression"
 New-Item -ItemType Directory -Force -Path $build | Out-Null
 Push-Location $build
 try {
-  $sources = @("viewport_frame","transform_solve","workspace_canvas_relation","geometry","canvas_observe","color",
+  $sources = @("navigator_thumbnail","viewport_frame","transform_solve","workspace_canvas_relation","geometry","canvas_observe","color",
     "features","seeds","background","similarity","grower","scoring","refine","validate","detector")
+  $headerTime = (Get-ChildItem "$root\native\include", "$workspaceNative\include" -Recurse -File |
+    Measure-Object -Property LastWriteTime -Maximum).Maximum
   foreach ($name in $sources) {
     $sourcePath = if ($name -in @("color","features","seeds","background","similarity","grower","geometry",
         "scoring","refine","validate","detector")) {
@@ -27,13 +29,15 @@ try {
       Join-Path $root "native\src\$name.cpp"
     }
     if ($Incremental -and (Test-Path "$name.obj") -and
-        (Get-Item "$name.obj").LastWriteTime -gt (Get-Item $sourcePath).LastWriteTime) {continue}
+        (Get-Item "$name.obj").LastWriteTime -gt (Get-Item $sourcePath).LastWriteTime -and
+        (Get-Item "$name.obj").LastWriteTime -gt $headerTime) {continue}
     & $compiler /nologo /std:c++17 /O2 /EHsc /utf-8 /MT "/I$workspaceNative\include" "/I$root\native\include" /c $sourcePath
     if ($LASTEXITCODE) { throw "Compile failed: $name" }
   }
   $objects = $sources | ForEach-Object { "$_.obj" }
   $failed = $false
-  foreach ($test in @("contract_tests","rotation_regression_tests","workspace_regression_tests")) {
+  foreach ($test in @("contract_tests","rotation_regression_tests","workspace_regression_tests",
+      "navigator_thumbnail_regression_tests","viewport_robustness_tests")) {
     & $compiler /nologo /std:c++17 /O2 /EHsc /utf-8 /MT "/I$workspaceNative\include" "/I$root\native\include" "$root\native\tests\$test.cpp" @objects "/Fe:$test.exe"
     if ($LASTEXITCODE) { throw "Compile failed: $test" }
     & ".\$test.exe"

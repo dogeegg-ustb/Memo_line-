@@ -1,0 +1,8 @@
+source/bin/
+source/obj/
+checks/bin/
+checks/obj/
+checks/artifacts/
+publish/
+.work/
+recordings/

@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <limits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace sct {
@@ -219,6 +220,7 @@ CanvasObservation ObserveCanvasExcludingBackground(
       if(canvas_component[index(x,y)] && !background[index(x,y)]) ++rows[y];
     if(!body_interval(rows,miny,maxy)) return fail("no supported workspace canvas rows");
   }
+  int clip_ext[4]={0,0,0,0};  // navigator paper continuing past the ROI (L/T/R/B px)
   if (navigator) {
     // Connectivity is useful for keeping artwork inside the paper, but a red
     // viewport can also enclose exterior gray. Such a pocket is NOT paper
@@ -273,10 +275,94 @@ CanvasObservation ObserveCanvasExcludingBackground(
     while(miny<=maxy && rows[miny]<minRow) ++miny;
     while(maxy>=miny && rows[maxy]<minRow) --maxy;
     if(maxx<minx || maxy<miny) return fail("no supported navigator canvas body");
+
+    // CSP frames the Navigator view with lines a few levels off its fill. A
+    // line touching the paper joins the paper's component (often through red
+    // viewport ink) and survives the density trim, shifting a paper bound by
+    // its width. A frame line runs on past the paper's perpendicular extent;
+    // paper itself is background there. Conversely a frozen thumbnail ROI a
+    // few px inside the view clips a genuine paper edge: continue that edge
+    // into the real frame pixels while the column/row is still paper.
+    auto paper_at=[&](int x,int y) {  // ROI-local coordinates, may leave the ROI
+      const int ax=x+roi.left, ay=y+roi.top;
+      if(ax<0 || ay<0 || ax>=width || ay>=height) return -1;
+      if(x>=0 && y>=0 && x<rw && y<rh) return viewport_ink[index(x,y)] ? -1 : int(!background[index(x,y)]);
+      const auto* p=bgra+size_t(ay)*stride+size_t(ax)*4;
+      if(p[2]>=70 && int(p[2])-p[1]>=8 && int(p[2])-p[0]>=8) return -1;  // red viewport ink
+      return int(BgrDistance(p,model_bg)>3);
+    };
+    // Share of non-background pixels of one line, inside / outside the paper span.
+    auto line_share=[&](bool column,int at,bool inside) {
+      int hits=0,total=0;
+      const int lo=column?miny:minx, hi=column?maxy:maxx, n=column?rh:rw;
+      for(int k=0;k<n;++k) {
+        if((k>=lo && k<=hi)!=inside) continue;
+        const int v=column?paper_at(at,k):paper_at(k,at);
+        if(v<0) continue;
+        ++total; hits+=v;
+      }
+      return std::make_pair(hits,total);
+    };
+    constexpr int kFrameLineMaxPx=4, kClippedEdgeMaxPx=6, kOutsideSamplesMin=4;
+    auto frame_line=[&](bool column,int at) {
+      const auto [hits,total]=line_share(column,at,false);
+      if (total<kOutsideSamplesMin || hits<0.8*total) return false;
+      // A genuine paper edge can share its column/row with a slightly
+      // different gray panel rim. Exterior non-background alone does not
+      // make that white paper a frame line: the line's color must continue
+      // through both its exterior and its interior span.
+      const int lo=column?miny:minx, hi=column?maxy:maxx, n=column?rh:rw;
+      std::unordered_map<uint32_t,int> colors;
+      uint32_t dominant=0; int best=0;
+      for(int k=0;k<n;++k) {
+        if(k>=lo && k<=hi) continue;
+        const int x=column?at:k, y=column?k:at;
+        if(paper_at(x,y)!=1) continue;
+        const auto* p=bgra+size_t(y+roi.top)*stride+size_t(x+roi.left)*4;
+        const uint32_t color=uint32_t(p[0]) | (uint32_t(p[1])<<8) | (uint32_t(p[2])<<16);
+        const int count=++colors[color];
+        if(count>best) { best=count; dominant=color; }
+      }
+      if(best<kOutsideSamplesMin) return false;
+      const BgrColor line_color{int(dominant&255),int((dominant>>8)&255),int((dominant>>16)&255)};
+      int same=0, inside=0;
+      for(int k=lo;k<=hi;++k) {
+        const int x=column?at:k, y=column?k:at;
+        if(paper_at(x,y)<0) continue;
+        const auto* p=bgra+size_t(y+roi.top)*stride+size_t(x+roi.left)*4;
+        ++inside; same+=BgrDistance(p,line_color)<=3;
+      }
+      return inside>0 && same>=0.8*inside;
+    };
+    auto paper_line=[&](bool column,int at) {
+      const auto in=line_share(column,at,true), out=line_share(column,at,false);
+      return in.second>0 && in.first>=0.5*in.second &&
+             (out.second<kOutsideSamplesMin || out.first<=0.2*out.second);
+    };
+    // A peeled frame line can expose a sparse line (e.g. one red pixel) that
+    // the density trim would have removed had the frame not shielded it.
+    for(int pass=0;pass<3;++pass) {
+      const int before[4]={minx,miny,maxx,maxy};
+      for(int k=0;k<kFrameLineMaxPx && maxx>minx && frame_line(true,minx);++k) ++minx;
+      for(int k=0;k<kFrameLineMaxPx && maxx>minx && frame_line(true,maxx);++k) --maxx;
+      for(int k=0;k<kFrameLineMaxPx && maxy>miny && frame_line(false,miny);++k) ++miny;
+      for(int k=0;k<kFrameLineMaxPx && maxy>miny && frame_line(false,maxy);++k) --maxy;
+      while(minx<maxx && columns[minx]<minColumn) ++minx;
+      while(maxx>minx && columns[maxx]<minColumn) --maxx;
+      while(miny<maxy && rows[miny]<minRow) ++miny;
+      while(maxy>miny && rows[maxy]<minRow) --maxy;
+      if(before[0]==minx && before[1]==miny && before[2]==maxx && before[3]==maxy) break;
+    }
+    // Kept apart from the ROI-local bounds, which index ROI-sized masks below.
+    if(minx==0) while(clip_ext[0]<kClippedEdgeMaxPx && paper_line(true,-1-clip_ext[0])) ++clip_ext[0];
+    if(miny==0) while(clip_ext[1]<kClippedEdgeMaxPx && paper_line(false,-1-clip_ext[1])) ++clip_ext[1];
+    if(maxx==rw-1) while(clip_ext[2]<kClippedEdgeMaxPx && paper_line(true,rw+clip_ext[2])) ++clip_ext[2];
+    if(maxy==rh-1) while(clip_ext[3]<kClippedEdgeMaxPx && paper_line(false,rh+clip_ext[3])) ++clip_ext[3];
   }
   if (navigator && canvas_pixel_width > 0 && canvas_pixel_height > 0) {
     const double expected_aspect = double(canvas_pixel_width) / canvas_pixel_height;
-    const int observed_w = maxx - minx + 1, observed_h = maxy - miny + 1;
+    const int observed_w = maxx - minx + 1 + clip_ext[0] + clip_ext[2];
+    const int observed_h = maxy - miny + 1 + clip_ext[1] + clip_ext[3];
     const double observed_aspect = double(observed_w) / observed_h;
     const double tolerance = std::max(0.04, 2.0 / std::min(observed_w, observed_h));
     if (std::abs(observed_aspect / expected_aspect - 1.0) > tolerance) {
@@ -352,12 +438,14 @@ CanvasObservation ObserveCanvasExcludingBackground(
         return fail("navigator canvas aspect mismatch without unique supported edge");
       minx = proposals[0].l; miny = proposals[0].t;
       maxx = proposals[0].r; maxy = proposals[0].b;
+      std::fill(std::begin(clip_ext), std::end(clip_ext), 0);
     }
   }
-  out.bounds_capture={roi.left+minx,roi.top+miny,roi.left+maxx+1,roi.top+maxy+1};
+  out.bounds_capture={roi.left+minx-clip_ext[0],roi.top+miny-clip_ext[1],
+                      roi.left+maxx+1+clip_ext[2],roi.top+maxy+1+clip_ext[3]};
   out.bounds_screen={out.bounds_capture.left+origin_x,out.bounds_capture.top+origin_y,
                      out.bounds_capture.right+origin_x,out.bounds_capture.bottom+origin_y};
-  const int bw=maxx-minx+1,bh=maxy-miny+1;
+  const int bw=out.bounds_capture.width(),bh=out.bounds_capture.height();
   out.aspect_ratio=float(bw)/bh;
 
   // Require the actual two-sided transition at each proposed edge: canvas on

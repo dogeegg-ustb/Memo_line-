@@ -265,6 +265,13 @@ public sealed class NavigatorOcrService
                 debugDir, "rotation", cancellationToken).ConfigureAwait(false);
             rotOk = TryPickOrdered(rapidHits, TryParseRotation,
                 out rotVal, out rotRaw, out rotHit);
+            if (!rotOk && !label.Equals(rotationSlotCapture))
+            {
+                var fullSlotHits = await RecognizeRapidFallbackAsync(
+                    session, rotationSlotCapture, debugDir, "rotation_full", cancellationToken).ConfigureAwait(false);
+                rotOk = TryPickOrdered(fullSlotHits, TryParseRotation,
+                    out rotVal, out rotRaw, out rotHit);
+            }
         }
 
         Log(debugDir,

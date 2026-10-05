@@ -63,10 +63,11 @@ class ActivatorTests(unittest.TestCase):
         self.assertEqual(self.requests()[-1]["relatedEventIds"], [3])
         self.assertEqual(self.records[0]["kind"], "shortcutResolved")
 
-    def test_navigation_tool_changes_are_cleared_by_brush_key(self):
+    def test_navigation_tool_shortcut_does_not_arm_canvas_pointer_events(self):
         self.key(72, [72])
         self.cursor(down=True)
-        self.assertIn(NAVIGATOR, self.engine.gesture_panels)
+        self.assertEqual(self.engine.gesture_panels, set())
+        self.assertFalse(any(CANVAS in r["data"]["panels"] for r in self.requests()))
         self.key(66, [66], 4)
         self.cursor(down=True)
         self.assertEqual(self.engine.gesture_panels, set())
@@ -100,7 +101,7 @@ class ActivatorTests(unittest.TestCase):
     def test_toolbar_operation_captures_brush_roi_and_keeps_input_reference(self):
         self.engine.set_regions({**self.engine.regions,TOOLBAR:[-50,0,40,500]})
         self.cursor(-30,20)
-        self.assertEqual(self.engine.active_panels(),{TOOLBAR,BRUSH})
+        self.assertEqual(self.engine.active_panels(),set())
         self.engine.handle(dict(type="input",event=dict(eventId=7,ticks=15,kind="mouseDown",
             data=dict(x=-30,y=20,heldKeys=[]))))
         request=self.requests()[-1]
@@ -113,6 +114,8 @@ class ActivatorTests(unittest.TestCase):
             data=dict(x=-30,y=20,heldKeys=[]))))
         self.assertEqual(self.requests()[-1]["data"]["phase"],"invalidate")
         self.assertEqual(self.requests()[-1]["relatedEventIds"],[7,8])
+        self.engine.flash_update([TOOLBAR])
+        self.assertEqual(self.engine.active_panels(),{BRUSH})
 
     def test_initial_capture_maps_toolbar_to_existing_brush_state(self):
         self.assertEqual(self.engine.capture_targets([TOOLBAR,BRUSH,CANVAS]),{BRUSH,CANVAS})

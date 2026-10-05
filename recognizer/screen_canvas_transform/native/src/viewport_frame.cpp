@@ -1396,6 +1396,7 @@ struct GroupCandidate {
   int recovered_edge_count = 0;
   bool completed_ok = false;
   bool used_crop_correspondence = false;
+  bool used_single_side_fallback = false;
   ViewportCompletionPattern pattern = ViewportCompletionPattern::FourCompleteEdges;
   NavigatorViewportFrame frame{};
   char completion_failure[128] = {};
@@ -1517,6 +1518,27 @@ bool RecoverSideLength(const ObservedEdge& edge, const ViewportCompletionInput& 
   side.observed_start = std::min(observed0, observed1);
   side.observed_end = std::max(observed0, observed1);
   side.normal = Dot2(EdgePosX(edge), EdgePosY(edge), normal.x, normal.y);
+  ObservedEdge contact_edge = edge;
+  if (!edge.complete && beside_canvas_corner) {
+    // A perpendicular stroke makes the shared corner's normal profile wide,
+    // so straight-line extraction may stop a pixel before that corner. Use
+    // the independently observed perpendicular line to restore only this end.
+    const bool at_start = std::abs(observed0 - *beside_canvas_corner) <=
+                          std::abs(observed1 - *beside_canvas_corner);
+    const double delta = *beside_canvas_corner - (at_start ? observed0 : observed1);
+    if (std::abs(delta) <= kGroupCornerTolPx &&
+        (at_start ? edge.has_start_corner : edge.has_end_corner)) {
+      if (at_start) {
+        contact_edge.seg.x0 += tangent.x * delta;
+        contact_edge.seg.y0 += tangent.y * delta;
+      } else {
+        contact_edge.seg.x1 += tangent.x * delta;
+        contact_edge.seg.y1 += tangent.y * delta;
+      }
+      side.observed_start = std::min(*beside_canvas_corner, at_start ? observed1 : observed0);
+      side.observed_end = std::max(*beside_canvas_corner, at_start ? observed1 : observed0);
+    }
+  }
   if (edge.complete) {
     side.start = side.observed_start;
     side.end = side.observed_end;
@@ -1528,7 +1550,7 @@ bool RecoverSideLength(const ObservedEdge& edge, const ViewportCompletionInput& 
   if (!workspace.valid() || rel.ambiguous) return false;
   double p0 = 0, p1 = 0;
   Vec2 cut0{}, cut1{};
-  if (ClipEdgeToCanvas(edge, canvas_local, &cut0, &cut1)) {
+  if (ClipEdgeToCanvas(contact_edge, canvas_local, &cut0, &cut1)) {
     p0 = Dot2(cut0.x, cut0.y, tangent.x, tangent.y);
     p1 = Dot2(cut1.x, cut1.y, tangent.x, tangent.y);
   } else if (beside_canvas_corner &&
@@ -1578,6 +1600,54 @@ bool RecoveredSideContainsObservation(const RecoveredSide& side) {
          side.end >= side.observed_end - kGroupCornerTolPx;
 }
 
+// A 0.3 side without paper contact must lie beside the paper, within the
+// recovered viewport span, and at the workspace's own measured distance from
+// the paper: the viewport side is that many workspace px past the paper edge,
+// which the workspace sees uncropped. This rejects a Navigator not yet
+// repainted after a pan, which the loose aspect check alone would accept.
+bool BesideSideMatchesWorkspace(const RecoveredSide& side, const ViewportCompletionInput& in,
+                                const wb::IntRect& canvas_local, Vec2 tangent, Vec2 normal,
+                                bool along_workspace_x, char* failure, size_t failure_size) {
+  const auto& rel = in.workspace_canvas_relation;
+  const auto& workspace = rel.workspace_roi;
+  const auto& visible = rel.visible_canvas_bounds_workspace_local;
+  double n_min = std::numeric_limits<double>::infinity(), n_max = -n_min;
+  for (double x : {canvas_local.left - 0.5, canvas_local.right - 0.5}) {
+    for (double y : {canvas_local.top - 0.5, canvas_local.bottom - 0.5}) {
+      const double n = Dot2(x, y, normal.x, normal.y);
+      n_min = std::min(n_min, n);
+      n_max = std::max(n_max, n);
+    }
+  }
+  const bool low = side.normal < n_min;
+  if (!canvas_local.valid() || !visible.valid() || (!low && !(side.normal > n_max))) {
+    std::snprintf(failure, failure_size, "0.3 side without paper contact is not beside the paper");
+    return false;
+  }
+  if (!RecoveredSideContainsObservation(side)) {
+    std::snprintf(failure, failure_size, "0.3 beside-paper side exceeds the recovered span");
+    return false;
+  }
+  // Workspace side running along this red side, and its gap to the paper.
+  const int edge = along_workspace_x ? (low ? kEdgeT : kEdgeB) : (low ? kEdgeL : kEdgeR);
+  const double gap = edge == kEdgeT ? visible.top
+                     : edge == kEdgeB ? workspace.height() - visible.bottom
+                     : edge == kEdgeL ? visible.left
+                                      : workspace.width() - visible.right;
+  const double total = along_workspace_x ? workspace.width() : workspace.height();
+  const double scale = side.length() / total;
+  const double expected = low ? n_min - gap * scale : n_max + gap * scale;
+  const double tolerance = 3.0 + 0.02 * gap * scale;
+  if ((rel.canvas_crop_sides & edge) || gap < 0 ||
+      std::abs(side.normal - expected) > tolerance) {
+    std::snprintf(failure, failure_size,
+                  "0.3 beside-paper side position conflict: observed=%.1f expected=%.1f crop=0x%x",
+                  side.normal, expected, rel.canvas_crop_sides);
+    return false;
+  }
+  return true;
+}
+
 bool CompleteOppositePartialSides(GroupCandidate& g, const ViewportCompletionInput& in,
                                   const wb::IntRect& roi) {
   if (g.edges.size() != 2 || g.edges[0].complete || g.edges[1].complete ||
@@ -1602,18 +1672,26 @@ bool CompleteOppositePartialSides(GroupCandidate& g, const ViewportCompletionInp
   if (!canvas.valid()) canvas = roi;
   const wb::IntRect canvas_local{canvas.left - roi.left, canvas.top - roi.top,
                                 canvas.right - roi.left, canvas.bottom - roi.top};
+  // A side lying beside the paper (in its margin, e.g. a viewport edge just
+  // past the paper edge) has no red ink on the paper and therefore no contact
+  // interval. Its normal position is still factual; the opposite side's
+  // contact supplies the tangential interval for both.
   RecoveredSide sides[2];
-  if (!RecoverSideLength(g.edges[0], in, canvas_local, tangent, normal, along_x, sides[0]) ||
-      !RecoverSideLength(g.edges[1], in, canvas_local, tangent, normal, along_x, sides[1])) {
+  bool measured[2];
+  for (int i = 0; i < 2; ++i) {
+    measured[i] = RecoverSideLength(g.edges[i], in, canvas_local, tangent, normal, along_x,
+                                    sides[i]);
+  }
+  if (!measured[0] && !measured[1]) {
     std::snprintf(g.completion_failure, sizeof(g.completion_failure),
                   "0.3 side recovery lacks workspace contact geometry");
     return false;
   }
-  for (const auto& side : sides) {
-    if (!RecoveredSideContainsObservation(side)) {
+  for (int i = 0; i < 2; ++i) {
+    if (measured[i] && !RecoveredSideContainsObservation(sides[i])) {
       std::snprintf(g.completion_failure, sizeof(g.completion_failure),
           "0.3 contact conflict: observed=%.1f recovered=%.1f relation=%.2f",
-          side.observed_end - side.observed_start, side.length(),
+          sides[i].observed_end - sides[i].observed_start, sides[i].length(),
           in.workspace_canvas_relation.confidence);
       return false;
     }
@@ -1628,16 +1706,28 @@ bool CompleteOppositePartialSides(GroupCandidate& g, const ViewportCompletionInp
       return false;
     }
   }
-  if (std::abs(sides[0].start - sides[1].start) > tolerance ||
-      std::abs(sides[0].end - sides[1].end) > tolerance) {
+  if (measured[0] && measured[1] &&
+      (std::abs(sides[0].start - sides[1].start) > tolerance ||
+       std::abs(sides[0].end - sides[1].end) > tolerance)) {
     std::snprintf(g.completion_failure, sizeof(g.completion_failure),
                   "0.3 opposite recovered side intervals disagree");
     return false;
   }
   // Independent single-side recovery has finished. Fuse only compatible
   // tangential intervals; the two measured normals fix the opposite sides.
-  const double start = 0.5 * (sides[0].start + sides[1].start);
-  const double end = 0.5 * (sides[0].end + sides[1].end);
+  const int both = int(measured[0]) + int(measured[1]);
+  const double start = ((measured[0] ? sides[0].start : 0) + (measured[1] ? sides[1].start : 0)) / both;
+  const double end = ((measured[0] ? sides[0].end : 0) + (measured[1] ? sides[1].end : 0)) / both;
+  for (int i = 0; i < 2; ++i) {
+    if (measured[i]) continue;
+    RecoveredSide beside = sides[i];
+    beside.start = start;
+    beside.end = end;
+    if (!BesideSideMatchesWorkspace(beside, in, canvas_local, tangent, normal, along_x,
+                                    g.completion_failure, sizeof(g.completion_failure))) {
+      return false;
+    }
+  }
   const double low = std::min(sides[0].normal, sides[1].normal);
   const double high = std::max(sides[0].normal, sides[1].normal);
   const double width = along_x ? end - start : high - low;
@@ -2353,6 +2443,50 @@ bool CompleteGroupPattern(GroupCandidate& g, const ViewportCompletionInput& in,
   return finish_ok(0);
 }
 
+// A second red side may have no trustworthy paper contact (or disagree with
+// the workspace relation). Reuse 0.1 only when exactly one observed side can
+// be completed. A thin red line can occupy the pixels excluded from the paper
+// bounds, so allow a two-pixel normal-axis rim without changing its tangential
+// paper span, which supplies the 0.1 length and translation.
+bool CompleteSingleSideFallback(GroupCandidate& g, const ViewportCompletionInput& in,
+                                const wb::IntRect& roi, int rw, int rh) {
+  if (g.edges.empty() || g.edges.size()>2 ||
+      std::any_of(g.edges.begin(),g.edges.end(),[](const ObservedEdge& e) { return e.complete; })) return false;
+  if (g.edges.size()==2 && !DirsParallel(g.edges[0].ux,g.edges[0].uy,g.edges[1].ux,g.edges[1].uy))
+    return false;
+  GroupCandidate recovered;
+  int successful=0;
+  for (const auto& edge:g.edges) {
+    GroupCandidate single;
+    single.edges.push_back(edge);
+    if (!CompleteGroupPattern(single,in,roi,rw,rh,nullptr)) {
+      if (!in.navigator_canvas_bounds.valid()) continue;
+      // This bounded rim fallback applies only to a side aligned with the
+      // displayed paper. Oblique fragments retain their real clipping path.
+      if (std::abs(edge.ux)>0.04 && std::abs(edge.uy)>0.04) continue;
+      auto contact_input=in;
+      auto& paper=contact_input.navigator_canvas_bounds;
+      if (edge.seg.horizontal) { paper.top-=2;paper.bottom+=2; }
+      else { paper.left-=2;paper.right+=2; }
+      single=GroupCandidate{};
+      single.edges.push_back(edge);
+      if (!CompleteGroupPattern(single,contact_input,roi,rw,rh,nullptr)) continue;
+      // The near-paper side must correspond to a real workspace crop, rather
+      // than being labelled from the navigator midpoint.
+      if (!single.used_crop_correspondence || single.edges.front().workspace_edge==0 ||
+          !(in.workspace_canvas_relation.canvas_crop_sides & single.edges.front().workspace_edge)) continue;
+    }
+    if (single.pattern!=ViewportCompletionPattern::ParallelSegmentsNoCompleteEdge) continue;
+    if (in.workspace_canvas_relation.canvas_crop_sides!=0 && !single.used_crop_correspondence) continue;
+    recovered=std::move(single);
+    if (++successful>1) return false;
+  }
+  if (successful!=1) return false;
+  recovered.used_single_side_fallback=true;
+  g=std::move(recovered);
+  return true;
+}
+
 // Hough seeds can miss an entire pale AA side. Existing factual corners give
 // bounded line probes; a completed frame alone never supplies a red edge.
 void RecoverMissingObservedEdges(GroupCandidate& g,const ViewportCompletionInput& in,
@@ -2770,7 +2904,8 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
   for (auto& g : groups) {
     g.recovered_edge_count = static_cast<int>(std::count_if(
         g.edges.begin(), g.edges.end(), [](const ObservedEdge& e) { return e.recovered_from_corner; }));
-    if (!CompleteGroupPattern(g, in, roi, rw, rh, nullptr)) continue;
+    if (!CompleteGroupPattern(g, in, roi, rw, rh, nullptr) &&
+        !CompleteSingleSideFallback(g,in,roi,rw,rh)) continue;
     RecoverMissingObservedEdges(g,in,roi,rw,rh);
     // Multiple extraction paths can describe the same physical frame. They
     // are duplicate evidence, not competing viewport locations.
@@ -2888,16 +3023,16 @@ ViewportCompletionResult CompleteViewportFrame(const ViewportCompletionInput& in
   r.used_crop_correspondence = target->used_crop_correspondence;
   if (target->used_crop_correspondence) {
     std::snprintf(r.message, sizeof(r.message),
-                  "ok crop_correspondence pattern=%d complete=%d segs=%d groups=%d fallback=%d recovered=%d",
+                  "ok crop_correspondence pattern=%d complete=%d segs=%d groups=%d fallback=%d recovered=%d fallback01=%d",
                   r.frame.completion_strategy, target->complete_count,
                   static_cast<int>(target->edges.size()), static_cast<int>(survivors.size()),fragment_fallbacks,
-                  target->recovered_edge_count);
+                  target->recovered_edge_count,int(target->used_single_side_fallback));
   } else {
     std::snprintf(r.message, sizeof(r.message),
-                  "ok legacy_group_sort pattern=%d complete=%d segs=%d groups=%d fallback=%d recovered=%d",
+                  "ok legacy_group_sort pattern=%d complete=%d segs=%d groups=%d fallback=%d recovered=%d fallback01=%d",
                   r.frame.completion_strategy, target->complete_count,
                   static_cast<int>(target->edges.size()), static_cast<int>(survivors.size()),fragment_fallbacks,
-                  target->recovered_edge_count);
+                  target->recovered_edge_count,int(target->used_single_side_fallback));
   }
   return r;
 }

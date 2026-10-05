@@ -266,6 +266,14 @@ public sealed class NavigatorOcrService : IDisposable
                 cancellationToken);
             rotOk = TryPickOrdered(rapidHits, TryParseRotation,
                 out rotVal, out rotRaw, out rotHit);
+            if (!rotOk && !label.Equals(rotationSlotCapture))
+            {
+                // A persisted narrow numbers ROI can put the last digit past
+                // the 75% label window. Retry the supplied slot unchanged.
+                rapidHits = RecognizeRapidFallback(session, rotationSlotCapture, cancellationToken);
+                rotOk = TryPickOrdered(rapidHits, TryParseRotation,
+                    out rotVal, out rotRaw, out rotHit);
+            }
         }
 
         return new NavigatorNumericReadingDto

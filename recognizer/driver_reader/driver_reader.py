@@ -1,8 +1,9 @@
 """
-driver_reader.py - Python 绑定与数位板驱动压感求解器
+driver_reader.py - Python 绑定与数位板驱动压感/坐标映射求解器
 
 用于与 recognizer/driver_reader CLI 协作，或直接读取导出的 JSON 配置文件，
-支持硬件有效范围获取、三次贝塞尔 (Cubic Bézier) 压感曲线求解与起笔死区校准。
+支持硬件有效范围获取、三次贝塞尔 (Cubic Bézier) 压感曲线求解、起笔死区校准、
+以及物理坐标系到屏幕坐标系的前向映射与反向映射。
 """
 
 import json
@@ -65,8 +66,148 @@ class CubicBezierCurve:
 
 
 @dataclass
+class RectArea:
+    """矩形边界区域定义（物理区域或屏幕区域）。"""
+
+    left: float
+    top: float
+    right: float
+    bottom: float
+
+    @property
+    def width(self) -> float:
+        return max(0.0, self.right - self.left)
+
+    @property
+    def height(self) -> float:
+        return max(0.0, self.bottom - self.top)
+
+    def __str__(self) -> str:
+        return f"[{self.left:.2f}, {self.top:.2f}] → [{self.right:.2f}, {self.bottom:.2f}] (尺寸: {self.width:.2f} x {self.height:.2f})"
+
+    @classmethod
+    def from_dict(cls, data: Optional[dict]) -> Optional["RectArea"]:
+        if not data:
+            return None
+        return cls(
+            left=float(data.get("Left", 0.0)),
+            top=float(data.get("Top", 0.0)),
+            right=float(data.get("Right", 0.0)),
+            bottom=float(data.get("Bottom", 0.0)),
+        )
+
+
+@dataclass
+class CoordinateMapping:
+    """数位板物理坐标系与屏幕显示坐标系之间的映射模型。"""
+
+    mapping_mode: str
+    physical_area: RectArea
+    physical_unit: str
+    screen_area: Optional[RectArea]
+    screen_map_ratio: Optional[RectArea]
+    screen_index: Optional[int]
+    rotation_degrees: int
+    lock_aspect_ratio: bool
+    scale_x: Optional[float]
+    scale_y: Optional[float]
+    formula_summary: str
+
+    @classmethod
+    def from_dict(cls, data: Optional[dict]) -> Optional["CoordinateMapping"]:
+        if not data:
+            return None
+        phys = RectArea.from_dict(data.get("PhysicalArea")) or RectArea(0, 0, 1, 1)
+        screen = RectArea.from_dict(data.get("ScreenArea"))
+        ratio = RectArea.from_dict(data.get("ScreenMapRatio"))
+        return cls(
+            mapping_mode=data.get("MappingMode", "Absolute"),
+            physical_area=phys,
+            physical_unit=data.get("PhysicalUnit", "Counts"),
+            screen_area=screen,
+            screen_map_ratio=ratio,
+            screen_index=data.get("ScreenIndex"),
+            rotation_degrees=int(data.get("RotationDegrees") or 0),
+            lock_aspect_ratio=bool(data.get("LockAspectRatio", False)),
+            scale_x=float(data["ScaleX"]) if data.get("ScaleX") is not None else None,
+            scale_y=float(data["ScaleY"]) if data.get("ScaleY") is not None else None,
+            formula_summary=data.get("FormulaSummary", ""),
+        )
+
+    def physical_to_screen(
+        self,
+        px: float,
+        py: float,
+        default_screen_width: float = 1920.0,
+        default_screen_height: float = 1080.0,
+    ) -> Tuple[float, float]:
+        """将物理坐标映射为屏幕像素坐标。"""
+        p_width = self.physical_area.width if self.physical_area.width > 0 else 1.0
+        p_height = self.physical_area.height if self.physical_area.height > 0 else 1.0
+
+        norm_x = min(max((px - self.physical_area.left) / p_width, 0.0), 1.0)
+        norm_y = min(max((py - self.physical_area.top) / p_height, 0.0), 1.0)
+
+        if self.rotation_degrees == 90:
+            norm_x, norm_y = 1.0 - norm_y, norm_x
+        elif self.rotation_degrees == 180:
+            norm_x, norm_y = 1.0 - norm_x, 1.0 - norm_y
+        elif self.rotation_degrees == 270:
+            norm_x, norm_y = norm_y, 1.0 - norm_x
+
+        if self.screen_area and self.screen_area.width > 0 and self.screen_area.height > 0:
+            sx = self.screen_area.left + norm_x * self.screen_area.width
+            sy = self.screen_area.top + norm_y * self.screen_area.height
+            return sx, sy
+
+        if self.screen_map_ratio:
+            s_left = self.screen_map_ratio.left * default_screen_width
+            s_top = self.screen_map_ratio.top * default_screen_height
+            s_width = self.screen_map_ratio.width * default_screen_width
+            s_height = self.screen_map_ratio.height * default_screen_height
+            sx = s_left + norm_x * s_width
+            sy = s_top + norm_y * s_height
+            return sx, sy
+
+        return norm_x * default_screen_width, norm_y * default_screen_height
+
+    def screen_to_physical(
+        self,
+        sx: float,
+        sy: float,
+        default_screen_width: float = 1920.0,
+        default_screen_height: float = 1080.0,
+    ) -> Tuple[float, float]:
+        """将屏幕像素坐标反向映射为数位板物理坐标。"""
+        if self.screen_area and self.screen_area.width > 0 and self.screen_area.height > 0:
+            norm_x = min(max((sx - self.screen_area.left) / self.screen_area.width, 0.0), 1.0)
+            norm_y = min(max((sy - self.screen_area.top) / self.screen_area.height, 0.0), 1.0)
+        elif self.screen_map_ratio:
+            s_left = self.screen_map_ratio.left * default_screen_width
+            s_top = self.screen_map_ratio.top * default_screen_height
+            s_width = self.screen_map_ratio.width * default_screen_width or 1.0
+            s_height = self.screen_map_ratio.height * default_screen_height or 1.0
+            norm_x = min(max((sx - s_left) / s_width, 0.0), 1.0)
+            norm_y = min(max((sy - s_top) / s_height, 0.0), 1.0)
+        else:
+            norm_x = min(max(sx / default_screen_width, 0.0), 1.0)
+            norm_y = min(max(sy / default_screen_height, 0.0), 1.0)
+
+        if self.rotation_degrees == 90:
+            norm_x, norm_y = norm_y, 1.0 - norm_x
+        elif self.rotation_degrees == 180:
+            norm_x, norm_y = 1.0 - norm_x, 1.0 - norm_y
+        elif self.rotation_degrees == 270:
+            norm_x, norm_y = 1.0 - norm_y, norm_x
+
+        px = self.physical_area.left + norm_x * self.physical_area.width
+        py = self.physical_area.top + norm_y * self.physical_area.height
+        return px, py
+
+
+@dataclass
 class DriverProfile:
-    """数位板驱动硬件与压感特性模型。"""
+    """数位板驱动硬件、压感特性及坐标系映射模型。"""
 
     vendor: str
     device_name: str
@@ -79,6 +220,7 @@ class DriverProfile:
     threshold_ratio: float
     gamma: Optional[float]
     bezier_curve: Optional[CubicBezierCurve]
+    coordinate_mapping: Optional[CoordinateMapping] = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "DriverProfile":
@@ -90,6 +232,8 @@ class DriverProfile:
             p2 = (float(bp["P2"]["X"]), float(bp["P2"]["Y"]))
             p3 = (float(bp["P3"]["X"]), float(bp["P3"]["Y"]))
             bezier = CubicBezierCurve(p0, p1, p2, p3)
+
+        coord_map = CoordinateMapping.from_dict(data.get("CoordinateMapping"))
 
         return cls(
             vendor=data.get("Vendor", ""),
@@ -103,6 +247,7 @@ class DriverProfile:
             threshold_ratio=float(data.get("ThresholdRatio") or 0.0),
             gamma=data.get("Gamma"),
             bezier_curve=bezier,
+            coordinate_mapping=coord_map,
         )
 
     def transform_pressure(self, raw_pressure: float, pressure_max: Optional[float] = None) -> float:
@@ -129,7 +274,6 @@ class DriverProfile:
 
         # 贝塞尔响应曲线
         if self.bezier_curve:
-            # 缩放到控制点所在坐标系
             scale_x = self.bezier_curve.p3[0]
             scale_y = self.bezier_curve.p3[1]
             bx = norm_input * scale_x
@@ -196,6 +340,25 @@ class DriverReader:
         return [DriverProfile.from_dict(item) for item in data]
 
     @classmethod
+    def find_all(cls) -> List[DriverProfile]:
+        """自动扫描本机数位板驱动配置（auto 别名）。"""
+        return cls.auto()
+
+    @classmethod
+    def find_best(cls) -> Optional[DriverProfile]:
+        """自动寻找并返回本机最推荐的数位板驱动配置（优先贝塞尔曲线/Gamma）。"""
+        profiles = cls.auto()
+        if not profiles:
+            return None
+        for p in profiles:
+            if p.bezier_curve is not None:
+                return p
+        for p in profiles:
+            if p.gamma is not None:
+                return p
+        return profiles[0]
+
+    @classmethod
     def load(cls, config_path: str) -> DriverProfile:
         """解析指定驱动配置文件并返回 DriverProfile。"""
         out = cls._run_cli(["export", config_path])
@@ -212,6 +375,20 @@ if __name__ == "__main__":
         print(f"    配置文件: {p.config_path}")
         print(f"    特性描述: {p.curve_summary}")
         if p.physical_width and p.physical_height:
-            print(f"    物理尺寸: {p.physical_width} x {p.physical_height}")
+            unit = p.coordinate_mapping.physical_unit if p.coordinate_mapping else "Counts"
+            print(f"    物理尺寸: {p.physical_width} x {p.physical_height} ({unit})")
+        if p.coordinate_mapping:
+            cm = p.coordinate_mapping
+            print(f"    坐标映射模式: {cm.mapping_mode} (旋转: {cm.rotation_degrees}°)")
+            if cm.screen_area:
+                print(f"    目标屏幕像素: {cm.screen_area}")
+            if cm.scale_x and cm.scale_y:
+                print(f"    缩放系数: X={cm.scale_x:.4f} px/{cm.physical_unit}, Y={cm.scale_y:.4f} px/{cm.physical_unit}")
+            # 测试前向与反向映射
+            center_x = cm.physical_area.left + cm.physical_area.width * 0.5
+            center_y = cm.physical_area.top + cm.physical_area.height * 0.5
+            screen_x, screen_y = cm.physical_to_screen(center_x, center_y, 1920, 1080)
+            rev_x, rev_y = cm.screen_to_physical(screen_x, screen_y, 1920, 1080)
+            print(f"    测试映射物理中心 ({center_x:.1f}, {center_y:.1f}) -> 屏幕 ({screen_x:.1f}, {screen_y:.1f}) -> 反向 ({rev_x:.1f}, {rev_y:.1f})")
         print(f"    测试输入 50% 压力: {p.transform_pressure(p.recommended_pressure_max * 0.5):.1f}")
         print()

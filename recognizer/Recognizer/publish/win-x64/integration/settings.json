@@ -25,20 +25,20 @@
         "画布视口": [
           410,
           72,
-          1747,
-          1387
+          1844,
+          1432
         ],
         "导航器": [
-          2178,
+          2275,
           102,
-          382,
-          550
+          285,
+          646
         ],
         "图层": [
-          2178,
-          789,
-          382,
-          738
+          2275,
+          819,
+          285,
+          708
         ],
         "工具组": [
           65,
@@ -62,10 +62,13 @@
       "dpi": 144
     },
     "roi": [
-      2189,
-      573,
-      159,
-      75
+      2277,
+      666,
+      80,
+      77
     ]
-  }
+  },
+  "driverConfigPath": "C:\\Users\\dogeegg\\AppData\\Roaming\\GAOMON\\data\\EKeySetting.dt",
+  "driverMappingDisabled": false,
+  "driverScreenIndex": null
 }

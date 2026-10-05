@@ -249,8 +249,66 @@ bool DetectThumbnailFromBackgroundComponents(const BackgroundSimilarity& similar
   return true;
 }
 
-bool IsRedViewportOverlay(uint8_t b, uint8_t g, uint8_t r) {
-  return r >= 140 && r >= g + 20 && r >= b + 20 && r - g >= 40 && r - b >= 40;
+void IgnoreRedViewportLines(const ImageBGRA& image, FeatureMaps& features,
+                            const IntRect& roi, const BackgroundModel& background) {
+  const int w=roi.width(),h=roi.height();
+  const size_t count=size_t(w)*h;
+  std::vector<uint8_t> core(count,0),thin(count,0),ink(count,0);
+  auto index=[&](int x,int y) {return size_t(y)*w+x;};
+  auto inside=[&](int x,int y) {return x>=0 && y>=0 && x<w && y<h;};
+  auto pixel=[&](int x,int y) {return image.Row(y+roi.top)+size_t(x+roi.left)*4;};
+  for(int y=0;y<h;++y) for(int x=0;x<w;++x) {
+    const auto* p=pixel(x,y);
+    core[index(x,y)]=p[2]>=100 && int(p[2])-std::max(p[0],p[1])>=30;
+  }
+  auto core_at=[&](int x,int y) {return inside(x,y) && core[index(x,y)];};
+  auto nearby_core=[&](int x,int y) {
+    for(int dy=-1;dy<=1;++dy) for(int dx=-1;dx<=1;++dx)
+      if(core_at(x+dx,y+dy)) return true;
+    return false;
+  };
+  // Only narrow straight strokes qualify. Red artwork remains foreground.
+  for(int y=0;y<h;++y) for(int x=0;x<w;++x) {
+    if(!core[index(x,y)]) continue;
+    for(int direction=0;direction<8;++direction) {
+      const double angle=direction*3.14159265358979323846/8;
+      const int nx=int(std::lround(5*std::cos(angle))),ny=int(std::lround(5*std::sin(angle)));
+      if(core_at(x+nx,y+ny) || core_at(x-nx,y-ny)) continue;
+      const int tx=int(std::lround(-6*std::sin(angle))),ty=int(std::lround(6*std::cos(angle)));
+      const bool a=nearby_core(x+tx,y+ty),b=nearby_core(x-tx,y-ty);
+      if((a || !inside(x+tx,y+ty)) && (b || !inside(x-tx,y-ty)) && (a || b)) {
+        thin[index(x,y)]=1;
+        break;
+      }
+    }
+  }
+  for(int y=0;y<h;++y) for(int x=0;x<w;++x) {
+    const auto* p=pixel(x,y);
+    if(int(p[2])-std::max(p[0],p[1])<8) continue;
+    for(int dy=-2;dy<=2 && !ink[index(x,y)];++dy) for(int dx=-2;dx<=2;++dx)
+      if(inside(x+dx,y+dy) && thin[index(x+dx,y+dy)]) {
+        ink[index(x,y)]=1;
+        break;
+      }
+  }
+  for(int y=0;y<h;++y) for(int x=0;x<w;++x) {
+    if(!ink[index(x,y)]) continue;
+    float* lab=features.lab.At(x+roi.left,y+roi.top);
+    lab[0]=background.center_lab.L;
+    lab[1]=background.center_lab.a;
+    lab[2]=background.center_lab.b;
+    // Feature extraction spreads the line's gradient/variance into adjacent
+    // gray pixels. Clear that influence too, without changing their color or
+    // the original capture used later to solve the viewport.
+    for(int dy=-3;dy<=3;++dy) for(int dx=-3;dx<=3;++dx) {
+      if(!inside(x+dx,y+dy)) continue;
+      const int xx=x+dx+roi.left,yy=y+dy+roi.top;
+      features.gradient_x.At(xx,yy)=0.f;
+      features.gradient_y.At(xx,yy)=0.f;
+      features.gradient_magnitude.At(xx,yy)=0.f;
+      features.local_variance.At(xx,yy)=0.f;
+    }
+  }
 }
 
 }  // namespace
@@ -276,25 +334,7 @@ DetectionOutput WorkspaceBorderDetector::DetectCiiWithExternalBackground(
     if (background.strong_delta_e <= 0.f) background.strong_delta_e = 6.f;
     if (background.weak_delta_e <= 0.f) background.weak_delta_e = 12.f;
 
-    // A viewport frame can cross the user-selected navigator panel. Ignore its
-    // red pixels when constructing the thumbnail background mask.
-    for (int y = roi.top; y < roi.bottom; ++y) {
-      const uint8_t* row = bgra.Row(y);
-      for (int x = roi.left; x < roi.right; ++x) {
-        const uint8_t b = row[x * 4 + 0];
-        const uint8_t g = row[x * 4 + 1];
-        const uint8_t r = row[x * 4 + 2];
-        if (!IsRedViewportOverlay(b, g, r)) continue;
-        float* lab = features.lab.At(x, y);
-        lab[0] = background.center_lab.L;
-        lab[1] = background.center_lab.a;
-        lab[2] = background.center_lab.b;
-        features.gradient_x.At(x, y) = 0.f;
-        features.gradient_y.At(x, y) = 0.f;
-        features.gradient_magnitude.At(x, y) = 0.f;
-        features.local_variance.At(x, y) = 0.f;
-      }
-    }
+    IgnoreRedViewportLines(bgra, features, roi, background);
 
     const auto similarity = BuildSimilarity(features, background, roi, cfg_);
     IntRect detected;

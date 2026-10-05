@@ -14,5 +14,6 @@
     <PackageReference Include="RapidOcrNet" Version="4.2.0" />
     <None Update="ScreenCanvasNative.dll" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" Pack="true" PackagePath="runtimes/win-x64/native" />
     <Compile Remove="SmokeTest/**/*.cs" />
+    <Compile Remove="Tests/**/*.cs" />
   </ItemGroup>
 </Project>

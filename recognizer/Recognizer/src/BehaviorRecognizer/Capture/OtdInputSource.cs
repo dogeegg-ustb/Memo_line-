@@ -174,7 +174,9 @@ public sealed class OtdInputSource : IInputSource
             ProductId = id?.ProductID,
             MaxPressure = pen.MaxPressure,
             Width = digitizer.Width,
-            Height = digitizer.Height
+            Height = digitizer.Height,
+            MaxX = digitizer.MaxX,
+            MaxY = digitizer.MaxY
         };
     }
 

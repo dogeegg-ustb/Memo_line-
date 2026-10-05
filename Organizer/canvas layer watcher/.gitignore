@@ -1,0 +1,13 @@
+tools/
+api-update/
+bridge/target/
+**/bin/
+**/obj/
+publish/
+checks/artifacts/
+checks/*.log
+artifacts/
+watcher-settings.json
+watcher.log
+snapshots/
+layer-diffs/

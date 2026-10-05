@@ -1,21 +1,36 @@
 {
   "runtimeTarget": {
-    "name": ".NETCoreApp,Version=v8.0/win-x64",
+    "name": ".NETCoreApp,Version=v8.0",
     "signature": ""
   },
   "compilationOptions": {},
   "targets": {
-    ".NETCoreApp,Version=v8.0": {},
-    ".NETCoreApp,Version=v8.0/win-x64": {
+    ".NETCoreApp,Version=v8.0": {
       "DriverReader/1.0.0": {
+        "dependencies": {
+          "DriverReader.Core": "1.0.0"
+        },
         "runtime": {
           "DriverReader.dll": {}
+        }
+      },
+      "DriverReader.Core/1.0.0": {
+        "runtime": {
+          "DriverReader.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
         }
       }
     }
   },
   "libraries": {
     "DriverReader/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "DriverReader.Core/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

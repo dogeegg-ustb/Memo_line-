@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>MemolineDemo</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../recognizer/core/memoline/Memoline.Core.csproj" />
+    <Compile Include="../../Organizer/canvas layer watcher/source/*.cs" Exclude="../../Organizer/canvas layer watcher/source/Program.cs" Link="Watcher/%(Filename)%(Extension)" />
+    <Compile Include="../../Organizer/dirty matrix/source/Core/Coverage.cs" Link="DirtyMatrix/Coverage.cs" />
+    <InternalsVisibleTo Include="MemolineDemo.Checks" />
+  </ItemGroup>
+</Project>

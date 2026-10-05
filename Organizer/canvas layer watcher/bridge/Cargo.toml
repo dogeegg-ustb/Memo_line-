@@ -1,0 +1,12 @@
+[package]
+name = "clip-layer-bridge"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clipfile = { version = "=1.2.0", features = ["image"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde_json = "1"
+
+[dev-dependencies]
+clipfile = { version = "=1.2.0", features = ["image", "write"] }

@@ -22,22 +22,27 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
     private volatile bool _recordingReady;
     public bool RecordingReady => _recordingReady;
     private readonly string _initialPackage;
+    private readonly DriverInitializationService? _driverInitialization;
 
-    private UpdateActivatorBridge(MemolineWriter writer, Process process, ProcessLifetimeJob processJob)
+    private UpdateActivatorBridge(MemolineWriter writer, Process process, ProcessLifetimeJob processJob,
+        DriverInitializationService? driverInitialization)
     {
         _writer = writer;
         _process = process;
         _processJob = processJob;
+        _driverInitialization = driverInitialization;
         Guard = new LayerSaveGuard(writer, msg => _outgoing.Writer.TryWrite(msg),_processJob.Add);
         _initialPackage = writer.ReserveStatePackage(0, 0, "initialState");
         _outgoing.Writer.TryWrite(new { type = "timelineSession", initialPackageId = _initialPackage });
+        if (driverInitialization is not null)
+            _outgoing.Writer.TryWrite(new { type = "driverConfigurations", data = driverInitialization.Catalog });
         _writer.HardwareAppended += OnHardware;
         _send = SendAsync();
         _receive = ReceiveAsync();
         _errors = ErrorsAsync();
     }
 
-    public static UpdateActivatorBridge? Start(MemolineWriter writer)
+    public static UpdateActivatorBridge? Start(MemolineWriter writer, DriverInitializationService? driverInitialization = null)
     {
         ProcessLifetimeJob? processJob=null;
         Process? process=null;
@@ -63,7 +68,7 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
             processJob=new ProcessLifetimeJob();
             process = Process.Start(start) ?? throw new IOException("Unable to start workspace helper.");
             processJob.Add(process);
-            return new UpdateActivatorBridge(writer, process,processJob);
+            return new UpdateActivatorBridge(writer, process,processJob, driverInitialization);
         }
         catch (Exception ex)
         {
@@ -118,6 +123,25 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
                 using var document = JsonDocument.Parse(line);
                 var msg = document.RootElement;
                 string type = msg.GetProperty("type").GetString()!;
+                if (type == "selectDriverConfiguration")
+                {
+                    try
+                    {
+                        string? driverConfigPath = msg.GetProperty("path").GetString();
+                        int? screenIndex = msg.TryGetProperty("screenIndex", out var index) && index.ValueKind == JsonValueKind.Number
+                            ? index.GetInt32() : null;
+                        var snapshot = (_driverInitialization ?? throw new InvalidOperationException("驱动初始化服务不可用"))
+                            .Select(driverConfigPath, screenIndex);
+                        _writer.AppendState("driverConfiguration", _writer.NowTicks, [], snapshot, "immediate");
+                        _outgoing.Writer.TryWrite(new { type = "driverConfigurationResult", requestId = msg.GetProperty("requestId").GetString(), data = snapshot });
+                    }
+                    catch (Exception ex)
+                    {
+                        _outgoing.Writer.TryWrite(new { type = "driverConfigurationResult", requestId = msg.GetProperty("requestId").GetString(),
+                            data = new { status = "unavailable", warnings = new[] { ex.Message } } });
+                    }
+                    continue;
+                }
                 if (type == "timelineResult")
                 {
                     DisplayTimelineResult(msg.GetProperty("data"), msg.GetProperty("packageId").GetString()!);
@@ -156,7 +180,7 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
                 string kind = msg.GetProperty("kind").GetString()!;
                 if (kind is not ("shortcutConfiguration" or "workspaceStatus" or "workspaceSuspended" or
                     "panelUpdateRequested" or "panelActivationEnded" or "shortcutResolved" or "updateActivatorError" or
-                    "screenshotBlob" or "captureUnavailable" or "stateResult" or "analysisError" or
+                    "screenshotBlob" or "captureUnavailable" or "stateResult" or "coreStateUpdated" or "coreEvidenceCaptured" or "analysisError" or
                     "initializationConfiguration" or "initializationStatus" or "clipParseResult" or "clipParseError"))
                     throw new InvalidDataException($"Unknown update message: {kind}");
                 var refs = msg.GetProperty("relatedEventIds").EnumerateArray().Select(v => v.GetUInt64()).ToArray();
@@ -241,7 +265,7 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
         "changed" => "已识别 / 状态变化",
         "unchanged" => "已识别 / 与前次相同",
         "unknown" => "未知 / 无法确认",
-        "ambiguous" => "有歧义 / 因果位置不确定",
+        "ambiguous" => "识别结果有歧义",
         "error" => "解析失败",
         _ => status ?? "未知"
     };

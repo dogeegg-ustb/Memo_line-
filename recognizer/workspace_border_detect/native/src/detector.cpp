@@ -157,73 +157,102 @@ DetectionOutput WorkspaceBorderDetector::Detect(const DetectionInput& in) const 
                   selected.reason.empty() ? "no hypothesis" : selected.reason, capture_id);
     }
 
-    Hypothesis best = *selected.best;
-    if (best.endpoints_truncated && best.grade != EvidenceGrade::A) {
-      bool any_ok = false;
-      for (const auto& s : all_sides) {
-        if (!s.truncated && s.coverage >= cfg_.min_side_coverage) any_ok = true;
-      }
-      if (!any_ok) return Fail(Status::EndpointTruncated, "endpoints truncated", capture_id);
-    }
-
-    IntRect coarse_full = UnscaleRectFloorCeil(best.rect, coarse_scale).Clamp(in.width, in.height);
-    if (!coarse_full.valid()) {
-      return Fail(Status::RectangleClosureFailed, "rectangle closure failed", capture_id);
-    }
-
     FeatureMaps full_feat = ExtractFeatures(full_bgr, cfg_, dpi_scale, &grow_roi);
-    BackgroundModel refine_model = accepted_models[0];
-    if (best.model_index >= 0 && best.model_index < static_cast<int>(accepted_models.size())) {
-      refine_model = accepted_models[best.model_index];
-    }
-
-    IntRect refined;
-    if (!RefineRectangle(coarse_full, full_feat, refine_model, cfg_, dpi_scale, refined)) {
-      return Fail(Status::RefinementFailed, "refine failed / refine shift exceeded", capture_id);
-    }
-
-    ImageU8* grown_ptr = nullptr;
-    GrownBackground full_grown;
-    {
-      auto sim = BuildSimilarity(full_feat, refine_model, grow_roi, cfg_);
-      auto full_seeds = SampleBackgroundSeeds(full_feat, user_roi, cfg_, dpi_scale);
-      // Coarse seed IDs do not identify the same samples at full resolution.
-      std::vector<int> full_ids;
-      for (const auto& seed : full_seeds) {
-        if (seed.accepted && DeltaE76(seed.mean_lab, refine_model.center_lab) <=
-                                 refine_model.strong_delta_e)
-          full_ids.push_back(seed.seed_id);
+    std::vector<GrownBackground> full_grown(accepted_models.size());
+    std::vector<bool> grow_attempted(accepted_models.size(), false);
+    std::vector<Hypothesis> attempted;
+    DetectionOutput first_failure;
+    bool have_failure = false;
+    auto remember_failure = [&](Status status, const std::string& message) {
+      if (!have_failure) {
+        first_failure = Fail(status, message, capture_id);
+        have_failure = true;
       }
-      if (GrowBackground(full_seeds, full_ids, sim, grow_roi, cfg_, full_grown)) {
-        grown_ptr = &full_grown.mask;
+    };
+
+    // Ranking supplies candidates, not a verified boundary. UI tabs/scrollbars
+    // can form a larger partial frame; reject that candidate and keep checking
+    // the independently observed workspace instead of aborting detection.
+    for (const Hypothesis& best : selected.ranked) {
+      const bool duplicate = std::any_of(attempted.begin(), attempted.end(), [&](const Hypothesis& h) {
+        return h.model_index == best.model_index && h.rect.left == best.rect.left &&
+               h.rect.top == best.rect.top && h.rect.right == best.rect.right &&
+               h.rect.bottom == best.rect.bottom;
+      });
+      if (duplicate) continue;
+      attempted.push_back(best);
+      if (best.endpoints_truncated && best.grade != EvidenceGrade::A) {
+        bool any_ok = false;
+        for (const auto& s : all_sides) {
+          if (!s.truncated && s.coverage >= cfg_.min_side_coverage) any_ok = true;
+        }
+        if (!any_ok) {
+          remember_failure(Status::EndpointTruncated, "endpoints truncated");
+          continue;
+        }
       }
-    }
 
-    auto val = ValidateRectangle(refined, best, full_feat, refine_model, grown_ptr, cfg_);
-    if (!val.ok) {
-      std::string reason = "validation failed rect=[" + std::to_string(refined.left) + "," +
-          std::to_string(refined.top) + "," + std::to_string(refined.right) + "," +
-          std::to_string(refined.bottom) + "]";
-      for (const auto& metric : val.metrics)
-        reason += " " + metric.first + "=" + std::to_string(metric.second);
-      return Fail(Status::IndependentValidationFailed, reason, capture_id);
-    }
+      IntRect coarse_full = UnscaleRectFloorCeil(best.rect, coarse_scale).Clamp(in.width, in.height);
+      if (!coarse_full.valid()) {
+        remember_failure(Status::RectangleClosureFailed, "rectangle closure failed");
+        continue;
+      }
 
-    DetectionOutput out;
-    out.status = Status::Ok;
-    out.workspace_capture = refined;
-    out.workspace_screen = {refined.left + in.origin_x, refined.top + in.origin_y,
-                            refined.right + in.origin_x, refined.bottom + in.origin_y};
-    out.grade = best.grade;
-    out.confidence = std::max(best.confidence, val.confidence);
-    out.message = "ok";
-    out.source_capture_id = capture_id;
-    out.observed_sides = best.observed_sides;
-    out.closed_sides = best.closed_sides;
-    out.background_model = refine_model;
-    out.has_background_model = true;
-    out.source_revision = "workspace-border-shared-v2";
-    return out;
+      const int model_index = best.model_index >= 0 &&
+          best.model_index < static_cast<int>(accepted_models.size()) ? best.model_index : 0;
+      const BackgroundModel& refine_model = accepted_models[model_index];
+
+      IntRect refined;
+      if (!RefineRectangle(coarse_full, full_feat, refine_model, cfg_, dpi_scale, refined)) {
+        remember_failure(Status::RefinementFailed, "refine failed / refine shift exceeded");
+        continue;
+      }
+
+      ImageU8* grown_ptr = nullptr;
+      if (!grow_attempted[model_index]) {
+        grow_attempted[model_index] = true;
+        auto sim = BuildSimilarity(full_feat, refine_model, grow_roi, cfg_);
+        auto full_seeds = SampleBackgroundSeeds(full_feat, user_roi, cfg_, dpi_scale);
+        // Coarse seed IDs do not identify the same samples at full resolution.
+        std::vector<int> full_ids;
+        for (const auto& seed : full_seeds) {
+          if (seed.accepted && DeltaE76(seed.mean_lab, refine_model.center_lab) <=
+                                   refine_model.strong_delta_e)
+            full_ids.push_back(seed.seed_id);
+        }
+        GrowBackground(full_seeds, full_ids, sim, grow_roi, cfg_, full_grown[model_index]);
+      }
+      if (full_grown[model_index].pixel_count > 0) grown_ptr = &full_grown[model_index].mask;
+
+      auto val = ValidateRectangle(refined, best, full_feat, refine_model, grown_ptr, cfg_);
+      if (!val.ok) {
+        std::string reason = "validation failed rect=[" + std::to_string(refined.left) + "," +
+            std::to_string(refined.top) + "," + std::to_string(refined.right) + "," +
+            std::to_string(refined.bottom) + "]";
+        for (const auto& metric : val.metrics)
+          reason += " " + metric.first + "=" + std::to_string(metric.second);
+        remember_failure(Status::IndependentValidationFailed, reason);
+        continue;
+      }
+
+      DetectionOutput out;
+      out.status = Status::Ok;
+      out.workspace_capture = refined;
+      out.workspace_screen = {refined.left + in.origin_x, refined.top + in.origin_y,
+                              refined.right + in.origin_x, refined.bottom + in.origin_y};
+      out.grade = best.grade;
+      out.confidence = std::max(best.confidence, val.confidence);
+      out.message = "ok";
+      out.source_capture_id = capture_id;
+      out.observed_sides = best.observed_sides;
+      out.closed_sides = best.closed_sides;
+      out.background_model = refine_model;
+      out.has_background_model = true;
+      out.source_revision = "workspace-border-shared-v2";
+      return out;
+    }
+    return have_failure ? first_failure :
+        Fail(Status::IndependentValidationFailed, "no validated workspace candidate", capture_id);
   } catch (const std::exception& ex) {
     return Fail(Status::InvalidInput, ex.what(), capture_id);
   } catch (...) {

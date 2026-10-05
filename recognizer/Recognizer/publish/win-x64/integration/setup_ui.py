@@ -4,8 +4,10 @@ import ctypes
 import queue
 import sys
 import threading
+import uuid
+import os
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 
 from catalog import NAVIGATOR
 from csp_workspace_overlay import inspect
@@ -18,7 +20,7 @@ class SetupDialog:
         self.clip_generation = 0
         self.window = tk.Toplevel(runtime.root)
         self.window.title("记艺线 · 录制初始化")
-        self.window.geometry("560x410")
+        self.window.geometry("640x550")
         self.window.protocol("WM_DELETE_WINDOW", self.cancel)
         self.width, self.height = tk.StringVar(), tk.StringVar()
         self.clip = tk.StringVar(value=runtime.settings.get("clipPath", ""))
@@ -29,6 +31,26 @@ class SetupDialog:
         row = tk.Frame(self.window); row.pack(fill="x",padx=12)
         tk.Entry(row,textvariable=self.clip).pack(side="left",fill="x",expand=True)
         tk.Button(row,text="选择当前 .clip",command=self.select_clip).pack(side="right")
+        self.driver_choice = tk.StringVar(value="请选择本次使用的驱动配置")
+        self.driver_details = tk.StringVar(value="正在查找已安装驱动的配置文件……")
+        self.driver_choices = {}
+        self.driver_request_id = None
+        self.driver_applied_selection = None
+        self.driver_requested_selection = None
+        row = tk.Frame(self.window); row.pack(fill="x",padx=12,pady=(10,0))
+        tk.Label(row,text="驱动配置：").pack(side="left")
+        self.driver_combo = ttk.Combobox(row,textvariable=self.driver_choice,state="readonly")
+        self.driver_combo.pack(side="left",fill="x",expand=True)
+        self.driver_combo.bind("<<ComboboxSelected>>",lambda _: self.update_driver_details())
+        tk.Button(row,text="选择文件…",command=self.select_driver_file).pack(side="right")
+        tk.Label(self.window,textvariable=self.driver_details,wraplength=610,justify="left").pack(fill="x",padx=12,pady=4)
+        self.screen_choice = tk.StringVar(value="使用配置中的屏幕区域（单屏自动）")
+        self.screen_choices = {self.screen_choice.get(): None}
+        self.screen_row = tk.Frame(self.window)
+        tk.Label(self.screen_row,text="映射屏幕：").pack(side="left")
+        self.screen_combo = ttk.Combobox(self.screen_row,textvariable=self.screen_choice,state="readonly")
+        self.screen_combo.pack(side="left",fill="x",expand=True)
+        self.update_driver_configurations(runtime.driver_configurations)
         row = tk.Frame(self.window); row.pack(pady=10)
         for title, variable in (("画布宽（像素）",self.width),("高（像素）",self.height)):
             tk.Label(row,text=title).pack(side="left")
@@ -45,6 +67,84 @@ class SetupDialog:
         self.reselect_button.pack()
         if self.clip.get():
             self.window.after(50,lambda: self.read_dimensions(self.clip.get()))
+        self.window.after_idle(self.fit_dialog)
+
+    def fit_dialog(self):
+        if not self.window.winfo_exists():
+            return
+        self.window.update_idletasks()
+        width = max(640, self.window.winfo_reqwidth() + 16)
+        height = max(550, self.window.winfo_reqheight() + 16)
+        self.window.minsize(width, height)
+        self.window.geometry(f"{width}x{height}")
+
+    def update_driver_configurations(self, catalog):
+        if catalog is None:
+            return
+        previous = self.driver_choices.get(self.driver_choice.get(), self.runtime.settings.get("driverConfigPath"))
+        fallback = "不使用驱动映射（保留原始数据）"
+        self.driver_choices = {fallback: None}
+        for index, choice in enumerate(catalog.get("choices", []), 1):
+            label = f"{index}. {choice['vendor']} · {choice['deviceName']}"
+            self.driver_choices[label] = choice["path"]
+        self.driver_combo.configure(values=list(self.driver_choices))
+        for label, path in self.driver_choices.items():
+            if path and previous and os.path.normcase(os.path.normpath(path)) == os.path.normcase(os.path.normpath(previous)):
+                self.driver_choice.set(label)
+                break
+        else:
+            if self.runtime.settings.get("driverMappingDisabled"):
+                self.driver_choice.set(fallback)
+        self.screen_choices = {"使用配置中的屏幕区域（单屏自动）": None}
+        for display in catalog.get("displays", []):
+            bounds = display["bounds"]
+            label = f"屏幕 {display['index'] + 1} · {display['name']} · {bounds['width']:g}×{bounds['height']:g}"
+            self.screen_choices[label] = display["index"]
+        self.screen_combo.configure(values=list(self.screen_choices))
+        previous_screen = self.runtime.settings.get("driverScreenIndex")
+        for label, index in self.screen_choices.items():
+            if previous_screen == index:
+                self.screen_choice.set(label)
+                break
+        if len(catalog.get("displays", [])) > 1:
+            self.screen_row.pack(fill="x",padx=12,pady=4,after=self.driver_combo.master)
+        self.update_driver_details()
+
+    def update_driver_details(self):
+        label = self.driver_choice.get()
+        if label not in self.driver_choices:
+            self.driver_details.set("请选择要使用的驱动配置，也可手动选择配置文件。")
+            return
+        path = self.driver_choices[label]
+        self.driver_details.set(path or "本次保留原始压力与 Windows 屏幕坐标，不应用驱动映射。")
+        self.window.after_idle(self.fit_dialog)
+
+    def select_driver_file(self):
+        path = filedialog.askopenfilename(parent=self.window,title="选择本次使用的数位板驱动配置",
+            filetypes=[("驱动配置","*.dt *.json *.xml *.wacomprefs *.wacomxs *.prefs *.dat"),("所有文件","*.*")])
+        if path:
+            label = "手动选择 · " + os.path.basename(path)
+            self.driver_choices[label] = path
+            self.driver_combo.configure(values=list(self.driver_choices))
+            self.driver_choice.set(label)
+            self.update_driver_details()
+
+    def driver_configuration_result(self, msg):
+        if not self.driver_request_id or msg.get("requestId") != self.driver_request_id:
+            return
+        self.driver_request_id = None
+        self.pending = False
+        self.capture_button.configure(state="normal")
+        data = msg["data"]
+        if data.get("status") not in {"selected", "disabled"}:
+            error = "所选驱动配置不可用：" + "；".join(data.get("warnings") or ["无法读取配置文件"])
+            self.status.set(error)
+            messagebox.showerror("驱动配置未应用",error,parent=self.window)
+            return
+        self.driver_applied_selection = self.driver_requested_selection
+        path, screen = self.driver_applied_selection
+        self.runtime.settings.update(driverConfigPath=path,driverMappingDisabled=path is None,driverScreenIndex=screen)
+        self.begin(self.driver_continue_force_selection)
 
     def select_clip(self):
         path = filedialog.askopenfilename(parent=self.window,filetypes=[("CSP 文档","*.clip")])
@@ -122,6 +222,18 @@ class SetupDialog:
                 raise ValueError("同时解析任务数需为 1–4")
             if not self.runtime.engine.regions:
                 raise ValueError("尚未匹配 CSP 工作区；请打开 CSP 并保存工作区布局")
+            if self.driver_choice.get() not in self.driver_choices:
+                raise ValueError("请先选择本次使用的驱动配置，或明确选择不使用驱动映射。")
+            selection = (self.driver_choices[self.driver_choice.get()], self.screen_choices.get(self.screen_choice.get()))
+            if self.driver_applied_selection != selection:
+                self.pending = True
+                self.driver_request_id = uuid.uuid4().hex
+                self.driver_requested_selection = selection
+                self.driver_continue_force_selection = force_selection
+                self.capture_button.configure(state="disabled")
+                self.status.set("正在读取并应用所选驱动配置……")
+                self.runtime.request_driver_configuration(self.driver_request_id, *selection)
+                return
             self.runtime.settings.update(flashBorders=self.flash.get(),analysisConcurrency=workers,clipPath=self.clip.get())
             self.runtime.settings_path.write_text(json.dumps(self.runtime.settings,ensure_ascii=False,indent=2),encoding="utf-8")
             self.selection_layout = self.layout_key()

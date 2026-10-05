@@ -1,6 +1,6 @@
 # Recognizer Core
 
-Five independent, caller-driven cores extracted from the four original modules. The originals remain unchanged. They do not find CSP windows, capture the screen, select ROIs, schedule calls, write reports, or integrate with `.memoline`. Screen/canvas archive handling is retained as an explicit, opt-in API.
+Six independent, caller-driven recognition and driver cores. They do not find CSP windows, capture the screen, select ROIs, schedule calls, write reports, or integrate with `.memoline`. Driver configuration discovery runs only when explicitly requested by the caller. Screen/canvas archive handling is retained as an explicit, opt-in API.
 
 ## Components
 
@@ -11,6 +11,7 @@ Five independent, caller-driven cores extracted from the four original modules. 
 | `panel_state` | One BGR crop of Tool Properties | Existing schema-v3 state dictionary with `brush` name and properties | Existing property OCR, visual-state analysis, catalog-backed label/value binding, and image-derived option/pattern values |
 | `color_state` | One BGR crop of the color panel | Color dictionary: `kind`, `rgb`, `hex`, `confidence`, `detail`, `hue`, `sv_point` | Existing color-wheel, swatch, and transparent-button recognition copied unchanged |
 | `screen_canvas_transform` | Recorder integration: one complete virtual-desktop frame with its screen origin, initialization ROIs and canvas pixel size; recompute: one current complete frame with frozen ROIs. Three-crop API remains available | Corrected canvas-window ROI, Navigator thumbnail ROI, capture screen origin, calculated canvas origin, OCR scale percent and rotation; stage failure returned as data | Existing workspace/C-II detection, OCR calibration, canvas observation, viewport completion, native transform solver, and archive/recompute path |
+| `driver_reader` | Explicitly selected driver configuration path, tablet specifications, display topology; then raw tablet coordinates and pressure per report | Configuration snapshot, pressure mapping, physical-to-screen and screen-to-physical matrices, per-point mapped values and availability states | Shared DriverReader parser and mapping used directly by Recognizer and the standalone DriverReader CLI |
 
 The input semantics remain distinct. Layer State returns only the selected layer name; its screenshot-derived row IDs remain internal and are not CSP layer IDs. Duplicate names cannot be distinguished through this minimal return value. `.clip` parsing returns IDs read from document metadata. Panel State reads only brush properties from Tool Properties. Color State independently reads a crop containing the complete color wheel, square, and lower-left swatch/transparent controls. The transform core requires the host to provide frame/crop positions, initialization ROIs and canvas document resolution; it does not infer them from a CSP window. Recorder supplies one unchanged complete virtual-desktop frame to the transform core, while the other screenshot cores still receive only their panel ROI crops.
 
@@ -42,10 +43,15 @@ For compatibility, `InitializeAsync(ScreenCanvasTransformInitializationInput)` a
 
 ## Initialization and resources
 
+Recognizer's transform host [project](../recorder_integration/transform_host/TransformHost.csproj) directly references `screen_canvas_transform/ScreenCanvasTransform.Core.csproj`. Its deployed runtime is `Recognizer/publish/win-x64/integration/transform_host/TransformHost.exe`, with `ScreenCanvasTransform.Core.dll` and `ScreenCanvasNative.dll` beside it. Both deployed DLLs were checked against the core's built/bundled copies and match. This folder is the source used by the recorder, rather than a separate transform implementation.
+
+Recognizer and the standalone DriverReader now directly reference `driver_reader/DriverReader.Core.csproj` in this folder. Driver source is held here once; see [DriverReader.Core](driver_reader/README.md) for initialization, pressure units, coordinate conventions, and unavailable-state handling.
+
 - **CLIP layers:** no external resource or third-party Python library. Requires Python 3.11+ with `sqlite3.Connection.deserialize`.
 - **Layer state:** the core bundles `layer_state/data/layer_catalog.json`. Default OCR imports `RapidOCR` from the `rapidocr` package. `catalog_path` and an optional RapidOCR-compatible callable can be passed to `LayerStateCore(...)`.
 - **Panel state:** the core bundles `panel_state/data/properties.sqlite3`; `ui_strings.json` is not used. Default OCR accepts `rapidocr` or `rapidocr_onnxruntime` and holds the engine in the core instance. Pass an alternate read-only catalog as `catalog_path`, or inject an engine with `recognize(image)`.
 - **Color state:** no initialization resource, model, or template; `ColorStateCore()` accepts one color-panel image per call.
+- **Driver reader:** .NET 8, no external package, OCR, UI or HID dependency. The caller supplies the user's selected `ConfigPath`, optional tablet specifications and display topology to `DriverMappingSession.Initialize(...)`. Discovery may be explicitly requested using `DriverProfileParser.AutoDetectCandidatePaths(...)`. No configuration is automatically applied without a selection; per-point `Evaluate(...)` does not read or search files.
 - **Screen/canvas transform:** the core bundles `ScreenCanvasNative.dll`, all native C++ source, and the archive model, JSON read/write, and visual-fingerprint code. It targets Windows x64 and .NET 8. `RapidOcrModelDirectory` is an optional explicit path for the PP-OCRv5 fallback; Windows.Media.Ocr is tried first. If fallback OCR is reached without a model directory, the missing resource raises an error. The directory must contain `ch_PP-OCRv5_mobile_det.onnx`, `ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx`, `latin_PP-OCRv5_rec_mobile_infer.onnx`, and `ppocrv5_latin_dict.txt`. Construct `SaveArchiveService(archivesDirectory)` with an explicit archive directory; no default/global archive path is used. Complete-frame input preserves the real surrounding UI and supplies its physical screen origin; the compatible three-crop entry requires crops from the same frozen frame with their physical positions. `CanvasPixelWidth/Height` are document pixels, not screen dimensions.
 
 ## Dependencies
@@ -57,6 +63,7 @@ For compatibility, `InitializeAsync(ScreenCanvasTransformInitializationInput)` a
 | Panel state | Python 3.10+, NumPy, OpenCV-Python, `rapidocr` or `rapidocr_onnxruntime`; stdlib SQLite | PySide6, dxcam, CSP HWND/window service, ROI selector, scheduler, exporter, debug overlays and optional Paddle reference OCR |
 | Color state | Python 3.10+, NumPy, OpenCV-Python | PySide6 color-reader window, screenshots, timer, and clipboard |
 | Screen/canvas transform | Windows x64, .NET 8, System.Drawing.Common, RapidOcrNet, Windows.Media.Ocr; native C++17/MSVC runtime to rebuild; System.Text.Json for archives | WPF screens/windows, CSP enumeration/capture, ROI overlays, stage/debug logging and UI mapping |
+| Driver reader | .NET 8, framework JSON/XML APIs | CLI, window, Python wrapper, HID capture and file writes; optional configuration discovery is caller-controlled |
 
 OpenCV in the Python cores is part of the recognition algorithms: it performs resizing, color/edge analysis, local crops, and pattern encoding. It is not present only for debug display. The panel property catalog and layer vocabulary JSON are algorithm inputs bundled beside their respective cores, not hidden absolute paths.
 

@@ -60,11 +60,12 @@ while (Console.ReadLine() is { } line)
                 completedViewport = new[] { viewport.Corner0, viewport.Corner1, viewport.Corner2, viewport.Corner3 }
                     .Select(p => new ScreenPoint(p.X+captureOrigin.X, p.Y+captureOrigin.Y)).ToArray();
         }
-        // PipelineState owns internal native details; the public snapshot is the state contract.
+        // Expose calibrated digit rectangles in physical screen pixels without serializing native pipeline details.
         Console.WriteLine(JsonSerializer.Serialize(new { result.Success, result.CanvasWindowRoiScreenPx,
             result.NavigatorThumbnailRoiScreenPx, result.ScreenCoordinateOriginScreenPx,
             result.CanvasOriginScreenPx, result.OcrScalePercent, result.OcrRotationDegrees,
             completedViewportScreenPx = completedViewport,
+            ocrLayout = result.PipelineState?.OcrLayoutUsed,
             result.Snapshot, result.FailedStage, result.Status, result.Message }, options));
     }
     catch (Exception ex) { Console.WriteLine(JsonSerializer.Serialize(new { success = false, message = ex.Message }, options)); }

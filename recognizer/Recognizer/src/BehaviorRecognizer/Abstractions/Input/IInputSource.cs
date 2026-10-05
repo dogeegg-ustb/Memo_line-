@@ -29,6 +29,8 @@ public sealed class DetectedDeviceInfo
     public float MaxPressure { get; init; }
     public float Width { get; init; }
     public float Height { get; init; }
+    public float MaxX { get; init; }
+    public float MaxY { get; init; }
 }
 
 /// <summary>

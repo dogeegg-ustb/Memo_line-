@@ -3,6 +3,34 @@ using System.Text.Json;
 using BehaviorRecognizer.Storage.Memoline;
 
 Console.OutputEncoding = Encoding.UTF8;
+if (args.Length == 2 && args[0] == "--follow")
+{
+    using var cancellation = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
+    try
+    {
+        await foreach (var record in MemolineReader.FollowAsync(args[1], cancellationToken: cancellation.Token))
+            await Console.Out.WriteLineAsync(record.GetRawText());
+        return 0;
+    }
+    catch (OperationCanceledException) { return 0; }
+    catch (Exception ex) { Console.Error.WriteLine($"读取失败: {ex.Message}"); return 1; }
+}
+if (args.Length == 3 && args[0] == "--compact")
+{
+    try
+    {
+        var result = await MemolineReader.CompactAsync(args[1], args[2]);
+        Console.WriteLine($"已压缩 {result.Records} 帧：{result.InputBytes:N0} → {result.OutputBytes:N0} 字节；输出: {args[2]}");
+        return 0;
+    }
+    catch (Exception ex) { Console.Error.WriteLine($"压缩失败: {ex.Message}"); return 1; }
+}
+if (args.Length > 0 && args[0].StartsWith("--") && args[0] is not ("--help"))
+{
+    Usage();
+    return 2;
+}
 if (args.Length == 1 && args[0] is "--help" or "-h")
 {
     Usage();
@@ -110,5 +138,7 @@ static void Usage()
 {
     Console.WriteLine("Memoline 事件文件 JSON 解析器");
     Console.WriteLine("用法: MemolineToJson <input.memoline|input.memoline.part> [output.json]");
+    Console.WriteLine("      MemolineToJson --follow <input.memoline.part>（新增 JSONL，Ctrl+C 停止）");
+    Console.WriteLine("      MemolineToJson --compact <input> <output>（不覆盖原文件）");
     Console.WriteLine("省略输出路径时，生成同名 .json；.part 可解析到最后一帧完整数据。");
 }

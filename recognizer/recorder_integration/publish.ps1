@@ -4,8 +4,13 @@ $recognizerRoot = Split-Path $integrationRoot -Parent
 $project = Join-Path $recognizerRoot 'Recognizer/src/BehaviorRecognizer/BehaviorRecognizer.csproj'
 $destination = Join-Path $recognizerRoot 'Recognizer/publish/win-x64'
 $build = Join-Path $recognizerRoot 'Recognizer/src/BehaviorRecognizer/bin/Release/net10.0'
+$recorderPublish = Join-Path $build 'win-x64/publish'
 $transformPublish = Join-Path $integrationRoot 'transform_host/publish'
-dotnet build $project -c Release --no-restore
+
+# Rebuild the extracted native/managed core before packaging its host.
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $recognizerRoot 'recognizer_core/screen_canvas_transform/build.ps1')
+if ($LASTEXITCODE) { throw 'Transform core build/tests failed' }
+dotnet publish $project -c Release -r win-x64 --self-contained true -p:NuGetAudit=false -o $recorderPublish
 if ($LASTEXITCODE) { throw 'Recorder build failed' }
 dotnet publish (Join-Path $integrationRoot 'transform_host/TransformHost.csproj') -c Release -r win-x64 --self-contained true --no-restore -o $transformPublish
 if ($LASTEXITCODE) { throw 'Transform host publish failed' }
@@ -22,9 +27,10 @@ foreach ($target in @($build,$destination)) {
         Remove-Item -LiteralPath $retiredCapture -Force
     }
     if ($target -eq $destination) {
-        Copy-Item -LiteralPath (Join-Path $build 'BehaviorRecognizer.dll'),(Join-Path $build 'BehaviorRecognizer.pdb') -Destination $target -Force
+        # Include the shared driver/storage cores, dependency manifest and self-contained runtime.
+        Get-ChildItem -LiteralPath $recorderPublish -File | Copy-Item -Destination $target -Force
         # Preserve the user's editable settings across publish operations.
-        Get-ChildItem -LiteralPath (Join-Path $build 'integration') | Where-Object Name -ne 'settings.json' | Copy-Item -Destination $helper -Recurse -Force
+        Get-ChildItem -LiteralPath (Join-Path $recorderPublish 'integration') | Where-Object Name -ne 'settings.json' | Copy-Item -Destination $helper -Recurse -Force
         if (!(Test-Path -LiteralPath (Join-Path $helper 'settings.json'))) {
             Copy-Item -LiteralPath (Join-Path $integrationRoot 'settings.json') -Destination $helper
         }

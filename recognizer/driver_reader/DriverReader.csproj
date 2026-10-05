@@ -9,4 +9,7 @@
     <AssemblyName>DriverReader</AssemblyName>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\recognizer_core\driver_reader\DriverReader.Core.csproj" />
+  </ItemGroup>
 </Project>

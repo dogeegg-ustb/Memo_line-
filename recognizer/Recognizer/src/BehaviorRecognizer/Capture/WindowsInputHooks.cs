@@ -9,13 +9,11 @@ public sealed class WindowsInputHooks : IDisposable
     // Shared with the recorder AHK worker and ordered replay.
     internal const nuint RecorderInputTag = 0x4D4C5243;
     private readonly UnifiedInputCapture _capture;
-    private readonly bool _passivePen;
+    private readonly WindowsMouseInputRouter _mouseRouter;
     private readonly LayerSaveGuard? _guard;
     private readonly HookProc _keyboardProc, _mouseProc;
     private readonly Thread _thread;
     private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private int _mouseButtonsDown;
-    private bool _passivePenDown;
     private uint _threadId;
     private nint _keyboardHook, _mouseHook;
 
@@ -23,7 +21,7 @@ public sealed class WindowsInputHooks : IDisposable
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
         _capture = capture;
-        _passivePen = passivePen;
+        _mouseRouter = new WindowsMouseInputRouter(capture, passivePen, guard);
         _guard = guard;
         _keyboardProc = KeyboardCallback;
         _mouseProc = MouseCallback;
@@ -70,7 +68,7 @@ public sealed class WindowsInputHooks : IDisposable
             if (code >= 0)
             {
                 var input = Marshal.PtrToStructure<KbdData>(data);
-                if (input.extraInfo != RecorderInputTag) // Accept keyboard input translated by device drivers.
+                if (input.extraInfo != RecorderInputTag) // Accept physical and externally injected keyboard input.
                 {
                     int msg = (int)message;
                     if (msg is 0x0100 or 0x0104 or 0x0101 or 0x0105)
@@ -100,39 +98,8 @@ public sealed class WindowsInputHooks : IDisposable
             if (code >= 0)
             {
                 var input = Marshal.PtrToStructure<MouseData>(data);
-                // Windows marks synthetic mouse messages from pen/touch with MI_WP_SIGNATURE.
-                bool penOrTouch = (input.extraInfo & (nuint)0xFFFFFF00) == (nuint)0xFF515700;
-                bool touch = (input.extraInfo & (nuint)0x80) != 0;
-                if (penOrTouch && !touch && _passivePen)
-                {
-                    int msg = (int)message;
-                    if (msg == 0x0201) _passivePenDown = true;
-                    if (msg != 0x0200 || _passivePenDown)
-                        _capture.PostMouse(msg, input.point.X, input.point.Y, (int)input.mouseData, passivePen: true);
-                    if (msg == 0x0202) _passivePenDown = false;
-                    if (_guard?.Mouse(msg, input.point.X, input.point.Y, input.mouseData) == true) return 1;
-                }
-                else if (penOrTouch && !touch)
-                {
-                    if (_guard?.Mouse((int)message, input.point.X, input.point.Y, input.mouseData) == true) return 1;
-                }
-                else if (!penOrTouch && ((input.flags & 1) == 0 ||
-                    ((int)message is 0x020A or 0x020E && input.extraInfo != RecorderInputTag)))
-                {
-                    int msg = (int)message;
-                    int button = msg switch
-                    {
-                        0x0201 or 0x0202 => 1, 0x0204 or 0x0205 => 2,
-                        0x0207 or 0x0208 => 4,
-                        0x020B or 0x020C => ((input.mouseData >> 16) & 0xffff) == 1 ? 8 : 16,
-                        _ => 0
-                    };
-                    if (msg is 0x0201 or 0x0204 or 0x0207 or 0x020B) _mouseButtonsDown |= button;
-                    if (msg != 0x0200 || _mouseButtonsDown != 0)
-                        _capture.PostMouse(msg, input.point.X, input.point.Y, (int)input.mouseData);
-                    if (msg is 0x0202 or 0x0205 or 0x0208 or 0x020C) _mouseButtonsDown &= ~button;
-                    if (_guard?.Mouse(msg, input.point.X, input.point.Y, input.mouseData) == true) return 1;
-                }
+                if (_mouseRouter.Observe((int)message, input.point.X, input.point.Y,
+                    input.mouseData, input.flags, input.extraInfo)) return 1;
             }
         }
         catch (Exception ex) { Console.Error.WriteLine($"[Mouse] {ex.Message}"); }

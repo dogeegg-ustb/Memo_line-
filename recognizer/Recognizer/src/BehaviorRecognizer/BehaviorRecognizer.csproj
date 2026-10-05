@@ -12,6 +12,11 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\recognizer_core\driver_reader\DriverReader.Core.csproj" />
+    <ProjectReference Include="..\..\..\core\memoline\Memoline.Core.csproj" />
+  </ItemGroup>
+
   <!-- The repository ships the exact managed dependencies used by its Windows release.
        Referencing them here keeps the source build independent of a missing OTD checkout
        and of network package restore. Build output receives private copies. -->

@@ -1,6 +1,7 @@
 using System.Numerics;
 using BehaviorRecognizer.Abstractions.Config;
 using BehaviorRecognizer.Abstractions.Input;
+using DriverReader;
 
 namespace BehaviorRecognizer.Capture;
 
@@ -10,10 +11,12 @@ public sealed class InputEventNormalizer : IInputEventNormalizer
     private ContactState _lastContact = ContactState.OutOfRange;
     private bool[]? _lastButtons;
     private PenProfile _profile;
+    private readonly Func<DriverMappingSession?>? _driverMapping;
 
-    public InputEventNormalizer(PenProfile profile)
+    public InputEventNormalizer(PenProfile profile, Func<DriverMappingSession?>? driverMapping = null)
     {
         _profile = profile;
+        _driverMapping = driverMapping;
     }
 
     public void UpdateProfile(PenProfile profile) => _profile = profile;
@@ -41,34 +44,43 @@ public sealed class InputEventNormalizer : IInputEventNormalizer
             return events;
         }
 
-        var normalizedPressure = NormalizePressure(report.Pressure, report.MaxPressure);
-        var contact = ResolveContact(normalizedPressure, report.IsNearProximity);
+        var mapping = _driverMapping?.Invoke()?.Evaluate(report.DeviceId, report.X, report.Y, report.Pressure, report.MaxPressure);
+        var normalizedPressure = mapping?.NormalizedPressure is { } mapped
+            ? (float?)mapped : NormalizePressure(report.Pressure, report.MaxPressure);
+        // Mapping describes the recorded pressure. Physical transitions retain the
+        // recorder's contact threshold, independent of the selected response curve.
+        var contact = ResolveContact(NormalizePressure(report.Pressure, report.MaxPressure), report.IsNearProximity);
         var rawPressure = report.Pressure;
 
         lock (_sync)
         {
             if (report.PenButtons is not null && !ButtonsEqual(report.PenButtons, _lastButtons))
             {
-                events.Add(Create(report, sessionId, sequence, InputEventType.PenButtonChanged, contact, rawPressure));
+                events.Add(Create(report, sessionId, sequence, InputEventType.PenButtonChanged, contact, rawPressure, normalizedPressure, mapping));
                 _lastButtons = (bool[])report.PenButtons.Clone();
             }
 
             switch (contact)
             {
                 case ContactState.Contact when _lastContact != ContactState.Contact:
-                    events.Add(Create(report, sessionId, sequence, InputEventType.PenDown, contact, rawPressure));
+                    events.Add(Create(report, sessionId, sequence, InputEventType.PenDown, contact, rawPressure, normalizedPressure, mapping));
                     break;
                 case ContactState.Contact:
-                    events.Add(Create(report, sessionId, sequence, InputEventType.PenMove, contact, rawPressure));
+                    events.Add(Create(report, sessionId, sequence, InputEventType.PenMove, contact, rawPressure, normalizedPressure, mapping));
                     break;
                 case ContactState.Hover when _lastContact == ContactState.Contact:
-                    events.Add(Create(report, sessionId, sequence, InputEventType.PenUp, contact, rawPressure));
+                    events.Add(Create(report, sessionId, sequence, InputEventType.PenUp, contact, rawPressure, normalizedPressure, mapping));
                     if (_profile.HoverTracking)
-                        events.Add(Create(report, sessionId, sequence, InputEventType.PenHover, contact, rawPressure));
+                        events.Add(Create(report, sessionId, sequence, InputEventType.PenHover, contact, rawPressure, normalizedPressure, mapping));
+                    break;
+                case ContactState.OutOfRange when _lastContact == ContactState.Contact:
+                    // Some tablet reports drop pressure to zero without a proximity flag
+                    // or a separate OutOfRangeReport. They still terminate the operation.
+                    events.Add(Create(report, sessionId, sequence, InputEventType.PenUp, contact, rawPressure, normalizedPressure, mapping));
                     break;
                 case ContactState.Hover:
                     if (_profile.HoverTracking)
-                        events.Add(Create(report, sessionId, sequence, InputEventType.PenHover, contact, rawPressure));
+                        events.Add(Create(report, sessionId, sequence, InputEventType.PenHover, contact, rawPressure, normalizedPressure, mapping));
                     break;
             }
 
@@ -129,7 +141,7 @@ public sealed class InputEventNormalizer : IInputEventNormalizer
         ulong sequence,
         InputEventType type,
         ContactState contact,
-        float? pressure = null)
+        float? pressure = null, float? normalizedPressure = null, DriverPenMappingResult? driverMapping = null)
     {
         Vector2? position = report.X is null || report.Y is null
             ? null
@@ -150,6 +162,8 @@ public sealed class InputEventNormalizer : IInputEventNormalizer
             Pressure = pressure ?? (report.Pressure is null || report.MaxPressure is null or 0
                 ? null
                 : report.Pressure / report.MaxPressure),
+            NormalizedPressure = normalizedPressure,
+            DriverMapping = driverMapping,
             Tilt = tilt,
             ContactState = contact,
             PenButtons = report.PenButtons is null ? null : (bool[])report.PenButtons.Clone()

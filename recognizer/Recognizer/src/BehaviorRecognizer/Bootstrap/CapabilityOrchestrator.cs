@@ -9,6 +9,7 @@ using BehaviorRecognizer.Capture;
 using BehaviorRecognizer.Recording;
 using BehaviorRecognizer.Session;
 using BehaviorRecognizer.Storage.Memoline;
+using BehaviorRecognizer.Realtime;
 
 namespace BehaviorRecognizer.Bootstrap;
 
@@ -36,6 +37,10 @@ public sealed class CapabilityOrchestrator
     private WindowsInputHooks? _windowsHooks;
     private UpdateActivatorBridge? _updateActivator;
     private InputEventNormalizer? _normalizer; // 事件归一化
+    private DriverInitializationService? _driverInitialization;
+    private RecorderRealtimeHub? _realtime;
+    private RecorderRealtimePipeServer? _realtimeServer;
+    private RecorderInputControlServer? _inputControlServer;
     private ulong _sequence; // 会话序号
     private ConfigurationSnapshot? _configSnapshot; // 配置快照
     private EnvironmentSnapshot? _environmentSnapshot; // 环境快照
@@ -70,6 +75,8 @@ public sealed class CapabilityOrchestrator
 
     public EnvironmentSnapshot? LastEnvironment => _environmentSnapshot;
     public ConfigurationSnapshot? LastConfiguration => _configSnapshot;
+    public IRecorderInputControl? InputControl => _updateActivator?.Guard;
+    public string? InputControlPipeName => _inputControlServer?.PipeName;
 
     /// <summary>启动统一输入采集与 .memoline 写入。</summary>
     public async Task<SessionInfo> StartAsync(CancellationToken cancellationToken = default)
@@ -94,6 +101,7 @@ public sealed class CapabilityOrchestrator
         var device = _captureOptions.EnableOtdHid ? _inputSource.DetectedDevices.FirstOrDefault() : null;
         var deviceName = device?.Name;
         var deviceId = device?.DeviceId ?? deviceName ?? "unknown";
+        _driverInitialization = new DriverInitializationService(device);
         var profile = _profileMatcher.Match(defaults, presets, deviceName, user);
         var source = user is not null ? "user-override"
             : profile.ProfileId != defaults.ProfileId ? "device-preset"
@@ -109,12 +117,27 @@ public sealed class CapabilityOrchestrator
 
         // Both immediate hardware input and future interpreted state append through one writer.
         _memoline = new MemolineWriter(Path.Combine(_paths.StrokeRoot, "stroke"),
-            new { deviceName = deviceName ?? "unknown", deviceId, profileId = profile.ProfileId });
-        _updateActivator = UpdateActivatorBridge.Start(_memoline);
+            new { deviceName = deviceName ?? "unknown", deviceId, profileId = profile.ProfileId },
+            new() { SuccessfulStatesOnly = true });
+        Console.WriteLine($"[状态诊断日志] {_memoline.DiagnosticFilePath}");
+        _realtime = new RecorderRealtimeHub(_memoline);
+        try { _realtimeServer = new RecorderRealtimePipeServer(_realtime); }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Realtime] 实时订阅接口不可用: {ex.Message}");
+            await _realtime.DisposeAsync();
+            _realtime = null;
+        }
+        foreach (var tablet in _inputSource.DetectedDevices)
+            _memoline.AppendState("tabletDeviceChanged", _memoline.NowTicks, [], tablet, "immediate");
+        _updateActivator = UpdateActivatorBridge.Start(_memoline, _driverInitialization);
+        if (_updateActivator is not null)
+            _inputControlServer = new RecorderInputControlServer(_updateActivator.Guard,
+                () => _updateActivator?.RecordingReady == true);
         _unifiedCapture = new UnifiedInputCapture(_memoline, _updateActivator);
         _windowsHooks = new WindowsInputHooks(_unifiedCapture, passivePen: !_captureOptions.EnableOtdHid, _updateActivator?.Guard);
 
-        _normalizer = new InputEventNormalizer(profile);
+        _normalizer = new InputEventNormalizer(profile, () => _driverInitialization.Current);
         _inputSource.ReportReceived += OnReport;
         _inputSource.DeviceChanged += OnDeviceChanged;
 
@@ -131,7 +154,15 @@ public sealed class CapabilityOrchestrator
             : "笔来源: Windows 被动笔事件（不打开数位板 HID；压力可能不可用）");
         Console.WriteLine($"会话: {_memoline.SessionId}");
         Console.WriteLine($"输出: {_memoline.FilePath}");
+        Console.WriteLine($"实时读取: {_memoline.LiveFilePath}");
+        if (_realtimeServer is not null)
+        {
+            Console.WriteLine($"实时订阅管道: {_realtimeServer.PipeName}");
+            Console.WriteLine($"接口描述: {_realtimeServer.ManifestPath}");
+        }
         Console.WriteLine("按 Enter 停止。");
+        if (_inputControlServer is not null)
+            Console.WriteLine($"输入控制与一次性保存管道: {_inputControlServer.PipeName}");
 
         return session;
     }
@@ -145,8 +176,11 @@ public sealed class CapabilityOrchestrator
         _windowsHooks = null;
         await _inputSource.StopAsync(cancellationToken);
         if (_unifiedCapture is not null) await _unifiedCapture.DisposeAsync();
+        if (_inputControlServer is not null) await _inputControlServer.DisposeAsync();
         if (_updateActivator is not null) await _updateActivator.DisposeAsync();
         if (_memoline is not null) await _memoline.DisposeAsync();
+        if (_realtime is not null) await _realtime.DisposeAsync();
+        if (_realtimeServer is not null) await _realtimeServer.DisposeAsync();
         await _eventBus.DisposeAsync();
 
         if (_sessionManager.Current is not null &&
@@ -227,6 +261,7 @@ public sealed class CapabilityOrchestrator
 
     private void OnDeviceChanged(object? sender, DetectedDeviceInfo device)
     {
+        _memoline?.AppendState("tabletDeviceChanged", _memoline.NowTicks, [], device, "immediate");
         var sessionId = _memoline?.SessionId
             ?? _sessionManager.Current?.SessionId
             ?? "unknown";

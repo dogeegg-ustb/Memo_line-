@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text.Json.Serialization;
+using DriverReader;
 
 namespace BehaviorRecognizer.Abstractions.Input;
 
@@ -23,6 +24,8 @@ public sealed class InputEvent
 
     /// <summary>Raw device pressure value.</summary>
     public float? Pressure { get; init; }
+    public float? NormalizedPressure { get; init; }
+    public DriverPenMappingResult? DriverMapping { get; init; }
 
     public Vector2? Tilt { get; init; }
 
@@ -45,6 +48,8 @@ public sealed class InputEvent
         Sequence = Sequence,
         Position = Position,
         Pressure = Pressure,
+        NormalizedPressure = NormalizedPressure,
+        DriverMapping = DriverMapping,
         Tilt = Tilt,
         ContactState = ContactState,
         PenButtons = PenButtons is null ? null : (bool[])PenButtons.Clone(),

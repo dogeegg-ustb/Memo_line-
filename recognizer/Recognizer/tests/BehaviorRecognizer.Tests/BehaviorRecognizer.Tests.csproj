@@ -18,6 +18,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\BehaviorRecognizer\BehaviorRecognizer.csproj" />
+    <Reference Include="System.IO.Hashing">
+      <HintPath>..\..\publish\win-x64\System.IO.Hashing.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

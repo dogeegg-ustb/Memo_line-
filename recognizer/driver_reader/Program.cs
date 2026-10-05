@@ -4,10 +4,16 @@ using DriverReader;
 
 Console.OutputEncoding = Encoding.UTF8;
 
-if (args.Length == 0 || args[0] is "--help" or "-h" or "help")
+if (args.Length == 0)
+{
+    RunAutoDetect(asJson: false, interactive: true);
+    return 0;
+}
+
+if (args[0] is "--help" or "-h" or "help")
 {
     PrintUsage();
-    return args.Length == 0 ? 0 : 0;
+    return 0;
 }
 
 var command = args[0].ToLowerInvariant();
@@ -17,9 +23,11 @@ try
     switch (command)
     {
         case "auto":
+        case "find":
+        case "search":
         {
             bool asJson = args.Any(a => a.Equals("--json", StringComparison.OrdinalIgnoreCase));
-            RunAutoDetect(asJson);
+            RunAutoDetect(asJson, interactive: !asJson);
             return 0;
         }
 
@@ -51,6 +59,24 @@ try
                 ? pMax : null;
 
             return RunEval(inputPath, rawPressure, maxP);
+        }
+
+        case "map":
+        {
+            if (args.Length < 4 ||
+                !double.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double px) ||
+                !double.TryParse(args[3], NumberStyles.Float, CultureInfo.InvariantCulture, out double py))
+            {
+                Console.Error.WriteLine("错误: map 命令需要指定配置文件与物理坐标 X Y。");
+                Console.Error.WriteLine("用法: DriverReader map <input_config> <phys_x> <phys_y> [screen_w] [screen_h]");
+                return 1;
+            }
+
+            string inputPath = args[1];
+            double sw = args.Length >= 5 && double.TryParse(args[4], NumberStyles.Float, CultureInfo.InvariantCulture, out double swV) ? swV : 1920;
+            double sh = args.Length >= 6 && double.TryParse(args[5], NumberStyles.Float, CultureInfo.InvariantCulture, out double shV) ? shV : 1080;
+
+            return RunMap(inputPath, px, py, sw, sh);
         }
 
         case "table":
@@ -114,6 +140,33 @@ static int RunInspect(string path)
     if (profile.ThresholdRatio > 0)
         Console.WriteLine($"起笔接触死区: {profile.ThresholdRatio * 100:0.##}%");
 
+    if (profile.CoordinateMapping != null)
+    {
+        var map = profile.CoordinateMapping;
+        Console.WriteLine();
+        Console.WriteLine("【物理坐标系 ↔ 屏幕坐标系映射关系】");
+        Console.WriteLine($"  映射模式    : {(map.MappingMode == "Absolute" ? "绝对映射 (Absolute)" : "相对映射 (Relative)")}");
+        Console.WriteLine($"  物理有效范围: {map.PhysicalArea} ({map.PhysicalUnit})");
+        if (map.ScreenArea != null)
+            Console.WriteLine($"  屏幕像素范围: {map.ScreenArea} (px)");
+        if (map.ScreenMapRatio != null)
+            Console.WriteLine($"  屏幕映射比例: 水平 [{map.ScreenMapRatio.Left * 100:0.##}% ~ {map.ScreenMapRatio.Right * 100:0.##}%], 垂直 [{map.ScreenMapRatio.Top * 100:0.##}% ~ {map.ScreenMapRatio.Bottom * 100:0.##}%]");
+        if (map.ScreenIndex.HasValue)
+            Console.WriteLine($"  目标显示器  : 显示器 #{map.ScreenIndex.Value}");
+        Console.WriteLine($"  旋转角度    : {map.RotationDegrees}°");
+        Console.WriteLine($"  保持宽高比  : {(map.LockAspectRatio ? "是 (保持原始比例)" : "否 (全屏拉伸)")}");
+        if (map.ScaleX.HasValue && map.ScaleY.HasValue)
+        {
+            Console.WriteLine($"  横向缩放系数: {map.ScaleX.Value:0.####} px/{map.PhysicalUnit}");
+            Console.WriteLine($"  纵向缩放系数: {map.ScaleY.Value:0.####} px/{map.PhysicalUnit}");
+        }
+        Console.WriteLine("  映射变换公式:");
+        foreach (var line in map.GetFormulaDescription().Split('\n'))
+        {
+            Console.WriteLine($"    {line}");
+        }
+    }
+
     Console.WriteLine();
     Console.WriteLine("压感响应变换测试采样表:");
     Console.WriteLine("  百分比     原始硬件输入      驱动输出压感      输出百分比   响应偏向");
@@ -131,23 +184,9 @@ static int RunInspect(string path)
     return 0;
 }
 
-static void RunAutoDetect(bool asJson)
+static void RunAutoDetect(bool asJson, bool interactive = false)
 {
-    var candidates = DriverProfileParser.AutoDetectCandidatePaths();
-    var list = new List<DriverProfile>();
-
-    foreach (var path in candidates)
-    {
-        try
-        {
-            var p = DriverProfileParser.Parse(path);
-            list.Add(p);
-        }
-        catch
-        {
-            // 忽略不可解析的候选文件
-        }
-    }
+    var list = DriverProfileParser.FindAllInstalledProfiles();
 
     if (asJson)
     {
@@ -167,22 +206,43 @@ static void RunAutoDetect(bool asJson)
     if (list.Count == 0)
     {
         Console.WriteLine("未在默认路径中找到已激活的常见数位板驱动配置文件。");
-        Console.WriteLine("已扫描路径包括高漫、绘王、Wacom、OpenTabletDriver、XP-Pen 等。");
+        Console.WriteLine("已扫描路径包括高漫、绘王、Wacom、OpenTabletDriver、XP-Pen 等默认配置及桌面/文档备份。");
+        Console.WriteLine("您可以通过命令行指定路径进行解析: DriverReader <配置文件路径>");
     }
     else
     {
+        var best = DriverProfileParser.FindBestProfile();
         Console.WriteLine($"共找到 {list.Count} 个有效的数位板驱动配置：\n");
         for (int i = 0; i < list.Count; i++)
         {
             var p = list[i];
-            Console.WriteLine($"[{i + 1}] {p.DeviceName} ({p.Vendor})");
+            bool isBest = best != null && p.ConfigPath.Equals(best.ConfigPath, StringComparison.OrdinalIgnoreCase);
+            string star = isBest ? " ★ [推荐]" : "";
+            Console.WriteLine($"[{i + 1}] {p.DeviceName} ({p.Vendor}){star}");
             Console.WriteLine($"    路径: {p.ConfigPath}");
             Console.WriteLine($"    特性: {p.CurveSummary}");
             Console.WriteLine($"    压力上限: {p.RecommendedPressureMax ?? 16383}");
             Console.WriteLine();
         }
+
+        if (best != null)
+        {
+            Console.WriteLine($"★ 默认推荐关联: {best.DeviceName}");
+        }
     }
     Console.WriteLine("==================================================");
+
+    if (interactive && !Console.IsInputRedirected && list.Count > 0)
+    {
+        Console.WriteLine();
+        Console.Write($"请输入配置序号 [1~{list.Count}] 查看详细采样报告与贝塞尔曲线（按 Enter 退出）: ");
+        var input = Console.ReadLine();
+        if (int.TryParse(input, out int idx) && idx >= 1 && idx <= list.Count)
+        {
+            Console.WriteLine();
+            RunInspect(list[idx - 1].ConfigPath);
+        }
+    }
 }
 
 static int RunExport(string inputPath, string? outputPath)
@@ -231,21 +291,61 @@ static int RunTable(string inputPath, int steps)
     return 0;
 }
 
+static int RunMap(string inputPath, double px, double py, double screenW, double screenH)
+{
+    var profile = DriverProfileParser.Parse(inputPath);
+    if (profile.CoordinateMapping == null)
+    {
+        Console.Error.WriteLine("该配置文件中未包含坐标系映射参数。");
+        return 1;
+    }
+
+    var map = profile.CoordinateMapping;
+    var (sx, sy) = map.PhysicalToScreen(px, py, screenW, screenH);
+    var (rpx, rpy) = map.ScreenToPhysical(sx, sy, screenW, screenH);
+
+    Console.WriteLine("==================================================");
+    Console.WriteLine("        坐标映射计算 (Physical -> Screen)");
+    Console.WriteLine("==================================================");
+    Console.WriteLine($"配置文件    : {Path.GetFullPath(inputPath)}");
+    Console.WriteLine($"设备名称    : {profile.DeviceName} ({profile.Vendor})");
+    Console.WriteLine($"物理有效区  : {map.PhysicalArea} ({map.PhysicalUnit})");
+    Console.WriteLine($"参考屏幕尺寸: {screenW} x {screenH} px");
+    Console.WriteLine($"旋转角度    : {map.RotationDegrees}°");
+    Console.WriteLine($"保持宽高比  : {(map.LockAspectRatio ? "是" : "否")}");
+    Console.WriteLine($"输入物理坐标: ({px:0.##}, {py:0.##})");
+    Console.WriteLine($"映射屏幕坐标: ({sx:0.##}, {sy:0.##})");
+    Console.WriteLine($"反向还原物理: ({rpx:0.##}, {rpy:0.##})");
+    Console.WriteLine("--------------------------------------------------");
+    Console.WriteLine("映射公式:");
+    foreach (var line in map.GetFormulaDescription().Split('\n'))
+    {
+        Console.WriteLine($"  {line}");
+    }
+    Console.WriteLine("==================================================");
+    return 0;
+}
+
 static void PrintUsage()
 {
     Console.WriteLine("""
     DriverReader — 数位板驱动配置文件解析器与压感特性提取工具
 
     用法:
+      DriverReader
       DriverReader auto [--json]
-        自动扫描本机安装的高漫/绘王/Wacom/OTD/XP-Pen 驱动配置文件并显示报告。
+      DriverReader find [--json]
+        自动扫描本机安装的高漫/绘王/Wacom/OTD/XP-Pen 驱动配置文件并显示报告或交互查看。
 
       DriverReader <配置文件路径>
       DriverReader inspect <配置文件路径>
-        详细解析指定驱动配置文件，输出设备型号、硬件物理范围、压感曲线及采样表。
+        详细解析指定驱动配置文件，输出设备型号、物理/屏幕坐标系映射、压感曲线及采样表。
+
+      DriverReader map <配置文件路径> <phys_x> <phys_y> [screen_w] [screen_h]
+        输入物理坐标，计算驱动配置在目标屏幕分辨率下的屏幕映射坐标及反向还原。
 
       DriverReader export <配置文件路径> [output.json]
-        将驱动配置解析为标准 JSON 格式。省略输出路径时输出到终端 stdout。
+        将驱动配置（含物理与屏幕坐标映射）解析为标准 JSON 格式。省略输出路径时输出到终端 stdout。
 
       DriverReader eval <配置文件路径> <raw_pressure> [pressure_max]
         输入一个原始硬件压力值，计算经过驱动曲线映射后的实际输出压力。
@@ -257,11 +357,14 @@ static void PrintUsage()
       1. 高漫 / 绘王: EKeySetting.dt, Setting.json (*.dt, *.json)
       2. Wacom 路径1: .wacomprefs, .wacomxs, .xml, .prefs (包括解压目录和 zip 封装)
       3. OpenTabletDriver: settings.json
-      4. XP-Pen / 友基: config.xml
+      4. XP-Pen / 友基 / 绘客: config.xml
 
     示例:
-      DriverReader auto
+      DriverReader
+      DriverReader find
+      DriverReader auto --json
       DriverReader "C:\Users\user\AppData\Roaming\GAOMON\data\EKeySetting.dt"
+      DriverReader map "C:\Users\user\AppData\Roaming\GAOMON\data\EKeySetting.dt" 25400 15875 1920 1080
       DriverReader export "C:\Users\user\AppData\Roaming\GAOMON\data\EKeySetting.dt" profile.json
       DriverReader "C:\path\to\backup.wacomprefs"
     """);
