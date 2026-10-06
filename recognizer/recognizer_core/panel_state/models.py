@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 
 
-RESULT_SCHEMA_VERSION = 3
+RESULT_SCHEMA_VERSION = 4
 RoiRole = Literal["tool_list", "tool_properties"]
 
 

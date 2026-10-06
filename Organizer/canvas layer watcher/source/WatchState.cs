@@ -1,5 +1,6 @@
 using System.Text.Json;
 using BehaviorRecognizer.Realtime;
+using BehaviorRecognizer.Storage.Memoline;
 
 namespace CanvasLayerWatcher;
 
@@ -59,6 +60,7 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
     private long _viewTicks = -1, _evidenceTicks = -1, _completedTriggerTicks = -1, _syntheticOperation;
     private bool _reserved;
     private bool _penContact, _mouseContact;
+    private bool _penEditable = true;
     private Rectangle? _canvasArea;
     public event Action<string>? Diagnostic;
     public event Action<ViewportObservation>? ViewportObserved;
@@ -73,7 +75,7 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         Generation++; _layers.Clear(); _clipLayers.Clear(); _dirty.Clear(); _lastDirty.Clear(); _view = null;
         _mouseOperation = _penOperation = null;
         _viewTicks = _evidenceTicks = _completedTriggerTicks = -1;
-        _reserved = _penContact = _mouseContact = false; _canvasArea = null;
+        _reserved = _penContact = _mouseContact = false; _penEditable = true; _canvasArea = null;
     }
     public CaptureRequest? Accept(RecorderRealtimeEvent message)
     {
@@ -92,7 +94,15 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         }
         if (message.Channel == "tablet" && !message.IsSnapshot)
         {
-            if (message.Kind == "penBegin") _penOperation = message.OperationId is { } penId ? (long)penId : --_syntheticOperation;
+            if (message.Kind == "penBegin")
+            {
+                _penOperation = message.OperationId is { } penId ? (long)penId : --_syntheticOperation;
+                var location = PanelRegionMap.ReadLocation(message.Data);
+                _penEditable = location is not null ? location.Region == "canvasViewport"
+                    : _canvasArea is not { } area || J.Number(message.Data, "x") is not { } x || J.Number(message.Data, "y") is not { } y
+                        || area.Contains((int)x, (int)y);
+                Diagnostic?.Invoke($"数位笔下笔区域：{location?.Name ?? (_penEditable ? "画布区域或旧接口未分类" : "画布外")}，operation={_penOperation}，位置=({J.Number(message.Data, "x")},{J.Number(message.Data, "y")})");
+            }
             if (message.Kind is "penBegin" or "penSample") _penContact = true;
             else if (message.Kind is "penEnd" or "penInterrupted" or "leave" or "outOfRange")
             {
@@ -105,6 +115,7 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         {
             var data = message.Data;
             if (J.Get(data, "inCsp").ValueKind == JsonValueKind.False) return null;
+            if (!_penEditable) return null;
             if (NavigationHeld(data)) return null;
             long operation = message.OperationId is { } id ? checked((long)id) : _penOperation ??= --_syntheticOperation;
             if (_dirty.TryAdd(operation, message.Ticks)) Diagnostic?.Invoke($"编辑输入：tablet/{message.Kind}，operation={operation}");
@@ -173,20 +184,28 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         if (_reserved) return Skip("已有保存任务，合并本次变化");
         return Reserve(message, ticks, view, pending: false);
     }
-    private CaptureRequest? Reserve(RecorderRealtimeEvent message, long ticks, View view, bool pending)
+    public CaptureRequest? ReserveRecordingEnd(RecorderRealtimeEvent message)
+    {
+        if (message.Kind != "recordingEndRequested" || message.AppendId == 0 || message.Ticks < 0)
+            throw new InvalidDataException("结束保存需要 Recognizer 的原生结束边界。");
+        if (_reserved || _view is null) return null;
+        return Reserve(message, message.Ticks, _view, pending: false, force: true) is { } request
+            ? request with { TimeSource = "triggerTicks", TriggerKind = "recordingEnd" } : null;
+    }
+    private CaptureRequest? Reserve(RecorderRealtimeEvent message, long ticks, View view, bool pending, bool force = false)
     {
         CaptureRequest? Skip(string reason) { ViewDiagnostic(message, ticks, reason, view); return null; }
         var operations = _dirty.Where(p => p.Value <= ticks).Select(p => p.Key).ToArray();
         string? layer = _layers.LastOrDefault(p => p.Key <= ticks).Value;
-        if (operations.Length == 0) return Skip("切换前没有符合条件的编辑输入");
+        if (operations.Length == 0 && !force) return Skip("切换前没有符合条件的编辑输入");
         if (string.IsNullOrWhiteSpace(layer)) return Skip("切换时图层未确认");
         // Later layer changes do not replace the layer at triggerTicks, even
         // when the viewport recognition result arrives after those changes.
-        LayerReference? identity;
+        LayerReference? identity = null;
         try { identity = LayerMapping.FromCore(_clipLayers.LastOrDefault(p => p.Key <= ticks).Value ?? [], layer); }
-        catch (InvalidDataException ex) { return Skip(ex.Message); }
+        catch (InvalidDataException ex) { Diagnostic?.Invoke(ex.Message + "；保存后以当前 CLIP 的名称映射为准"); }
         _reserved = true;
-        Diagnostic?.Invoke($"图层对应：接口={layer}，属性核心={identity?.Name ?? "尚无对应，保存后核对"}，ID={identity?.Id}，UUID={identity?.Uuid}");
+        Diagnostic?.Invoke($"图层名称已固定：接口={layer}，初始编号提示={identity?.Id}；保存后将名称映射为当前 CLIP 编号");
         ViewDiagnostic(message, ticks, pending ? "存证已发生，立即触发保存，不等待解析" : "触发保存", view);
         return new(Generation, ticks, layer, view, operations, identity, J.ObservationClock(message), message.Kind, pending);
     }

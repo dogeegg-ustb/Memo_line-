@@ -1,0 +1,29 @@
+{
+  "pythonTests": 128,
+  "packetReplayAssertions": 246,
+  "publicInterfaceAssertions": 37,
+  "verifiedRuntimeFiles": [
+    "recognizer_core/panel_state/core.py",
+    "recognizer_core/panel_state/panel_parser.py",
+    "recognizer_core/panel_state/property_catalog.py",
+    "recognizer_core/panel_state/visual_value_extraction.py",
+    "recognizer_core/panel_state/configuration_audit.py",
+    "recognizer_core/panel_state/data/properties.sqlite3",
+    "recognizer_core/subtool_state.py",
+    "recognizer_core/layer_state/data/layer_catalog.json",
+    "recognizer_core/layer_state/layer_catalog.py",
+    "pipeline.py"
+  ],
+  "executables": [
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\Memoline.exe",
+      "bytes": 116630419,
+      "sha256": "1974dc7fd1d25a299299a074eecbc97a645fe9c3d0825504df93f155669d2af1"
+    },
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\replayer\\packetreplayer\\release\\win-x64\\PacketReplay.exe",
+      "bytes": 116532115,
+      "sha256": "92a7b297b80430832904461325eecf4bab0b0eb2157db59989a7263607793226"
+    }
+  ]
+}

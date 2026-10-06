@@ -9,6 +9,122 @@ namespace BehaviorRecognizer.Tests;
 public class RecorderRealtimeTests
 {
     [Fact]
+    public async Task SubtoolsPipePreservesLatestOcrAndConfirmedSnapshotAcrossFailures()
+    {
+        await using var s = new Session(successfulStatesOnly: true);
+        await using var server = new RecorderRealtimePipeServer(s.Hub);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        await using var client = RecorderRealtimeClient.FollowSubtoolsAsync(server.PipeName, timeout.Token).GetAsyncEnumerator();
+        await using var core = RecorderRealtimeClient.FollowCoreAsync(server.PipeName, "subtoolState", timeout.Token).GetAsyncEnumerator();
+        Assert.True(await client.MoveNextAsync()); Assert.Equal("hello", client.Current.Kind);
+        Assert.True(await core.MoveNextAsync()); Assert.Equal("hello", core.Current.Kind);
+        using var manifest = JsonDocument.Parse(File.ReadAllText(server.ManifestPath));
+        Assert.Contains("subtools", manifest.RootElement.GetProperty("channels").EnumerateArray().Select(v => v.GetString()));
+        var state = new { entries = new[] { new { name = "G筆", nodeIds = new[] { "tool_24" }, selectionState = "unknown" } } };
+        void Observe(string status, int x) => s.Writer.AppendState("coreStateUpdated", s.Writer.NowTicks, [], new {
+            module = "subtoolState", status, state = status == "unknown" ? null : state,
+            evidence = new { captureId = "capture-" + x, capturedTicks = s.Writer.NowTicks,
+                captureEndTicks = s.Writer.NowTicks, panelRoi = new[] { -300, 500, 300, 220 } },
+            ocrEntries = status == "unknown" ? Array.Empty<object>() : new object[] {
+                new { name = "G筆", text = "G笔", bbox = new[] { x, 40, 30, 18 },
+                    screenBbox = new[] { -300+x, 540, 30, 18 }, coordinateSpace = "panel", selectionState = "unknown",
+                    matches = new[] { new { id = "tool_24", toolId = "tool_22", groupId = "tool_23", path = new[] { "沾水筆", "沾水筆", "G筆" } } } }
+            }, rawResult = new { schemaVersion = 1 }
+        });
+        Observe("changed", 200);
+        Assert.True(await client.MoveNextAsync()); Assert.Equal("ocrUpdated", client.Current.Kind);
+        Assert.True(await core.MoveNextAsync());
+        Assert.Equal(core.Current.AppendId, client.Current.AppendId);
+        Assert.Equal(core.Current.Ticks, client.Current.Ticks);
+        Assert.Equal(-100, client.Current.Data.GetProperty("ocrEntries")[0].GetProperty("screenBbox")[0].GetInt32());
+        Observe("unchanged", 210);
+        Assert.True(await client.MoveNextAsync());
+        Assert.Equal(-90, client.Current.Data.GetProperty("ocrEntries")[0].GetProperty("screenBbox")[0].GetInt32());
+        Assert.Empty(client.Current.Data.GetProperty("changedFields").EnumerateArray());
+        Observe("unknown", 220);
+        Assert.True(await client.MoveNextAsync());
+        Assert.Empty(client.Current.Data.GetProperty("ocrEntries").EnumerateArray());
+        Assert.Equal(0ul, client.Current.AppendId);
+        Assert.Equal("G筆", client.Current.Data.GetProperty("lastConfirmedState").GetProperty("entries")[0].GetProperty("name").GetString());
+        await using var late = RecorderRealtimeClient.FollowSubtoolsAsync(server.PipeName, timeout.Token).GetAsyncEnumerator();
+        Assert.True(await late.MoveNextAsync()); Assert.Equal("hello", late.Current.Kind);
+        Assert.True(await late.MoveNextAsync()); Assert.True(late.Current.IsSnapshot);
+        Assert.Equal("capture-210", late.Current.Data.GetProperty("evidence").GetProperty("captureId").GetString());
+        Assert.Equal(-90, late.Current.Data.GetProperty("ocrEntries")[0].GetProperty("screenBbox")[0].GetInt32());
+        Assert.True(await late.MoveNextAsync()); Assert.True(late.Current.IsSnapshot);
+        Assert.Equal("unknown", late.Current.Data.GetProperty("status").GetString());
+        await s.EndAsync();
+        Assert.Equal(2, MemolineReader.Read(s.Writer.FilePath).Count(f => f.GetProperty("kind").GetString() == "coreStateUpdated"));
+    }
+
+    [Fact]
+    public async Task BrushValueLocationsSurvivePipeSnapshotsAndNativeRecording()
+    {
+        await using var s = new Session(successfulStatesOnly: true);
+        await using var server = new RecorderRealtimePipeServer(s.Hub);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        await using var client = RecorderRealtimeClient.FollowCoreAsync(server.PipeName, "brushState", timeout.Token).GetAsyncEnumerator();
+        Assert.True(await client.MoveNextAsync());
+        Assert.Equal("hello", client.Current.Kind);
+        foreach (int offset in new[] { 0, 10 })
+        {
+            object[] regions = [
+                new { propertyKey = "brush_size", propertyIndex = 0, category = "number", value = 5.4,
+                    bbox = new[] { 200 + offset, 40, 30, 18 }, screenBbox = new[] { -100 + offset, 540, 30, 18 }, coordinateSpace = "panel", source = "ocr", status = "ok" },
+                new { propertyKey = "checkbox", propertyIndex = 1, category = "icon", value = "checked",
+                    bbox = new[] { 10, 80, 16, 16 }, screenBbox = new[] { -290, 580, 16, 16 }, coordinateSpace = "panel", source = "image", status = "ok" },
+                new { propertyKey = "blend", propertyIndex = 2, category = "text", value = "Normal",
+                    bbox = new[] { 200, 120, 50, 18 }, screenBbox = new[] { -100, 620, 50, 18 }, coordinateSpace = "panel", source = "ocr", status = "ok" }
+            ];
+            s.Writer.AppendState("coreStateUpdated", s.Writer.NowTicks, [], new {
+                module = "brushState", status = offset == 0 ? "changed" : "unchanged",
+                state = new { name = "Pen", properties = new[] { new { key = "brush_size", value = 5.4 } } },
+                evidence = new { captureId = "capture-" + offset, panelRoi = new[] { -300, 500, 360, 260 } },
+                valueRegions = regions, rawResult = new { schema_version = 4 }
+            }, "delayed");
+            Assert.True(await client.MoveNextAsync());
+            Assert.Equal("stateUpdated", client.Current.Kind);
+            var values = client.Current.Data.GetProperty("valueRegions");
+            Assert.Equal(new[] { "number", "icon", "text" }, values.EnumerateArray().Select(v => v.GetProperty("category").GetString()));
+            Assert.Equal(-100 + offset, values[0].GetProperty("screenBbox")[0].GetInt32());
+        }
+        await using var late = RecorderRealtimeClient.FollowCoreAsync(server.PipeName, "brushState", timeout.Token).GetAsyncEnumerator();
+        Assert.True(await late.MoveNextAsync()); Assert.Equal("hello", late.Current.Kind);
+        Assert.True(await late.MoveNextAsync()); Assert.True(late.Current.IsSnapshot);
+        Assert.Equal("capture-10", late.Current.Data.GetProperty("evidence").GetProperty("captureId").GetString());
+        Assert.Equal(-90, late.Current.Data.GetProperty("valueRegions")[0].GetProperty("screenBbox")[0].GetInt32());
+        Assert.Empty(late.Current.Data.GetProperty("changedFields").EnumerateArray());
+        await s.EndAsync();
+        var saved = MemolineReader.Read(s.Writer.FilePath).Where(f => f.GetProperty("kind").GetString() == "coreStateUpdated").ToArray();
+        Assert.Equal(2, saved.Length);
+        Assert.Equal(-90, saved[^1].GetProperty("data").GetProperty("valueRegions")[0].GetProperty("screenBbox")[0].GetInt32());
+    }
+
+    [Fact]
+    public async Task RecordingEndBoundaryFollowsHardwareAndRetainsNativeIdentity()
+    {
+        await using var s = new Session(successfulStatesOnly: true);
+        await using var subscription = s.Hub.SubscribeTablet(false);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await using var reader = subscription.ReadAllAsync(timeout.Token).GetAsyncEnumerator();
+        var pen = s.Writer.AppendHardware("penEnd", new { }, new("tablet", "fixture", "fixture", "fixture"), 7);
+        long ticks = s.Writer.NowTicks;
+        s.Writer.AppendState("recordingEndRequested", ticks, [], new { boundaryKind = "recordingEnd" }, "immediate");
+        Assert.True(await reader.MoveNextAsync());
+        Assert.Equal(pen.EventId, reader.Current.EventId);
+        Assert.True(await reader.MoveNextAsync());
+        var boundary = reader.Current;
+        Assert.Equal("system", boundary.Channel);
+        Assert.Equal("recordingEndRequested", boundary.Kind);
+        Assert.Equal(ticks, boundary.Ticks);
+        Assert.True(boundary.AppendId > 0);
+        await s.EndAsync();
+        var native = Assert.Single(MemolineReader.Read(s.Writer.FilePath), r => r.TryGetProperty("kind", out var k) && k.GetString() == "recordingEndRequested");
+        Assert.Equal(boundary.AppendId, native.GetProperty("appendId").GetUInt64());
+        Assert.Equal(boundary.Ticks, native.GetProperty("ticks").GetInt64());
+    }
+
+    [Fact]
     public async Task EvidenceNotificationArrivesBeforeAnalysisAndDoesNotReplaceConfirmedSnapshot()
     {
         await using var s = new Session(successfulStatesOnly: true);
@@ -173,8 +289,9 @@ public class RecorderRealtimeTests
     [Fact]
     public void TopicSelectionRejectsTyposAndExpandsCores()
     {
-        Assert.Equal(5, RecorderRealtimeTopics.Expand(["cores"]).Length);
-        Assert.Equal(8, RecorderRealtimeTopics.Expand(["all", "keyboard"]).Length);
+        Assert.Equal(6, RecorderRealtimeTopics.Expand(["cores"]).Length);
+        Assert.Equal(13, RecorderRealtimeTopics.Expand(["all", "keyboard"]).Length);
+        Assert.Equal(new[] { "shortcuts", "layers", "layerstage" }, RecorderRealtimeTopics.Expand(["shortcuts", "layers", "layerstage", "shortcuts"]));
         Assert.Throws<ArgumentException>(() => RecorderRealtimeTopics.Expand(["core.typo"]));
         Assert.Throws<ArgumentException>(() => RecorderRealtimeTopics.Expand([]));
     }

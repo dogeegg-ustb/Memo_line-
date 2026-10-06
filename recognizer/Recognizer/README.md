@@ -12,6 +12,7 @@
 - 光标实时位于 CSP 窗口时记录鼠标按下、按住移动、释放，以及数位板接触笔迹
 - 外部程序通过 SendInput 等方式注入的键盘、鼠标点击、拖拽和滚轮也会进入相同的激活流程；程序自身带标记的保存/重放输入不重复激活。
 - 默认沿用原有 OTD 笔报告采集，保留压力和倾斜值；可选 Windows 被动笔模式，该路径可能无法提供压力和倾斜值
+- 数位笔下笔时按实时工作区屏幕 ROI 分类为笔刷属性、笔刷选择（工具组）、工具栏、导航器、图层、画布视口或其他；原生笔事件及实时 tablet 消息的 `data.penDownLocation` 保留分类、起笔坐标和工作区证据指针，整个接触段沿用起笔分类。
 - 按发生顺序给硬件输入分配事件 ID；统一使用会话单调时钟写入追加式 `.memoline`
 - 延迟解释的状态记录可追加到同一文件，并通过硬件事件 ID 关联原输入
 - 自动读取已保存的 CSP 面板布局与快捷键，悬停或相关快捷键使对应面板边框闪烁，并追加状态更新请求；详见 [更新触发原型](../recorder_integration/README.md)
@@ -84,7 +85,7 @@ BehaviorRecognizer --recover
 
 录制中输入 `V` + Enter 可打开 vMulti 安装引导。
 
-默认沿用原有 OTD 笔报告采集。若设备环境不适合 OTD 直接采集，可用 `BehaviorRecognizer --passive-pen` 改用 Windows 笔兼容事件；这一模式不打开数位板 HID，压力与倾斜值可能不可用。系统输入钩子仅排队通知，窗口判断与写盘在后台执行。
+默认沿用原有 OTD 笔报告采集。`--input-catalog` 查询数位板设备、驱动配置与屏幕，查询结束即释放设备，不启动录制。`--tablet-device-id <id>` 只接收指定数位板的报告；指定设备未连接时启动失败。若设备环境不适合 OTD 直接采集，可用 `BehaviorRecognizer --passive-pen` 改用 Windows 笔兼容事件；这一模式不打开数位板 HID，压力与倾斜值可能不可用。系统输入钩子仅排队通知，窗口判断与写盘在后台执行。
 
 ## 目录布局（自动创建）
 
@@ -147,6 +148,10 @@ C# 进程内订阅、外部客户端、JSONL 协议和全部输出字段见 [实
 初始化完成后，无需新的键鼠事件即可派发 Ctrl+S。该命令不改变输入拦截配置；工作线程忙、尚未完成初始化或前台不是 CSP 时返回 `success=false` 和 `error`。按调用方要求已移除文档标题／文件名匹配校验；调用方负责选择 CSP 当前文档的 `.clip`。调用方应等待笔接触及导航按键释放，再发起请求。
 
 `triggerTicks` 是可选的非负 64 位整数，取自同一录制会话的 `data.evidence.triggerTicks`，不得晚于该会话当前 ticks；省略或传 `null` 兼容旧请求。服务端将其传入保存工作线程并在响应中原样返回。外部保存的 `clipSaveRequest/saveGuardResult` 以该 triggerTicks 标记时间归属，同时单独记录 `requestReceivedTicks` 和实际 `saveInputDispatchedTicks`。
+
+结束录制前可调用 `{"command":"prepareRecordingEnd"}`。初始化完成后，接口追加一个原生 `recordingEndRequested` 事件，并返回 `success`、`sessionId`、`triggerTicks` 和 `appendId`；重复调用返回同一个结束边界。该事件通过实时 `system/recordingEndRequested` 发布，排在此前已追加的硬件消息之后。它不停止采集、不派发保存输入，也不表示画布发生变化；调用方取得边界后完成最终保存和解析，再正常停止 Recognizer 写入 footer。
+
+`requestClipSave` 的可选布尔参数 `activateCsp=true` 用于点击外部程序“停止”后的最终保存：尝试激活最近的 CSP 窗口（或唯一 CSP 主窗口）再派发保存输入。默认 `false` 保持原来的前台策略。不会按窗口标题校验文档；无法激活时返回失败且不注入保存输入。
 
 成功响应包含 `success=true`、原 `requestId`、`triggerTicks`、`saveInputDispatched=true`、`saveInputDispatchedTicks`、`saveCompletionConfirmed=false`。它只确认保存输入已派发，调用方仍须等待目标 `.clip` 改变并稳定后读取。对应 C# 接口是 `IRecorderInputControl.RequestClipSaveAsync`，原键鼠输入控制命令亦可经此管道调用。
 

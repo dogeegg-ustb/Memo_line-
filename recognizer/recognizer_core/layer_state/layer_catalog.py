@@ -21,6 +21,7 @@ class LayerCatalog:
         payload = json.loads(path.read_text(encoding="utf-8"))
         self.metadata = payload["metadata"]
         self.blend_modes = payload["blend_modes"]
+        self.properties = {entry['key']:entry for entry in payload.get('properties',[])}
         self.aliases: dict[str, str] = {}
         for entry in self.blend_modes:
             for alias in entry["aliases"]:

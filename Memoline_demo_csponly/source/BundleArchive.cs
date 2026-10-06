@@ -14,16 +14,18 @@ public sealed record BundleVerificationResult(string SessionId, long Frequency, 
 /// <summary>A sealed recording preserves its two source streams byte for byte. Only the active dimensions may be revised.</summary>
 public static class BundleArchive
 {
-    public const string Schema = "memoline-csponly/v1";
+    public const string Schema = "memoline-csponly/v2";
+    public const string LegacySchema = "memoline-csponly/v1";
     public const string MechanicalEntry = "mechanical/recording.memoline";
     public const string AggregationEntry = "aggregation/events.jsonl";
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
     private static readonly UTF8Encoding Utf8 = new(false, true);
     private static readonly string[] Continuities = ["actionPatternContinuity", "toolContinuity", "layerContinuity", "regionContinuity", "timeContinuity"];
-    private sealed record EntryInfo(string Entry, string Sha256, long Size);
+    private sealed record EntryInfo(string Entry, string Sha256, long Size, string? Codec = null);
     private sealed record ArchiveIndex(string Schema, string SessionId, long Frequency, long OriginTicks,
         EntryInfo Mechanical, EntryInfo Aggregation, string FixedSha256, string ActiveDimensionsEntry, EntryInfo[] Dimensions);
-    private sealed record MechanicalRecord(ulong AppendId, ulong EventId, ulong? OperationId, long Ticks, bool Hardware);
+    private sealed record MechanicalRecord(ulong AppendId, ulong EventId, ulong? OperationId, long Ticks, bool Hardware,
+        string Kind, PenDownLocation? PenDownLocation);
     private sealed record MechanicalInfo(string SessionId, long Frequency, long OriginTicks, long EndTicks,
         Dictionary<ulong, MechanicalRecord> Records);
     private sealed record AggregateInfo(string FixedSha256, int Packets, int Assets, int Dimensions);
@@ -66,13 +68,13 @@ public static class BundleArchive
         if (mechanical.SessionId != index.SessionId || mechanical.Frequency != index.Frequency || mechanical.OriginTicks != index.OriginTicks)
             throw new InvalidDataException("Container index does not match the native recording clock/session.");
         AggregateInfo aggregate;
-        using (var source = RequiredEntry(archive, AggregationEntry).Open())
+        using (var source = OpenEntry(archive, index.Aggregation))
             aggregate = ValidateAggregate(source, mechanical, false, null, token);
         if (!HashEqual(aggregate.FixedSha256, index.FixedSha256)) throw new InvalidDataException("Fixed packets/assets hash mismatch.");
         int dimensionCount = aggregate.Dimensions;
         foreach (var revision in index.Dimensions)
         {
-            using var source = RequiredEntry(archive, revision.Entry).Open();
+            using var source = OpenEntry(archive, revision);
             var revised = ValidateAggregate(source, mechanical, true, RevisionVersion(revision.Entry), token);
             if (revision.Entry == index.ActiveDimensionsEntry) dimensionCount = revised.Dimensions;
         }
@@ -89,7 +91,7 @@ public static class BundleArchive
         Directory.CreateDirectory(directory);
         try
         {
-            using (var source = RequiredEntry(archive, MechanicalEntry).Open())
+            using (var source = OpenEntry(archive, ReadIndex(archive).Mechanical))
             using (var target = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None)) source.CopyTo(target);
             foreach (var frame in MemolineReader.Read(temporary)) yield return frame;
         }
@@ -101,7 +103,8 @@ public static class BundleArchive
         Verify(path);
         using var archive = ZipFile.OpenRead(path);
         var index = ReadIndex(archive);
-        using var source = RequiredEntry(archive, index.ActiveDimensionsEntry).Open();
+        using var source = OpenEntry(archive, index.ActiveDimensionsEntry == index.Aggregation.Entry
+            ? index.Aggregation : index.Dimensions.Single(e => e.Entry == index.ActiveDimensionsEntry));
         return ReadRows(source, CancellationToken.None).Where(row => Text(row.Value, "kind") == "dimensionSample")
             .Select(row => row.Value.Clone()).OrderBy(row => Integer(row, "ticks")).ToArray();
     }
@@ -117,7 +120,7 @@ public static class BundleArchive
         using var original = ZipFile.OpenRead(input);
         var index = ReadIndex(original);
         string entry = "dimensions/" + version + ".jsonl";
-        if (original.GetEntry(entry) is not null) throw new IOException("This dimensions version already exists.");
+        if (index.Dimensions.Any(e => e.Entry == entry)) throw new IOException("This dimensions version already exists.");
         WithMechanical(original, temporary =>
         {
             var mechanical = ValidateMechanical(temporary, token);
@@ -125,22 +128,53 @@ public static class BundleArchive
             ValidateAggregate(source, mechanical, true, version, token);
             return true;
         }, token);
-        var updated = index with { ActiveDimensionsEntry = entry,
+        var updated = index with { Schema = Schema, ActiveDimensionsEntry = entry,
             Dimensions = [.. index.Dimensions, FileEntry(dimensionJsonl, entry, token)] };
         return WriteArchive(output, updated, archive =>
         {
             foreach (var source in original.Entries.Where(e => e.FullName != "index.json"))
             {
                 token.ThrowIfCancellationRequested();
-                var target = archive.CreateEntry(source.FullName, CompressionLevel.Fastest);
+                var target = archive.CreateEntry(source.FullName, source.FullName.EndsWith(".br", StringComparison.Ordinal)
+                    ? CompressionLevel.NoCompression : CompressionLevel.SmallestSize);
                 using var read = source.Open(); using var write = target.Open(); Copy(read, write, token);
             }
             AddFile(archive, dimensionJsonl, entry, token);
         }, token);
     }
 
+    /// <summary>Re-encode storage only. Original streams, image bytes and every revision hash are preserved.</summary>
+    public static BundleSealResult Compact(string input, string output, CancellationToken token = default)
+    {
+        input = ExistingPath(input); output = Destination(output, input);
+        Verify(input, token);
+        using var original = ZipFile.OpenRead(input);
+        var index = ReadIndex(original);
+        var updated = index with { Schema = Schema, Mechanical = index.Mechanical with { Codec = "brotli" },
+            Aggregation = index.Aggregation with { Codec = "brotli" },
+            Dimensions = index.Dimensions.Select(e => e with { Codec = "brotli" }).ToArray() };
+        return WriteArchive(output, updated, archive =>
+        {
+            foreach (var entry in new[] { index.Mechanical, index.Aggregation }.Concat(index.Dimensions))
+            {
+                using var source = OpenEntry(original, entry);
+                AddCompressedEntry(archive, source, entry.Entry, token);
+            }
+        }, token, input);
+    }
+
+    public static void ExtractMechanical(string input, string output, CancellationToken token = default)
+    {
+        input = ExistingPath(input); output = Destination(output, input);
+        Verify(input, token);
+        using var archive = ZipFile.OpenRead(input);
+        using var source = OpenEntry(archive, ReadIndex(archive).Mechanical);
+        using var target = new FileStream(output, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        Copy(source, target, token);
+    }
+
     private static BundleSealResult WriteArchive(string destination, ArchiveIndex index, Action<ZipArchive> writeEntries,
-        CancellationToken token)
+        CancellationToken token, string? fallbackArchive = null)
     {
         string directory = Path.GetDirectoryName(destination)!;
         Directory.CreateDirectory(directory);
@@ -153,10 +187,18 @@ public static class BundleArchive
                 using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
                 {
                     writeEntries(archive);
-                    using var json = archive.CreateEntry("index.json", CompressionLevel.Fastest).Open();
+                    using var json = archive.CreateEntry("index.json", CompressionLevel.SmallestSize).Open();
                     JsonSerializer.Serialize(json, index, Json);
                 }
                 stream.Flush(flushToDisk: true);
+            }
+            // Small recordings or already compact archives may gain no space.
+            // In that case retain the original encoding instead of growing it.
+            if (fallbackArchive is not null && new FileInfo(stage).Length >= new FileInfo(fallbackArchive).Length)
+            {
+                File.Copy(fallbackArchive, stage, overwrite: true);
+                using var unchanged = new FileStream(stage, FileMode.Open, FileAccess.Write, FileShare.None);
+                unchanged.Flush(flushToDisk: true);
             }
             Verify(stage, token);
             token.ThrowIfCancellationRequested();
@@ -198,7 +240,8 @@ public static class BundleArchive
             if (hardware && (ticks < lastHardwareTicks || eventId == 0 || !hardwareIds.Add(eventId)))
                 throw new InvalidDataException("Native hardware events violate the one-way timeline.");
             if (hardware) lastHardwareTicks = ticks;
-            records.Add(append, new(append, eventId, operation, ticks, hardware)); lastAppend = append;
+            records.Add(append, new(append, eventId, operation, ticks, hardware, kind,
+                kind == "penBegin" ? PanelRegionMap.ReadLocation(Property(frame, "data")) : null)); lastAppend = append;
         }
         if (session is null || !footer) throw new InvalidDataException("Native recording has not been finalized.");
         if (records.Values.Any(record => record.Ticks > end)) throw new InvalidDataException("Native event is after the session footer.");
@@ -209,8 +252,12 @@ public static class BundleArchive
         string? version, CancellationToken token)
     {
         bool header = false, footer = false; int packets = 0, assets = 0, dimensions = 0;
+        bool requireEndPacket = false;
+        var windows = new List<(long From, long To, bool End)>();
+        var ownedHardware = new HashSet<ulong>();
         using var fixedHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var chunks = new Dictionary<string, AssetChunks>();
+        var referencedAssets = new HashSet<string>(StringComparer.Ordinal);
         try
         {
         foreach (var (raw, row) in ReadRows(source, token))
@@ -223,6 +270,7 @@ public static class BundleArchive
                     throw new InvalidDataException("Aggregation header does not match the native session/clock.");
                 if (row.TryGetProperty("originTicks", out _) && Integer(row, "originTicks") != mechanical.OriginTicks)
                     throw new InvalidDataException("Aggregation clock origin does not match the native session.");
+                requireEndPacket = row.TryGetProperty("endPacketPolicy", out var policy) && policy.GetString() == "nativeFooterClosure/v1";
                 header = true; continue;
             }
             if (kind == "header") throw new InvalidDataException("Duplicate aggregation header.");
@@ -230,6 +278,8 @@ public static class BundleArchive
             {
                 if (row.TryGetProperty("sessionId", out _) && Text(row, "sessionId") != mechanical.SessionId)
                     throw new InvalidDataException("Aggregation footer session mismatch.");
+                if (requireEndPacket && Integer(row, "lastBoundaryTicks") != mechanical.EndTicks)
+                    throw new InvalidDataException("Aggregation does not close at the native footer.");
                 footer = true; continue;
             }
             if (kind == "dimensionSample")
@@ -243,6 +293,44 @@ public static class BundleArchive
                 long from = Integer(row, "fromTicks"), to = Integer(row, "toTicks");
                 if (from < 0 || to < from || to > mechanical.EndTicks) throw new InvalidDataException("Invalid packet time range.");
                 ValidatePointers(Array(row, "eventPointers"), mechanical, from, to, hardware: true);
+                if (requireEndPacket)
+                {
+                    bool end = row.TryGetProperty("boundaryKind", out var boundaryKind) && boundaryKind.GetString() == "recordingEnd";
+                    windows.Add((from, to, end));
+                    foreach (var pointer in Array(row, "eventPointers").EnumerateArray())
+                        if ((!pointer.TryGetProperty("context", out var context) || !context.GetBoolean())
+                            && !ownedHardware.Add(Unsigned(pointer, "appendId")))
+                            throw new InvalidDataException("A hardware event belongs to more than one packet.");
+                    if (end)
+                    {
+                        long trigger = Integer(row, "triggerTicks");
+                        if (trigger < from || trigger > to || to != mechanical.EndTicks)
+                            throw new InvalidDataException("Invalid recording-end packet boundary.");
+                        ulong observation = Unsigned(row, "observationAppendId");
+                        if (observation > 0)
+                        {
+                            if (!mechanical.Records.TryGetValue(observation, out var original)
+                                || original.Kind != "recordingEndRequested" || original.Ticks != trigger)
+                                throw new InvalidDataException("End capture does not reference its native trigger.");
+                        }
+                        else if (trigger != mechanical.EndTicks || Text(row, "status") != "empty")
+                            throw new InvalidDataException("A footer-only end packet cannot claim a captured image.");
+                    }
+                }
+                if (row.TryGetProperty("penContacts", out var contacts))
+                {
+                    if (contacts.ValueKind != JsonValueKind.Array) throw new InvalidDataException("penContacts must be an array.");
+                    foreach (var contact in contacts.EnumerateArray())
+                    {
+                        var begin = Property(contact, "beginEventPointer");
+                        ValidatePointers(JsonSerializer.SerializeToElement(new[] { begin }), mechanical, from, to, hardware: true);
+                        var original = mechanical.Records[Unsigned(begin, "appendId")];
+                        if (original.Kind != "penBegin" || Unsigned(contact, "operationId") != (original.OperationId ?? original.EventId))
+                            throw new InvalidDataException("Pen contact does not point to its native penBegin.");
+                        if (original.PenDownLocation is { } location && PanelRegionMap.ReadLocation(contact) != location)
+                            throw new InvalidDataException("Pen contact location differs from the native penBegin.");
+                    }
+                }
                 foreach (var matrix in Array(row, "dirtyMatrices").EnumerateArray())
                 {
                     ValidatePointers(Array(matrix, "eventPointers"), mechanical, from, to, hardware: true);
@@ -251,6 +339,11 @@ public static class BundleArchive
                         if (statePointers.ValueKind != JsonValueKind.Array) throw new InvalidDataException("statePointers must be an array.");
                         ValidatePointers(statePointers, mechanical, from, to, hardware: false);
                     }
+                }
+                if (row.TryGetProperty("imageAssets", out var imageAssets))
+                {
+                    if (imageAssets.ValueKind != JsonValueKind.Array) throw new InvalidDataException("imageAssets must be an array.");
+                    foreach (var asset in imageAssets.EnumerateArray()) referencedAssets.Add(Text(asset, "assetId"));
                 }
                 packets++;
             }
@@ -279,7 +372,21 @@ public static class BundleArchive
             fixedHash.AppendData(raw); fixedHash.AppendData([10]);
         }
         if (!header || !footer) throw new InvalidDataException("Aggregation has not been finalized.");
+        if (requireEndPacket)
+        {
+            var ordered = windows.OrderBy(w => w.From).ThenBy(w => w.To).ThenBy(w => w.End).ToArray();
+            long previous = 0;
+            foreach (var window in ordered)
+            {
+                if (window.From != previous) throw new InvalidDataException("Packet windows leave a gap or overlap.");
+                previous = window.To;
+            }
+            if (ordered.Length == 0 || ordered.Count(w => w.End) != 1 || !ordered[^1].End || previous != mechanical.EndTicks
+                || !ownedHardware.SetEquals(mechanical.Records.Values.Where(r => r.Hardware).Select(r => r.AppendId)))
+                throw new InvalidDataException("Recording-end packet is missing or leaves hardware events unpackaged.");
+        }
         if (chunks.Values.Any(chunk => chunk.Next != chunk.Count)) throw new InvalidDataException("Asset is missing one or more chunks.");
+        if (referencedAssets.Any(id => !chunks.ContainsKey(id))) throw new InvalidDataException("Packet references a missing image asset.");
         foreach (var chunk in chunks.Values)
             if (chunk.TotalSha256 is not null && !HashEqual(Convert.ToHexString(chunk.Hash.GetHashAndReset()), chunk.TotalSha256))
                 throw new InvalidDataException("Complete asset hash mismatch.");
@@ -352,22 +459,28 @@ public static class BundleArchive
         if (entry.Length > 1024 * 1024) throw new InvalidDataException("Container index exceeds 1 MiB.");
         using var stream = entry.Open();
         var index = JsonSerializer.Deserialize<ArchiveIndex>(stream, Json) ?? throw new InvalidDataException("Missing container index.");
-        if (index.Schema != Schema || index.Mechanical is null || index.Aggregation is null || index.Dimensions is null
+        if (index.Schema is not (Schema or LegacySchema) || index.Mechanical is null || index.Aggregation is null || index.Dimensions is null
             || index.Mechanical.Entry != MechanicalEntry || index.Aggregation.Entry != AggregationEntry)
             throw new InvalidDataException("Unsupported container schema or stream entries.");
+        foreach (var info in new[] { index.Mechanical, index.Aggregation }.Concat(index.Dimensions))
+            if (info is null || info.Codec is not (null or "brotli") || (index.Schema == LegacySchema && info.Codec is not null))
+                throw new InvalidDataException("Unsupported entry codec.");
         return index;
     }
 
     private static void ValidateArchiveEntries(ZipArchive archive, ArchiveIndex index)
     {
-        var expected = new HashSet<string>(StringComparer.Ordinal) { "index.json", MechanicalEntry, AggregationEntry };
+        var expected = new HashSet<string>(StringComparer.Ordinal)
+            { "index.json", StoredName(index.Mechanical), StoredName(index.Aggregation) };
+        var dimensions = new HashSet<string>(StringComparer.Ordinal) { index.Aggregation.Entry };
         foreach (var revision in index.Dimensions)
         {
             if (revision is null) throw new InvalidDataException("Missing dimensions entry metadata.");
             RevisionVersion(revision.Entry);
-            if (!expected.Add(revision.Entry)) throw new InvalidDataException("Duplicate dimensions entry metadata.");
+            if (!dimensions.Add(revision.Entry) || !expected.Add(StoredName(revision)))
+                throw new InvalidDataException("Duplicate dimensions entry metadata.");
         }
-        if (!expected.Contains(index.ActiveDimensionsEntry) || index.ActiveDimensionsEntry is "index.json" or MechanicalEntry)
+        if (!dimensions.Contains(index.ActiveDimensionsEntry))
             throw new InvalidDataException("Invalid active dimensions entry.");
         if (archive.Entries.Count != expected.Count || archive.Entries.Any(entry => !expected.Contains(entry.FullName)))
             throw new InvalidDataException("Unexpected or missing container entries.");
@@ -382,10 +495,19 @@ public static class BundleArchive
 
     private static void CheckEntry(ZipArchive archive, EntryInfo expected, CancellationToken token)
     {
-        var entry = RequiredEntry(archive, expected.Entry);
-        if (expected.Size < 0 || entry.Length != expected.Size) throw new InvalidDataException("Container entry size mismatch.");
-        using var stream = entry.Open();
-        if (!HashEqual(Hash(stream, token), expected.Sha256)) throw new InvalidDataException("Container entry hash mismatch: " + expected.Entry);
+        if (expected.Size < 0) throw new InvalidDataException("Container entry size mismatch.");
+        using var stream = OpenEntry(archive, expected);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        byte[] buffer = new byte[128 * 1024]; long size = 0; int count;
+        while ((count = stream.Read(buffer)) != 0)
+        {
+            token.ThrowIfCancellationRequested(); size = checked(size + count);
+            if (size > expected.Size) throw new InvalidDataException("Container entry size mismatch.");
+            hash.AppendData(buffer.AsSpan(0, count));
+        }
+        if (size != expected.Size) throw new InvalidDataException("Container entry size mismatch.");
+        if (!HashEqual(Convert.ToHexString(hash.GetHashAndReset()), expected.Sha256))
+            throw new InvalidDataException("Container entry hash mismatch: " + expected.Entry);
     }
 
     private static T WithMechanical<T>(ZipArchive archive, Func<string, T> read, CancellationToken token = default)
@@ -395,7 +517,7 @@ public static class BundleArchive
         Directory.CreateDirectory(directory);
         try
         {
-            using (var source = RequiredEntry(archive, MechanicalEntry).Open())
+            using (var source = OpenEntry(archive, ReadIndex(archive).Mechanical))
             using (var target = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) Copy(source, target, token);
             return read(path);
         }
@@ -405,13 +527,52 @@ public static class BundleArchive
     private static EntryInfo FileEntry(string path, string entry, CancellationToken token)
     {
         using var stream = File.OpenRead(path);
-        return new(entry, Hash(stream, token), stream.Length);
+        return new(entry, Hash(stream, token), stream.Length, "brotli");
     }
     private static void AddFile(ZipArchive archive, string path, string name, CancellationToken token)
     {
         using var source = File.OpenRead(path);
-        using var target = archive.CreateEntry(name, name == MechanicalEntry ? CompressionLevel.NoCompression : CompressionLevel.Fastest).Open();
-        Copy(source, target, token);
+        AddCompressedEntry(archive, source, name, token);
+    }
+
+    private static string StoredName(EntryInfo entry) => entry.Entry + (entry.Codec == "brotli" ? ".br" : "");
+
+    private static Stream OpenEntry(ZipArchive archive, EntryInfo entry)
+    {
+        Stream source = RequiredEntry(archive, StoredName(entry)).Open();
+        return entry.Codec == "brotli" ? new BrotliStream(source, CompressionMode.Decompress) : source;
+    }
+
+    private static void AddCompressedEntry(ZipArchive archive, Stream source, string name, CancellationToken token)
+    {
+        using var target = archive.CreateEntry(name + ".br", CompressionLevel.NoCompression).Open();
+        // One 16 MiB history window across the exact source byte stream. Live
+        // recording remains unchanged; expensive compression runs only at seal.
+        using var encoder = new BrotliEncoder(quality: 11, window: 24);
+        byte[] input = new byte[128 * 1024], output = new byte[128 * 1024]; int count;
+        while ((count = source.Read(input)) != 0)
+        {
+            ReadOnlySpan<byte> remaining = input.AsSpan(0, count);
+            System.Buffers.OperationStatus status;
+            do
+            {
+                token.ThrowIfCancellationRequested();
+                status = encoder.Compress(remaining, output, out int consumed, out int written, isFinalBlock: false);
+                target.Write(output.AsSpan(0, written)); remaining = remaining[consumed..];
+                if (status == System.Buffers.OperationStatus.InvalidData)
+                    throw new InvalidDataException("Brotli compression failed.");
+            }
+            while (!remaining.IsEmpty || status == System.Buffers.OperationStatus.DestinationTooSmall);
+        }
+        System.Buffers.OperationStatus finalStatus;
+        do
+        {
+            token.ThrowIfCancellationRequested();
+            finalStatus = encoder.Compress(ReadOnlySpan<byte>.Empty, output, out _, out int written, isFinalBlock: true);
+            target.Write(output.AsSpan(0, written));
+        }
+        while (finalStatus == System.Buffers.OperationStatus.DestinationTooSmall);
+        if (finalStatus != System.Buffers.OperationStatus.Done) throw new InvalidDataException("Incomplete Brotli compression.");
     }
     private static void Copy(Stream source, Stream target, CancellationToken token)
     {

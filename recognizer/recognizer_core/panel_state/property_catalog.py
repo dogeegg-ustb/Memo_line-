@@ -44,7 +44,7 @@ class PropertyCatalog:
                 node[""] = word
 
     @lru_cache(maxsize=2048)
-    def match(self, text: str, category: str | None = None, value_kind: str | None = None) -> dict:
+    def match(self, text: str, category: str | None = None, value_kind: str | None = None, context_key: str | None = None) -> dict:
         word = normalize(text)
         node = self.trie
         matched = None
@@ -72,6 +72,14 @@ class PropertyCatalog:
             score, matched = scored[0]
             method = "fuzzy"
         definitions = self.aliases[matched]
+        scoped = [d for d in definitions if d.get('context_key')]
+        if scoped:
+            contextual = [d for d in scoped if d['context_key'] == context_key]
+            if contextual:
+                definitions = contextual
+            elif all(d.get('context_key') for d in definitions):
+                return {'status':'ambiguous','candidates':[d['id'] for d in definitions],
+                        'matched_alias':matched,'reason':'missingVisibleParentContext'}
         if value_kind:
             compatible = [d for d in definitions if d['value_kind'] == value_kind or d['value_kind'] == 'compound']
             if compatible:
@@ -87,6 +95,10 @@ class PropertyCatalog:
                 return {'status': 'matched', 'definition': self.by_key['opacity'],
                         'definition_candidates': [d['id'] for d in definitions],
                         'matched_alias': matched, 'method': 'shared_visible_label', 'score': score}
+            if {d['key'] for d in definitions} == {'color_tolerance', 'anti_overflow.color_margin'}:
+                return {'status': 'matched', 'definition': self.by_key['color_tolerance'],
+                        'definition_candidates': [d['id'] for d in definitions],
+                        'matched_alias': matched, 'method': 'shared_visible_label', 'score': score}
             return {"status": "ambiguous", "candidates": [d["id"] for d in definitions], "matched_alias": matched}
         return {"status": "matched", "definition": definitions[0], "matched_alias": matched, "method": method, "score": score}
 
@@ -94,7 +106,8 @@ class PropertyCatalog:
         definition = self.by_key[key]
         return {"property_id": definition["id"], "category": definition["category"],
                 "value_kind": definition["value_kind"], "read_support": definition["read_support"],
-                "sources": definition["sources"], "catalog_version": self.metadata["catalog_version"]}
+                "sources": definition["sources"], "catalog_version": self.metadata["catalog_version"],
+                **{k:definition[k] for k in ('enum_values','description_zh','state_descriptions','configuration_fields','context_key') if k in definition}}
 
 
 @lru_cache(maxsize=1)

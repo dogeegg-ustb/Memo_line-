@@ -35,10 +35,10 @@ if (-not $SkipChecks) {
     if ($LASTEXITCODE -ne 0) { throw 'Memoline integration checks failed' }
 }
 $output = Join-Path $PSScriptRoot 'publish/win-x64'
-dotnet publish (Join-Path $PSScriptRoot 'source/MemolineDemo.csproj') -c Release -r win-x64 --self-contained true -o $output -m:1 -p:UseSharedCompilation=false -nr:false
+dotnet publish (Join-Path $PSScriptRoot 'source/MemolineDemo.csproj') -c Release -r win-x64 --self-contained true -o $output -m:1 -p:UseSharedCompilation=false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -nr:false
 if ($LASTEXITCODE -ne 0) { throw 'MemolineDemo publish failed' }
 Copy-Item -LiteralPath $bridge -Destination $output -Force
-foreach ($name in @('README.md', 'FORMAT.md')) {
+foreach ($name in @('README.md', 'FORMAT.md', 'INTERFACES.md')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $output -Force
 }
 foreach ($name in @('NOTICE.md', 'DIFF_FORMAT.md')) {
@@ -61,4 +61,38 @@ foreach ($file in Get-ChildItem -LiteralPath $RecognizerPackage -File -Recurse) 
     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
     Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
 }
-Write-Host "Published: $output\MemolineDemo.exe"
+# Compile the native recorder as well. The package supplies Python/native
+# dependencies; source changes must never silently run an older recorder DLL.
+$recorderStage = Join-Path $PSScriptRoot '.stage/recognizer'
+dotnet publish (Join-Path $repository 'recognizer/Recognizer/src/BehaviorRecognizer/BehaviorRecognizer.csproj') -c Release -r win-x64 --self-contained true -o $recorderStage -m:1 -p:UseSharedCompilation=false -nr:false
+if ($LASTEXITCODE -ne 0) { throw 'Integrated Recognizer publish failed' }
+foreach ($file in Get-ChildItem -LiteralPath $recorderStage -File -Recurse) {
+    $relative = [System.IO.Path]::GetRelativePath($recorderStage, $file.FullName)
+    if ($relative -eq 'integration\settings.json' -or $relative -eq 'integration/settings.json' -or $relative -match '^config[\\/]') { continue }
+    $destination = Join-Path $recognizerOutput $relative
+    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+    Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+}
+$entryPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'Memoline.exe'))
+$entryStage = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ('.stage/entry-' + [Guid]::NewGuid().ToString('N') + '.exe')))
+$entryBackup = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ('.stage/previous-entry/Memoline-' + [Guid]::NewGuid().ToString('N') + '.exe')))
+$entryRoot = [System.IO.Path]::GetFullPath($PSScriptRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+foreach ($entryTarget in @($entryPath, $entryStage, $entryBackup)) {
+    if (-not $entryTarget.StartsWith($entryRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Executable update path is outside the demo.' }
+}
+Copy-Item -LiteralPath (Join-Path $output 'MemolineDemo.exe') -Destination $entryStage -ErrorAction Stop
+try {
+    try { [System.IO.File]::Move($entryStage, $entryPath, $true) }
+    catch [System.IO.IOException], [System.UnauthorizedAccessException] {
+        # A running entry cannot be overwritten on Windows, but can be renamed.
+        # Keep that loaded image, and atomically install the already complete new one.
+        if (-not (Test-Path -LiteralPath $entryPath)) { throw }
+        New-Item -ItemType Directory -Path (Split-Path -Parent $entryBackup) -Force | Out-Null
+        Move-Item -LiteralPath $entryPath -Destination $entryBackup -ErrorAction Stop
+        try { [System.IO.File]::Move($entryStage, $entryPath) }
+        catch { Move-Item -LiteralPath $entryBackup -Destination $entryPath -ErrorAction Stop; throw }
+    }
+}
+finally { if (Test-Path -LiteralPath $entryStage) { Remove-Item -LiteralPath $entryStage -Force } }
+Copy-Item -LiteralPath $bridge -Destination (Join-Path $PSScriptRoot 'clip-layer-bridge.exe') -Force
+Write-Host "Published: $PSScriptRoot\Memoline.exe"

@@ -2,7 +2,7 @@
 import json
 import threading
 
-MODULES = {"笔刷属性":"brushState", "图层":"currentLayerState", "色彩":"colorState", "画布视口":"canvasViewState"}
+MODULES = {"笔刷属性":"brushState", "工具组":"subtoolState", "图层":"currentLayerState", "色彩":"colorState", "画布视口":"canvasViewState"}
 
 def synchronized(method):
     def call(self,*args,**kwargs):
@@ -12,6 +12,13 @@ def synchronized(method):
 
 
 def semantic_state(module, result):
+    if module == 'subtoolState':
+        if not isinstance(result,dict) or result.get('status') != 'ok':
+            return None
+        def summary(entries):
+            return [dict(name=entry['name'],nodeIds=[match['id'] for match in entry['matches']],
+                         selectionState=entry['selectionState']) for entry in entries]
+        return dict(entries=summary(result['entries']),groups=summary(result.get('groupEntries',[])))
     if module == "brushState":
         brush = result.get("brush") if isinstance(result,dict) else None
         if not brush or brush.get("status") in {"unknown","ambiguous"} or any(

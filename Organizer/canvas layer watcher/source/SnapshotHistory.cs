@@ -8,6 +8,8 @@ namespace CanvasLayerWatcher;
 internal sealed record LayerSnapshot(string Id, string RunId, string SessionId, long Generation, long SavedTicks, string ImageFile,
     int Width, int Height, LayerReference Layer, JsonElement RasterMetadata, RecognizerState[] RecognizerStates, long TriggerTicks = -1);
 internal sealed record SnapshotPair(LayerSnapshot? After, LayerSnapshot? Now);
+internal sealed record SnapshotHistoryIndex(LayerSnapshot? After, LayerSnapshot? Now,
+    Dictionary<long, SnapshotPair>? LayerStacks = null);
 internal sealed record SnapshotUpdate(string ImagePath, string PacketDirectory, bool Baseline, int DiffImages, int DirtyLabels);
 
 internal sealed class SnapshotHistory
@@ -20,16 +22,29 @@ internal sealed class SnapshotHistory
     };
     public string Root { get; }
     public SnapshotPair Pair { get; private set; } = new(null, null);
+    private Dictionary<long, SnapshotPair> _layerStacks = [];
+    public IReadOnlyDictionary<long, SnapshotPair> LayerStacks => _layerStacks;
+    public long EvidenceRetentionTicks => _layerStacks.Values.Select(pair => (pair.Now ?? pair.After)?.TriggerTicks)
+        .OfType<long>().Where(ticks => ticks >= 0).DefaultIfEmpty(0).Min();
     private readonly string _run = Guid.NewGuid().ToString("N");
     public SnapshotHistory(string root)
     {
         Root = Path.GetFullPath(root); Directory.CreateDirectory(Path.Combine(Root, "snapshots"));
-        try { Pair = JsonSerializer.Deserialize<SnapshotPair>(File.ReadAllText(Path.Combine(Root, "current.json")), Json) ?? Pair; }
+        try
+        {
+            var index = JsonSerializer.Deserialize<SnapshotHistoryIndex>(File.ReadAllText(Path.Combine(Root, "current.json")), Json);
+            if (index is not null)
+            {
+                Pair = new(index.After, index.Now);
+                _layerStacks = index.LayerStacks ?? [];
+                if ((Pair.Now ?? Pair.After) is { } active) _layerStacks.TryAdd(active.Layer.Id, Pair);
+            }
+        }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { }
     }
     private static bool SameLayer(LayerReference a, LayerReference b)
         => a.Uuid is { Length: > 0 } && b.Uuid is { Length: > 0 } ? a.Uuid.Equals(b.Uuid, StringComparison.OrdinalIgnoreCase)
-            : a.Id == b.Id && LayerMapping.SameName(a.Name, b.Name);
+            : a.Id == b.Id;
     public SnapshotUpdate Advance(CaptureResult result, CaptureRequest request, string session,
         Func<long, long, EvidenceWindow> collect, Func<bool> valid, CancellationToken token)
     {
@@ -38,9 +53,16 @@ internal sealed class SnapshotHistory
         if (width <= 0 || height <= 0 || (long)width * height > 64_000_000 || request.TriggerTicks < 0)
             throw new InvalidDataException("快照缺少有效的画布尺寸或 Recognizer triggerTicks");
         var layer = new LayerReference(J.Tick(metadata, "layerId", 0), result.LayerName, J.Text(metadata, "layerUuid"));
-        var previous = Pair.Now ?? Pair.After;
-        bool baseline = previous is null || previous.RunId != _run || previous.SessionId != session || previous.Generation != request.Generation
-            || previous.Width != width || previous.Height != height || previous.TriggerTicks < 0 || !SameLayer(previous.Layer, layer);
+        if (layer.Id <= 0) throw new InvalidDataException("快照缺少有效的 CLIP 图层编号");
+        // Reconnection, restart and resize invalidate the entire old epoch.
+        // Switching layers only selects another independent two-slot stack.
+        var nextStacks = _layerStacks.Where(item => (item.Value.Now ?? item.Value.After) is { } cached
+            && cached.RunId == _run && cached.SessionId == session && cached.Generation == request.Generation
+            && cached.Width == width && cached.Height == height && cached.TriggerTicks >= 0)
+            .ToDictionary(item => item.Key, item => item.Value);
+        var previous = nextStacks.GetValueOrDefault(layer.Id) is { } pair ? pair.Now ?? pair.After : null;
+        bool baseline = previous is null || !SameLayer(previous.Layer, layer)
+            || !File.Exists(Path.Combine(Root, previous.ImageFile));
         long from = baseline ? 0 : previous!.TriggerTicks;
         if (!baseline && request.TriggerTicks <= from) throw new InvalidDataException("新快照 triggerTicks 没有晚于前一张图像");
         var window = request.Context is { } context ? context.Evidence.Snapshot(from, request.TriggerTicks) : collect(from, request.TriggerTicks);
@@ -65,8 +87,8 @@ internal sealed class SnapshotHistory
             // layer, so historical locations survive full snapshot rotation.
             const string canvasPreviewImage = "canvas-preview.png";
             CanvasThumbnail.Save(result.PngPath, Path.Combine(stage, canvasPreviewImage), new(width, height), token);
-            // Historical packets own their cropped before/now pixels. Full-size
-            // source images rotate out; descriptors intentionally omit source paths.
+            // Historical packets own their cropped before/now pixels. Each layer
+            // rotates its own full-size sources independently.
             object Descriptor(LayerSnapshot s) => new { s.Id, s.SessionId, s.Generation, s.TriggerTicks,
                 saveDispatchedTicks = s.SavedTicks, s.SavedTicks, s.Width, s.Height, s.Layer, s.RasterMetadata, s.RecognizerStates };
             var manifest = new
@@ -76,7 +98,9 @@ internal sealed class SnapshotHistory
                 recognizer = new { window.SessionId, window.Frequency, window.FromTicks, window.ToTicks, window.Complete,
                     window.States, window.CaptureStateIds, window.Inputs },
                 capture = new { request.TriggerTicks, request.Ticks, request.TimeSource, request.TriggerKind, request.ViewPending,
-                    request.LayerName, request.Layer, request.View,
+                    layerName = layer.Name, layerId = layer.Id, layer,
+                    observedLayerName = request.LayerName, initialLayerHint = request.Layer,
+                    layerMapping = "currentLayerNameToSavedClipId", request.View,
                     request.Operations, saveDispatchedTicks = result.SaveDispatchedTicks, result.ControlResponse },
                 search = new { tileSize = LayerDiff.TileSize, outsideDownsampleFactor = LayerDiff.CoarseFactor,
                     coarseWidth = diff?.CoarseWidth ?? (width + LayerDiff.CoarseFactor - 1) / LayerDiff.CoarseFactor,
@@ -90,13 +114,17 @@ internal sealed class SnapshotHistory
             };
             File.WriteAllText(Path.Combine(stage, "manifest.json"), JsonSerializer.Serialize(manifest, Json));
             var next = baseline ? new SnapshotPair(snapshot, null) : new SnapshotPair(previous, snapshot);
-            File.WriteAllText(indexTemp, JsonSerializer.Serialize(next, Json));
+            nextStacks[layer.Id] = next;
+            File.WriteAllText(indexTemp, JsonSerializer.Serialize(new SnapshotHistoryIndex(next.After, next.Now, nextStacks), Json));
             token.ThrowIfCancellationRequested(); if (!valid()) throw new InvalidOperationException("会话或图层已改变，差异包未提交");
             File.Move(result.PngPath, imagePath); movedImage = true;
             Directory.CreateDirectory(Path.GetDirectoryName(packet)!); Directory.Move(stage, packet); published = true;
             File.Move(indexTemp, Path.Combine(Root, "current.json"), overwrite: true);
-            var obsolete = new[] { Pair.After, Pair.Now }.Where(s => s is not null && s.Id != next.After?.Id && s.Id != next.Now?.Id).ToArray();
-            Pair = next; committed = true;
+            var retained = nextStacks.Values.SelectMany(stack => new[] { stack.After, stack.Now }).OfType<LayerSnapshot>()
+                .Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+            var obsolete = _layerStacks.Values.SelectMany(stack => new[] { stack.After, stack.Now }).OfType<LayerSnapshot>()
+                .Where(s => !retained.Contains(s.Id)).DistinctBy(s => s.Id).ToArray();
+            _layerStacks = nextStacks; Pair = next; committed = true;
             foreach (var old in obsolete) SafeDeleteImage(old!.ImageFile);
             return new(imagePath, packet, baseline, diff?.Images.Length ?? 0, labels.Length);
         }

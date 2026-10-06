@@ -49,8 +49,10 @@ internal sealed record DiffViewPacket(string Directory, bool Baseline, Size Canv
         string root = Path.GetDirectoryName(Path.GetDirectoryName(directory))!;
         try
         {
-            var pair = JsonSerializer.Deserialize<SnapshotPair>(File.ReadAllText(Path.Combine(root, "current.json")), SnapshotHistory.Json);
-            var snapshot = new[] { pair?.After, pair?.Now }.FirstOrDefault(s => s?.Id == id);
+            var index = JsonSerializer.Deserialize<SnapshotHistoryIndex>(File.ReadAllText(Path.Combine(root, "current.json")), SnapshotHistory.Json);
+            var snapshots = new[] { index?.After, index?.Now }.Concat(index?.LayerStacks?.Values
+                .SelectMany(pair => new[] { pair.After, pair.Now }) ?? []);
+            var snapshot = snapshots.FirstOrDefault(s => s?.Id == id);
             if (snapshot is null) return null;
             string path = Resolve(root, snapshot.ImageFile);
             return path.StartsWith(Path.Combine(root, "snapshots") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ? path : null;

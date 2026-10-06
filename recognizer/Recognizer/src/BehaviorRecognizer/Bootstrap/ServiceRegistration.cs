@@ -16,10 +16,10 @@ namespace BehaviorRecognizer.Bootstrap;
 
 public static class ServiceRegistration
 {
-    public static IServiceCollection AddBehaviorRecognizer(this IServiceCollection services, ApplicationPaths paths, bool enableOtdHid = true)
+    public static IServiceCollection AddBehaviorRecognizer(this IServiceCollection services, ApplicationPaths paths, bool enableOtdHid = true, string? tabletDeviceId = null)
     {
         services.AddSingleton(paths);
-        services.AddSingleton(new CaptureOptions(enableOtdHid));
+        services.AddSingleton(new CaptureOptions(enableOtdHid, tabletDeviceId));
 
         services.AddSingleton<IVMultiDetector, VMultiDetector>();
         services.AddSingleton<IWindowsInkProbe, WindowsInkProbe>();

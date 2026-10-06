@@ -1,5 +1,6 @@
 using System.Text.Json;
 using BehaviorRecognizer.Realtime;
+using BehaviorRecognizer.Storage.Memoline;
 using DirtyMatrix.Core;
 
 namespace CanvasLayerWatcher;
@@ -7,11 +8,12 @@ namespace CanvasLayerWatcher;
 internal sealed record RecognizerState(string Id, string Channel, long Ticks, long PublishedTicks, JsonElement Data,
     ulong AppendId = 0);
 internal sealed record InputObservation(long Ticks, string Channel, string Kind, long OperationId, JsonElement Data,
-    JsonElement DeviceSource, bool Continuity = false, ulong EventId = 0, ulong[]? RelatedEventIds = null, ulong AppendId = 0);
+    JsonElement DeviceSource, bool Continuity = false, ulong EventId = 0, ulong[]? RelatedEventIds = null, ulong AppendId = 0,
+    PenDownLocation? PenDownLocation = null);
 internal sealed record EvidenceWindow(string SessionId, long Frequency, long FromTicks, long ToTicks, bool Complete,
     RecognizerState[] States, InputObservation[] Inputs, string[] CaptureStateIds);
 internal sealed record DirtyLabel(string Id, long OperationId, long FromTicks, long ToTicks, string Source,
-    string[] StateIds, StrokeCoverage Coverage, string[] Warnings);
+    string[] StateIds, StrokeCoverage Coverage, string[] Warnings, PenDownLocation? PenDownLocation = null);
 internal sealed record DirtyEvidence(EvidenceWindow Recognizer, DirtyLabel[] Labels, string[] Warnings);
 internal sealed class FrozenEvidence(string session, long frequency, long connectedTicks, long droppedThrough,
     long triggerTicks, RecognizerState[] states, InputObservation[] inputs)
@@ -33,13 +35,18 @@ internal sealed class RecognitionEvidence
     private long _frequency, _connectedTicks, _droppedThrough = -1;
     private long _syntheticId;
     private readonly Dictionary<string, long> _active = [];
+    private readonly Dictionary<long, PenDownLocation> _penLocations = [];
+    private PanelRegionMap _regions = PanelRegionMap.Unavailable();
     public void Reset(string session, long frequency, long connectedTicks)
     {
-        _states.Clear(); _inputs.Clear(); _active.Clear(); _session = session; _frequency = frequency;
+        _states.Clear(); _inputs.Clear(); _active.Clear(); _penLocations.Clear(); _regions = PanelRegionMap.Unavailable(); _session = session; _frequency = frequency;
         _connectedTicks = connectedTicks; _droppedThrough = -1; _syntheticId = 0;
     }
     public void Configuration(long ticks, JsonElement data, ulong appendId = 0)
-        => _states.Add(new("configuration:" + ticks, "configuration", ticks, ticks, data.Clone(), appendId));
+    {
+        _states.Add(new("configuration:" + ticks, "configuration", ticks, ticks, data.Clone(), appendId));
+        _regions = PanelRegionMap.FromRegions(J.Get(J.Get(J.Get(J.Get(data, "settings"), "navigatorOcrSelection"), "layout"), "regions"), appendId, ticks);
+    }
     public void Accept(RecorderRealtimeEvent message)
     {
         bool state = message.Channel.StartsWith("core.") || message.Kind is "driverConfiguration" or "tabletDeviceChanged"
@@ -63,8 +70,17 @@ internal sealed class RecognitionEvidence
             : message.EventId > 0 ? (long)message.EventId : --_syntheticId;
         long operation = message.OperationId is { } op ? (long)op
             : _active.TryGetValue(key, out long current) ? current : --_syntheticId;
+        PenDownLocation? location = pen ? PanelRegionMap.ReadLocation(message.Data) : null;
+        if (pen && message.Kind == "penBegin")
+        {
+            if (location is null && _regions.HasRegions && J.Number(message.Data, "x") is { } x && J.Number(message.Data, "y") is { } y)
+                location = _regions.Classify(x, y);
+            if (location is not null) _penLocations[operation] = location;
+        }
+        if (pen) location ??= _penLocations.GetValueOrDefault(operation);
         _inputs.Add(new(message.Ticks, message.Channel, message.Kind, operation, message.Data.Clone(),
-            JsonSerializer.SerializeToElement(message.DeviceSource, SnapshotHistory.Json), false, message.EventId, message.RelatedEventIds, message.AppendId));
+            JsonSerializer.SerializeToElement(message.DeviceSource, SnapshotHistory.Json), false, message.EventId, message.RelatedEventIds, message.AppendId, location));
+        if (pen && message.Kind is "penEnd" or "penInterrupted") _penLocations.Remove(operation);
         if (message.Kind is "penEnd" or "penInterrupted" or "mouseUp" or "mouseInterrupted") _active.Remove(key);
         if (_inputs.Count > 50000) { _droppedThrough = Math.Max(_droppedThrough, _inputs[999].Ticks); _inputs.RemoveRange(0, 1000); }
     }
@@ -113,7 +129,7 @@ internal sealed class RecognitionEvidence
 
     public static DirtyEvidence Build(EvidenceWindow window, CaptureRequest request, Size canvas)
     {
-        var labels = new Dictionary<string, (long Operation, long From, long To, string Source, string[] States, double Radius, List<StrokeSegment> Segments, string[] Warnings)>();
+        var labels = new Dictionary<string, (long Operation, long From, long To, string Source, string[] States, double Radius, List<StrokeSegment> Segments, string[] Warnings, PenDownLocation? Location)>();
         var last = new Dictionary<long, (PointD Point, string Label)>();
         var eligibleMouse = new HashSet<long>();
         var warnings = new HashSet<string>();
@@ -130,6 +146,8 @@ internal sealed class RecognitionEvidence
                 if (state.Channel == "core.canvasViewState" && J.Confirmed(state.Data)) view = state;
             }
             var keys = J.Get(input.Data, "heldKeys");
+            if (input.Channel == "tablet" && input.PenDownLocation is { Region: not "canvasViewport" })
+            { last.Remove(input.OperationId); continue; }
             if (input.Kind is "penInterrupted" or "mouseInterrupted" || (keys.ValueKind == JsonValueKind.Array
                 && keys.EnumerateArray().Any(k => k.TryGetInt32(out int vk) && vk is 32 or 17 or 18 or 0xA2 or 0xA3 or 0xA4 or 0xA5))
                 || J.Get(input.Data, "inCsp").ValueKind == JsonValueKind.False)
@@ -195,7 +213,7 @@ internal sealed class RecognitionEvidence
             // Keyboard key-up changes need not fragment otherwise identical brush labels.
             string labelKey = input.OperationId + ":" + string.Join("|", stateIds.Where(id => !id.StartsWith("keyboard:")));
             if (!labels.TryGetValue(labelKey, out var label))
-                label = (input.OperationId, Math.Max(input.Ticks, window.FromTicks), input.Ticks, input.Channel, stateIds, radius, [], localWarnings.ToArray());
+                label = (input.OperationId, Math.Max(input.Ticks, window.FromTicks), input.Ticks, input.Channel, stateIds, radius, [], localWarnings.ToArray(), input.PenDownLocation);
             var start = last.TryGetValue(input.OperationId, out var previous) ? previous.Point : point;
             if (!input.Continuity) label.Segments.Add(new(start, point)); label.To = input.Ticks;
             labels[labelKey] = label; last[input.OperationId] = (point, labelKey);
@@ -203,7 +221,7 @@ internal sealed class RecognitionEvidence
         }
         return new(window, labels.Where(pair => pair.Value.Segments.Count > 0).Select((pair, index) => new DirtyLabel("input-" + index, pair.Value.Operation,
             pair.Value.From, pair.Value.To, pair.Value.Source, pair.Value.States,
-            new(pair.Value.Segments.ToArray(), pair.Value.Radius), pair.Value.Warnings)).ToArray(), warnings.ToArray());
+            new(pair.Value.Segments.ToArray(), pair.Value.Radius), pair.Value.Warnings, pair.Value.Location)).ToArray(), warnings.ToArray());
     }
     private static bool TryCanvasPoint(JsonElement data, View view, double x, double y, Size canvas, out PointD point)
     {

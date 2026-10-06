@@ -6,9 +6,10 @@ import os
 import re
 import sqlite3
 import struct
+from contextlib import closing
 from pathlib import Path
 
-from csp_shortcuts import read_menu_shortcuts, read_tool_shortcuts
+from csp_shortcuts import read_menu_shortcuts, read_tool_shortcuts, read_tool_inventory, tool_descendants, saved_selected_subtool
 
 BRUSH = "笔刷属性"
 TOOLBAR = "工具栏"
@@ -38,7 +39,7 @@ def targets_for_command(command):
     if c in {"applicationchangecurrentcolor", "applicationchangecolortransparent"}:
         return [COLOR]
     if c.startswith(("tool", "subtool")):
-        return [BRUSH]
+        return [BRUSH, TOOLGROUP]
     if c.startswith(("viewrotate", "viewzoom", "viewflip")) or c in {
         "viewpixelsize", "viewwholesize", "viewreset", "viewresetrotation",
         "viewscrollup", "viewscrolldown", "viewscrollleft", "viewscrollright",
@@ -109,9 +110,24 @@ class Catalog:
         self.wheel_bindings = []
         self.warnings = []
         self.entries = []
+        try:
+            self.tool_catalog = read_tool_inventory(self.paths[1])
+            self.warnings.extend(self.tool_catalog['warnings'])
+        except (OSError, sqlite3.Error, ValueError) as ex:
+            self.tool_catalog = dict(schemaVersion=1, status='unavailable', sourceFile=str(self.paths[1]),
+                roots=[], nodes=[], savedCurrentNodeIds=[], selectionSource='savedCspConfiguration', warnings=[str(ex)])
+            self.warnings.append(f"子工具目录读取失败: {ex}")
+        tools_with_groups = {node['toolId'] for node in self.tool_catalog['nodes'] if node['kind'] == 'group'}
+        self.brush_packages = [dict(id=node['id'], name=node['name'], toolId=node['toolId'],
+            path=node['path'], subtools=tool_descendants(self.tool_catalog, node['id']),
+            savedSelectedSubtoolId=saved_selected_subtool(self.tool_catalog, node['id']))
+            for node in self.tool_catalog['nodes'] if node['kind'] == 'group'
+            or (node['kind'] == 'tool' and node['id'] not in tools_with_groups
+                and tool_descendants(self.tool_catalog, node['id']))]
+        tool_nodes = {node['id']:node for node in self.tool_catalog['nodes']}
         tool_targets = {}
         try:
-            with sqlite3.connect(self.paths[1].resolve().as_uri() + "?mode=ro", uri=True) as db:
+            with closing(sqlite3.connect(self.paths[1].resolve().as_uri() + "?mode=ro", uri=True)) as db:
                 for node, identity in db.execute("SELECT _PW_ID, NodeDefaultIdentifier FROM Node"):
                     tool_targets[f"tool_{node}"] = VIEW[:] if identity in {10, 200, 201, 202, 203} else [LAYERS] if identity == 211 else [COLOR] if identity in {16, 210} else []
         except (OSError, sqlite3.Error) as ex:
@@ -122,10 +138,13 @@ class Catalog:
                 for item in items:
                     binding = key_binding(item["shortcut"])
                     entry = dict(item, sourceFile=str(path),
-                                 targets=targets_for_command(item.get("command", "")) if "command" in item else [BRUSH])
+                                 targets=targets_for_command(item.get("command", "")) if "command" in item else [BRUSH, TOOLGROUP])
                     if "command" not in item:
                         entry["pointerTargets"] = tool_targets.get(item["id"], [])
                         entry["targets"] = sorted(set(entry["targets"] + entry["pointerTargets"]))
+                        entry["tool"] = tool_nodes.get(item['id'])
+                        entry["subtools"] = tool_descendants(self.tool_catalog, item['id'])
+                        entry["savedSelectedSubtoolId"] = saved_selected_subtool(self.tool_catalog, item['id'])
                     self.entries.append(entry)
                     if binding:
                         self.bindings.setdefault(binding, []).append(entry)
@@ -141,10 +160,10 @@ class Catalog:
             self.warnings.append(f"修饰键解析失败: {ex}")
 
     def _load_gestures(self):
-        with sqlite3.connect(self.paths[1].resolve().as_uri() + "?mode=ro", uri=True) as db:
+        with closing(sqlite3.connect(self.paths[1].resolve().as_uri() + "?mode=ro", uri=True)) as db:
             nodes = {bytes(uuid): (name, default_id) for uuid, name, default_id in
                      db.execute("SELECT NodeUuid, NodeName, NodeDefaultIdentifier FROM Node") if uuid}
-        with sqlite3.connect(self.paths[2].resolve().as_uri() + "?mode=ro", uri=True) as db:
+        with closing(sqlite3.connect(self.paths[2].resolve().as_uri() + "?mode=ro", uri=True)) as db:
             rows = db.execute("SELECT InputOperation, OutputOperation, RangeOperation, SettingData FROM ModifyKeySetting").fetchall()
         for inp, out, scope, blob in rows:
             if not blob or len(blob) < 8:
@@ -228,4 +247,7 @@ class Catalog:
 
     def snapshot(self):
         return dict(configRoot=str(self.root), bindings=self.entries, gestures=self.gestures,
-                    wheelBindings=self.wheel_bindings, warnings=self.warnings, source="savedCspConfiguration")
+                    wheelBindings=self.wheel_bindings, warnings=self.warnings, source="savedCspConfiguration",
+                    toolCatalog=self.tool_catalog, brushPackages=self.brush_packages,
+                    brushPackageSource="installedCspToolGroups",
+                    sourceFiles=[str(path) for path in self.paths])

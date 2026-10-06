@@ -1,0 +1,368 @@
+{
+  "method": "historical native workspaceStatus.layout.regions + native penBegin.data.x/y; left/top included, right/bottom excluded",
+  "counts": {
+    "画布视口面板": 36
+  },
+  "contacts": [
+    {
+      "eventId": 1,
+      "appendId": 914,
+      "operationId": 1,
+      "ticks": 3401619636,
+      "x": 1118,
+      "y": 871,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 53,
+      "appendId": 969,
+      "operationId": 53,
+      "ticks": 3403028220,
+      "x": 1184,
+      "y": 897,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 148,
+      "appendId": 1082,
+      "operationId": 148,
+      "ticks": 3405655098,
+      "x": 1505,
+      "y": 993,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 171,
+      "appendId": 1224,
+      "operationId": 171,
+      "ticks": 3440361330,
+      "x": 1270,
+      "y": 497,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 299,
+      "appendId": 1648,
+      "operationId": 299,
+      "ticks": 3585589099,
+      "x": 1341,
+      "y": 495,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 579,
+      "appendId": 1987,
+      "operationId": 579,
+      "ticks": 3609228915,
+      "x": 1604,
+      "y": 445,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 782,
+      "appendId": 2354,
+      "operationId": 782,
+      "ticks": 3708438790,
+      "x": 1277,
+      "y": 726,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 967,
+      "appendId": 2552,
+      "operationId": 967,
+      "ticks": 3714328794,
+      "x": 1340,
+      "y": 749,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 1114,
+      "appendId": 2801,
+      "operationId": 1114,
+      "ticks": 3759388970,
+      "x": 1340,
+      "y": 746,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 2691,
+      "appendId": 4675,
+      "operationId": 2691,
+      "ticks": 3997758578,
+      "x": 1608,
+      "y": 907,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 2767,
+      "appendId": 4763,
+      "operationId": 2767,
+      "ticks": 3999839797,
+      "x": 1297,
+      "y": 999,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 2877,
+      "appendId": 4898,
+      "operationId": 2877,
+      "ticks": 4002859559,
+      "x": 930,
+      "y": 1176,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 2895,
+      "appendId": 5090,
+      "operationId": 2895,
+      "ticks": 4052098320,
+      "x": 1332,
+      "y": 848,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 3032,
+      "appendId": 5237,
+      "operationId": 3032,
+      "ticks": 4056549129,
+      "x": 1336,
+      "y": 866,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 3078,
+      "appendId": 5337,
+      "operationId": 3078,
+      "ticks": 4080948703,
+      "x": 1390,
+      "y": 901,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 3152,
+      "appendId": 5459,
+      "operationId": 3152,
+      "ticks": 4098348313,
+      "x": 1497,
+      "y": 779,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 3351,
+      "appendId": 5713,
+      "operationId": 3351,
+      "ticks": 4122997920,
+      "x": 1363,
+      "y": 1114,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 3427,
+      "appendId": 5804,
+      "operationId": 3427,
+      "ticks": 4125083802,
+      "x": 1456,
+      "y": 930,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 3537,
+      "appendId": 5938,
+      "operationId": 3537,
+      "ticks": 4128093285,
+      "x": 1623,
+      "y": 562,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 3610,
+      "appendId": 6075,
+      "operationId": 3610,
+      "ticks": 4137728217,
+      "x": 1046,
+      "y": 1023,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 3767,
+      "appendId": 6268,
+      "operationId": 3767,
+      "ticks": 4142038834,
+      "x": 1512,
+      "y": 868,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 3790,
+      "appendId": 6517,
+      "operationId": 3790,
+      "ticks": 4204208170,
+      "x": 1272,
+      "y": 730,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 4001,
+      "appendId": 6767,
+      "operationId": 4001,
+      "ticks": 4221637874,
+      "x": 1481,
+      "y": 743,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 4257,
+      "appendId": 7099,
+      "operationId": 4257,
+      "ticks": 4259087878,
+      "x": 1664,
+      "y": 896,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 4347,
+      "appendId": 7206,
+      "operationId": 4347,
+      "ticks": 4261548626,
+      "x": 1409,
+      "y": 972,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 4457,
+      "appendId": 7344,
+      "operationId": 4457,
+      "ticks": 4264571640,
+      "x": 1025,
+      "y": 1086,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 4499,
+      "appendId": 7542,
+      "operationId": 4499,
+      "ticks": 4292152688,
+      "x": 1341,
+      "y": 919,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 4749,
+      "appendId": 7817,
+      "operationId": 4749,
+      "ticks": 4302038288,
+      "x": 1373,
+      "y": 904,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 4967,
+      "appendId": 8064,
+      "operationId": 4967,
+      "ticks": 4314717752,
+      "x": 1365,
+      "y": 909,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 6096,
+      "appendId": 9261,
+      "operationId": 6096,
+      "ticks": 4346207951,
+      "x": 1544,
+      "y": 978,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 6147,
+      "appendId": 9322,
+      "operationId": 6147,
+      "ticks": 4350038093,
+      "x": 1541,
+      "y": 892,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 6952,
+      "appendId": 10261,
+      "operationId": 6952,
+      "ticks": 4412857505,
+      "x": 1314,
+      "y": 1073,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 7006,
+      "appendId": 10325,
+      "operationId": 7006,
+      "ticks": 4414318725,
+      "x": 1358,
+      "y": 1144,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 7118,
+      "appendId": 10463,
+      "operationId": 7118,
+      "ticks": 4417310238,
+      "x": 1382,
+      "y": 1430,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 7135,
+      "appendId": 10486,
+      "operationId": 7135,
+      "ticks": 4417737705,
+      "x": 1377,
+      "y": 1428,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    },
+    {
+      "eventId": 7141,
+      "appendId": 10657,
+      "operationId": 7141,
+      "ticks": 4465057510,
+      "x": 1466,
+      "y": 1219,
+      "category": "画布视口面板",
+      "layoutAppendId": 5
+    }
+  ]
+}

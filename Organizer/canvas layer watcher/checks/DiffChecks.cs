@@ -191,7 +191,7 @@ internal static class DiffChecks
         string historyRoot = Path.Combine(root, "history"); var history = new SnapshotHistory(historyRoot);
         CaptureResult Result(string name, long ticks, string layer = "Ink", int width = 256) => new(Png(root, name,
             image => { if (ticks > 10) image.SetPixel(4, 4, Color.Red); }, width), JsonSerializer.Serialize(new
-            { width, height = 256, fullCanvas = true, layerId = 3, layerUuid = layer == "Ink" ? "ink" : "other" }), layer, ticks + 1000,
+            { width, height = 256, fullCanvas = true, layerId = layer == "Ink" ? 3 : 4, layerUuid = layer == "Ink" ? "ink" : "other" }), layer, ticks + 1000,
             JsonSerializer.SerializeToElement(new { success = true, saveInputDispatched = true, saveInputDispatchedTicks = ticks + 1000 }));
         var historyEvidence = Ready(); historyEvidence.Accept(Pen(15, "penBegin", 102, 202));
         historyEvidence.Accept(Pen(16, "penEnd", 102, 202));
@@ -241,13 +241,75 @@ internal static class DiffChecks
                 && J.Get(data, "images")[0].GetProperty("labelIds")[0].GetString()!.StartsWith("input-"), "Committed image diff carries a Recognizer input matrix label");
             check(J.Text(J.Get(data, "images")[0], "image") == J.Text(J.Get(data, "images")[0], "nowImage"), "Matrix-labelled primary image is the actual masked now diff, not the absolute channel-difference visualization");
         }
+        var reboundHistory = new SnapshotHistory(Path.Combine(root, "rebound-history"));
+        var reboundResult = Result("rebound",10) with { Metadata = JsonSerializer.Serialize(new
+        { width=256,height=256,fullCanvas=true,layerId=19,layerUuid="replacement" }) };
+        var rebound = reboundHistory.Advance(reboundResult,Request(10),"test",Collect,()=>true,CancellationToken.None);
+        using (var reboundPacket=JsonDocument.Parse(File.ReadAllText(Path.Combine(rebound.PacketDirectory,"manifest.json"))))
+        {
+            var reboundCapture=J.Get(reboundPacket.RootElement,"capture");
+            check(J.Tick(reboundCapture,"layerId",-1)==19 && J.Tick(J.Get(reboundCapture,"layer"),"id",-1)==19
+                && J.Tick(J.Get(reboundCapture,"initialLayerHint"),"id",-1)==3
+                && J.Text(reboundCapture,"layerMapping")=="currentLayerNameToSavedClipId",
+                "Packet captures the freshly exported layer ID and keeps initial identity only as a hint");
+        }
+        historyEvidence.Accept(Core("currentLayerState",31,"Ink"));
+        historyEvidence.Accept(Pen(40,"penBegin",103,203,88)); historyEvidence.Accept(Pen(41,"penEnd",103,203,88));
+        historyEvidence.Accept(Core("currentLayerState",44,"Other"));
+        historyEvidence.Accept(Pen(45,"penBegin",120,220,99)); historyEvidence.Accept(Pen(46,"penEnd",120,220,99));
         var otherLayer = history.Advance(Result("other", 50, "Other"), Request(50, name: "Other"), "test", Collect, () => true, CancellationToken.None);
-        check(otherLayer.Baseline && history.Pair.Now is null && !File.Exists(second.ImagePath) && !File.Exists(third.ImagePath), "Different layer starts a new after baseline without cross-layer diff");
+        check(otherLayer.Baseline && history.Pair.Now is null && File.Exists(second.ImagePath) && File.Exists(third.ImagePath)
+            && history.LayerStacks.Count==2 && history.LayerStacks[3].Now!.TriggerTicks==30,
+            "A new layer creates its own baseline while retaining the other layer's two snapshots");
+        check(history.EvidenceRetentionTicks==30,"Evidence retention follows the oldest latest layer snapshot");
         var historicalLocator = DiffDisplay.Locator(DiffViewPacket.Read(Path.Combine(second.PacketDirectory, "manifest.json")), CancellationToken.None);
         using (historicalLocator.Image) check(historicalLocator.Image.GetPixel(4, 4).ToArgb() == Color.Red.ToArgb(), "Historical complete-canvas locator survives deletion of its full source snapshot");
-        check(DiffViewPacket.Read(legacyManifest).CanvasImagePath is null, "An old packet never displays a newer unrelated canvas as its locator");
+        check(DiffViewPacket.Read(legacyManifest).CanvasImagePath==Path.GetFullPath(second.ImagePath),
+            "Legacy packets locate retained snapshots across inactive layer stacks by exact image ID");
+        historyEvidence.Trim(history.EvidenceRetentionTicks);
+        historyEvidence.Accept(Core("currentLayerState",52,"Ink"));
+        var returnedResult=Result("returned-ink",55);
+        using (var returnedPixels=LayerDiff.Load(returnedResult.PngPath))
+        { returnedPixels.SetPixel(6,6,Color.Blue); returnedPixels.Save(returnedResult.PngPath,ImageFormat.Png); }
+        var returnedRequest=Request(55) with { Context=new("test",new(256,256),"test-control",historyEvidence.Freeze(55)) };
+        var returned=history.Advance(returnedResult,returnedRequest,"test",Collect,()=>true,CancellationToken.None);
+        check(!returned.Baseline && history.Pair.After!.TriggerTicks==30 && history.Pair.Now!.TriggerTicks==55
+            && history.LayerStacks[4].After!.TriggerTicks==50 && File.Exists(otherLayer.ImagePath),
+            "A to B to A compares with the last A snapshot and leaves B unchanged");
+        using(var returnedPacket=JsonDocument.Parse(File.ReadAllText(Path.Combine(returned.PacketDirectory,"manifest.json"))))
+        {
+            var data=returnedPacket.RootElement;
+            check(J.Tick(J.Get(data,"recognizer"),"fromTicks",-1)==30 && J.Tick(J.Get(data,"search"),"changedPixels",-1)==1,
+                "Returned layer uses its own time window and detects its actual changed pixel");
+            var returnedLabels=J.Get(data,"labels").EnumerateArray().ToArray();
+            check(returnedLabels.Any(label=>J.Tick(label,"operationId",-1)==88 && J.Get(label,"imageIds").GetArrayLength()>0)
+                && returnedLabels.All(label=>J.Tick(label,"operationId",-1)!=99),
+                "A stroke before the B packet retains matrix attribution while B strokes are excluded");
+            check(J.Get(J.Get(data,"recognizer"),"inputs").EnumerateArray().Any(input=>J.Tick(input,"operationId",-1)==88),
+                "Frozen evidence retains A input from before the intermediate B capture");
+        }
+        check(!File.Exists(second.ImagePath) && File.Exists(third.ImagePath) && File.Exists(returned.ImagePath)
+            && Directory.GetFiles(Path.Combine(historyRoot,"snapshots"),"*.png").Length==3,
+            "Only A's obsolete third snapshot rotates out; B's stack remains available");
+        check(DiffViewPacket.Read(legacyManifest).CanvasImagePath is null,"Legacy lookup does not substitute a newer snapshot after its exact image rotates out");
+        check(history.EvidenceRetentionTicks==50,"Updating A advances retention to B's still-needed boundary");
+        var recreatedResult=Result("recreated-ink",57) with { Metadata=JsonSerializer.Serialize(new
+            { width=256,height=256,fullCanvas=true,layerId=3,layerUuid="recreated-ink" }) };
+        var recreated=history.Advance(recreatedResult,Request(57),"test",Collect,()=>true,CancellationToken.None);
+        check(recreated.Baseline && history.LayerStacks[3].Now is null && history.LayerStacks[3].After!.Layer.Uuid=="recreated-ink"
+            && !File.Exists(third.ImagePath) && !File.Exists(returned.ImagePath) && File.Exists(otherLayer.ImagePath),
+            "Recreating the same layer ID with a new UUID resets only that layer's stack");
+        var returnedOther=history.Advance(Result("returned-other",58,"Other"),Request(58,name:"Other"),"test",Collect,()=>true,CancellationToken.None);
+        check(!returnedOther.Baseline && history.LayerStacks[4].After!.TriggerTicks==50 && history.LayerStacks[4].Now!.TriggerTicks==58
+            && history.LayerStacks[3].After!.TriggerTicks==57,"B still resumes its own stack after A is recreated");
+        using(var persisted=JsonDocument.Parse(File.ReadAllText(Path.Combine(historyRoot,"current.json"))))
+            check(J.Get(persisted.RootElement,"layerStacks").EnumerateObject().Count()==2
+                && J.Tick(J.Get(J.Get(persisted.RootElement,"layerStacks"),"4").GetProperty("now"),"triggerTicks",-1)==58,
+                "The atomic history index persists separate stacks keyed by CLIP layer ID");
         var reconnect = history.Advance(Result("reconnected", 60, "Other"), Request(60, name: "Other", generation: 2), "test", Collect, () => true, CancellationToken.None);
-        check(reconnect.Baseline && !File.Exists(otherLayer.ImagePath), "Recognizer reconnection starts a new baseline");
+        check(reconnect.Baseline && !File.Exists(otherLayer.ImagePath) && !File.Exists(returned.ImagePath)
+            && !File.Exists(recreated.ImagePath) && !File.Exists(returnedOther.ImagePath)
+            && history.LayerStacks.Count==1,"Recognizer reconnection starts a fresh set of layer stacks");
         var restarted = new SnapshotHistory(historyRoot);
         var restart = restarted.Advance(Result("restart", 70, "Other"), Request(70, name: "Other", generation: 2), "test", Collect, () => true, CancellationToken.None);
         check(restart.Baseline && Directory.GetFiles(Path.Combine(historyRoot, "snapshots"), "*.png").Length == 1, "App restart preserves packets and establishes a fresh baseline");

@@ -51,6 +51,36 @@ internal sealed class WindowsViewInput : IViewInput
         if (pid != _processId) throw new InvalidOperationException("目标输入区域被其他窗口遮挡，回放已停止。");
     }
 
+    internal async Task ClickAsync(Rectangle input, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var point = PanelPoint(input);
+        Move(point);
+        try { Mouse(0x0002); }
+        finally { Mouse(0x0004); }
+        await Task.Delay(80, token);
+        EnsureTarget();
+    }
+
+    internal async Task ScrollAsync(Rectangle panel, int delta, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var point = PanelPoint(panel);
+        Move(point);
+        Send(new Input { Type = 0, Data = new InputUnion { Mouse = new MouseInput { Flags = 0x0800, Data = unchecked((uint)delta) } } });
+        await Task.Delay(100, token);
+        EnsureTarget();
+    }
+
+    private Point PanelPoint(Rectangle input)
+    {
+        EnsureTarget();
+        if (input.Width <= 0 || input.Height <= 0) throw new InvalidOperationException("面板输入区域无效。");
+        var point = new Point(input.Left + input.Width / 2, input.Top + input.Height / 2);
+        EnsurePoint(point);
+        return point;
+    }
+
     public async Task SetNumberAsync(Rectangle input, double value, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
@@ -66,7 +96,7 @@ internal sealed class WindowsViewInput : IViewInput
         Key(Control, true);
         try { Key(A, true); Key(A, false); }
         finally { Key(Control, false); }
-        foreach (char character in value.ToString("0.###", CultureInfo.InvariantCulture))
+        foreach (char character in value.ToString("0.################", CultureInfo.InvariantCulture))
         {
             token.ThrowIfCancellationRequested();
             EnsureTarget();
@@ -115,6 +145,32 @@ internal sealed class WindowsViewInput : IViewInput
         {
             try { if (mouseDown) Mouse(0x0004); }
             finally { if (spaceDown) Key(Space, false); }
+        }
+    }
+
+    internal async Task SendShortcutAsync(IReadOnlyList<ushort> keys, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        EnsureTarget();
+        var held = new List<ushort>();
+        try
+        {
+            foreach (var key in keys)
+            {
+                token.ThrowIfCancellationRequested();
+                EnsureTarget();
+                Key(key, true);
+                held.Add(key);
+            }
+            await Task.Delay(40, token);
+        }
+        finally
+        {
+            // Attempt every release even if one SendInput call fails.
+            Exception? failure = null;
+            foreach (var key in held.AsEnumerable().Reverse())
+                try { Key(key, false); } catch (Exception ex) { failure ??= ex; }
+            if (failure is not null) throw failure;
         }
     }
 

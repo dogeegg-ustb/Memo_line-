@@ -1,0 +1,42 @@
+{
+  "observedAt": "2026-10-05T20:59:14.157704+08:00",
+  "sourcePath": "D:\\感官解冻原画及参考\\插画6.clip",
+  "historicalRecordingEvidence": false,
+  "inspection": {
+    "layers": [
+      {
+        "canvasId": 1,
+        "folder": true,
+        "id": 2,
+        "is_folder": true,
+        "kind": 256,
+        "name": "",
+        "opacity_raw": 256,
+        "uuid": "18d718fa0f-b84a-bfa4-5b6c-2a69404e8d",
+        "visible": true
+      },
+      {
+        "canvasId": 1,
+        "folder": false,
+        "id": 4,
+        "is_folder": false,
+        "kind": 1584,
+        "name": "纸张",
+        "opacity_raw": 256,
+        "uuid": "fe467dea42-4946-6797-bd4c-aedaae2a3e",
+        "visible": true
+      },
+      {
+        "canvasId": 1,
+        "folder": false,
+        "id": 19,
+        "is_folder": false,
+        "kind": 1,
+        "name": "图层 1",
+        "opacity_raw": 256,
+        "uuid": "c7609660dc-c345-85bb-c485-8da028fa6f",
+        "visible": true
+      }
+    ]
+  }
+}

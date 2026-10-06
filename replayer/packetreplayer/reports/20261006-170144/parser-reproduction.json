@@ -1,0 +1,292 @@
+{
+  "ocrWords": [
+    {
+      "text": "三",
+      "bbox": [
+        11,
+        12,
+        13,
+        12
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "工具属性",
+      "bbox": [
+        71,
+        16,
+        65,
+        18
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "笔刷尺寸",
+      "bbox": [
+        180,
+        16,
+        61,
+        18
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "較硬",
+      "bbox": [
+        0,
+        38,
+        45,
+        27
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "笔刷尺寸",
+      "bbox": [
+        23,
+        99,
+        76,
+        26
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "27.2",
+      "bbox": [
+        242,
+        108,
+        60,
+        24
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "消除锯齿",
+      "bbox": [
+        24,
+        157,
+        76,
+        24
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "无",
+      "bbox": [
+        135,
+        158,
+        25,
+        22
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "弱",
+      "bbox": [
+        190,
+        158,
+        24,
+        23
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "强",
+      "bbox": [
+        300,
+        158,
+        25,
+        23
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "硬度",
+      "bbox": [
+        23,
+        206,
+        43,
+        25
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "笔刷浓度",
+      "bbox": [
+        23,
+        247,
+        77,
+        24
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "100",
+      "bbox": [
+        253,
+        257,
+        36,
+        21
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "0",
+      "bbox": [
+        309,
+        260,
+        15,
+        15
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "√矢量擦除",
+      "bbox": [
+        26,
+        304,
+        99,
+        22
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "手颤修正",
+      "bbox": [
+        23,
+        344,
+        78,
+        26
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "2",
+      "bbox": [
+        271,
+        356,
+        16,
+        19
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    }
+  ],
+  "brushName": "三",
+  "properties": [
+    {
+      "key": "brush_size",
+      "type": "number",
+      "value": 27.2,
+      "status": "ok"
+    },
+    {
+      "key": "antialiasing",
+      "type": "enum",
+      "value": "unknown",
+      "status": "partial"
+    },
+    {
+      "key": "brush_tip.hardness",
+      "type": "highlight_index",
+      "value": 1,
+      "status": "ok"
+    },
+    {
+      "key": "brush_tip.brush_density",
+      "type": "number",
+      "value": 100,
+      "status": "ok"
+    },
+    {
+      "key": "stabilization",
+      "type": "number",
+      "value": 2,
+      "status": "ok"
+    }
+  ],
+  "unresolved": [
+    "較硬",
+    "√矢量擦除"
+  ],
+  "antialiasLabelBox": [
+    24,
+    157,
+    76,
+    24
+  ],
+  "antialiasOptions": [
+    {
+      "text": "无",
+      "bbox": [
+        135,
+        158,
+        25,
+        22
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "弱",
+      "bbox": [
+        190,
+        158,
+        24,
+        23
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    },
+    {
+      "text": "强",
+      "bbox": [
+        300,
+        158,
+        25,
+        23
+      ],
+      "selected": "unknown",
+      "score": 0.0
+    }
+  ],
+  "antialiasHighlightedIndex": null,
+  "semanticState": null,
+  "knownAntialiasEnums": [
+    [
+      "无",
+      "無",
+      "None"
+    ],
+    [
+      "弱",
+      "Weak"
+    ],
+    [
+      "中",
+      "Middle",
+      "Medium"
+    ],
+    [
+      "强",
+      "強",
+      "Strong"
+    ]
+  ]
+}

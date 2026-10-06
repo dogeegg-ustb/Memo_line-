@@ -1,6 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using DirtyMatrix.Core;
+using BehaviorRecognizer.Storage.Memoline;
 
 namespace CanvasLayerWatcher;
 
@@ -11,7 +12,8 @@ internal sealed record MatrixData(int CanvasWidth, int CanvasHeight, int TileSiz
         matrix.Bounds.Left, matrix.Bounds.Top, matrix.Runs.Select(r => new MatrixRun(r.Row, r.Start, r.End)).ToArray());
 }
 internal sealed record ImageDirtyLabel(string Id, string Source, long? OperationId, long FromTicks, long ToTicks,
-    string[] StateIds, StrokeCoverage? Coverage, MatrixData ImpactRange, string[] Warnings, string[] ImageIds);
+    string[] StateIds, StrokeCoverage? Coverage, MatrixData ImpactRange, string[] Warnings, string[] ImageIds,
+    PenDownLocation? PenDownLocation = null);
 internal sealed record DiffImage(string Id, PixelBox Bounds, long ChangedPixels, string AfterImage, string NowImage,
     string MaskImage, string DifferenceImage, string[] LabelIds)
 {
@@ -60,7 +62,7 @@ internal static unsafe class LayerDiff
         {
             var m = new DirtyTileMatrix(size.Width, size.Height, TileSize); m.AddCoverage(label.Coverage);
             return new ImageDirtyLabel(label.Id, label.Source, label.OperationId, label.FromTicks, label.ToTicks, label.StateIds,
-                label.Coverage, MatrixData.From(m, size), label.Warnings, []);
+                label.Coverage, MatrixData.From(m, size), label.Warnings, [], label.PenDownLocation);
         }).ToArray();
     internal static MatrixData Predicted(DirtyEvidence evidence, Size size)
     {

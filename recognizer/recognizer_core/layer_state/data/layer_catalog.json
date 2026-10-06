@@ -1,39 +1,695 @@
 {
   "metadata": {
-    "catalog_version": "2026.09.26.1",
+    "catalog_version": "2026-10-06",
     "source": "Curated CSP layer-panel vocabulary; aliases are recognition hints, not proof of document internals.",
     "fuzzy_min_score": 0.82,
-    "fuzzy_min_margin": 0.12
+    "fuzzy_min_margin": 0.12,
+    "public_sources": [
+      "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm",
+      "https://help.clip-studio.com/en-us/manual_en/180_layers/Blending_modes.htm"
+    ],
+    "property_scope": "Vocabulary and support audit. Descriptions do not imply that missing values are captured.",
+    "live_core_scope": "currentLayerState supplies selected name; detailed read/partial fields above come from saved clipState."
   },
   "blend_modes": [
-    {"canonical": "正常", "aliases": ["正常", "普通", "normal"]},
-    {"canonical": "通过", "aliases": ["通過", "透過", "pass through", "passthrough"]},
-    {"canonical": "变暗", "aliases": ["變暗", "变暗", "darken"]},
-    {"canonical": "正片叠底", "aliases": ["正片疊底", "正片叠底", "乘算", "multiply"]},
-    {"canonical": "颜色加深", "aliases": ["顏色加深", "颜色加深", "color burn"]},
-    {"canonical": "线性加深", "aliases": ["線性加深", "线性加深", "linear burn"]},
-    {"canonical": "变亮", "aliases": ["變亮", "变亮", "lighten"]},
-    {"canonical": "滤色", "aliases": ["濾色", "滤色", "screen"]},
-    {"canonical": "颜色减淡", "aliases": ["顏色減淡", "颜色减淡", "color dodge"]},
-    {"canonical": "发光减淡", "aliases": ["發光減淡", "发光减淡", "glow dodge"]},
-    {"canonical": "添加", "aliases": ["添加", "add"]},
-    {"canonical": "线性减淡", "aliases": ["線性減淡", "线性减淡", "linear dodge", "add glow"]},
-    {"canonical": "叠加", "aliases": ["疊加", "叠加", "overlay"]},
-    {"canonical": "柔光", "aliases": ["柔光", "soft light"]},
-    {"canonical": "强光", "aliases": ["強光", "强光", "hard light"]},
-    {"canonical": "亮光", "aliases": ["亮光", "vivid light"]},
-    {"canonical": "线性光", "aliases": ["線性光", "线性光", "linear light"]},
-    {"canonical": "点光", "aliases": ["點光", "点光", "pin light"]},
-    {"canonical": "实色混合", "aliases": ["實色混合", "实色混合", "hard mix"]},
-    {"canonical": "差值", "aliases": ["差值", "difference"]},
-    {"canonical": "排除", "aliases": ["排除", "exclusion"]},
-    {"canonical": "色相", "aliases": ["色相", "hue"]},
-    {"canonical": "饱和度", "aliases": ["飽和度", "饱和度", "saturation"]},
-    {"canonical": "颜色", "aliases": ["顏色", "颜色", "color"]},
-    {"canonical": "亮度", "aliases": ["亮度", "luminosity"]}
+    {
+      "canonical": "正常",
+      "aliases": [
+        "正常",
+        "普通",
+        "normal"
+      ]
+    },
+    {
+      "canonical": "通过",
+      "aliases": [
+        "通過",
+        "透過",
+        "pass through",
+        "passthrough",
+        "穿透"
+      ]
+    },
+    {
+      "canonical": "变暗",
+      "aliases": [
+        "變暗",
+        "变暗",
+        "darken"
+      ]
+    },
+    {
+      "canonical": "正片叠底",
+      "aliases": [
+        "正片疊底",
+        "正片叠底",
+        "乘算",
+        "multiply"
+      ]
+    },
+    {
+      "canonical": "颜色加深",
+      "aliases": [
+        "顏色加深",
+        "颜色加深",
+        "color burn"
+      ]
+    },
+    {
+      "canonical": "线性加深",
+      "aliases": [
+        "線性加深",
+        "线性加深",
+        "linear burn"
+      ]
+    },
+    {
+      "canonical": "变亮",
+      "aliases": [
+        "變亮",
+        "变亮",
+        "lighten"
+      ]
+    },
+    {
+      "canonical": "滤色",
+      "aliases": [
+        "濾色",
+        "滤色",
+        "screen"
+      ]
+    },
+    {
+      "canonical": "颜色减淡",
+      "aliases": [
+        "顏色減淡",
+        "颜色减淡",
+        "color dodge"
+      ]
+    },
+    {
+      "canonical": "发光减淡",
+      "aliases": [
+        "發光減淡",
+        "发光减淡",
+        "glow dodge",
+        "颜色减淡（发光）",
+        "顏色減淡（發光）"
+      ]
+    },
+    {
+      "canonical": "添加",
+      "aliases": [
+        "添加",
+        "add"
+      ]
+    },
+    {
+      "canonical": "添加（发光）",
+      "aliases": [
+        "添加（发光）",
+        "添加（發光）",
+        "Add (Glow)",
+        "add glow"
+      ]
+    },
+    {
+      "canonical": "叠加",
+      "aliases": [
+        "疊加",
+        "叠加",
+        "overlay"
+      ]
+    },
+    {
+      "canonical": "柔光",
+      "aliases": [
+        "柔光",
+        "soft light"
+      ]
+    },
+    {
+      "canonical": "强光",
+      "aliases": [
+        "強光",
+        "强光",
+        "hard light"
+      ]
+    },
+    {
+      "canonical": "亮光",
+      "aliases": [
+        "亮光",
+        "vivid light"
+      ]
+    },
+    {
+      "canonical": "线性光",
+      "aliases": [
+        "線性光",
+        "线性光",
+        "linear light"
+      ]
+    },
+    {
+      "canonical": "点光",
+      "aliases": [
+        "點光",
+        "点光",
+        "pin light"
+      ]
+    },
+    {
+      "canonical": "实色混合",
+      "aliases": [
+        "實色混合",
+        "实色混合",
+        "hard mix"
+      ]
+    },
+    {
+      "canonical": "差值",
+      "aliases": [
+        "差值",
+        "difference"
+      ]
+    },
+    {
+      "canonical": "排除",
+      "aliases": [
+        "排除",
+        "exclusion"
+      ]
+    },
+    {
+      "canonical": "色相",
+      "aliases": [
+        "色相",
+        "hue"
+      ]
+    },
+    {
+      "canonical": "饱和度",
+      "aliases": [
+        "飽和度",
+        "饱和度",
+        "saturation"
+      ]
+    },
+    {
+      "canonical": "颜色",
+      "aliases": [
+        "顏色",
+        "颜色",
+        "color"
+      ]
+    },
+    {
+      "canonical": "亮度",
+      "aliases": [
+        "亮度",
+        "luminosity",
+        "brightness"
+      ]
+    },
+    {
+      "canonical": "减去",
+      "aliases": [
+        "减去",
+        "減去",
+        "subtract"
+      ]
+    },
+    {
+      "canonical": "深色",
+      "aliases": [
+        "深色",
+        "darker color"
+      ]
+    },
+    {
+      "canonical": "浅色",
+      "aliases": [
+        "浅色",
+        "淺色",
+        "lighter color"
+      ]
+    },
+    {
+      "canonical": "除法",
+      "aliases": [
+        "除法",
+        "divide"
+      ]
+    }
   ],
   "row_markers": {
-    "paper": ["紙張", "纸张", "paper"],
-    "group_name_prefixes": ["組", "组", "文件夾", "文件夹", "group", "folder"]
-  }
+    "paper": [
+      "紙張",
+      "纸张",
+      "paper"
+    ],
+    "group_name_prefixes": [
+      "組",
+      "组",
+      "文件夾",
+      "文件夹",
+      "group",
+      "folder"
+    ]
+  },
+  "properties": [
+    {
+      "key": "name",
+      "label_zh": "图层名称",
+      "value_kind": "text",
+      "description_zh": "当前图层的名称；同名图层需要结构或 ID 消歧。",
+      "state_descriptions": [
+        "名称"
+      ],
+      "clip_state_coverage": "read",
+      "clip_fields": [
+        "LayerName"
+      ],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/180_layers.htm"
+    },
+    {
+      "key": "selection",
+      "label_zh": "选中图层",
+      "value_kind": "identity",
+      "description_zh": "当前编辑的图层。",
+      "state_descriptions": [
+        "selected",
+        "not_selected"
+      ],
+      "clip_state_coverage": "read",
+      "clip_fields": [
+        "CanvasCurrentLayer",
+        "LayerSelect"
+      ],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/180_layers.htm"
+    },
+    {
+      "key": "opacity",
+      "label_zh": "不透明度",
+      "value_kind": "number",
+      "description_zh": "图层整体的不透明度。",
+      "state_descriptions": {
+        "display": "百分比",
+        "saved": "现有 .clip 核心换算原始值 / 256 × 100"
+      },
+      "clip_state_coverage": "read",
+      "clip_fields": [
+        "LayerOpacity"
+      ],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/180_layers.htm"
+    },
+    {
+      "key": "blend_mode",
+      "label_zh": "混合模式",
+      "value_kind": "enum",
+      "description_zh": "图层与下方图层颜色的合成方式。",
+      "state_descriptions": [
+        "正常",
+        "通过",
+        "变暗",
+        "正片叠底",
+        "颜色加深",
+        "线性加深",
+        "变亮",
+        "滤色",
+        "颜色减淡",
+        "发光减淡",
+        "添加",
+        "添加（发光）",
+        "叠加",
+        "柔光",
+        "强光",
+        "亮光",
+        "线性光",
+        "点光",
+        "实色混合",
+        "差值",
+        "排除",
+        "色相",
+        "饱和度",
+        "颜色",
+        "亮度",
+        "减去",
+        "深色",
+        "浅色",
+        "除法"
+      ],
+      "clip_state_coverage": "read",
+      "clip_fields": [
+        "LayerComposite"
+      ],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Blending_modes.htm"
+    },
+    {
+      "key": "visible",
+      "label_zh": "可见性",
+      "value_kind": "checkbox",
+      "description_zh": "图层自身显示状态；父文件夹隐藏会影响有效可见性。",
+      "state_descriptions": [
+        "visible",
+        "hidden"
+      ],
+      "clip_state_coverage": "read",
+      "clip_fields": [
+        "LayerVisibility"
+      ],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/180_layers.htm"
+    },
+    {
+      "key": "locked",
+      "label_zh": "锁定",
+      "value_kind": "checkbox",
+      "description_zh": "限制图层编辑。",
+      "state_descriptions": [
+        "locked",
+        "unlocked"
+      ],
+      "clip_state_coverage": "read",
+      "clip_fields": [
+        "LayerLock"
+      ],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/180_layers.htm"
+    },
+    {
+      "key": "clipping",
+      "label_zh": "剪贴",
+      "value_kind": "checkbox",
+      "description_zh": "将图层内容限制在下方图层的不透明区域。",
+      "state_descriptions": [
+        "clipped",
+        "not_clipped"
+      ],
+      "clip_state_coverage": "read",
+      "clip_fields": [
+        "LayerClip"
+      ],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/180_layers.htm"
+    },
+    {
+      "key": "draft",
+      "label_zh": "草稿",
+      "value_kind": "checkbox",
+      "description_zh": "标记为草稿图层。",
+      "state_descriptions": [
+        "draft",
+        "normal"
+      ],
+      "clip_state_coverage": "read",
+      "clip_fields": [
+        "DraftLayer"
+      ],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/180_layers.htm"
+    },
+    {
+      "key": "folder",
+      "label_zh": "文件夹结构",
+      "value_kind": "structure",
+      "description_zh": "父子关系、层级和折叠状态。",
+      "state_descriptions": [
+        "expanded",
+        "collapsed"
+      ],
+      "clip_state_coverage": "read",
+      "clip_fields": [
+        "LayerFolder",
+        "LayerFirstChildIndex",
+        "LayerNextIndex"
+      ],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/180_layers.htm"
+    },
+    {
+      "key": "mask",
+      "label_zh": "图层蒙版",
+      "value_kind": "compound",
+      "description_zh": "控制图层内容的遮盖；原始蒙版字段没有解码为全部状态。",
+      "state_descriptions": {
+        "has_mask": "已提供",
+        "masking_raw": "保留原始值，显示／链接语义未完整验证"
+      },
+      "clip_state_coverage": "partial",
+      "clip_fields": [
+        "LayerMasking",
+        "LayerType"
+      ],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_masks.htm"
+    },
+    {
+      "key": "reference",
+      "label_zh": "参考图层",
+      "value_kind": "checkbox",
+      "description_zh": "作为填充或防溢出的参考。",
+      "state_descriptions": {
+        "status": "unsupported"
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/180_layers.htm"
+    },
+    {
+      "key": "lock_transparent",
+      "label_zh": "锁定透明像素",
+      "value_kind": "checkbox",
+      "description_zh": "保持图层透明区域。",
+      "state_descriptions": {
+        "status": "unsupported"
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/180_layers.htm"
+    },
+    {
+      "key": "palette_color",
+      "label_zh": "面板颜色",
+      "value_kind": "color",
+      "description_zh": "图层面板中的标记色。",
+      "state_descriptions": {
+        "status": "unsupported"
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    },
+    {
+      "key": "border.edge",
+      "label_zh": "边缘效果",
+      "value_kind": "compound",
+      "description_zh": "边框的厚度、颜色与抗锯齿。",
+      "state_descriptions": {
+        "toggle": [
+          "on",
+          "off"
+        ],
+        "parameters": [
+          "thickness",
+          "color",
+          "antialiasing"
+        ]
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    },
+    {
+      "key": "border.watercolor",
+      "label_zh": "水彩边缘",
+      "value_kind": "compound",
+      "description_zh": "边缘的范围、不透明度、深浅与模糊。",
+      "state_descriptions": {
+        "toggle": [
+          "on",
+          "off"
+        ],
+        "parameters": [
+          "range",
+          "opacity",
+          "darkness",
+          "blur"
+        ]
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    },
+    {
+      "key": "extract_lines",
+      "label_zh": "提取线稿",
+      "value_kind": "compound",
+      "description_zh": "EX 的线条提取效果。",
+      "state_descriptions": {
+        "toggle": [
+          "on",
+          "off"
+        ],
+        "edition": "EX"
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    },
+    {
+      "key": "tone",
+      "label_zh": "网点",
+      "value_kind": "compound",
+      "description_zh": "网点频率、浓度、形状、角度和位置。",
+      "state_descriptions": {
+        "toggle": [
+          "on",
+          "off"
+        ],
+        "parameters": [
+          "frequency",
+          "density",
+          "reflect_opacity",
+          "posterization",
+          "dot_shape",
+          "angle",
+          "size",
+          "factor",
+          "offset_x",
+          "offset_y",
+          "area_color"
+        ]
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    },
+    {
+      "key": "layer_color",
+      "label_zh": "图层颜色",
+      "value_kind": "compound",
+      "description_zh": "用主色和副色替换黑白色。",
+      "state_descriptions": {
+        "toggle": [
+          "on",
+          "off"
+        ],
+        "parameters": [
+          "layer_color",
+          "sub_color"
+        ]
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    },
+    {
+      "key": "expression_color",
+      "label_zh": "表现颜色",
+      "value_kind": "enum",
+      "description_zh": "图层使用彩色、灰色或单色表现。",
+      "state_descriptions": [
+        "Color",
+        "Gray",
+        "Monochrome"
+      ],
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    },
+    {
+      "key": "expression_threshold",
+      "label_zh": "表现颜色阈值",
+      "value_kind": "compound",
+      "description_zh": "转换为单色时的颜色和透明度阈值。",
+      "state_descriptions": {
+        "parameters": [
+          "color_threshold",
+          "alpha_threshold",
+          "reflect_opacity"
+        ]
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    },
+    {
+      "key": "display_decrease_color",
+      "label_zh": "减少颜色显示",
+      "value_kind": "compound",
+      "description_zh": "素材显示使用有限颜色。",
+      "state_descriptions": {
+        "toggle": [
+          "on",
+          "off"
+        ],
+        "parameters": [
+          "color_threshold",
+          "alpha_threshold",
+          "reflect_opacity"
+        ]
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    },
+    {
+      "key": "mask_expression",
+      "label_zh": "蒙版表现",
+      "value_kind": "compound",
+      "description_zh": "允许渐变蒙版或使用阈值。",
+      "state_descriptions": {
+        "show_gradients": [
+          "Yes",
+          "No"
+        ],
+        "parameters": [
+          "threshold"
+        ]
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    },
+    {
+      "key": "tool_navigation",
+      "label_zh": "工具导航",
+      "value_kind": "action",
+      "description_zh": "显示可编辑当前图层的工具。",
+      "state_descriptions": {
+        "state": "导航控件，不是绘制属性"
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    },
+    {
+      "key": "overlay_texture",
+      "label_zh": "叠加纹理",
+      "value_kind": "compound",
+      "description_zh": "图像素材层的纹理叠加强度。",
+      "state_descriptions": {
+        "toggle": [
+          "on",
+          "off"
+        ],
+        "parameters": [
+          "strength"
+        ]
+      },
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    },
+    {
+      "key": "light_table_color",
+      "label_zh": "拷贝台颜色模式",
+      "value_kind": "enum",
+      "description_zh": "拷贝台图层的显示颜色方式。",
+      "state_descriptions": [
+        "Color",
+        "Half color",
+        "Monochrome"
+      ],
+      "clip_state_coverage": "not_read",
+      "clip_fields": [],
+      "source": "https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_properties.htm"
+    }
+  ]
 }

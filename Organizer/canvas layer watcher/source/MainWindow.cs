@@ -100,6 +100,12 @@ internal sealed class MainWindow : Form
             };
             buttons.Controls.Add(recordings);
         }
+        if (host?.CreateConfigurationControl() is { } setup)
+        {
+            setup.Dock = DockStyle.Fill;
+            var settingsPage = new TabPage("录制设置"); settingsPage.Controls.Add(setup);
+            _views.TabPages.Add(settingsPage); _configurationControls.Add(setup);
+        }
         _layerPage.Controls.Add(_preview); _diffPage.Controls.Add(_diff); _views.TabPages.AddRange([_layerPage, _diffPage]);
         _diff.Error += Status; _diff.PacketOpened += () => { _views.SelectedTab = _diffPage; _info.Text = "正在查看已保存的差异包"; };
         _start.Click += async (_, _) => await (_startingTask = StartAsync()); _stop.Click += async (_, _) => await StopAsync();
@@ -135,6 +141,7 @@ internal sealed class MainWindow : Form
             if (!File.Exists(bridge)) throw new IOException("缺少 clip-layer-bridge.exe，请先运行 Build.ps1");
             // Parse once before enabling automatic saves, so unsupported files fail without input injection.
             _start.Enabled = false;
+            foreach (var control in _configurationControls) control.Enabled = false;
             using var validation = new CancellationTokenSource(_host is null ? TimeSpan.FromSeconds(60) : TimeSpan.FromMinutes(3));
             _startingSource = validation;
             await Bridge.RunAsync(bridge, ["inspect", clip], validation.Token);
@@ -159,6 +166,7 @@ internal sealed class MainWindow : Form
         catch (Exception ex)
         {
             _startingSource = null; _start.Enabled = true;
+            foreach (var control in _configurationControls) control.Enabled = true;
             if (_host is not null)
                 try { await _host.FinishRecordingAsync(CancellationToken.None); _stop.Enabled = _host.HasPendingSeal; }
                 catch (Exception cleanup) { WriteLog("停止初始化中的 Recognizer：" + cleanup.Message); }
@@ -210,7 +218,7 @@ internal sealed class MainWindow : Form
             try { if (!success) _host?.CaptureFailed(request, failure); }
             finally
             {
-                monitor.Complete(request, success);
+                monitor.Complete(request, success, success ? _history?.EvidenceRetentionTicks : null);
                 if (acquired) _captureSerial.Release();
             }
         }
@@ -232,6 +240,31 @@ internal sealed class MainWindow : Form
                 Exception? captureError = null;
                 try { await Task.WhenAll(_captureTasks); }
                 catch (Exception ex) { captureError = ex; }
+                if (_monitor is { } monitor && captureError is null)
+                {
+                    Status("请求 Recognizer 结束边界，保存末尾图层并生成最后一个聚集包…");
+                    try
+                    {
+                        var final = await monitor.PrepareRecordingEndAsync(CancellationToken.None);
+                        if (final is not null)
+                        {
+                            Native.AllowRecorderForeground(monitor.ControlProcessId);
+                            _host.CaptureQueued(final);
+                            await HandleCaptureAsync(monitor, _clip.Text, Path.Combine(AppContext.BaseDirectory, "clip-layer-bridge.exe"),
+                                final, CancellationToken.None);
+                        }
+                        else
+                        {
+                            _host.RecordingEndFailed("recordingEndLayerOrCanvasUnconfirmed");
+                            Status("末尾图层或画布状态未确认；最后一个包将保留事件和失败原因。");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _host.RecordingEndFailed(ex.Message);
+                        WriteLog("末尾保存未完成；以原生 footer 闭合事件包：" + ex.Message);
+                    }
+                }
                 await _host.FinishRecordingAsync(CancellationToken.None);
                 if (captureError is not null) throw new IOException("聚集事件写入失败，保留两份中间文件以供恢复。", captureError);
             }
@@ -240,7 +273,7 @@ internal sealed class MainWindow : Form
             await Task.WhenAll(_captureTasks);
             if (_host is not null)
             {
-                Status("校验原生事件与脏矩阵指针，封盘中…");
+                Status("无损压缩并校验原生事件与脏矩阵指针，封盘中…");
                 string bundle = await _host.SealAsync(CancellationToken.None);
                 Status("已封盘：" + bundle);
             }
@@ -282,6 +315,7 @@ internal sealed class MainWindow : Form
             image.Save(Path.Combine(directory, name), System.Drawing.Imaging.ImageFormat.Png);
         }
         Show(); Render("empty.png");
+        _views.SelectedTab = _layerPage;
         _image = new Bitmap(320, 240);
         using (var g = Graphics.FromImage(_image))
         { g.Clear(Color.Transparent); using var brush = new SolidBrush(Color.FromArgb(192, 32, 128, 240)); g.FillEllipse(brush, 30, 30, 240, 170); }

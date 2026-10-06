@@ -12,6 +12,8 @@ namespace BehaviorRecognizer.Capture;
 /// </summary>
 public sealed class OtdInputSource : IInputSource
 {
+    private readonly CaptureOptions _options;
+    public OtdInputSource(CaptureOptions? options = null) => _options = options ?? new(true);
     private readonly object _sync = new();
     private Driver? _driver;
     private readonly List<(InputDevice Device, EventHandler<IDeviceReport> Handler)> _subscriptions = [];
@@ -42,7 +44,7 @@ public sealed class OtdInputSource : IInputSource
             var found = _driver!.Detect();
             AttachTrees(_driver.InputDevices);
 
-            return Task.FromResult(found || _devices.Count > 0);
+            return Task.FromResult((_options.TabletDeviceId is null && found) || _devices.Count > 0);
         }
     }
 
@@ -107,6 +109,7 @@ public sealed class OtdInputSource : IInputSource
             foreach (var tablet in tablets)
             {
                 var info = ToDeviceInfo(tablet);
+                if (!_options.AcceptsDevice(info.DeviceId)) continue;
                 _devices[info.DeviceId] = info;
                 DeviceChanged?.Invoke(this, info);
             }
@@ -119,6 +122,7 @@ public sealed class OtdInputSource : IInputSource
         {
             var reference = tree.CreateReference();
             var info = ToDeviceInfo(reference);
+            if (!_options.AcceptsDevice(info.DeviceId)) continue;
             _devices[info.DeviceId] = info;
             DeviceChanged?.Invoke(this, info);
 

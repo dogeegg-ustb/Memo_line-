@@ -5,6 +5,7 @@ internal interface ILayerSaveGuardBackend
 {
     bool SaveWorkerReady { get; }
     bool IsCspForeground { get; }
+    bool TryActivateCspWindow() => false;
     nint ForegroundWindow { get; }
     string ForegroundWindowTitle { get; }
     bool IsCspPoint(int x, int y);

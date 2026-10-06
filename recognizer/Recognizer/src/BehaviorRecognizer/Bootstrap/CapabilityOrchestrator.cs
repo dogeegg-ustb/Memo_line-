@@ -98,6 +98,8 @@ public sealed class CapabilityOrchestrator
 
         // Preserve the existing OTD capture path. Passive capture is an explicit fallback.
         var detected = _captureOptions.EnableOtdHid && await _inputSource.DetectDevicesAsync(cancellationToken);
+        if (_captureOptions.EnableOtdHid && _captureOptions.TabletDeviceId is not null && !detected)
+            throw new InvalidOperationException("未找到所选数位板：" + _captureOptions.TabletDeviceId + "。请连接设备后刷新设备列表。");
         var device = _captureOptions.EnableOtdHid ? _inputSource.DetectedDevices.FirstOrDefault() : null;
         var deviceName = device?.Name;
         var deviceId = device?.DeviceId ?? deviceName ?? "unknown";
@@ -133,7 +135,7 @@ public sealed class CapabilityOrchestrator
         _updateActivator = UpdateActivatorBridge.Start(_memoline, _driverInitialization);
         if (_updateActivator is not null)
             _inputControlServer = new RecorderInputControlServer(_updateActivator.Guard,
-                () => _updateActivator?.RecordingReady == true);
+                () => _updateActivator?.RecordingReady == true, recording: _memoline, requestStates: _updateActivator.RequestStatesAsync);
         _unifiedCapture = new UnifiedInputCapture(_memoline, _updateActivator);
         _windowsHooks = new WindowsInputHooks(_unifiedCapture, passivePen: !_captureOptions.EnableOtdHid, _updateActivator?.Guard);
 

@@ -10,6 +10,7 @@ from .property_catalog import PropertyCatalog, get_catalog
 
 NUMBER_RE = re.compile(r"(?<![\w.])[-+]?\d+(?:[.,]\d+)?")
 UNIT_RE = re.compile(r"(%|％|px|像素|度|°|ms|毫米|mm)", re.IGNORECASE)
+VALUE_NUMBER_RE = re.compile(r"\s*[-+]?\d+(?:[.,]\d+)?\s*(?:%|％|px|像素|度|°|ms|毫米|mm)?\s*", re.IGNORECASE)
 
 
 def _clean(text: str) -> str:
@@ -85,6 +86,7 @@ class PanelParser:
         brush_candidates: list[dict[str, Any]] = []
         unresolved: list[dict[str, Any]] = []
         title_names = set()
+        visible_context = None
         for row in rows:
             title = _clean(" ".join(item.text for item, _ in row))
             match = re.search(r"(.+?)(?:工具属性|工具屬性|tool property)", title, re.IGNORECASE)
@@ -107,16 +109,20 @@ class PanelParser:
                     following, _ = row[index + 1]
                     if following.bbox()[0] >= item.bbox()[0] + item.bbox()[2] * .55 and NUMBER_RE.search(following.text):
                         value_hint = 'number'
-                item_match = self.catalog.match(item.text, value_kind=value_hint)
+                item_match = self.catalog.match(item.text, value_kind=value_hint, context_key=visible_context)
                 definition = item_match.get('definition')
                 if definition:
+                    if definition['key'] in ('color_jitter.change_brush_tip_color','color_jitter.randomize_per_stroke'):
+                        visible_context = definition['key']
+                    elif not definition.get('context_key'):
+                        visible_context = None
                     label_text, inline_value = self._split_label_value(item.text, definition, item_match.get('matched_alias', ''))
                     labels.append((index, definition, label_text, inline_value, state))
 
             if not labels:
                 # Older OCR often puts a label and its numeric value in one
                 # box. Catalog prefix matching handles that as a fallback.
-                inline = self.catalog.match(row_text)
+                inline = self.catalog.match(row_text,context_key=visible_context)
                 definition = inline.get('definition')
                 if definition:
                     labels = [(0, definition, definition.get('label_zh_tw') or definition['label_en'],
@@ -137,7 +143,9 @@ class PanelParser:
                 right_items = [(i, item, state) for i, (item, state) in enumerate(row)
                                if label_index < i < next_label_index and item.bbox()[0] >= label_item.bbox()[0] + label_item.bbox()[2] * .55]
                 right_text = _clean(' '.join(item.text for _, item, _ in right_items))
-                check_state = label_state if label_state.checkbox in ('checked', 'unchecked') else next((s for _, s in row if s.checkbox in ('checked', 'unchecked')), None)
+                # A checkbox belongs to the label immediately to its right,
+                # rather than to every property sharing the same OCR row.
+                check_state = label_state if label_state.checkbox in ('checked', 'unchecked') else None
 
                 inline_number = NUMBER_RE.search(inline_value or '')
                 raw_number = inline_number.group(0) if inline_number else next((m.group(0) for _, item, _ in right_items if (m := NUMBER_RE.search(item.text))), None)
@@ -149,6 +157,14 @@ class PanelParser:
                     parameters.append(self._parameter(roi_id, key, label_text, 'number', value, raw_number, unit_match.group(1) if unit_match else None,
                     self._evidence(roi_id, [(label_item, label_state)] + [(item, state) for _, item, state in right_items], 'ocr_text', '标签右侧的数字词段'), self._enabled([row[label_index]] + [(item,state) for _,item,state in right_items])))
                     parameters[-1]['observed'] = {'label': label_text, 'number': number, 'unit': unit_match.group(1) if unit_match else None}
+                    numeric_items = [(item, state) for _, item, state in right_items
+                                     if VALUE_NUMBER_RE.fullmatch(item.text)
+                                     and NUMBER_RE.search(item.text).group(0) == raw_number]
+                    # Inline label+value boxes cannot locate the value alone.
+                    # Keep their parsed value, but never export the mixed box.
+                    parameters[-1]['_value_evidence'] = (self._value_ocr_evidence(roi_id, numeric_items[0][0], label_item, '数字值词段')
+                                                          if not inline_number and numeric_items else [])
+                    parameters[-1]['_value_category'] = 'number'
                     used_value_indexes.update(i for i, _, _ in right_items)
                     continue
 
@@ -158,6 +174,10 @@ class PanelParser:
                         self._evidence(roi_id, [(label_item, label_state)], 'checkbox', '标签左侧复选框的当前勾选状态'), label_state.enabled,
                         status='ok' if value != 'unknown' else 'partial'))
                     parameters[-1]['observed'] = {'label': label_text, 'option': value}
+                    parameters[-1]['_value_evidence'] = [{**entry, 'roi_id': roi_id}
+                        for entry in check_state.evidence if entry.get('type') == 'checkbox'
+                        and entry.get('bbox') != label_item.bbox()]
+                    parameters[-1]['_value_category'] = 'icon'
                     continue
 
                 inline_is_option = bool(inline_value) and (definition['value_kind'] == 'enum' or (definition['key'] == 'antialiasing' and len(inline_value) <= 8))
@@ -175,6 +195,9 @@ class PanelParser:
                     parameters.append(self._parameter(roi_id, key, label_text, 'enum', value, value, None,
                         self._evidence(roi_id, [(label_item, label_state), (option_item, option_state)], 'selected_background', '标签右侧选项中唯一高亮的一项'), label_state.enabled))
                     parameters[-1]['observed'] = {'label': label_text, 'option': value}
+                    parameters[-1]['_value_evidence'] = (self._value_ocr_evidence(roi_id, option_item, label_item, '当前文字选项')
+                                                          if i != label_index else [])
+                    parameters[-1]['_value_category'] = 'text'
                     if i != label_index:
                         used_value_indexes.add(i)
                     continue
@@ -198,10 +221,20 @@ class PanelParser:
                 unresolved.append({'roi_id': roi_id, 'raw_text': _clean(' '.join(leftovers)), 'reason': '未绑定到属性标签'})
         for parameter in parameters:
             parameter['definition'] = self.catalog.describe(parameter['key'])
-            matched = self.catalog.match(parameter['label'], value_kind=parameter['type'])
+            matched = self.catalog.match(parameter['label'], value_kind=parameter['type'],
+                                         context_key=self.catalog.by_key[parameter['key']].get('context_key'))
             parameter['definition']['match_method'] = matched.get('method')
             parameter['definition']['context_candidates'] = matched.get('definition_candidates', [])
         return parameters, brush_candidates, unresolved
+
+    @staticmethod
+    def _value_ocr_evidence(roi_id: str, item: OcrText, label: OcrText, reason: str) -> list[dict[str, Any]]:
+        # Recognition may retain a value even if its detector box overlaps the
+        # name. Such a box is not a value-only location and cannot be exported.
+        if item.bbox()[0] < label.bbox()[0] + label.bbox()[2]:
+            return []
+        return [dict(roi_id=roi_id, bbox=item.bbox(), type='ocr_text',
+                     text=item.text, ocr_score=item.score, reason=reason)]
 
     @staticmethod
     def _parameter(roi_id: str, key: str, label: str, kind: str, value: Any, raw: str | None, unit: str | None, evidence: list[dict[str, Any]], enabled: str, status: str = "ok") -> dict[str, Any]:
@@ -228,8 +261,15 @@ class PanelParser:
         for alias in aliases:
             alias_norm = normalize(alias)
             if alias_norm and normalized.startswith(alias_norm):
-                # Chinese UI labels have a one-to-one normalized character map.
-                cut = len(alias)
+                # Resource aliases can include brackets, spaces or accents.
+                # Locate the normalized prefix in the observed text, rather
+                # than cutting by the raw length of a different UI alias.
+                consumed = 0
+                cut = 0
+                for cut, char in enumerate(text, 1):
+                    consumed += len(normalize(char))
+                    if consumed >= len(alias_norm):
+                        break
                 return _clean(text[:cut]).strip(' :：-'), _clean(text[cut:]).strip(' :：-')
         return _clean(definition.get('label_zh_tw') or definition['label_en']), ''
 

@@ -25,4 +25,6 @@ internal sealed record MemolineReplaySample(
     double Pressure,
     double TiltX,
     double TiltY,
-    bool InContact);
+    bool InContact,
+    ulong AppendId = 0,
+    ulong EventId = 0);

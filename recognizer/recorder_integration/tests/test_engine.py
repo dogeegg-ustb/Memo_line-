@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "recorder_integration"), str(ROOT.parent / "CSP_Shortcut_Manager")]
-from catalog import Catalog, BRUSH, CANVAS, NAVIGATOR, LAYERS, TOOLBAR, targets_for_command, key_binding
+from catalog import Catalog, BRUSH, CANVAS, NAVIGATOR, LAYERS, TOOLBAR, TOOLGROUP, targets_for_command, key_binding
 from engine import UpdateEngine
 
 
@@ -117,8 +117,25 @@ class ActivatorTests(unittest.TestCase):
         self.engine.flash_update([TOOLBAR])
         self.assertEqual(self.engine.active_panels(),{BRUSH})
 
-    def test_initial_capture_maps_toolbar_to_existing_brush_state(self):
-        self.assertEqual(self.engine.capture_targets([TOOLBAR,BRUSH,CANVAS]),{BRUSH,CANVAS})
+    def test_initial_capture_maps_toolbar_to_brush_and_subtool_panels(self):
+        self.assertEqual(self.engine.capture_targets([TOOLBAR,BRUSH,CANVAS]),{BRUSH,TOOLGROUP,CANVAS})
+
+    def test_tool_switch_click_and_scrolling_request_visible_subtool_ocr(self):
+        self.engine.set_regions({**self.engine.regions,TOOLBAR:[-50,0,40,500],TOOLGROUP:[-200,0,140,500]})
+        self.catalog.bindings[(66,0)][0]['targets']=[BRUSH,TOOLGROUP]
+        self.key(66,[66])
+        self.assertEqual(set(self.requests()[-1]['data']['modules']),{'brushState','subtoolState'})
+        self.engine.handle(dict(type='input',event=dict(eventId=7,ticks=15,kind='mouseDown',
+            data=dict(x=-100,y=20,heldKeys=[]))))
+        self.assertEqual(set(self.requests()[-1]['data']['panels']),{BRUSH,TOOLGROUP})
+        self.engine.handle(dict(type='input',event=dict(eventId=8,ticks=16,kind='mouseWheel',
+            data=dict(x=-100,y=20,heldKeys=[],delta=-120,axis='vertical'))))
+        self.assertIn(TOOLGROUP,self.requests()[-1]['data']['panels'])
+
+    def test_subtool_requests_are_filtered_when_the_panel_is_not_visible(self):
+        self.catalog.bindings[(66,0)][0]['targets']=[BRUSH,TOOLGROUP]
+        self.key(66,[66])
+        self.assertEqual(self.requests()[-1]['data']['panels'],[BRUSH])
 
 
 if __name__ == "__main__":

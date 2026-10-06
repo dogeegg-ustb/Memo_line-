@@ -14,12 +14,14 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
     private readonly MemolineWriter _writer;
     private readonly UpdateActivatorBridge? _updates;
     private readonly IInputTargetProbe _targetProbe;
+    private readonly Func<int, int, PenDownLocation> _locatePenDown;
     private readonly object _sync = new();
     private readonly Dictionary<int, ulong> _mouse = [];
     private readonly HashSet<int> _keysDown = [];
     private readonly HashSet<int> _usedModifiers = [];
     private readonly List<ulong> _penEvents = [];
     private ulong? _penOperation;
+    private PenDownLocation? _penDownLocation;
     private bool _penPhysicalDown;
     private int _penX, _penY;
     private float? _penPressure, _penTiltX, _penTiltY;
@@ -35,11 +37,12 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
     private readonly Task _cursorPoller;
 
     public UnifiedInputCapture(MemolineWriter writer, UpdateActivatorBridge? updates = null,
-        IInputTargetProbe? targetProbe = null)
+        IInputTargetProbe? targetProbe = null, Func<int, int, PenDownLocation>? locatePenDown = null)
     {
         _writer = writer;
         _updates = updates;
         _targetProbe = targetProbe ?? new CspInputTargetProbe();
+        _locatePenDown = locatePenDown ?? ((x, y) => _updates?.ClassifyPenDown(x, y) ?? PanelRegionMap.Unavailable().Classify(x, y));
         _worker = Task.Run(ProcessAsync);
         _cursorPoller = Task.Run(PollCursorAsync);
     }
@@ -171,6 +174,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
                     _writer.AppendHardware("penEnd", PenData(evt, cursor, "penUp"),
                         OtdPenSource(evt.DeviceId), _penOperation);
                     _penOperation = null;
+                    _penDownLocation = null;
                     _penEvents.Clear();
                 }
                 _penPhysicalDown = false;
@@ -184,6 +188,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
                 foreach (var operation in _mouse.Values.Distinct())
                     _writer.AppendState("mouseInterrupted", _writer.NowTicks, [operation], new { reason = "penContact", heldButtons = Array.Empty<string>(), heldKeys = HeldKeys() });
                 _mouse.Clear();
+                _penDownLocation = _locatePenDown(cursor.X, cursor.Y);
                 var start = _writer.AppendHardware("penBegin", PenData(evt, cursor), OtdPenSource(evt.DeviceId));
                 _penOperation = start.EventId;
                 _penEvents.Add(start.EventId);
@@ -220,7 +225,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
         driverSnapshotId = evt.DriverMapping?.DriverSnapshotId,
         pressureMappingStatus = evt.DriverMapping?.PressureStatus ?? "notSelected",
         coordinateMappingStatus = evt.DriverMapping?.CoordinateStatus ?? "notSelected", reason,
-        deviceId = evt.DeviceId, penButtons = evt.PenButtons, heldKeys = HeldKeys()
+        deviceId = evt.DeviceId, penButtons = evt.PenButtons, heldKeys = HeldKeys(), penDownLocation = _penDownLocation
     };
 
     private static HardwareDeviceSource OtdPenSource(string deviceId) =>
@@ -229,8 +234,9 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
     private void InterruptPen(string reason)
     {
         if (_penOperation is null) return;
-        _writer.AppendState("penInterrupted", _writer.NowTicks, _penEvents.ToArray(), new { reason });
+        _writer.AppendState("penInterrupted", _writer.NowTicks, _penEvents.ToArray(), new { reason, penDownLocation = _penDownLocation });
         _penOperation = null;
+        _penDownLocation = null;
         _penEvents.Clear();
     }
 
@@ -253,10 +259,11 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
                 foreach (var operation in _mouse.Values.Distinct())
                     _writer.AppendState("mouseInterrupted", _writer.NowTicks, [operation], new { reason = "penContact", heldButtons = Array.Empty<string>(), heldKeys = HeldKeys() });
                 _mouse.Clear();
+                _penDownLocation = _locatePenDown(x, y);
                 var start = _writer.AppendHardware("penBegin", new
                 {
                     x, y, pressure = (float?)null, deviceId = "windows-pen",
-                    source = "windowsPenCompatibility", heldKeys = HeldKeys()
+                    source = "windowsPenCompatibility", heldKeys = HeldKeys(), penDownLocation = _penDownLocation
                 }, PassivePenSource);
                 _penOperation = start.EventId;
                 _penEvents.Add(start.EventId);
@@ -267,7 +274,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
                 var sample = _writer.AppendHardware("penSample", new
                 {
                     x, y, pressure = (float?)null, deviceId = "windows-pen",
-                    source = "windowsPenCompatibility", heldKeys = HeldKeys()
+                    source = "windowsPenCompatibility", heldKeys = HeldKeys(), penDownLocation = _penDownLocation
                 }, PassivePenSource, _penOperation);
                 _penEvents.Add(sample.EventId);
                 _penX = x; _penY = y;
@@ -276,9 +283,10 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
             {
                 _penPhysicalDown = false;
                 if (_penOperation is not null)
-                    _writer.AppendHardware("penEnd", new { x, y, reason = "penUp", heldKeys = HeldKeys() },
+                    _writer.AppendHardware("penEnd", new { x, y, reason = "penUp", heldKeys = HeldKeys(), penDownLocation = _penDownLocation },
                         PassivePenSource, _penOperation);
                 _penOperation = null;
+                _penDownLocation = null;
                 _penEvents.Clear();
             }
         }

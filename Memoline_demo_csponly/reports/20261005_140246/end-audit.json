@@ -1,0 +1,268 @@
+{
+  "header": {
+    "kind": "header",
+    "version": 2,
+    "sessionId": "73b4478f875147ed9d40bb07410dbaae",
+    "createdAt": "2026-10-05T14:02:46.8302744+00:00",
+    "clock": "Stopwatch",
+    "frequency": 10000000,
+    "originTicks": 298479872690,
+    "timelineModel": "causalPackagesV1",
+    "statePersistence": "successfulOnly",
+    "compression": "brotliPerFrame",
+    "durableFlushIntervalMs": 100,
+    "metadata": {
+      "deviceName": "Gaomon M6",
+      "deviceId": "256C:0064:Gaomon_M6",
+      "profileId": "builtin-default"
+    }
+  },
+  "footer": {
+    "kind": "footer",
+    "hardwareEvents": 9175,
+    "appendedRecords": 12327,
+    "ticks": 1279046524
+  },
+  "packetCount": 6,
+  "lastBoundaryTicks": 939905521,
+  "tailEvents": 1069,
+  "tailKinds": {
+    "keyInput": 1,
+    "penBegin": 10,
+    "penSample": 1048,
+    "penEnd": 10
+  },
+  "tailFirst": {
+    "ticks": 940468658,
+    "kind": "keyInput",
+    "appendId": 10799
+  },
+  "tailLast": {
+    "ticks": 1133905588,
+    "kind": "penEnd",
+    "appendId": 12310
+  },
+  "tailPenBegin": [
+    {
+      "ticks": 1058735622,
+      "operationId": 8108,
+      "region": "layers"
+    },
+    {
+      "ticks": 1075196234,
+      "operationId": 8163,
+      "region": "canvasViewport"
+    },
+    {
+      "ticks": 1080046850,
+      "operationId": 8306,
+      "region": "canvasViewport"
+    },
+    {
+      "ticks": 1084025240,
+      "operationId": 8349,
+      "region": "canvasViewport"
+    },
+    {
+      "ticks": 1106035491,
+      "operationId": 8397,
+      "region": "canvasViewport"
+    },
+    {
+      "ticks": 1112787443,
+      "operationId": 8607,
+      "region": "canvasViewport"
+    },
+    {
+      "ticks": 1117785392,
+      "operationId": 8750,
+      "region": "canvasViewport"
+    },
+    {
+      "ticks": 1123235122,
+      "operationId": 8920,
+      "region": "canvasViewport"
+    },
+    {
+      "ticks": 1130125023,
+      "operationId": 9075,
+      "region": "canvasViewport"
+    },
+    {
+      "ticks": 1132986731,
+      "operationId": 9140,
+      "region": "canvasViewport"
+    }
+  ],
+  "saveEvents": [
+    {
+      "appendId": 3930,
+      "path": "immediate",
+      "kind": "clipSaveRequest",
+      "eventId": 0,
+      "ticks": 363226369,
+      "appendedTicks": 392238927,
+      "operationId": null,
+      "relatedEventIds": [],
+      "deviceSource": null,
+      "data": {
+        "saveId": "viewport-6b09acfcc93e4e5697d0492c115eb321",
+        "requestId": "viewport-6b09acfcc93e4e5697d0492c115eb321",
+        "reason": "externalControl",
+        "triggerTicks": 363226369,
+        "requestReceivedTicks": 392168069,
+        "expectedClipPath": "D:\\感官解冻原画及参考\\插画6.clip",
+        "confirmation": "requestOnly"
+      }
+    },
+    {
+      "appendId": 3931,
+      "path": "immediate",
+      "kind": "saveGuardResult",
+      "eventId": 0,
+      "ticks": 363226369,
+      "appendedTicks": 392253613,
+      "operationId": null,
+      "relatedEventIds": [],
+      "deviceSource": null,
+      "data": {
+        "saveId": "viewport-6b09acfcc93e4e5697d0492c115eb321",
+        "requestId": "viewport-6b09acfcc93e4e5697d0492c115eb321",
+        "error": null,
+        "triggerTicks": 363226369,
+        "requestReceivedTicks": 392168069,
+        "saveInputDispatchedTicks": 392231186,
+        "saveCompletionConfirmed": false,
+        "cspAcceptanceConfirmed": false
+      }
+    },
+    {
+      "appendId": 6796,
+      "path": "immediate",
+      "kind": "clipSaveRequest",
+      "eventId": 0,
+      "ticks": 589066332,
+      "appendedTicks": 620443823,
+      "operationId": null,
+      "relatedEventIds": [],
+      "deviceSource": null,
+      "data": {
+        "saveId": "viewport-ff3c1267f6b74a7e9b8cb375a947f289",
+        "requestId": "viewport-ff3c1267f6b74a7e9b8cb375a947f289",
+        "reason": "externalControl",
+        "triggerTicks": 589066332,
+        "requestReceivedTicks": 620420860,
+        "expectedClipPath": "D:\\感官解冻原画及参考\\插画6.clip",
+        "confirmation": "requestOnly"
+      }
+    },
+    {
+      "appendId": 6797,
+      "path": "immediate",
+      "kind": "saveGuardResult",
+      "eventId": 0,
+      "ticks": 589066332,
+      "appendedTicks": 620444210,
+      "operationId": null,
+      "relatedEventIds": [],
+      "deviceSource": null,
+      "data": {
+        "saveId": "viewport-ff3c1267f6b74a7e9b8cb375a947f289",
+        "requestId": "viewport-ff3c1267f6b74a7e9b8cb375a947f289",
+        "error": null,
+        "triggerTicks": 589066332,
+        "requestReceivedTicks": 620420860,
+        "saveInputDispatchedTicks": 620443335,
+        "saveCompletionConfirmed": false,
+        "cspAcceptanceConfirmed": false
+      }
+    },
+    {
+      "appendId": 9844,
+      "path": "immediate",
+      "kind": "clipSaveRequest",
+      "eventId": 0,
+      "ticks": 850855566,
+      "appendedTicks": 878495523,
+      "operationId": null,
+      "relatedEventIds": [],
+      "deviceSource": null,
+      "data": {
+        "saveId": "viewport-21892bc2c7ec4bf19f5cd4600fac6ba7",
+        "requestId": "viewport-21892bc2c7ec4bf19f5cd4600fac6ba7",
+        "reason": "externalControl",
+        "triggerTicks": 850855566,
+        "requestReceivedTicks": 878475362,
+        "expectedClipPath": "D:\\感官解冻原画及参考\\插画6.clip",
+        "confirmation": "requestOnly"
+      }
+    },
+    {
+      "appendId": 9845,
+      "path": "immediate",
+      "kind": "saveGuardResult",
+      "eventId": 0,
+      "ticks": 850855566,
+      "appendedTicks": 878495947,
+      "operationId": null,
+      "relatedEventIds": [],
+      "deviceSource": null,
+      "data": {
+        "saveId": "viewport-21892bc2c7ec4bf19f5cd4600fac6ba7",
+        "requestId": "viewport-21892bc2c7ec4bf19f5cd4600fac6ba7",
+        "error": null,
+        "triggerTicks": 850855566,
+        "requestReceivedTicks": 878475362,
+        "saveInputDispatchedTicks": 878495242,
+        "saveCompletionConfirmed": false,
+        "cspAcceptanceConfirmed": false
+      }
+    },
+    {
+      "appendId": 10998,
+      "path": "immediate",
+      "kind": "clipSaveRequest",
+      "eventId": 0,
+      "ticks": 939905521,
+      "appendedTicks": 976710497,
+      "operationId": null,
+      "relatedEventIds": [],
+      "deviceSource": null,
+      "data": {
+        "saveId": "viewport-08d13fe815fa4e709badbf94283bb5f8",
+        "requestId": "viewport-08d13fe815fa4e709badbf94283bb5f8",
+        "reason": "externalControl",
+        "triggerTicks": 939905521,
+        "requestReceivedTicks": 976636482,
+        "expectedClipPath": "D:\\感官解冻原画及参考\\插画6.clip",
+        "confirmation": "requestOnly"
+      }
+    },
+    {
+      "appendId": 10999,
+      "path": "immediate",
+      "kind": "saveGuardResult",
+      "eventId": 0,
+      "ticks": 939905521,
+      "appendedTicks": 976710910,
+      "operationId": null,
+      "relatedEventIds": [],
+      "deviceSource": null,
+      "data": {
+        "saveId": "viewport-08d13fe815fa4e709badbf94283bb5f8",
+        "requestId": "viewport-08d13fe815fa4e709badbf94283bb5f8",
+        "error": null,
+        "triggerTicks": 939905521,
+        "requestReceivedTicks": 976636482,
+        "saveInputDispatchedTicks": 976710232,
+        "saveCompletionConfirmed": false,
+        "cspAcceptanceConfirmed": false
+      }
+    }
+  ],
+  "sourceSha256": "d57de334133fecd23dc37c64eca28d83f08911a34a276f8dc7cddcce084d44f7",
+  "entryHashChecks": {
+    "mechanical": true,
+    "aggregation": true
+  }
+}

@@ -1,0 +1,702 @@
+{
+  "propertyDatabase": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\Recognizer\\integration\\recognizer_core\\panel_state\\data\\properties.sqlite3",
+  "tables": [
+    "properties",
+    "metadata",
+    "ui_strings"
+  ],
+  "propertyCount": 150,
+  "metadata": {
+    "schema_version": 1,
+    "catalog_version": "2026-09-24",
+    "basis": "official public manual, not CSP internal database",
+    "coverage": [
+      {
+        "category": "Brush size",
+        "documented_controls": 5,
+        "imported_controls": 5
+      },
+      {
+        "category": "Ink",
+        "documented_controls": 10,
+        "imported_controls": 10
+      },
+      {
+        "category": "Color Jitter",
+        "documented_controls": 3,
+        "imported_controls": 3
+      },
+      {
+        "category": "Anti-aliasing",
+        "documented_controls": 2,
+        "imported_controls": 2
+      },
+      {
+        "category": "Brush shape",
+        "documented_controls": 6,
+        "imported_controls": 6
+      },
+      {
+        "category": "Brush tip",
+        "documented_controls": 12,
+        "imported_controls": 12
+      },
+      {
+        "category": "Spraying effect",
+        "documented_controls": 6,
+        "imported_controls": 6
+      },
+      {
+        "category": "Stroke",
+        "documented_controls": 6,
+        "imported_controls": 6
+      },
+      {
+        "category": "Texture",
+        "documented_controls": 10,
+        "imported_controls": 10
+      },
+      {
+        "category": "2 - Brush shape",
+        "documented_controls": 10,
+        "imported_controls": 10
+      },
+      {
+        "category": "Watercolor edge",
+        "documented_controls": 5,
+        "imported_controls": 5
+      },
+      {
+        "category": "Erase",
+        "documented_controls": 3,
+        "imported_controls": 3
+      },
+      {
+        "category": "Correction",
+        "documented_controls": 12,
+        "imported_controls": 12
+      },
+      {
+        "category": "Starting and ending",
+        "documented_controls": 5,
+        "imported_controls": 5
+      },
+      {
+        "category": "Anti-overflow",
+        "documented_controls": 5,
+        "imported_controls": 5
+      },
+      {
+        "category": "2 - Brush tip",
+        "documented_controls": 12,
+        "imported_controls": 12
+      },
+      {
+        "category": "2 - Spraying effect",
+        "documented_controls": 6,
+        "imported_controls": 6
+      },
+      {
+        "category": "2 - Stroke",
+        "documented_controls": 6,
+        "imported_controls": 6
+      },
+      {
+        "category": "2 - Texture",
+        "documented_controls": 10,
+        "imported_controls": 10
+      }
+    ],
+    "sources": [
+      {
+        "url": "https://help.clip-studio.com/en-us/manual_en/240_brushes/Customizing_brush_tools.htm",
+        "file": "c6a5616e37e5bb04.html",
+        "sha256": "b80c995a9889c131d0cb09b2b21eebac467b6dddf00441b1a2e5d525069c896d"
+      },
+      {
+        "url": "https://help.clip-studio.com/zh-tw/manual_tc/240_brushes/%E8%87%AA%E8%A8%82%E7%AD%86%E5%88%B7.htm",
+        "file": "8e39f00514b6b76a.html",
+        "sha256": "736efd4cfcf488914b2c4fd6bba207a2379681bc1ccfd30331e671d928a4a2ad"
+      },
+      {
+        "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/810_subtools.htm",
+        "file": "0f6c70c21dd6dea5.html",
+        "sha256": "4a9493718ebee1411a91ed00c0687be08e928b0c5743bf6a3ede46b9eeaa75f8"
+      },
+      {
+        "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/A.htm",
+        "file": "c74a59e4c399b2a1.html",
+        "sha256": "6f269a938699b06054fef3655f0a2f5ee1dd4d6094e3f19c8ee261a6f1ddf742"
+      },
+      {
+        "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/B.htm",
+        "file": "45ab1e82c2b0a4c7.html",
+        "sha256": "695299832d62b393a4b53a9b687baca6b57c59cf2309a9bc9322f263673855a5"
+      },
+      {
+        "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/C.htm",
+        "file": "f2e4c8af53cfca8a.html",
+        "sha256": "ea70cf85fa56f02952b3412225b9e40f2263a4a64dfb450fd837088368f0d9e8"
+      },
+      {
+        "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/E.htm",
+        "file": "5d596866cbc4bf89.html",
+        "sha256": "e8716b4413f736bf0ec855a4280219b9eb5630688bd8320122c68c5a5b869251"
+      },
+      {
+        "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/I.htm",
+        "file": "0a82ee6771943a5c.html",
+        "sha256": "0c349b1d527827a1c71b1efa48f0ff617bf8a59f737e672a1c18776584c54443"
+      },
+      {
+        "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/Number.htm",
+        "file": "237152266f9e619e.html",
+        "sha256": "aea29784d77cba9ed2f367ec5fec383b95b98ead3e5146f3a31cd6701bf33ede"
+      },
+      {
+        "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/S.htm",
+        "file": "046cbf141ad8dd32.html",
+        "sha256": "16100ce9c89e1dcf8ded498623087810d9efb681286196da35292c6d56163276"
+      },
+      {
+        "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/T.htm",
+        "file": "af4c8662b7deeb33.html",
+        "sha256": "c2b2601f7617ad360f9e14ae941f8735c0a73609bcaf756c2f65cde9ab4364d4"
+      },
+      {
+        "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/W.htm",
+        "file": "f5c04488f6e49f89.html",
+        "sha256": "fbb283f4e953ed7a3b8be3b24b753fa182c8802b8e2847b23fcc132a293cf5a2"
+      },
+      {
+        "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/10.htm",
+        "file": "806ab7a8a259c801.html",
+        "sha256": "8e3575ebd966d32c521ae06e4bafe26a6812a04def08af94ba7ec767f59ee22c"
+      },
+      {
+        "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/12.htm",
+        "file": "32aad46370737260.html",
+        "sha256": "4d4c79b7018793439a82accd084ece911cb4acc8de4c3a91609a86797f77ee4d"
+      },
+      {
+        "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/15.htm",
+        "file": "c60a95dd384bd445.html",
+        "sha256": "8223142ce1294b8d854487be4004d08bc348ece85fd1ac9e906028de8d0a3ed9"
+      },
+      {
+        "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/18.htm",
+        "file": "59b1b92a1bb4dd77.html",
+        "sha256": "06b6632c8dbae13fb9759dd2f6360a42f895ee6580583755bd2051a6edb32e86"
+      },
+      {
+        "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/4.htm",
+        "file": "43861855ea6a75d1.html",
+        "sha256": "c26247b1cea93719860f003506a0031f1e03d2efa01f42d18919a086e48dff3b"
+      },
+      {
+        "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/6.htm",
+        "file": "117cd6cc22b1923d.html",
+        "sha256": "a80f388c54d60b8a26bc9587303c2d63c0381c04af9c8cd1af7c626423298694"
+      },
+      {
+        "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/7.htm",
+        "file": "d98caad8cff3e9df.html",
+        "sha256": "a7d58461248956a68d81bcd0b6e7a0e4d11dfd646b8a95377dd9d3b1dc82afef"
+      },
+      {
+        "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/9.htm",
+        "file": "c7d663daca1afba7.html",
+        "sha256": "b535da29b7b692f512f939fb931d6aeec4f27042b2dc36164d3155f2cc18d308"
+      },
+      {
+        "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/%E6%95%B8%E5%AD%97.htm",
+        "file": "cbfd956e4779aea4.html",
+        "sha256": "dbb19b79cb96ae02526c1463697dd2c2dba96361065378e42257d4ee6bf1ef30"
+      }
+    ],
+    "property_count": 150,
+    "installed_resources": {
+      "sources": [
+        {
+          "file": "D:\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\resource\\chinese_tc\\E79C2AC5-BC3F-4838-9E87-F49B629F84B5",
+          "sha256": "964f2ed22d181a91c8f1816bd93471f064b508c3fc98c33a1cda3203b26b85fc"
+        },
+        {
+          "file": "D:\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\resource\\english\\E79C2AC5-BC3F-4838-9E87-F49B629F84B5",
+          "sha256": "4494b552db8dd2896dfd123fd8518eb7685d966c6901952c565c9dabfb6e207a"
+        },
+        {
+          "file": "D:\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\resource\\french\\E79C2AC5-BC3F-4838-9E87-F49B629F84B5",
+          "sha256": "28131b1019f1b3121765f4d8b70d5cb4d3c124a9c1806203be52eae590cb59c0"
+        },
+        {
+          "file": "D:\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\resource\\german\\E79C2AC5-BC3F-4838-9E87-F49B629F84B5",
+          "sha256": "87946a78c3ae5d77f665620b94f4755a915944df1e4a5958746828518120491d"
+        },
+        {
+          "file": "D:\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\resource\\indonesian\\E79C2AC5-BC3F-4838-9E87-F49B629F84B5",
+          "sha256": "8910e76e9a501da451cddfd4d3fffcd39e956fa61e73ec60d1c56063c77d7651"
+        },
+        {
+          "file": "D:\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\resource\\japanese\\E79C2AC5-BC3F-4838-9E87-F49B629F84B5",
+          "sha256": "69fee55f76a4c81c6a8c280d8dbb6aa91211db3f99e395e9cd05166d9347b7c0"
+        },
+        {
+          "file": "D:\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\resource\\korean\\E79C2AC5-BC3F-4838-9E87-F49B629F84B5",
+          "sha256": "54f45214ab5bafdede800a4cbae0a627a6ce2826d040960d96eb8f4bcc8161ea"
+        },
+        {
+          "file": "D:\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\resource\\other\\E79C2AC5-BC3F-4838-9E87-F49B629F84B5",
+          "sha256": "4494b552db8dd2896dfd123fd8518eb7685d966c6901952c565c9dabfb6e207a"
+        },
+        {
+          "file": "D:\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\resource\\portuguese\\E79C2AC5-BC3F-4838-9E87-F49B629F84B5",
+          "sha256": "6d49db0bd60c58ff9fc7e9ae7e217e73c73e3623c0e2b02d2018b24875963a60"
+        },
+        {
+          "file": "D:\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\resource\\spanish\\E79C2AC5-BC3F-4838-9E87-F49B629F84B5",
+          "sha256": "1e5465373958e3048332de5766bb1ed7566c95286d11edb146d08b14d194686f"
+        },
+        {
+          "file": "D:\\CLIP STUDIO 1.5\\CLIP STUDIO PAINT\\resource\\thai\\E79C2AC5-BC3F-4838-9E87-F49B629F84B5",
+          "sha256": "38c5f958988bdcab4544c41d0d2f5ae85b5f5ecc0d0684616102dc50e61a819f"
+        }
+      ],
+      "ui_string_count": 547,
+      "csp_version": "2.0.0",
+      "languages": [
+        "chinese_tc",
+        "english",
+        "french",
+        "german",
+        "indonesian",
+        "japanese",
+        "korean",
+        "other",
+        "portuguese",
+        "spanish",
+        "thai"
+      ],
+      "scope": "verified brush/common paint/fill/selection resource groups; not all internal parameters"
+    }
+  },
+  "queries": {
+    "消除锯齿": {
+      "status": "matched",
+      "matched_alias": "消除锯齿",
+      "method": "exact",
+      "score": 1.0,
+      "key": "antialiasing",
+      "enum_values": [
+        [
+          "无",
+          "無",
+          "None"
+        ],
+        [
+          "弱",
+          "Weak"
+        ],
+        [
+          "中",
+          "Middle",
+          "Medium"
+        ],
+        [
+          "强",
+          "強",
+          "Strong"
+        ]
+      ]
+    },
+    "消除鋸齒": {
+      "status": "matched",
+      "matched_alias": "消除鋸齒",
+      "method": "exact",
+      "score": 1.0,
+      "key": "antialiasing",
+      "enum_values": [
+        [
+          "无",
+          "無",
+          "None"
+        ],
+        [
+          "弱",
+          "Weak"
+        ],
+        [
+          "中",
+          "Middle",
+          "Medium"
+        ],
+        [
+          "强",
+          "強",
+          "Strong"
+        ]
+      ]
+    },
+    "硬度": {
+      "status": "matched",
+      "matched_alias": "硬度",
+      "method": "exact",
+      "score": 1.0,
+      "key": "brush_tip.hardness",
+      "enum_values": []
+    },
+    "矢量擦除": {
+      "status": "unknown",
+      "candidates": []
+    },
+    "向量橡皮擦": {
+      "status": "unknown",
+      "candidates": []
+    },
+    "較硬": {
+      "status": "unknown",
+      "candidates": []
+    },
+    "较硬": {
+      "status": "unknown",
+      "candidates": []
+    },
+    "无": {
+      "status": "unknown",
+      "candidates": []
+    },
+    "弱": {
+      "status": "unknown",
+      "candidates": []
+    },
+    "中": {
+      "status": "unknown",
+      "candidates": []
+    },
+    "强": {
+      "status": "unknown",
+      "candidates": []
+    }
+  },
+  "definitions": [
+    {
+      "id": "anti_aliasing.anti_aliasing",
+      "key": "antialiasing",
+      "category": "Anti-aliasing",
+      "category_zh": "消除鋸齒",
+      "label_en": "Anti-aliasing",
+      "label_zh_tw": "消除鋸齒",
+      "aliases": [
+        "Anti-Aliasing",
+        "Anti-aliasing",
+        "Anticrénelage",
+        "Suavizado",
+        "Suavização de serrilhado",
+        "ลบรอยหยัก",
+        "アンチエイリアス",
+        "消除鋸齒",
+        "消除锯齿",
+        "안티에일리어싱"
+      ],
+      "value_kind": "enum",
+      "read_support": "visible_number_checkbox_or_text_enum",
+      "internal_csp_id": null,
+      "range": null,
+      "enum_values": [
+        [
+          "无",
+          "無",
+          "None"
+        ],
+        [
+          "弱",
+          "Weak"
+        ],
+        [
+          "中",
+          "Middle",
+          "Medium"
+        ],
+        [
+          "强",
+          "強",
+          "Strong"
+        ]
+      ],
+      "sources": [
+        {
+          "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/A.htm",
+          "section": "Anti-aliasing",
+          "item": "Anti-aliasing"
+        },
+        {
+          "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/10.htm",
+          "section": "消除鋸齒",
+          "item": "消除鋸齒"
+        },
+        {
+          "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.42.1.37",
+          "kind": "installed_ui_translation"
+        },
+        {
+          "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.3",
+          "kind": "installed_ui_translation"
+        },
+        {
+          "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.55",
+          "kind": "installed_ui_translation"
+        }
+      ],
+      "type_basis": "application classification from public UI documentation",
+      "scope": "public_brush_settings"
+    },
+    {
+      "id": "brush_tip.hardness",
+      "key": "brush_tip.hardness",
+      "category": "Brush tip",
+      "category_zh": "筆刷前端",
+      "label_en": "Hardness",
+      "label_zh_tw": "硬度",
+      "aliases": [
+        "Dureté",
+        "Dureza",
+        "Hardness",
+        "Härte",
+        "Ketegasan",
+        "ความกระด้าง",
+        "硬さ",
+        "硬度",
+        "경도"
+      ],
+      "value_kind": "compound",
+      "read_support": "visible_number_checkbox_or_text_enum",
+      "internal_csp_id": null,
+      "range": null,
+      "enum_values": [],
+      "sources": [
+        {
+          "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/B.htm",
+          "section": "Brush tip",
+          "item": "Hardness"
+        },
+        {
+          "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/12.htm",
+          "section": "筆刷前端",
+          "item": "硬度"
+        },
+        {
+          "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.20",
+          "kind": "installed_ui_translation"
+        }
+      ],
+      "type_basis": "application classification from public UI documentation",
+      "scope": "public_brush_settings"
+    },
+    {
+      "id": "erase.erase_on_all_layers",
+      "key": "erase.erase_on_all_layers",
+      "category": "Erase",
+      "category_zh": "刪除",
+      "label_en": "Erase on all layers",
+      "label_zh_tw": "刪除所有圖層",
+      "aliases": [
+        "Apagar em todas as camadas",
+        "Auf allen Ebenen radieren",
+        "Borrar en todas las capas",
+        "Effacer sur tous les calques",
+        "Erase on all layers",
+        "Hapus semua layer",
+        "ลบในเลเยอร์ทั้งหมด",
+        "すべてのレイヤーを消去",
+        "删除所有图层",
+        "刪除所有圖層",
+        "모든 레이어 지우기"
+      ],
+      "value_kind": "checkbox",
+      "read_support": "visible_number_checkbox_or_text_enum",
+      "internal_csp_id": null,
+      "range": null,
+      "enum_values": [],
+      "sources": [
+        {
+          "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/E.htm",
+          "section": "Erase",
+          "item": "Erase on all layers"
+        },
+        {
+          "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/7.htm",
+          "section": "刪除",
+          "item": "刪除所有圖層"
+        },
+        {
+          "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.173",
+          "kind": "installed_ui_translation"
+        }
+      ],
+      "type_basis": "application classification from public UI documentation",
+      "scope": "public_brush_settings"
+    },
+    {
+      "id": "erase.refer_all_layers",
+      "key": "erase.refer_all_layers",
+      "category": "Erase",
+      "category_zh": "刪除",
+      "label_en": "Refer all layers",
+      "label_zh_tw": "參照所有圖層",
+      "aliases": [
+        "Alle Ordner verweisen",
+        "Refer all layers",
+        "Referir a todas las capas",
+        "Remeter a todas as camadas",
+        "Rujuk semua layer",
+        "Se référer à tous les calques",
+        "อ้างอิงเลเยอร์ทั้งหมด",
+        "すべてのレイヤーを参照",
+        "全レイヤーを参照",
+        "参照所有图层",
+        "參照所有圖層",
+        "모든 레이어 참조",
+        "전체 레이어 참조"
+      ],
+      "value_kind": "checkbox",
+      "read_support": "visible_number_checkbox_or_text_enum",
+      "internal_csp_id": null,
+      "range": null,
+      "enum_values": [],
+      "sources": [
+        {
+          "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/E.htm",
+          "section": "Erase",
+          "item": "Refer all layers"
+        },
+        {
+          "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/7.htm",
+          "section": "刪除",
+          "item": "參照所有圖層"
+        },
+        {
+          "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.171",
+          "kind": "installed_ui_translation"
+        },
+        {
+          "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.42.1.116",
+          "kind": "installed_ui_translation"
+        },
+        {
+          "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.42.1.120",
+          "kind": "installed_ui_translation"
+        }
+      ],
+      "type_basis": "application classification from public UI documentation",
+      "scope": "public_brush_settings"
+    },
+    {
+      "id": "erase.vector_eraser",
+      "key": "erase.vector_eraser",
+      "category": "Erase",
+      "category_zh": "刪除",
+      "label_en": "Vector eraser",
+      "label_zh_tw": "刪除向量",
+      "aliases": [
+        "Borracha vetorial",
+        "Borrador de vectores",
+        "Gomme de vecteur",
+        "Penghapus vektor",
+        "Vector eraser",
+        "Vektor-Radierer",
+        "ยางลบเวกเตอร์",
+        "ベクター消去",
+        "删除向量",
+        "刪除向量",
+        "벡터 지우기"
+      ],
+      "value_kind": "compound",
+      "read_support": "visible_number_checkbox_or_text_enum",
+      "internal_csp_id": null,
+      "range": null,
+      "enum_values": [],
+      "sources": [
+        {
+          "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/E.htm",
+          "section": "Erase",
+          "item": "Vector eraser"
+        },
+        {
+          "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/7.htm",
+          "section": "刪除",
+          "item": "刪除向量"
+        },
+        {
+          "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.165",
+          "kind": "installed_ui_translation"
+        }
+      ],
+      "type_basis": "application classification from public UI documentation",
+      "scope": "public_brush_settings"
+    }
+  ],
+  "shippedHash": "a7a758ccded8bf904d9d2f73f2d726b9407be9dc8b40d09a33c9f8bf9c312bd8",
+  "sourceHash": "a7a758ccded8bf904d9d2f73f2d726b9407be9dc8b40d09a33c9f8bf9c312bd8",
+  "cspToolDatabase": "C:\\Users\\dogeegg\\AppData\\Roaming\\CELSYSUserData\\CELSYS\\CLIPStudioPaintVer1_5_0\\Tool\\EditImageTool.todb",
+  "toolCount": 264,
+  "matchingTools": [
+    {
+      "id": "tool_87",
+      "name": "橡皮擦",
+      "kind": "tool",
+      "path": [
+        "橡皮擦"
+      ],
+      "toolId": "tool_87",
+      "groupId": null,
+      "shortcut": "E",
+      "hidden": false
+    },
+    {
+      "id": "tool_88",
+      "name": "橡皮擦",
+      "kind": "group",
+      "path": [
+        "橡皮擦",
+        "橡皮擦"
+      ],
+      "toolId": "tool_87",
+      "groupId": "tool_88",
+      "shortcut": null,
+      "hidden": false
+    },
+    {
+      "id": "tool_89",
+      "name": "較硬",
+      "kind": "subtool",
+      "path": [
+        "橡皮擦",
+        "橡皮擦",
+        "較硬"
+      ],
+      "toolId": "tool_87",
+      "groupId": "tool_88",
+      "shortcut": null,
+      "hidden": false
+    }
+  ],
+  "warnings": [],
+  "uiStringCount": 547,
+  "exactUiStringMatches": {
+    "矢量擦除": [],
+    "較硬": [
+      "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.253"
+    ],
+    "较硬": [],
+    "消除锯齿": [],
+    "消除鋸齒": [
+      "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.42.1.37",
+      "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.3",
+      "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.55"
+    ],
+    "中": [
+      "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.66",
+      "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.7"
+    ]
+  }
+}

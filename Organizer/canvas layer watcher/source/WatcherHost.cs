@@ -10,11 +10,13 @@ internal interface IWatcherHost
     string OutputDirectory { get; }
     bool HasPendingSeal { get; }
     event Action<string>? Status;
+    Control? CreateConfigurationControl() => null;
     Task<string> PrepareAsync(string clipPath, CancellationToken token);
     void Attach(RecognizerMonitor monitor);
     void CaptureQueued(CaptureRequest request);
     Task PacketCommittedAsync(CaptureRequest request, SnapshotUpdate update, CancellationToken token);
     void CaptureFailed(CaptureRequest request, string reason);
+    void RecordingEndFailed(string reason) { }
     Task FinishRecordingAsync(CancellationToken token);
     Task<string> SealAsync(CancellationToken token);
 }

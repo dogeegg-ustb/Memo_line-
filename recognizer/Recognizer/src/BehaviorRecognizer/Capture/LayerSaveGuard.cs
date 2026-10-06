@@ -148,6 +148,9 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
             ObjectDisposedException.ThrowIf(_closed, this);
             if (_busy) return new(false, request.RequestId, false, null, false, "Save worker is busy; retry after it drains.", request.TriggerTicks);
             cancellationToken.ThrowIfCancellationRequested();
+            if (request.ActivateCsp && !(_backend?.IsCspForeground ?? CspWindowProbe.IsCspForeground())
+                && !(_backend?.TryActivateCspWindow() ?? CspWindowProbe.TryActivateCspWindow()))
+                return new(false, request.RequestId, false, null, false, "Could not activate the CSP window for the final save.", request.TriggerTicks);
             _busy = true;
             _activeWindow = ForegroundWindow;
             _activeConfig = EffectiveConfiguration;

@@ -104,6 +104,7 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
     private sealed record Endpoint(string PipeName, string? ManifestPath, DateTime LastWriteUtc);
     private readonly string? _endpointOrPipe;
     private readonly string? _discoveryRoot;
+    private readonly string[] _additionalChannels;
     private readonly CancellationTokenSource _stop = new();
     private readonly object _sync = new();
     private readonly HashSet<string> _endedPipes = new(StringComparer.Ordinal);
@@ -113,6 +114,7 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
     private CanvasViewSnapshot? _confirmedView;
     private RecognizerUpdateTiming? _lastUpdateTiming;
     private JsonElement? _driverConfiguration;
+    private JsonElement _initializationConfiguration;
     private readonly Dictionary<string, JsonElement> _devices = new(StringComparer.Ordinal);
     private bool _connected;
     private bool _preferTabletMetadata = true;
@@ -125,10 +127,11 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
     private int _disposed;
     private string _status = "等待 Recognizer 实时接口";
 
-    public RecognizerViewMonitor(string? endpointOrPipe = null, string? discoveryRoot = null)
+    public RecognizerViewMonitor(string? endpointOrPipe = null, string? discoveryRoot = null, string[]? additionalChannels = null)
     {
         _endpointOrPipe = string.IsNullOrWhiteSpace(endpointOrPipe) ? null : endpointOrPipe.Trim();
         _discoveryRoot = string.IsNullOrWhiteSpace(discoveryRoot) ? null : Path.GetFullPath(discoveryRoot);
+        _additionalChannels = additionalChannels ?? [];
     }
 
     /// <summary>The current session state table, replaced only by confirmed observations.</summary>
@@ -139,6 +142,51 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
     public JsonElement? DriverConfiguration { get { lock (_sync) return _driverConfiguration; } }
     public IReadOnlyDictionary<string, JsonElement> TabletDevices { get { lock (_sync) return new Dictionary<string, JsonElement>(_devices); } }
     public event Action<string>? StatusChanged;
+    internal event Action<RecorderRealtimeEvent>? MessageReceived;
+    internal event Action? ConnectionReset;
+    internal long? ClockOriginTicks { get { lock (_sync) return _clockOriginTicks; } }
+    internal JsonElement InitializationConfiguration { get { lock (_sync) return _initializationConfiguration; } }
+
+    internal async Task WaitForConnectionAsync(CancellationToken token)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token, _stop.Token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        try
+        {
+            while (true)
+            {
+                Task changed;
+                lock (_sync) { if (Ready) return; changed = _changed.Task; }
+                await changed.WaitAsync(deadline.Token);
+            }
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested && !_stop.IsCancellationRequested)
+        { throw new TimeoutException("连接 Memoline 控制会话超时。"); }
+    }
+
+    internal void ApplyRequestedConfiguration(JsonElement configuration)
+    {
+        lock (_sync)
+        {
+            if (!Ready) throw new IOException("Memoline 会话已断开。");
+            _initializationConfiguration = configuration.Clone();
+            if (_confirmedView is { } view) _confirmedView = view.WithInitializationConfiguration(configuration);
+            Pulse();
+        }
+    }
+
+    internal CanvasViewSnapshot ApplyRequestedView(JsonElement data)
+    {
+        lock (_sync)
+        {
+            if (!Ready) throw new IOException("Memoline 会话已断开。");
+            if (!CanvasViewSnapshot.TryParse(data, CanvasViewSnapshot.Property(data, "rawResult"), out var view, requireCausalAnchor: false) || view is null)
+            { _confirmedView = null; throw new InvalidOperationException("本次主动请求未确认当前画布视图。"); }
+            _confirmedView = view.WithInitializationConfiguration(_initializationConfiguration);
+            _revision++; _confirmedRevision = _revision; Pulse();
+            return _confirmedView;
+        }
+    }
 
     public Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -246,8 +294,9 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
         try
         {
             await foreach (var message in RecorderRealtimeClient.SubscribeAsync(endpoint.PipeName,
-                ["core.canvasViewState", _preferTabletMetadata ? RecorderRealtimeTopics.TabletMetadata : "tablet"], includeSnapshot: true, cancellationToken: token).ConfigureAwait(false))
+                new[] { "core.canvasViewState", _preferTabletMetadata ? RecorderRealtimeTopics.TabletMetadata : "tablet" }.Concat(_additionalChannels).Distinct().ToArray(), includeSnapshot: true, cancellationToken: token).ConfigureAwait(false))
             {
+                MessageReceived?.Invoke(message);
                 if (message.Channel == "system")
                 {
                     if (message.Kind == "hello")
@@ -257,7 +306,7 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
                         {
                             _connected = true; _confirmedView = null; _lastUpdateTiming = null; _confirmedRevision = -1;
                             _configurationReady = false; _configurationFailure = null;
-                            _clockOriginTicks = null; _minimumCaptureTicks = 0; _driverConfiguration = null; _devices.Clear();
+                            _clockOriginTicks = null; _minimumCaptureTicks = 0; _driverConfiguration = null; _initializationConfiguration = default; _devices.Clear();
                             _connectionGeneration++; Pulse();
                         }
                         var helloOrigin = CanvasViewSnapshot.Property(message.Data, "originTicks");
@@ -281,7 +330,7 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
                                 CanvasViewSnapshot? view;
                                 lock (_sync)
                                 {
-                                    configuration = value; _configurationReady = true;
+                                    configuration = value; _initializationConfiguration = value; _configurationReady = true;
                                     if (_confirmedView is { } recognized) _confirmedView = recognized.WithInitializationConfiguration(value);
                                     view = _confirmedView;
                                     Pulse();
@@ -468,12 +517,13 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
             _confirmedView = null; _lastUpdateTiming = null; _confirmedRevision = -1; _revision++;
             if (disconnect)
             {
-                _connected = false; _clockOriginTicks = null; _configurationReady = false; _configurationFailure = null;
+                _connected = false; _clockOriginTicks = null; _configurationReady = false; _configurationFailure = null; _initializationConfiguration = default;
                 _connectionGeneration++; _driverConfiguration = null; _devices.Clear();
             }
             Pulse();
         }
         SetStatus(status);
+        if (disconnect) ConnectionReset?.Invoke();
     }
 
     private void SetStatus(string status)

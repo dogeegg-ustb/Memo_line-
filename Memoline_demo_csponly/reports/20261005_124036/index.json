@@ -1,0 +1,19 @@
+{
+  "schema": "memoline-csponly/v1",
+  "sessionId": "1c07211005d34761b720120902a88d5f",
+  "frequency": 10000000,
+  "originTicks": 249173117465,
+  "mechanical": {
+    "entry": "mechanical/recording.memoline",
+    "sha256": "2bb4646983b366a7a7ecc9d5a1a1213c037651330d80e37f2473a8910ebadca0",
+    "size": 57326940
+  },
+  "aggregation": {
+    "entry": "aggregation/events.jsonl",
+    "sha256": "e45c5b1ef9d81e001660290053304dfae38c390ecad648a1a68f5d91b4196ec2",
+    "size": 958969
+  },
+  "fixedSha256": "59490b6805baef15b5cf870e58a8b40089291cdf654f19b0390d26b1dc7bbd51",
+  "activeDimensionsEntry": "aggregation/events.jsonl",
+  "dimensions": []
+}

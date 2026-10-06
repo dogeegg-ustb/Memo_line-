@@ -14,7 +14,33 @@ public static class CspWindowProbe
     private static uint _cachedPid;
     private static long _cacheExpires;
     private static bool _cachedCsp;
-    public static bool IsCspForeground() => IsCspWindow(Native.GetForegroundWindow());
+    private static nint _lastForeground;
+    public static bool IsCspForeground()
+    {
+        var window = Native.GetForegroundWindow();
+        if (!IsCspWindow(window)) return false;
+        lock (CacheSync) _lastForeground = window;
+        return true;
+    }
+
+    public static bool TryActivateCspWindow()
+    {
+        nint window;
+        lock (CacheSync) window = _lastForeground;
+        if (!IsCspWindow(window))
+        {
+            var windows = new List<nint>();
+            foreach (var process in Process.GetProcessesByName("CLIPStudioPaint"))
+                using (process) try { if (process.MainWindowHandle != 0) windows.Add(process.MainWindowHandle); }
+                catch (InvalidOperationException) { }
+                catch (System.ComponentModel.Win32Exception) { }
+            if (windows.Count != 1) return false;
+            window = windows[0];
+        }
+        if (Native.IsIconic(window)) Native.ShowWindow(window, 9); // SW_RESTORE
+        Native.SetForegroundWindow(window);
+        return Native.GetForegroundWindow() == window && IsCspForeground();
+    }
 
     public static bool TryGetCspCursor(out ScreenPoint point)
     {
@@ -61,6 +87,9 @@ public static class CspWindowProbe
     {
         [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(nint context);
         [DllImport("user32.dll")] public static extern nint GetForegroundWindow();
+        [DllImport("user32.dll")] public static extern bool SetForegroundWindow(nint window);
+        [DllImport("user32.dll")] public static extern bool IsIconic(nint window);
+        [DllImport("user32.dll")] public static extern bool ShowWindow(nint window, int command);
         [DllImport("user32.dll")] public static extern nint WindowFromPoint(ScreenPoint point);
         [DllImport("user32.dll")] public static extern nint GetAncestor(nint window, uint flags);
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static extern bool GetCursorPos(out ScreenPoint point);

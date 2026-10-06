@@ -21,7 +21,13 @@ class ShortcutReaderTests(unittest.TestCase):
                 (3, "basiccommand", "undo", "NULL", 0),
             ],
         )
-        with patch.object(Path, "is_file", return_value=True), patch("csp_shortcuts.sqlite3.connect", return_value=conn):
+        connect = sqlite3.connect
+        def readonly_copy(*args, **kwargs):
+            copy = connect(":memory:")
+            conn.backup(copy)
+            return copy
+        conn.commit()
+        with patch.object(Path, "is_file", return_value=True), patch("csp_shortcuts.sqlite3.connect", side_effect=readonly_copy):
             rows = read_menu_shortcuts("test.khc")
             self.assertEqual([row["shortcut"] for row in rows], ["Ctrl + G", "Ctrl + Shift + Z"])
             self.assertEqual([row["action_name"] for row in rows], ["重做", "重做"])

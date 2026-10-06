@@ -14,6 +14,30 @@ public static class Program
     {
         Capture.CspWindowProbe.EnableDpiAwareness();
         Console.OutputEncoding = System.Text.Encoding.UTF8;
+        if (args.Length > 0 && args[0] == "--shortcuts")
+        {
+            if (args.Length != 1 && !(args.Length == 3 && args[1] == "--config-dir")) { PrintHelp(); return 2; }
+            try
+            {
+                var configuration = await Capture.ShortcutConfigurationQuery.ReadAsync(args.Length == 3 ? args[2] : null);
+                Console.WriteLine(JsonSerializer.Serialize(configuration, MemolineWriter.Json));
+                return 0;
+            }
+            catch (Exception ex) { Console.Error.WriteLine(ex.Message); return 1; }
+        }
+        if (args.Length > 0 && args[0] == "--input-catalog")
+        {
+            var warnings = new List<string>();
+            await using var input = new Capture.OtdInputSource();
+            try { await input.DetectDevicesAsync(); }
+            catch (Exception ex) { warnings.Add(ex.Message); }
+            var driver = new Capture.DriverInitializationService(input.DetectedDevices.FirstOrDefault());
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                devices = input.DetectedDevices, driver = driver.Catalog, warnings
+            }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+            return 0;
+        }
         if (args.Length > 0 && args[0] == "--subscribe")
         {
             if (args.Length != 4 || args[2] is not ("--pipe" or "--endpoint")) { PrintHelp(); return 2; }
@@ -109,7 +133,14 @@ public static class Program
 
         var paths = ApplicationPaths.EnsureLayout();
         var services = new ServiceCollection();
-        services.AddBehaviorRecognizer(paths, !args.Contains("--passive-pen", StringComparer.OrdinalIgnoreCase));
+        int deviceIndex = Array.IndexOf(args, "--tablet-device-id");
+        if (deviceIndex >= 0 && (deviceIndex + 1 >= args.Length || string.IsNullOrWhiteSpace(args[deviceIndex + 1])))
+        { Console.Error.WriteLine("--tablet-device-id 需要设备 ID。"); return 2; }
+        string? deviceId = deviceIndex >= 0 ? args[deviceIndex + 1] : null;
+        bool passive = args.Contains("--passive-pen", StringComparer.OrdinalIgnoreCase);
+        if (passive && deviceId is not null)
+        { Console.Error.WriteLine("Windows 笔模式不能选择 OTD 设备 ID。"); return 2; }
+        services.AddBehaviorRecognizer(paths, !passive, deviceId);
         await using var provider = services.BuildServiceProvider();
 
         var orchestrator = provider.GetRequiredService<CapabilityOrchestrator>();
@@ -202,12 +233,15 @@ public static class Program
             用法:
               BehaviorRecognizer                      启动持续采集
               BehaviorRecognizer --passive-pen        使用 Windows 被动笔事件
+              BehaviorRecognizer --tablet-device-id <id>  只采集指定 OTD 数位板
+              BehaviorRecognizer --input-catalog      查询设备、驱动配置和屏幕
+              BehaviorRecognizer --shortcuts [--config-dir <directory>]  查询已保存的 CSP 快捷键与功能表
               BehaviorRecognizer --export <memoline> [jsonl]
               BehaviorRecognizer --follow <memoline.part>  持续输出新增 JSONL，Ctrl+C 停止
               BehaviorRecognizer --compact <input> <output> 创建压缩副本
               BehaviorRecognizer --subscribe <channels> --pipe <name>  订阅实时 JSONL
               BehaviorRecognizer --subscribe <channels> --endpoint <live.json>
-                channels: keyboard,mouse,tablet,cores,all,core.brushState 等
+                channels: keyboard,mouse,tablet,shortcuts,layers,layerstage,subtools,cores,all,core.brushState 等
               BehaviorRecognizer --recover [strokeDir]
               BehaviorRecognizer --help
               BehaviorRecognizer --diagnose-driver [--driver-config <path>]

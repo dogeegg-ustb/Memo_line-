@@ -20,7 +20,7 @@ if (HERE / "python_libs").is_dir():
 if (HERE.parent / "csp_workspace_overlay.py").is_file():
     sys.path[:0] = [str(HERE.parent), str(HERE.parent.parent / "CSP_Shortcut_Manager")]
 
-from catalog import Catalog, BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR
+from catalog import Catalog, BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR, TOOLGROUP
 from engine import UpdateEngine
 from csp_workspace_overlay import Overlay, border_strips, find_dock_file, inspect
 from csp_panel_validator.window_service import enable_per_monitor_dpi_awareness
@@ -69,6 +69,7 @@ class Runtime:
         self.initial_package_id = None
         self.current_package_id = None
         self.package_waiters = {}
+        self.initialization_configuration = None
         self.catalog = Catalog()
         self.engine = UpdateEngine(self.catalog, self.on_state)
         self.engine.record("shortcutConfiguration", self.catalog.snapshot(), 0)
@@ -104,10 +105,13 @@ class Runtime:
 
     def start_pipeline(self, dimensions, numbers_roi, clip_path):
         self.pipeline = Pipeline(self.settings,emit,self.messages.put)
-        self.pipeline.configure(dimensions,numbers_roi,clip_path,self.initial_package_id)
+        self.pipeline.set_tool_catalog(self.catalog.tool_catalog)
+        self.pipeline.configure(dimensions,numbers_roi,clip_path,self.initial_package_id,
+                                subtools_available=TOOLGROUP in self.engine.regions)
         self.initial_capture_pending = True
-        self.engine.record("initializationConfiguration",dict(canvasPixelSize=dimensions,
-            numbersRoi=numbers_roi,clipPath=clip_path,settings=self.settings),now_ticks())
+        self.initialization_configuration = dict(canvasPixelSize=dimensions,
+            numbersRoi=numbers_roi,clipPath=clip_path,settings=self.settings)
+        self.engine.record("initializationConfiguration",self.initialization_configuration,now_ticks())
         self.publish_guard()
         print("[Initialization] 请切回 CSP，随后自动截取初始状态。",file=sys.stderr)
 
@@ -122,6 +126,48 @@ class Runtime:
             region=self.engine.regions.get(LAYERS),bindings=bindings,saveSettleMs=0,
             autoHotkeyPath=self.settings.get("autoHotkeyPath",""))))
 
+    def request_states(self, msg):
+        """One explicit request captures fresh pixels; results keep its package identity."""
+        package, modules, ticks = msg['packageId'], set(msg['modules']), msg['ticks']
+        panels_by_module = {'brushState':BRUSH,'subtoolState':TOOLGROUP,'currentLayerState':LAYERS,
+                            'colorState':COLOR,'canvasViewState':CANVAS}
+        observed = modules & (set(panels_by_module) | {'clipState'})
+        if observed:
+            self.pipeline.timeline.expect(package, observed)
+        if 'shortcuts' in modules:
+            try:
+                self.catalog = self.engine.catalog = Catalog(self.catalog.root)
+                self.pipeline.set_tool_catalog(self.catalog.tool_catalog)
+                config = self.catalog.snapshot()
+                self.engine.record('shortcutConfiguration', config, ticks)
+                emit(dict(type='stateRequestPart',packageId=package,module='shortcuts',data=config))
+                self.publish_guard()
+            except Exception as ex:
+                emit(dict(type='stateRequestPart',packageId=package,module='shortcuts',data=dict(error=str(ex))))
+        if 'initializationConfiguration' in modules:
+            emit(dict(type='stateRequestPart',packageId=package,module='initializationConfiguration',
+                      data=self.initialization_configuration or dict(error='Initialization configuration unavailable.')))
+        if 'clipState' in observed:
+            if self.pipeline.clip_path:
+                self.pipeline.clip_executor.submit(self.pipeline._parse_clip,msg.get('saveId') or uuid.uuid4().hex,ticks,package)
+            else:
+                self.pipeline.timeline.complete_if_pending(package,'clipState',None,dict(triggerTicks=ticks),'.clip path unavailable.')
+        foreground = self.hwnd and self.user32.GetForegroundWindow() == self.hwnd
+        available = set()
+        for module in observed - {'clipState'}:
+            panel = panels_by_module[module]
+            if foreground and not self.engine.suspended and panel in self.engine.regions:
+                available.add(panel)
+            else:
+                self.pipeline.timeline.complete_if_pending(package,module,None,dict(triggerTicks=ticks),
+                    'CSP must be foreground with the requested panel visible and the initialized layout intact.')
+        if available:
+            if CANVAS in available:
+                available.add(NAVIGATOR)
+            self.capture_panels(available,ticks,reason='externalStateRequest:'+msg['requestId'],package_id=package,final=True)
+        if not observed:
+            self.pipeline.timeline.not_requested(package)
+
     def on_state(self, value):
         emit(value)
         if (self.pipeline and value["kind"] == "panelUpdateRequested" and
@@ -132,7 +178,7 @@ class Runtime:
             self.schedule_capture(panels,value["ticks"],value["relatedEventIds"],value["data"]["reason"],self.current_package_id)
 
     def schedule_capture(self, panels, ticks, refs, reason, package_id=None):
-        panels = self.engine.capture_targets(panels)
+        panels = self.engine.capture_targets(panels) & self.engine.regions.keys()
         if not panels:
             return
         if panels & {CANVAS,NAVIGATOR}:
@@ -154,7 +200,7 @@ class Runtime:
 
     def capture_panels(self, panels, ticks, refs=(), reason="operation", initialize=False,package_id=None,
                        analysis_token=None,final=True):
-        panels = self.engine.capture_targets(panels)
+        panels = self.engine.capture_targets(panels) & self.engine.regions.keys()
         if initialize:
             package_id = self.initial_package_id
         if package_id is None:
@@ -406,6 +452,9 @@ class Runtime:
                 except queue.Empty:
                     break
                 self.last_input = time.monotonic()
+                if msg["type"] == "requestStates":
+                    self.request_states(msg)
+                    continue
                 if msg["type"] == "timelineSession":
                     self.initial_package_id = msg["initialPackageId"]
                     continue
@@ -484,6 +533,8 @@ class Runtime:
                     raise RuntimeError(msg["message"])
                 if msg["type"] == "catalog":
                     self.catalog = self.engine.catalog = msg["catalog"]
+                    if self.pipeline:
+                        self.pipeline.set_tool_catalog(self.catalog.tool_catalog)
                     self.engine.tool_state_targets.clear()
                     self.engine.gesture_signature = None
                     self.engine.record("shortcutConfiguration", self.catalog.snapshot())

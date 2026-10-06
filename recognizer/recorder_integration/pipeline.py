@@ -15,7 +15,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-from catalog import BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR
+from catalog import BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR, TOOLGROUP
 from state_timeline import StateTimeline, MODULES
 
 CANVAS_FRAME = "__canvas_frame__"
@@ -35,7 +35,8 @@ class Pipeline:
         self.capture_queue = queue.Queue()
         self.evidence_queue = queue.Queue(maxsize=4)
         self.stop = threading.Event()
-        self.cores, self.locks = {}, {name: threading.Lock() for name in (BRUSH, LAYERS, COLOR, CANVAS)}
+        self.cores, self.locks = {}, {name: threading.Lock() for name in (BRUSH, TOOLGROUP, LAYERS, COLOR, CANVAS)}
+        self.tool_catalog = {}
         self.transform = None
         self.transform_ready = False
         self.transform_initial_payload = None
@@ -72,13 +73,48 @@ class Pipeline:
         completed = now_ticks()
         evidence.setdefault("completedTicks",completed)
         ticks = evidence.get("capturedTicks",evidence.get("observedTicks",completed))
+        value_fields = {}
+        if update.get("module") == "brushState":
+            panel_roi = evidence.get("panelRoi")
+            regions = raw_result.get("value_regions", []) if isinstance(raw_result, dict) else []
+            projected = []
+            for region in regions:
+                item = dict(propertyKey=region["property_key"], propertyIndex=region["property_index"],
+                    category=region["category"], value=region["value"], bbox=region["bbox"],
+                    coordinateSpace="panel", source=region["source"], status=region["status"])
+                for field in ("score", "text", "unit"):
+                    if field in region:
+                        item[field] = region[field]
+                if panel_roi is not None:
+                    x, y, w, h = region["bbox"]
+                    item["screenBbox"] = [panel_roi[0]+x, panel_roi[1]+y, w, h]
+                projected.append(item)
+            value_fields["valueRegions"] = projected
+        if update.get('module') == 'subtoolState':
+            origin = evidence.get('panelRoi')
+            for source,target in [('entries','ocrEntries'),('groupEntries','groupEntries'),('toolEntries','toolEntries')]:
+                entries = raw_result.get(source, []) if isinstance(raw_result,dict) else []
+                projected = []
+                for entry in entries:
+                    item = dict(entry)
+                    if origin is not None:
+                        x,y,w,h = item['bbox']
+                        item['screenBbox'] = [origin[0]+x,origin[1]+y,w,h]
+                    projected.append(item)
+                value_fields[target] = projected
         self.record("coreStateUpdated",ticks,evidence.get("relatedEventIds",[]),dict(
-            packageId=package_id,initial=initial,rawResult=raw_result,**{**update,"evidence":evidence}),"delayed")
+            packageId=package_id,initial=initial,rawResult=raw_result,**{**update,"evidence":evidence},**value_fields),"delayed")
 
-    def configure(self, dimensions, numbers_roi, clip_path,initial_package_id):
+    def set_tool_catalog(self, catalog):
+        self.tool_catalog = catalog
+
+    def configure(self, dimensions, numbers_roi, clip_path,initial_package_id,subtools_available=False):
         self.dimensions, self.numbers_roi, self.clip_path = dimensions, numbers_roi, clip_path
         self.initial_package_id = initial_package_id
-        self.timeline.expect(initial_package_id,set(MODULES.values()) | ({"clipState"} if clip_path else set()),True)
+        modules = set(MODULES.values()) - {'subtoolState'}
+        if subtools_available:
+            modules.add('subtoolState')
+        self.timeline.expect(initial_package_id,modules | ({"clipState"} if clip_path else set()),True)
         if clip_path:
             self.clip_executor.submit(self._parse_clip,uuid.uuid4().hex,0,initial_package_id)
 
@@ -234,7 +270,10 @@ class Pipeline:
     def capture(self, panels, regions, ticks, refs=(), reason="operation", initialize=False,package_id=None,
                 analysis_token=None, final=True):
         if not self.stop.is_set():
-            self.capture_queue.put((set(panels), dict(regions), ticks, list(refs), reason, initialize,package_id,
+            panels = set(panels)
+            if BRUSH in panels and TOOLGROUP in regions:
+                panels.add(TOOLGROUP)
+            self.capture_queue.put((panels, dict(regions), ticks, list(refs), reason, initialize,package_id,
                                    dict(analysisToken=analysis_token,finalEvidence=final)))
 
     def _capture_loop(self):
@@ -323,7 +362,7 @@ class Pipeline:
                             module=MODULES[panel], packageId=package_id, initial=initialize,
                             evidence=dict(triggerTicks=ticks, capturedTicks=start, captureEndTicks=end,
                                 captureId=analysis["evidenceId"], relatedEventIds=list(refs),
-                                triggerReason=reason, roi=list(selected[panel]),
+                                triggerReason=reason, roi=list(selected[panel]), roiRole="panelCapture",
                                 analysisToken=analysis["analysisToken"], finalEvidence=analysis["finalEvidence"],
                                 analysisQuietMs=self.analysis_quiet_ms(panel),
                                 encodingPending=True, analysisPending=True)), "immediate")
@@ -366,7 +405,8 @@ class Pipeline:
                     file = self.directory / (screenshot_id + ".png")
                     frames[panel].save(file,compress_level=1)
                     roi_start,roi_end = capture_times[panel]
-                    crop = dict(screenshotId=screenshot_id, path=str(file), roi=[x,y,w,h], panel=panel)
+                    crop = dict(screenshotId=screenshot_id, path=str(file), roi=[x,y,w,h], panel=panel,
+                                capturedTicks=roi_start,captureEndTicks=roi_end)
                     crops[panel] = crop
                     raw = file.read_bytes()
                     block_size = 512*1024
@@ -389,12 +429,17 @@ class Pipeline:
                 modules = [p for p in crops if p not in (NAVIGATOR, "导航器数字",CANVAS_FRAME)]
                 for module in modules:
                     group = {p: crops[p] for p in (CANVAS, NAVIGATOR, "导航器数字",CANVAS_FRAME)} if module == CANVAS else {module: crops[module]}
+                    if module == BRUSH and TOOLGROUP in crops:
+                        group[TOOLGROUP] = crops[TOOLGROUP]
                     self.sequence += 1
-                    job = dict(module=module, crops=group, ticks=capture_end, triggerTicks=ticks,
+                    sample_start, sample_end = capture_times[module] if module == TOOLGROUP else (capture_end,capture_end)
+                    job = dict(module=module, crops=group, ticks=sample_start, triggerTicks=ticks,
                                refs=refs, reason=reason, initialize=initialize, captureId=capture_id,
                                packageId=package_id,causalAmbiguous=ambiguous,observedAfterEventId=watermark,dpi=dpi,captureBackend=capture_backend,
-                               captureEndTicks=capture_end,captureLatencyMs=latency_ms,captureDurationMs=duration_ms,
-                               captureBudgetMs=budget_ms,captureBudgetExceeded=latency_ms>budget_ms,
+                               captureEndTicks=sample_end,
+                               captureLatencyMs=(sample_end-ticks)*1000/frequency.value if module == TOOLGROUP else latency_ms,
+                               captureDurationMs=(sample_end-sample_start)*1000/frequency.value if module == TOOLGROUP else duration_ms,
+                               captureBudgetMs=budget_ms,captureBudgetExceeded=(sample_end-ticks)*1000/frequency.value>budget_ms,
                                canvasCaptureValidation=canvas_validation if module == CANVAS else None,**analysis)
                     target = self.directory / f"{self.sequence:012d}_{uuid.uuid4().hex}.job"
                     temporary = target.with_suffix(".tmp")
@@ -503,7 +548,7 @@ class Pipeline:
                 import cv2
                 import numpy as np
                 if module not in self.cores:
-                    if module in (BRUSH,LAYERS):
+                    if module in (BRUSH,LAYERS,TOOLGROUP):
                         from rapidocr import RapidOCR
                         ocr = RapidOCR(params={"EngineConfig.onnxruntime.intra_op_num_threads":2,
                             "EngineConfig.onnxruntime.inter_op_num_threads":1,"Global.log_level":"warning"})
@@ -513,12 +558,26 @@ class Pipeline:
                     elif module == LAYERS:
                         from recognizer_core.layer_state import LayerStateCore
                         core = LayerStateCore(ocr_engine=ocr)
+                    elif module == TOOLGROUP:
+                        from recognizer_core.subtool_state import SubtoolPanelCore
+                        core = SubtoolPanelCore(ocr_engine=ocr)
                     else:
                         from recognizer_core.color_state import ColorStateCore
                         core = ColorStateCore()
                     self.cores[module] = core
                 pixels = cv2.imdecode(np.fromfile(crops[module]["path"], dtype=np.uint8), cv2.IMREAD_COLOR)
-                result = self.cores[module].process(pixels)
+                if module == TOOLGROUP:
+                    result = self.cores[module].process(pixels,catalog=self.tool_catalog)
+                elif module == BRUSH:
+                    companion = crops.get(TOOLGROUP)
+                    subtool_pixels = (cv2.imdecode(np.fromfile(companion['path'], dtype=np.uint8), cv2.IMREAD_COLOR)
+                                      if companion else None)
+                    result = self.cores[module].process(pixels,tool_catalog=self.tool_catalog,
+                        subtool_image=subtool_pixels,subtool_evidence=({
+                            **{k:companion.get(k) for k in ('screenshotId','roi','capturedTicks','captureEndTicks')},
+                            'captureId':job['captureId']} if companion else None))
+                else:
+                    result = self.cores[module].process(pixels)
             self._complete_analysis(job,result,analysis_started)
         except Exception as ex:
             with self.analysis_lock:
@@ -538,7 +597,9 @@ class Pipeline:
                         return
                 if job.get("packageId"):
                     self.timeline.complete_if_pending(job["packageId"],MODULES[module],None,dict(
-                        triggerTicks=job["triggerTicks"],relatedEventIds=job["refs"],completedTicks=now_ticks()),str(ex))
+                        triggerTicks=job["triggerTicks"],relatedEventIds=job["refs"],completedTicks=now_ticks(),
+                        **(dict(captureId=job['captureId'],capturedTicks=job['ticks'],captureEndTicks=job['captureEndTicks'],
+                                panelRoi=list(crops[module]['roi'])) if module in (BRUSH,TOOLGROUP) else {})),str(ex))
 
     def _complete_analysis(self, job, result, analysis_started):
         # Activation and publication share a lock: an older in-flight analysis
@@ -570,6 +631,8 @@ class Pipeline:
                 self.timeline.complete_if_pending(job["packageId"],MODULES[module],result,dict(
                     screenshotIds=[c["screenshotId"] for c in crops.values()],capturedTicks=job["ticks"],
                     captureId=job["captureId"],
+                    **(dict(captureEndTicks=job['captureEndTicks']) if module == TOOLGROUP else {}),
+                    **(dict(panelRoi=list(crops[module]["roi"])) if module in (BRUSH,TOOLGROUP) else {}),
                     triggerTicks=job["triggerTicks"],causalAmbiguous=job["causalAmbiguous"],
                     relatedEventIds=job["refs"],completedTicks=now_ticks(),analysisStartedTicks=analysis_started,
                     analysisQuietMs=self.analysis_quiet_ms(module),

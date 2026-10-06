@@ -14,12 +14,17 @@ internal sealed class AggregateSession : IDisposable
 {
     private const int AssetChunkBytes = 512 * 1024;
     private static readonly JsonSerializerOptions Json = new(MemolineWriter.Json);
-    private sealed record NativePointer(ulong AppendId, ulong EventId, ulong? OperationId, long Ticks, bool Hardware, string? Kind);
-    private sealed class Boundary(ViewportObservation observation, long from)
+    private sealed record NativePointer(ulong AppendId, ulong EventId, ulong? OperationId, long Ticks, bool Hardware, string? Kind,
+        PenDownLocation? PenDownLocation = null);
+    private sealed class Boundary(ViewportObservation observation, long from, bool recordingEnd = false)
     {
         public ViewportObservation Observation { get; } = observation;
         public long FromTicks { get; } = from;
-        public long ToTicks => Observation.TriggerTicks;
+        public long TriggerTicks => Observation.TriggerTicks;
+        public long ToTicks => EndTicks ?? TriggerTicks;
+        public long? EndTicks { get; set; }
+        public bool RecordingEnd { get; } = recordingEnd;
+        public (CaptureRequest Request, SnapshotUpdate Update)? PendingCapture { get; set; }
         public bool Queued { get; set; }
         public bool Committed { get; set; }
         public string? Failure { get; set; }
@@ -30,10 +35,16 @@ internal sealed class AggregateSession : IDisposable
     private MemolineReadSession? _native;
     private readonly Dictionary<ulong, NativePointer> _byAppend = [];
     private readonly Dictionary<ulong, NativePointer> _byEvent = [];
+    private readonly Dictionary<string, string> _assetIdsByHash = new(StringComparer.Ordinal);
     private readonly SortedDictionary<long, Boundary> _boundaries = [];
     private readonly long _frequency, _originTicks;
     private long _lastObservation = -1, _lastBoundary;
+    private long _nativeEndTicks = -1;
+    private Boundary? _recordingEnd;
+    private string? _recordingEndFailure;
+    private bool _committingEnd;
     private ulong _lastAppend;
+    private PanelRegionMap _nativeRegions = PanelRegionMap.Unavailable();
     private bool _nativeHeader, _disposed;
     private int _samples, _packets, _assets;
     public string FilePath { get; }
@@ -62,7 +73,8 @@ internal sealed class AggregateSession : IDisposable
             Write(new { kind = "header", schema = "memoline-aggregate/v1", SessionId, frequency = _frequency,
                 originTicks = _originTicks, mechanicalFile = Path.GetFileName(MechanicalPath), mechanicalPath = MechanicalPath,
                 algorithmVersion = "csponly-dimensions/v1", pointerModel = "nativeAppendId",
-                dimensionsMutable = true, packetsImmutable = true });
+                dimensionsMutable = true, packetsImmutable = true, endPacketPolicy = "nativeFooterClosure/v1",
+                assetStorage = "sha256Deduplication/v1" });
         }
         catch { _output.Dispose(); _stream.Dispose(); throw; }
     }
@@ -89,11 +101,30 @@ internal sealed class AggregateSession : IDisposable
                 observation.HasEditingInput, observationAppendId = observation.Message.AppendId });
             _samples++;
             _lastObservation = observation.TriggerTicks;
-            if (observation.Changed == 1)
+            if (observation.Changed == 1 && _recordingEnd is null)
             {
                 _boundaries.Add(observation.TriggerTicks, new(observation, _lastBoundary));
                 _lastBoundary = observation.TriggerTicks;
             }
+        }
+    }
+
+    public void ObserveRecordingEnd(ViewportObservation observation)
+    {
+        lock (_sync)
+        {
+            Active();
+            if (observation.Message.SessionId != SessionId || observation.Message.Kind != "recordingEndRequested"
+                || observation.Message.AppendId == 0 || observation.TriggerTicks != observation.Message.Ticks
+                || observation.TriggerTicks < _lastBoundary)
+                throw new InvalidDataException("结束边界必须来自同一原生会话，且不早于最后一个视口边界。");
+            if (_recordingEnd is { } previous)
+            {
+                if (previous.Observation.Message.AppendId != observation.Message.AppendId)
+                    throw new InvalidDataException("同一会话不能建立两个结束边界。");
+                return;
+            }
+            _recordingEnd = new(observation, _lastBoundary, recordingEnd: true);
         }
     }
 
@@ -116,6 +147,13 @@ internal sealed class AggregateSession : IDisposable
             Active();
             var boundary = Find(request);
             if (boundary.Committed) return;
+            if (boundary.RecordingEnd && !_committingEnd)
+            {
+                // Its pixels are fixed now. Publish only after the native footer
+                // so the packet also owns late input and interrupted contacts.
+                boundary.PendingCapture = (request, update);
+                return;
+            }
             try
             {
                 // A realtime delivery precedes the disk flush. Wait for this
@@ -125,7 +163,7 @@ internal sealed class AggregateSession : IDisposable
                 string manifestPath = CheckedAssetPath(root, "manifest.json", requirePng: false);
                 using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
                 var manifest = document.RootElement;
-                ValidateManifest(manifest, request.TriggerTicks);
+                ValidateManifest(manifest, boundary.TriggerTicks);
                 var labels = Array(manifest, "labels");
                 var images = Array(manifest, "images");
                 var recognizer = J.Get(manifest, "recognizer");
@@ -138,13 +176,14 @@ internal sealed class AggregateSession : IDisposable
                     Path: CheckedAssetPath(root, relative, requirePng: true), Id: packetId + "/" + relative.Replace('\\', '/'))).ToArray();
                 long diffFromTicks = J.Tick(recognizer, "fromTicks", -1);
                 var matrices = labels.Select(label => Matrix(label, inputs, states, boundary, diffFromTicks)).ToArray();
-                foreach (var asset in assets) AppendAsset(asset.Path, asset.Id);
+                var imageAssets = assets.Select(a => new { path = a.Relative, assetId = AppendAsset(a.Path, a.Id) }).ToArray();
                 Write(new { kind = "packet", SessionId, id = packetId, fromTicks = boundary.FromTicks,
-                    toTicks = boundary.ToTicks, triggerTicks = boundary.ToTicks,
+                    toTicks = boundary.ToTicks, triggerTicks = boundary.TriggerTicks,
+                    boundaryKind = boundary.RecordingEnd ? "recordingEnd" : "canvasViewportChanged",
                     observationAppendId = boundary.Observation.Message.AppendId,
                     status = update.Baseline ? "baseline" : "captured", reason = update.Baseline ? "firstLayerSnapshot" : (string?)null,
-                    eventPointers = WindowPointers(boundary), dirtyMatrices = matrices,
-                    imageAssets = assets.Select(a => new { path = a.Relative, assetId = a.Id }).ToArray(),
+                    eventPointers = WindowPointers(boundary), penContacts = WindowPenContacts(boundary), dirtyMatrices = matrices,
+                    imageAssets,
                     manifest });
                 boundary.Committed = true;
                 _packets++;
@@ -167,6 +206,16 @@ internal sealed class AggregateSession : IDisposable
         }
     }
 
+    public void RecordingEndFailed(string reason)
+    {
+        lock (_sync)
+        {
+            Active();
+            _recordingEndFailure = reason;
+            if (_recordingEnd is { Committed: false } boundary) boundary.Failure = reason;
+        }
+    }
+
     // Only called after the recorder has stopped gracefully. A footer proves
     // the complete mechanical prefix exists, including late core results.
     public void Complete()
@@ -183,18 +232,47 @@ internal sealed class AggregateSession : IDisposable
                 WaitForObservation(boundary);
                 string reason = boundary.Failure ?? (!boundary.Observation.HasEditingInput
                     ? "noEditingInput" : boundary.Queued ? "captureNotCompletedBeforeSeal" : "layerUnconfirmedOrCaptureCoalesced");
-                Write(new { kind = "packet", SessionId, id = PacketId(boundary), fromTicks = boundary.FromTicks,
-                    toTicks = boundary.ToTicks, triggerTicks = boundary.ToTicks,
-                    observationAppendId = boundary.Observation.Message.AppendId, status = "empty", reason,
-                    eventPointers = WindowPointers(boundary), dirtyMatrices = System.Array.Empty<object>(),
-                    imageAssets = System.Array.Empty<object>(), manifest = (object?)null });
-                boundary.Committed = true;
-                _packets++;
+                EmptyPacket(boundary, reason);
             }
+            if (_nativeEndTicks < _lastBoundary) throw new InvalidDataException("原生 footer 早于最后一个聚集边界。");
+            if (_recordingEnd is null)
+            {
+                var footer = new RecorderRealtimeEvent(1, SessionId, 0, "system", "sessionFooter", false,
+                    0, 0, _nativeEndTicks, _nativeEndTicks, _nativeEndTicks, null, null, null,
+                    JsonSerializer.SerializeToElement(new { boundaryKind = "recordingEnd" }));
+                _recordingEnd = new(new(footer, _nativeEndTicks, 0, false, false), _lastBoundary, recordingEnd: true);
+                _recordingEnd.Failure = _recordingEndFailure ?? "recordingEndCaptureUnavailable";
+            }
+            _recordingEnd.EndTicks = _nativeEndTicks;
+            if (_recordingEnd.PendingCapture is { } pending)
+            {
+                _committingEnd = true;
+                try { CaptureCommitted(pending.Request, pending.Update); }
+                catch (Exception) { /* CaptureCommitted retained the concrete failure. */ }
+                finally { _committingEnd = false; }
+            }
+            if (!_recordingEnd.Committed)
+            {
+                WaitForObservation(_recordingEnd);
+                EmptyPacket(_recordingEnd, _recordingEnd.Failure ?? "recordingEndLayerOrCanvasUnconfirmed");
+            }
+            _lastBoundary = _nativeEndTicks;
             Write(new { kind = "footer", SessionId, dimensionSamples = _samples, packets = _packets,
                 assetChunks = _assets, lastBoundaryTicks = _lastBoundary, nativeLastAppendId = _lastAppend });
             IsComplete = true;
         }
+    }
+
+    private void EmptyPacket(Boundary boundary, string reason)
+    {
+        Write(new { kind = "packet", SessionId, id = PacketId(boundary), fromTicks = boundary.FromTicks,
+            toTicks = boundary.ToTicks, triggerTicks = boundary.TriggerTicks,
+            boundaryKind = boundary.RecordingEnd ? "recordingEnd" : "canvasViewportChanged",
+            observationAppendId = boundary.Observation.Message.AppendId, status = "empty", reason,
+            eventPointers = WindowPointers(boundary), penContacts = WindowPenContacts(boundary), dirtyMatrices = System.Array.Empty<object>(),
+            imageAssets = System.Array.Empty<object>(), manifest = (object?)null });
+        boundary.Committed = true;
+        _packets++;
     }
 
     private object Matrix(JsonElement label, JsonElement[] inputs, JsonElement[] states, Boundary boundary, long diffFromTicks)
@@ -241,19 +319,33 @@ internal sealed class AggregateSession : IDisposable
     private object[] WindowPointers(Boundary boundary) => _byAppend.Values
         .Where(p => p.Hardware && p.Ticks > boundary.FromTicks && p.Ticks <= boundary.ToTicks)
         .OrderBy(p => p.Ticks).ThenBy(p => p.AppendId).Select(p => Pointer(p, context: false)).ToArray();
+    private object[] WindowPenContacts(Boundary boundary)
+    {
+        var operations = _byAppend.Values.Where(p => p.Hardware && p.Ticks > boundary.FromTicks && p.Ticks <= boundary.ToTicks
+            && p.Kind is "penBegin" or "penSample" or "penEnd")
+            .Select(p => p.OperationId ?? p.EventId).ToHashSet();
+        return _byAppend.Values.Where(p => p.Hardware && p.Kind == "penBegin" && p.Ticks <= boundary.ToTicks
+                && operations.Contains(p.OperationId ?? p.EventId))
+            .OrderBy(p => p.Ticks).ThenBy(p => p.AppendId)
+            .Select(p => (object)new { operationId = p.OperationId ?? p.EventId,
+                beginEventPointer = Pointer(p, context: p.Ticks <= boundary.FromTicks), p.PenDownLocation }).ToArray();
+    }
     private object Pointer(NativePointer p, bool context) => new { SessionId, p.AppendId, p.EventId, p.OperationId, p.Ticks, context };
     private Boundary Find(CaptureRequest request)
     {
         if (request.Context is { } context && context.SessionId != SessionId)
             throw new InvalidDataException("保存任务属于另一个 Recognizer 会话");
-        return _boundaries.GetValueOrDefault(request.TriggerTicks)
+        return request.TriggerKind == "recordingEnd" && _recordingEnd?.TriggerTicks == request.TriggerTicks ? _recordingEnd
+            : _boundaries.GetValueOrDefault(request.TriggerTicks)
             ?? throw new InvalidDataException("保存任务没有已确认的画布变化边界");
     }
-    private string PacketId(Boundary boundary) => "viewport-" + boundary.ToTicks.ToString("D20", System.Globalization.CultureInfo.InvariantCulture);
+    private string PacketId(Boundary boundary) => (boundary.RecordingEnd ? "recording-end-" : "viewport-")
+        + boundary.TriggerTicks.ToString("D20", System.Globalization.CultureInfo.InvariantCulture);
 
     private void WaitForObservation(Boundary boundary)
     {
         ulong appendId = boundary.Observation.Message.AppendId;
+        if (appendId == 0 && boundary.RecordingEnd && boundary.TriggerTicks == _nativeEndTicks && _native?.IsComplete == true) return;
         if (appendId == 0) throw new InvalidDataException("确认的画布变化缺少原生 appendId；不能用实时 sequence 替代");
         var wait = Stopwatch.StartNew();
         while (true)
@@ -292,16 +384,22 @@ internal sealed class AggregateSession : IDisposable
                     _nativeHeader = true;
                     continue;
                 }
-                if (kind == "footer") continue;
+                if (kind == "footer") { _nativeEndTicks = J.Tick(frame, "ticks", -1); continue; }
                 ulong appendId = Unsigned(frame, "appendId");
                 if (!_nativeHeader || appendId == 0 || appendId != _lastAppend + 1)
                     throw new InvalidDataException("机械记录 appendId 不构成统一完整前缀");
                 _lastAppend = appendId;
                 ulong eventId = Unsigned(frame, "eventId");
                 var op = J.Get(frame, "operationId");
+                var data = J.Get(frame, "data");
+                long ticks = J.Tick(frame, "ticks", -1);
+                if (kind == "workspaceStatus") _nativeRegions = PanelRegionMap.FromWorkspaceStatus(data, appendId, ticks);
+                PenDownLocation? location = kind == "penBegin" ? PanelRegionMap.ReadLocation(data) : null;
+                if (kind == "penBegin" && location is null && _nativeRegions.HasRegions
+                    && J.Number(data, "x") is { } x && J.Number(data, "y") is { } y) location = _nativeRegions.Classify(x, y);
                 var pointer = new NativePointer(appendId, eventId,
                     op.ValueKind == JsonValueKind.Number && op.TryGetUInt64(out ulong operation) ? operation : null,
-                    J.Tick(frame, "ticks", -1), J.Text(frame, "path") == "hardware", kind);
+                    ticks, J.Text(frame, "path") == "hardware", kind, location);
                 if (pointer.Ticks < 0 || (pointer.Hardware && eventId == 0)) throw new InvalidDataException("原生事件指针字段无效");
                 _byAppend.Add(appendId, pointer);
                 if (pointer.Hardware) _byEvent.Add(eventId, pointer);
@@ -343,10 +441,11 @@ internal sealed class AggregateSession : IDisposable
         }
         return full;
     }
-    private void AppendAsset(string path, string assetId)
+    private string AppendAsset(string path, string assetId)
     {
         using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         string totalSha256 = Convert.ToHexString(SHA256.HashData(file)).ToLowerInvariant();
+        if (_assetIdsByHash.TryGetValue(totalSha256, out string? existing)) return existing;
         file.Position = 0;
         int chunkCount = checked((int)Math.Max(1, (file.Length + AssetChunkBytes - 1) / AssetChunkBytes));
         var buffer = new byte[AssetChunkBytes];
@@ -364,6 +463,10 @@ internal sealed class AggregateSession : IDisposable
                 totalSha256, chunkIndex = index, chunkCount, encoding = "png", byteLength = file.Length });
             _assets++;
         }
+        // Add only after all chunks are written. Each packet keeps its own
+        // path-to-ID mapping; identical bytes may refer to an earlier packet.
+        _assetIdsByHash.Add(totalSha256, assetId);
+        return assetId;
     }
     private static JsonElement Required(JsonElement e, string key) => J.Get(e, key).ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Null)
         ? J.Get(e, key) : throw new InvalidDataException("缺少字段 " + key);

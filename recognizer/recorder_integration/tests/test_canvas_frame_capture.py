@@ -23,7 +23,7 @@ from PIL import Image, ImageDraw
 INTEGRATION = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(INTEGRATION), str(INTEGRATION.parents[1] / "CSP_Shortcut_Manager")]
 import pipeline
-from catalog import BRUSH, CANVAS, NAVIGATOR
+from catalog import BRUSH, CANVAS, NAVIGATOR, TOOLGROUP
 
 FRAME = "__canvas_frame__"
 NUMBERS = "导航器数字"
@@ -255,6 +255,20 @@ class CanvasFrameCaptureTests(unittest.TestCase):
         self.assertTrue(all(job["captureId"] == capture_id for job in jobs))
         kinds = [entry["kind"] for entry in self.records]
         self.assertLess(max(i for i, kind in enumerate(kinds) if kind == "coreEvidenceCaptured"), kinds.index("screenshotBlob"))
+
+    def test_subtool_job_uses_its_exact_panel_capture_start_and_end(self):
+        self.regions[TOOLGROUP]=(400,550,260,430)
+        item=self.capture((BRUSH,TOOLGROUP))
+        spans=item[2].copy()
+        jobs=self.persist(item)
+        job=next(job for job in jobs if job['module']==TOOLGROUP)
+        self.assertEqual(job['ticks'],spans[TOOLGROUP][0])
+        self.assertEqual(job['captureEndTicks'],spans[TOOLGROUP][1])
+        self.assertEqual(job['crops'][TOOLGROUP]['roi'],list(self.regions[TOOLGROUP]))
+        notice=next(entry for entry in self.records if entry['kind']=='coreEvidenceCaptured'
+                    and entry['data']['module']=='subtoolState')
+        self.assertEqual(notice['data']['evidence']['captureId'],job['captureId'])
+        self.assertEqual(notice['data']['evidence']['capturedTicks'],job['ticks'])
 
     def test_canvas_ipc_sends_full_frame_and_three_exact_crop_descriptors(self):
         job = self.persist(self.capture())[0]

@@ -9,8 +9,9 @@ public static class RecorderRealtimeTopics
 {
     public const string Keyboard = "keyboard", Mouse = "mouse", Tablet = "tablet";
     public const string TabletMetadata = "tablet.metadata";
-    public static readonly string[] CoreModules = ["brushState", "currentLayerState", "colorState", "canvasViewState", "clipState"];
-    public static IReadOnlyList<string> All { get; } = new[] { Keyboard, Mouse, Tablet }.Concat(CoreModules.Select(m => "core." + m)).ToArray();
+    public const string Shortcuts = "shortcuts", Layers = "layers", LayerStage = "layerstage", Subtools = "subtools";
+    public static readonly string[] CoreModules = ["brushState", "subtoolState", "currentLayerState", "colorState", "canvasViewState", "clipState"];
+    public static IReadOnlyList<string> All { get; } = new[] { Keyboard, Mouse, Tablet, Shortcuts, Layers, LayerStage, Subtools }.Concat(CoreModules.Select(m => "core." + m)).ToArray();
     public static string[] Expand(IEnumerable<string> topics)
     {
         var expanded = topics.SelectMany(t => t switch { "all" => All, "cores" => All.Where(x => x.StartsWith("core.")), _ => [t] })
@@ -95,6 +96,10 @@ public sealed class RecorderRealtimeHub : IAsyncDisposable
     public RecorderRealtimeSubscription SubscribeTablet(bool includeSnapshot = true) => Subscribe([RecorderRealtimeTopics.Tablet], includeSnapshot);
     public RecorderRealtimeSubscription SubscribeCore(string module, bool includeSnapshot = true) => Subscribe(["core." + module], includeSnapshot);
     public RecorderRealtimeSubscription SubscribeCores(bool includeSnapshot = true) => Subscribe(["cores"], includeSnapshot);
+    public RecorderRealtimeSubscription SubscribeShortcuts(bool includeSnapshot = true) => Subscribe([RecorderRealtimeTopics.Shortcuts], includeSnapshot);
+    public RecorderRealtimeSubscription SubscribeLayers(bool includeSnapshot = true) => Subscribe([RecorderRealtimeTopics.Layers], includeSnapshot);
+    public RecorderRealtimeSubscription SubscribeLayerStage(bool includeSnapshot = true) => Subscribe([RecorderRealtimeTopics.LayerStage], includeSnapshot);
+    public RecorderRealtimeSubscription SubscribeSubtools(bool includeSnapshot = true) => Subscribe([RecorderRealtimeTopics.Subtools], includeSnapshot);
 
     internal void Unsubscribe(RecorderRealtimeSubscription subscription)
     {
@@ -113,6 +118,8 @@ public sealed class RecorderRealtimeHub : IAsyncDisposable
         "tabletDeviceChanged" or "driverConfiguration" => ("tablet", frame.Kind),
         "coreStateUpdated" => ("core." + frame.Data.GetProperty("module").GetString(), "stateUpdated"),
         "coreEvidenceCaptured" => ("core." + frame.Data.GetProperty("module").GetString(), "evidenceCaptured"),
+        "shortcutConfiguration" => (RecorderRealtimeTopics.Shortcuts, "configurationUpdated"),
+        "recordingEndRequested" => ("system", frame.Kind),
         _ => null
     };
     private void OnRecord(MemolineEvent frame)
@@ -121,7 +128,7 @@ public sealed class RecorderRealtimeHub : IAsyncDisposable
         if (frame.Kind is "keyboardStateChanged" or "keyInput" or "shortcutResolved" or
             "mouseCursorChanged" or "mouseDown" or "mouseUp" or "mouseDrag" or "mouseWheel" or "mouseInterrupted" or
             "penBegin" or "penSample" or "penEnd" or "penInterrupted" or "tabletStateChanged" or
-            "tabletDeviceChanged" or "driverConfiguration" or "coreStateUpdated" or "coreEvidenceCaptured") _pending.Writer.TryWrite(frame);
+            "tabletDeviceChanged" or "driverConfiguration" or "coreStateUpdated" or "coreEvidenceCaptured" or "shortcutConfiguration" or "recordingEndRequested") _pending.Writer.TryWrite(frame);
     }
 
     private async Task PumpAsync()
@@ -151,7 +158,7 @@ public sealed class RecorderRealtimeHub : IAsyncDisposable
                         frame.RelatedEventIds, frame.DeviceSource, data);
                     // Evidence notifications are live boundaries, not confirmed
                     // states or initial snapshots. Do not overwrite either cache.
-                    if (frame.Kind == "coreEvidenceCaptured") { Publish(message); continue; }
+                    if (frame.Kind is "coreEvidenceCaptured" or "recordingEndRequested") { Publish(message); continue; }
                     if (frame.Kind == "coreStateUpdated" && data.GetProperty("status").GetString() is "changed" or "unchanged"
                         && data.GetProperty("state").ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined))
                         _confirmedMessages[topic] = message;
@@ -163,6 +170,23 @@ public sealed class RecorderRealtimeHub : IAsyncDisposable
                         _latest[key] = message;
                     }
                     Publish(message);
+                    if (frame.Kind == "coreStateUpdated" && topic is "core.clipState" or "core.currentLayerState" or "core.subtoolState")
+                    {
+                        // Each core has its own interface, cache and subscribers. A current
+                        // layer observation cannot replace a file-based structure snapshot.
+                        var (channel, projectionKind) = topic switch {
+                            "core.clipState" => (RecorderRealtimeTopics.Layers, "layerStructureUpdated"),
+                            "core.subtoolState" => (RecorderRealtimeTopics.Subtools, "ocrUpdated"),
+                            _ => (RecorderRealtimeTopics.LayerStage, "currentLayerUpdated")
+                        };
+                        var projection = message with { Sequence = ++_sequence, Channel = channel,
+                            Kind = projectionKind };
+                        _latest[channel] = projection;
+                        if (_confirmedMessages.TryGetValue(topic, out var latestConfirmed)
+                            && latestConfirmed.Sequence == message.Sequence)
+                            _confirmedMessages[channel] = projection;
+                        Publish(projection);
+                    }
                 }
             }
         }

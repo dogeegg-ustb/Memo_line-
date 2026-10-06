@@ -1,0 +1,2 @@
+Memoline_demo_csponly/reports/**/native-full.jsonl filter=lfs diff=lfs merge=lfs -text
+Memoline_demo_csponly/reports/**/native.memoline filter=lfs diff=lfs merge=lfs -text

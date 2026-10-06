@@ -9,17 +9,19 @@ namespace MemolineDemo;
 
 internal sealed class DemoController : IWatcherHost, IAsyncDisposable
 {
-    private readonly string _base = AppContext.BaseDirectory;
+    private readonly string _base = ResolveRuntimeDirectory();
     private readonly object _sync = new();
     private readonly SemaphoreSlim _finishGate = new(1, 1);
     private Process? _recorder;
     private Task _stdout = Task.CompletedTask, _stderr = Task.CompletedTask;
     private TaskCompletionSource _sessionEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private AggregateSession? _aggregate;
-    private string? _mechanicalPath, _sessionId, _lastSealed;
+    private string? _mechanicalPath, _sessionId, _lastSealed, _clipPath;
     private string _workRoot;
     private bool _completed;
     private DateTime _recorderStartedUtc;
+    private RecorderSetupPanel? _inputs;
+    private readonly bool _renderOnly;
     private string RecorderRoot => Path.Combine(_base, "Recognizer");
     public string Title => "Memoline · CSP 聚集事件记录";
     public string SettingsPath => Path.Combine(_base, "demo-settings.json");
@@ -28,29 +30,46 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
     public bool HasPendingSeal => _recorder is not null || _mechanicalPath is not null;
     public event Action<string>? Status;
 
-    public DemoController() => _workRoot = Path.Combine(_base, ".work", "standby");
+    public DemoController(bool renderOnly = false)
+    {
+        _renderOnly = renderOnly; _workRoot = Path.Combine(_base, ".work", "standby");
+        Status += text => _inputs?.RecorderStatus(text);
+    }
+    public Control? CreateConfigurationControl() => _inputs ??= new(RecorderRoot, _renderOnly);
+
+    internal static string ResolveRuntimeDirectory()
+    {
+        string application = AppContext.BaseDirectory;
+        string bundled = Path.Combine(application, "publish", "win-x64");
+        return File.Exists(Path.Combine(bundled, "Recognizer", "BehaviorRecognizer.exe"))
+            && !File.Exists(Path.Combine(application, "Recognizer", "BehaviorRecognizer.exe"))
+            ? bundled : application;
+    }
 
     public async Task<string> PrepareAsync(string clipPath, CancellationToken token)
     {
         if (HasPendingSeal) throw new InvalidOperationException("上一份录制尚未封盘；请先点击停止并封盘。");
         string executable = Path.Combine(RecorderRoot, "BehaviorRecognizer.exe");
         if (!File.Exists(executable)) throw new FileNotFoundException("缺少集成的 Recognizer，请运行 Build.ps1。", executable);
+        var input = await (_inputs ?? throw new InvalidOperationException("录制设置界面尚未建立。")).PrepareAsync(token);
         _workRoot = Path.Combine(_base, ".work", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_workRoot); Directory.CreateDirectory(OutputDirectory);
-        _completed = false; _lastSealed = null;
+        _completed = false; _lastSealed = null; _clipPath = Path.GetFullPath(clipPath);
         _sessionEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
         // Only the demo's private copy is configured. The original Recognizer
         // recorder implementation and native records are kept intact.
         string settingsPath = Path.Combine(RecorderRoot, "integration", "settings.json");
         var settings = JsonNode.Parse(await File.ReadAllTextAsync(settingsPath, token))?.AsObject()
             ?? throw new InvalidDataException("Recognizer 设置文件无效。");
-        settings["clipPath"] = Path.GetFullPath(clipPath);
+        settings["clipPath"] = _clipPath;
+        input.Apply(settings);
         await File.WriteAllTextAsync(settingsPath, settings.ToJsonString(new() { WriteIndented = true }), token);
         var start = new ProcessStartInfo(executable)
         {
             WorkingDirectory = RecorderRoot, UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true
         };
+        foreach (string argument in input.Arguments) start.ArgumentList.Add(argument);
         _recorderStartedUtc = DateTime.UtcNow;
         _recorder = Process.Start(start) ?? throw new IOException("Recognizer 启动失败。");
         _stdout = PumpAsync(_recorder.StandardOutput);
@@ -87,7 +106,9 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
             lock (_sync)
                 try { File.AppendAllText(Path.Combine(_workRoot, "recognizer.log"), line + Environment.NewLine); }
                 catch (IOException) { }
-            if (line.Contains("初始化", StringComparison.Ordinal) || line.Contains("启动失败", StringComparison.Ordinal)) Status?.Invoke(line);
+            if (line.Contains("初始化", StringComparison.Ordinal) || line.Contains("启动失败", StringComparison.Ordinal)
+                || line.Contains("[Initialization]", StringComparison.Ordinal) || line.Contains("[Driver]", StringComparison.Ordinal))
+                Status?.Invoke(line);
         }
     }
 
@@ -112,12 +133,18 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
             lock (_sync) _aggregate?.ObserveViewport(observation);
             if (observation.Changed == 1) Status?.Invoke("画布视口已变化，记录聚集事件边界…");
         };
+        monitor.RecordingEndObserved += observation =>
+        {
+            lock (_sync) _aggregate?.ObserveRecordingEnd(observation);
+            Status?.Invoke("已固定 Recognizer 结束 triggerTicks=" + observation.TriggerTicks + "，生成末尾聚集包…");
+        };
     }
 
     public void CaptureQueued(CaptureRequest request) { lock (_sync) _aggregate?.CaptureQueued(request); }
     public Task PacketCommittedAsync(CaptureRequest request, SnapshotUpdate update, CancellationToken token)
         => Task.Run(() => { lock (_sync) _aggregate?.CaptureCommitted(request, update); }, token);
     public void CaptureFailed(CaptureRequest request, string reason) { lock (_sync) _aggregate?.CaptureFailed(request, reason); }
+    public void RecordingEndFailed(string reason) { lock (_sync) _aggregate?.RecordingEndFailed(reason); }
 
     public async Task FinishRecordingAsync(CancellationToken token)
     {
@@ -192,13 +219,17 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
             var aggregate = _aggregate ?? throw new InvalidOperationException("没有可封盘的会话。");
             string native = _mechanicalPath ?? throw new InvalidOperationException("原生记录路径缺失。");
             if (!_completed) { aggregate.Complete(); aggregate.Dispose(); _completed = true; }
-            string output = Path.Combine(OutputDirectory, Path.GetFileName(native));
+            string name = Path.GetFileNameWithoutExtension(_clipPath
+                ?? throw new InvalidOperationException("本次录制的 CLIP 文件路径缺失。"));
+            string output = Path.Combine(OutputDirectory, name + ".memoline");
+            for (int index = 2; File.Exists(output) || Directory.Exists(output); index++)
+                output = Path.Combine(OutputDirectory, $"{name} ({index}).memoline");
             RequireUnder(native, Path.Combine(RecorderRoot, "procedure", "stroke"));
             RequireUnder(aggregate.FilePath, _workRoot);
             BundleArchive.Seal(native, aggregate.FilePath, output, token);
             // Publishing is the commit. Cleanup failures must not make a valid
             // sealed archive look unfinished or prevent the next recording.
-            _lastSealed = output; _mechanicalPath = null; _sessionId = null; _aggregate = null;
+            _lastSealed = output; _mechanicalPath = null; _sessionId = null; _aggregate = null; _clipPath = null;
             // Seal verifies byte hashes and references before publishing. Remove
             // only this owned session's two primary intermediate data files.
             foreach (string temporary in new[] { native, aggregate.FilePath })

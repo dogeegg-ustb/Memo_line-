@@ -140,6 +140,10 @@ public static class RecorderRealtimeClient
     public static IAsyncEnumerable<RecorderRealtimeEvent> FollowTabletAsync(string pipeName, CancellationToken token = default) => SubscribeAsync(pipeName, ["tablet"], cancellationToken: token);
     public static IAsyncEnumerable<RecorderRealtimeEvent> FollowCoreAsync(string pipeName, string module, CancellationToken token = default) => SubscribeAsync(pipeName, ["core." + module], cancellationToken: token);
     public static IAsyncEnumerable<RecorderRealtimeEvent> FollowCoresAsync(string pipeName, CancellationToken token = default) => SubscribeAsync(pipeName, ["cores"], cancellationToken: token);
+    public static IAsyncEnumerable<RecorderRealtimeEvent> FollowShortcutsAsync(string pipeName, CancellationToken token = default) => SubscribeAsync(pipeName, [RecorderRealtimeTopics.Shortcuts], cancellationToken: token);
+    public static IAsyncEnumerable<RecorderRealtimeEvent> FollowLayersAsync(string pipeName, CancellationToken token = default) => SubscribeAsync(pipeName, [RecorderRealtimeTopics.Layers], cancellationToken: token);
+    public static IAsyncEnumerable<RecorderRealtimeEvent> FollowLayerStageAsync(string pipeName, CancellationToken token = default) => SubscribeAsync(pipeName, [RecorderRealtimeTopics.LayerStage], cancellationToken: token);
+    public static IAsyncEnumerable<RecorderRealtimeEvent> FollowSubtoolsAsync(string pipeName, CancellationToken token = default) => SubscribeAsync(pipeName, [RecorderRealtimeTopics.Subtools], cancellationToken: token);
 
     public static async IAsyncEnumerable<RecorderRealtimeEvent> SubscribeAsync(string pipeName, IEnumerable<string> channels,
         bool includeSnapshot = true, [EnumeratorCancellation] CancellationToken cancellationToken = default)

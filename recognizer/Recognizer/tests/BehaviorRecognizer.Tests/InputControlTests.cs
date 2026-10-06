@@ -9,7 +9,7 @@ using Xunit;
 
 namespace BehaviorRecognizer.Tests;
 
-public sealed class InputControlTests
+public sealed partial class InputControlTests
 {
     [Fact]
     public async Task OneShotSaveDoesNotWaitForInputOrChangeInterceptionPolicy()
@@ -57,6 +57,32 @@ public sealed class InputControlTests
         var foreign = await session.Guard.RequestClipSaveAsync(new(@"C:\art\drawing.clip", "foreign"));
         Assert.False(foreign.Success);
         Assert.False(foreign.SaveInputDispatched);
+        Assert.Equal(0, session.Backend.Dispatches);
+    }
+
+    [Fact]
+    public async Task FinalSaveCanActivateCspWithoutChangingNormalSavePolicy()
+    {
+        await using var session = new TestSession();
+        session.Backend.ForegroundWindow = 2;
+        session.Backend.ActivationAllowed = true;
+        session.Backend.SaveAcknowledged.TrySetResult();
+        var result = await session.Guard.RequestClipSaveAsync(new(@"C:\art\drawing.clip", "end-save", 0, ActivateCsp: true));
+        Assert.True(result.Success);
+        Assert.True(result.SaveInputDispatched);
+        Assert.Equal(1, session.Backend.Activations);
+        Assert.Equal(1, session.Backend.Dispatches);
+        Assert.Equal(0L, result.TriggerTicks);
+    }
+
+    [Fact]
+    public async Task FinalSaveActivationFailureDoesNotInjectInput()
+    {
+        await using var session = new TestSession();
+        session.Backend.ForegroundWindow = 2;
+        var result = await session.Guard.RequestClipSaveAsync(new(@"C:\art\drawing.clip", "end-failed", 0, ActivateCsp: true));
+        Assert.False(result.Success);
+        Assert.False(result.SaveInputDispatched);
         Assert.Equal(0, session.Backend.Dispatches);
     }
 
@@ -269,7 +295,7 @@ public sealed class InputControlTests
         await using var session = new TestSession();
         string pipeName = "memoline-input-test-" + Guid.NewGuid().ToString("N");
         bool recordingReady = false;
-        await using var server = new RecorderInputControlServer(session.Guard, () => recordingReady, pipeName);
+        await using var server = new RecorderInputControlServer(session.Guard, () => recordingReady, pipeName, session.Writer);
         await using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         await client.ConnectAsync(3000);
         using var reader = new StreamReader(client, new UTF8Encoding(false), leaveOpen: true);
@@ -285,11 +311,22 @@ public sealed class InputControlTests
         var unsupported = await Query("""{"command":"configureInputInterception","enabled":true,"scope":"allHardware"}""");
         Assert.False(unsupported.GetProperty("success").GetBoolean());
         Assert.False((await Query("""{"command":"configureInputInterception","enabled":true}""")).GetProperty("success").GetBoolean());
+        Assert.False((await Query("""{"command":"prepareRecordingEnd"}""")).GetProperty("success").GetBoolean());
         recordingReady = true;
         Assert.True((await Query("""{"command":"configureInputInterception","enabled":true}""")).GetProperty("enabled").GetBoolean());
         Assert.True((await Query("""{"command":"getInputControlStatus"}""")).GetProperty("success").GetBoolean());
         Assert.True((await Query("""{"command":"configureInputInterception","enabled":false}""")).GetProperty("controlled").GetBoolean());
         Assert.False((await Query("""{"command":"restoreAutomaticInputProtection"}""")).GetProperty("controlled").GetBoolean());
+        var beforeBoundary = session.NowTicks;
+        var boundary = await Query("""{"command":"prepareRecordingEnd"}""");
+        Assert.True(boundary.GetProperty("success").GetBoolean());
+        Assert.Equal(session.Writer.SessionId, boundary.GetProperty("sessionId").GetString());
+        Assert.True(boundary.GetProperty("triggerTicks").GetInt64() >= beforeBoundary);
+        Assert.True(boundary.GetProperty("triggerTicks").GetInt64() <= session.NowTicks);
+        Assert.True(boundary.GetProperty("appendId").GetUInt64() > 0);
+        var replay = await Query("""{"command":"prepareRecordingEnd"}""");
+        Assert.Equal(boundary.GetRawText(), replay.GetRawText());
+        Assert.False((await Query("""{"command":"prepareRecordingEnd","extra":true}""")).GetProperty("success").GetBoolean());
         foreach (string invalidTicks in new[] { "-1", "1.5", "\"952451354\"", "true", "9223372036854775808" })
         {
             var invalid = await Query("""{"command":"requestClipSave","expectedClipPath":"C:\\art\\drawing.clip","requestId":"invalid","triggerTicks": """ + invalidTicks + "}");
@@ -367,6 +404,7 @@ public sealed class InputControlTests
     {
         private readonly string _directory = Path.Combine(Path.GetTempPath(), "memoline-control-test-" + Guid.NewGuid().ToString("N"));
         private readonly MemolineWriter _writer;
+        public MemolineWriter Writer => _writer;
         public long NowTicks => _writer.NowTicks;
         public FakeBackend Backend { get; } = new();
         public LayerSaveGuard Guard { get; }
@@ -396,6 +434,14 @@ public sealed class InputControlTests
         public nint ForegroundWindow { get; set; } = 1;
         public string ForegroundWindowTitle { get; set; } = "drawing.clip - CLIP STUDIO PAINT";
         public int Initializations, Dispatches;
+        public bool ActivationAllowed;
+        public int Activations;
+        public bool TryActivateCspWindow()
+        {
+            Activations++;
+            if (ActivationAllowed) ForegroundWindow = 1;
+            return ActivationAllowed;
+        }
         public Exception? WarmupError, DispatchError;
         public TaskCompletionSource SaveStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource SaveAcknowledged { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);

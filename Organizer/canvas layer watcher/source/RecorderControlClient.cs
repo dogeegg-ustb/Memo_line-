@@ -31,10 +31,13 @@ internal sealed class RecorderControlClient(string pipeName, Action<string>? dia
     }
 
     public Task<JsonElement> StatusAsync(CancellationToken token) => SendAsync(new { command = "getInputControlStatus" }, token);
-    public async Task<JsonElement> SaveClipAsync(string expectedClipPath, CancellationToken token, long? triggerTicks = null)
+    public Task<JsonElement> PrepareRecordingEndAsync(CancellationToken token)
+        => SendAsync(new { command = "prepareRecordingEnd" }, token);
+    public async Task<JsonElement> SaveClipAsync(string expectedClipPath, CancellationToken token, long? triggerTicks = null,
+        bool activateCsp = false)
     {
         string id = "viewport-" + Guid.NewGuid().ToString("N");
-        var response = await SendAsync(new { command = "requestClipSave", expectedClipPath, requestId = id, triggerTicks }, token);
+        var response = await SendAsync(new { command = "requestClipSave", expectedClipPath, requestId = id, triggerTicks, activateCsp }, token);
         if (J.Text(response, "requestId") != id || J.Get(response, "saveInputDispatched").ValueKind != JsonValueKind.True
             || J.Tick(response, "saveInputDispatchedTicks", -1) < 0)
             throw new InvalidDataException("Recognizer 未确认本次保存输入已派发");

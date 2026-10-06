@@ -35,7 +35,8 @@ internal static class AggregateChecks
         }
         MemolineEvent Pen(string kind, ulong operation)
         {
-            writer.AppendHardware(kind, new { x = 5, y = 5, inCsp = true }, new("tablet", "test", "fixture", "fixture"), operation);
+            var location = PanelRegionMap.FromRegions(JsonSerializer.SerializeToElement(new Dictionary<string, int[]> { ["画布视口"] = [0, 0, 10, 10] })).Classify(5, 5);
+            writer.AppendHardware(kind, new { x = 5, y = 5, inCsp = true, penDownLocation = location }, new("tablet", "test", "fixture", "fixture"), operation);
             return records[^1];
         }
         long NextTick()
@@ -90,6 +91,7 @@ internal static class AggregateChecks
                 patch.SetPixel(2, 1, Color.FromArgb(0, 0, 0, 0));
                 patch.Save(Path.Combine(packetRoot, "patch.png"), ImageFormat.Png);
             }
+            File.Copy(Path.Combine(packetRoot, "patch.png"), Path.Combine(packetRoot, "patch-alias.png"));
             // A genuine PNG above the chunk boundary, with incompressible pixels.
             using (var preview = new Bitmap(512, 512, PixelFormat.Format32bppArgb))
             {
@@ -119,7 +121,7 @@ internal static class AggregateChecks
                     states = new[] { new { id = "brush", appendId = brush.AppendId, ticks = brush.Ticks },
                         new { id = "diagnostic", appendId = 0UL, ticks = brush.Ticks } } },
                 capture = new { triggerTicks = secondTick, saveDispatchedTicks = secondTick + 99999999 },
-                labels, images = new[] { new { id = "image-0001", image = "patch.png", afterImage = "patch.png", nowImage = "patch.png",
+                labels, images = new[] { new { id = "image-0001", image = "patch.png", afterImage = "patch-alias.png", nowImage = "patch.png",
                     maskImage = "patch.png", differenceImage = "patch.png", labelIds = new[] { "stroke", "coarse" } } },
                 canvasPreviewImage = "canvas-preview.png"
             };
@@ -155,6 +157,24 @@ internal static class AggregateChecks
             long reconnectTick = NextTick();
             var reconnect = State(reconnectTick);
             aggregate.ObserveViewport(new(Realtime(reconnect, snapshot: true), reconnectTick, 0, true, false));
+            // A later packet has identical PNG bytes under other paths. It must
+            // retain all local references while storing no second image copy.
+            writer.AppendState("recordingEndRequested", NextTick(), [], new { purpose = "shared-image-check" });
+            var marker = records[^1];
+            aggregate.ObserveRecordingEnd(new(Realtime(marker) with { Channel = "system", Kind = "recordingEndRequested" },
+                marker.Ticks, 0, false, false));
+            string finalRoot = Path.Combine(root, "final-shared-images"); Directory.CreateDirectory(finalRoot);
+            File.Copy(Path.Combine(packetRoot, "patch.png"), Path.Combine(finalRoot, "tail-patch.png"));
+            File.Copy(Path.Combine(packetRoot, "canvas-preview.png"), Path.Combine(finalRoot, "tail-preview.png"));
+            var finalManifest = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(packetRoot, "manifest.json")))!;
+            finalManifest["capture"]!["triggerTicks"] = marker.Ticks;
+            finalManifest["recognizer"]!["toTicks"] = marker.Ticks;
+            finalManifest["canvasPreviewImage"] = "tail-preview.png";
+            foreach (string key in new[] { "image", "afterImage", "nowImage", "maskImage", "differenceImage" })
+                finalManifest["images"]![0]![key] = "tail-patch.png";
+            File.WriteAllText(Path.Combine(finalRoot, "manifest.json"), finalManifest.ToJsonString());
+            aggregate.CaptureCommitted(new(1, marker.Ticks, "Ink", new(20, 0, 100, 0), [], TriggerKind: "recordingEnd"),
+                new(Path.Combine(finalRoot, "tail-patch.png"), finalRoot, false, 1, 2));
             writer.DisposeAsync().AsTask().GetAwaiter().GetResult();
             byte[] mechanicalHash = SHA256.HashData(File.ReadAllBytes(writer.FilePath));
             aggregate.Complete();
@@ -170,8 +190,11 @@ internal static class AggregateChecks
             Check(samples.All(s => new[] { "actionPatternContinuity", "toolContinuity", "layerContinuity", "regionContinuity", "timeContinuity" }
                 .All(key => J.Get(s, key).ValueKind == JsonValueKind.Null)), "Future algorithms have empty numeric fields");
             Check(samples.All(s => J.Text(s, "algorithmVersion") == "csponly-dimensions/v1"), "Dimension algorithm is versioned separately");
-            var packets = lines.Where(e => J.Text(e, "kind") == "packet").ToArray();
+            var packets = lines.Where(e => J.Text(e, "kind") == "packet" && J.Text(e, "boundaryKind") != "recordingEnd").ToArray();
             Check(packets.Length == 4, "Only true changes produce packets, including empty boundaries");
+            var final = lines.Single(e => J.Text(e, "kind") == "packet" && J.Text(e, "boundaryKind") == "recordingEnd");
+            Check(J.Tick(final, "toTicks", -1) == J.Tick(MemolineReader.Read(writer.FilePath).Last(), "ticks", -2),
+                "Every session has a final packet closed at the native footer");
             var captured = packets.Single(p => J.Text(p, "status") == "captured");
             Check(J.Tick(captured, "fromTicks", -1) == firstTick && J.Tick(captured, "toTicks", -1) == secondTick, "Boundary ticks do not use save dispatch or commit time");
             Check(J.Tick(captured, "observationAppendId", -1) == (long)second.AppendId, "Observation points to native appendId, not Sequence");
@@ -194,11 +217,22 @@ internal static class AggregateChecks
             Check(J.Text(fallback, "attribution") == "unresolved" && J.Get(fallback, "eventPointers").GetArrayLength() == 0, "Coarse fallback never invents stroke ownership");
             Check(J.Get(stroke, "label").GetRawText() == J.Get(J.Get(captured, "manifest"), "labels")[0].GetRawText(), "Original dirty label is retained");
             Check(packets.Single(p => J.Tick(p, "toTicks", -1) == firstTick).GetProperty("reason").GetString() == "fixtureSaveFailed", "Failure reason is retained at final seal");
+            var contact = J.Get(captured, "penContacts").EnumerateArray().Single();
+            Check(J.Tick(contact, "operationId", -1) == 77 && PanelRegionMap.ReadLocation(contact)?.Region == "canvasViewport",
+                "Packets retain native pen starting-region metadata");
+            Check(J.Get(contact, "beginEventPointer").GetProperty("context").GetBoolean(), "A continued contact points to its original penBegin");
             Check(packets.Single(p => J.Tick(p, "toTicks", -1) == thirdTick).GetProperty("reason").GetString() == "noEditingInput", "No-edit viewport movement retains an empty packet");
             Check(packets.Single(p => J.Tick(p, "toTicks", -1) == fourthTick).GetProperty("reason").GetString() == "fixtureUnsafeAsset", "Unsafe asset failure seals without a fabricated diff");
             Check(packets.Where(p => J.Text(p, "status") == "empty").All(p => J.Get(p, "dirtyMatrices").GetArrayLength() == 0), "Empty packets have no invented matrix");
             var assets = lines.Where(e => J.Text(e, "kind") == "asset").ToArray();
             Check(assets.GroupBy(a => J.Text(a, "assetId")).Count() == 2, "All PNG references are deduplicated and contained");
+            var firstMappings = J.Get(captured, "imageAssets").EnumerateArray().ToArray();
+            Check(firstMappings.Single(a => J.Text(a, "path") == "patch.png").GetProperty("assetId").GetString()
+                == firstMappings.Single(a => J.Text(a, "path") == "patch-alias.png").GetProperty("assetId").GetString(),
+                "Identical PNG bytes with different paths share one asset");
+            var finalMappings = J.Get(final, "imageAssets").EnumerateArray().ToArray();
+            Check(finalMappings.Length == 2 && finalMappings.All(a => firstMappings.Any(b => J.Text(a, "assetId") == J.Text(b, "assetId"))),
+                "A later packet can refer to original image bytes without rewriting the earlier packet");
             Check(assets.Any(a => J.Tick(a, "chunkCount", 0) > 1), "Large PNG is emitted in bounded chunks");
             foreach (var group in assets.GroupBy(a => J.Text(a, "assetId")))
             {
@@ -217,8 +251,15 @@ internal static class AggregateChecks
             string sealedPath = Path.Combine(root, "integrated.memoline");
             BundleArchive.Seal(writer.FilePath, aggregatePath, sealedPath);
             var verified = BundleArchive.Verify(sealedPath);
-            Check(verified.PacketCount == 4 && verified.DimensionSampleCount == 7 && verified.AssetCount == assets.Length,
+            Check(verified.PacketCount == 5 && verified.DimensionSampleCount == 7 && verified.AssetCount == assets.Length,
                 "Real aggregate pointers and chunked images pass final single-file sealing validation");
+            var alteredContacts = File.ReadAllLines(aggregatePath).Select(line => System.Text.Json.Nodes.JsonNode.Parse(line)!).ToArray();
+            var alteredPacket = alteredContacts.First(row => row["kind"]!.GetValue<string>() == "packet" && row["penContacts"]!.AsArray().Count > 0);
+            alteredPacket["penContacts"]![0]!["penDownLocation"]!["region"] = "toolbar";
+            string alteredPath = Path.Combine(root, "altered-region.aggregate.jsonl");
+            File.WriteAllLines(alteredPath, alteredContacts.Select(row => row.ToJsonString()));
+            Invalid(() => BundleArchive.Seal(writer.FilePath, alteredPath, Path.Combine(root, "altered-region.memoline")),
+                "Seal rejects starting-region metadata changed relative to the native penBegin");
 
             // Some older native producers leave the begin frame's operation
             // null; its event ID is the operation anchor. Exercise the real
@@ -242,6 +283,7 @@ internal static class AggregateChecks
             string legacyPacket = Path.Combine(root, "legacy-packet");
             Directory.CreateDirectory(legacyPacket);
             File.Copy(Path.Combine(packetRoot, "patch.png"), Path.Combine(legacyPacket, "patch.png"));
+            File.Copy(Path.Combine(packetRoot, "patch-alias.png"), Path.Combine(legacyPacket, "patch-alias.png"));
             File.Copy(Path.Combine(packetRoot, "canvas-preview.png"), Path.Combine(legacyPacket, "canvas-preview.png"));
             File.WriteAllText(Path.Combine(legacyPacket, "manifest.json"), legacyManifest.ToJsonString());
             string legacyAggregatePath = Path.Combine(root, "legacy.aggregate.jsonl");
@@ -253,7 +295,7 @@ internal static class AggregateChecks
                 legacyAggregate.Complete();
             }
             var legacyPacketFrame = File.ReadLines(legacyAggregatePath).Select(line => JsonDocument.Parse(line).RootElement.Clone())
-                .Single(frame => J.Text(frame, "kind") == "packet");
+                .Single(frame => J.Text(frame, "kind") == "packet" && J.Text(frame, "boundaryKind") != "recordingEnd");
             var legacyPointers = J.Get(J.Get(legacyPacketFrame, "dirtyMatrices")[0], "eventPointers").EnumerateArray().ToArray();
             Check(legacyPointers.Length == 4, "Legacy begin anchor and following samples retain their exact native pointers");
             var legacyBegin = legacyPointers.Single(p => J.Tick(p, "appendId", -1) == (long)begin.AppendId);

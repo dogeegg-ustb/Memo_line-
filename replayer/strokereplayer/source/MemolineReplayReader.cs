@@ -21,7 +21,7 @@ internal static class MemolineReplayReader
     public static MemolineReplayDocument Read(string path)
         => Parse(Path.GetFullPath(path), MemolineReader.Read(path));
 
-    internal static MemolineReplayDocument Parse(string path, IEnumerable<JsonElement> records)
+    internal static MemolineReplayDocument Parse(string path, IEnumerable<JsonElement> records, bool allowEmpty = false)
     {
         // Keep only replay metadata. Screenshot blobs can be tens of MiB per frame.
         var relevant = records.Where(IsRelevant).ToArray();
@@ -100,7 +100,8 @@ internal static class MemolineReplayReader
                 var coordinates = Coordinates(data, operation.Id);
                 double pressure = contact ? Pressure(frame, deviceLimits, operation.Id) : 0;
                 samples.Add(new(ticks, coordinates.X, coordinates.Y, pressure,
-                    OptionalNumber(data, "tiltX", 0), OptionalNumber(data, "tiltY", 0), contact));
+                    OptionalNumber(data, "tiltX", 0), OptionalNumber(data, "tiltY", 0), contact,
+                    RequiredUnsigned(frame, "appendId"), RequiredUnsigned(frame, "eventId")));
             }
             long endTicks = operation.EndTicks ?? throw new InvalidDataException(
                 $"笔操作 {operation.Id} 尚未抬笔或中断；请先结束录制，再重放该 memoline。");
@@ -109,11 +110,11 @@ internal static class MemolineReplayReader
             if (samples[^1].InContact)
             {
                 // penInterrupted carries no coordinates. Release at the last measured position.
-                samples.Add(samples[^1] with { Ticks = endTicks, Pressure = 0, InContact = false });
+                samples.Add(samples[^1] with { Ticks = endTicks, Pressure = 0, InContact = false, AppendId = 0, EventId = 0 });
             }
             strokes.Add(new(operation.Id, startTicks, endTicks, strokeView, samples));
         }
-        if (strokes.Count == 0)
+        if (strokes.Count == 0 && !allowEmpty)
             throw new InvalidDataException($"memoline 没有可重放的绘画笔操作（跳过 {skippedNavigation} 个空格导航、{skippedOutside} 个画布外操作、{skippedInvalidView} 个无效画布视图操作）。");
         return new(path, sessionId, frequency, strokes, skippedNavigation, skippedOutside, skippedInvalidView);
     }

@@ -147,14 +147,80 @@ public static class BundleChecks
         string corrupt = Path.Combine(root, "tampered.memoline"); File.Copy(destination, corrupt);
         using (var zip = ZipFile.Open(corrupt, ZipArchiveMode.Update))
         {
-            zip.GetEntry(BundleArchive.AggregationEntry)!.Delete();
-            using var target = zip.CreateEntry(BundleArchive.AggregationEntry).Open(); target.Write("{}\n"u8);
+            zip.GetEntry(BundleArchive.AggregationEntry + ".br")!.Delete();
+            using var target = zip.CreateEntry(BundleArchive.AggregationEntry + ".br").Open();
+            using var encoder = new BrotliStream(target, CompressionLevel.Fastest); encoder.Write("{}\n"u8);
         }
         Reject<InvalidDataException>(() => BundleArchive.Verify(corrupt), "tampered sealed aggregate");
         using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
         string cancelledOutput = Path.Combine(root, "cancelled.memoline");
         Reject<OperationCanceledException>(() => BundleArchive.Seal(native, aggregate, cancelledOutput, cancelled.Token), "cancelled seal");
         Check(!File.Exists(cancelledOutput) && File.ReadAllBytes(native).SequenceEqual(originalNative), "cancellation leaves native bytes intact");
+
+        // Exercise an actual old ZIP, with native v1 frames and no whole-stream
+        // compression. Its decoded mechanical bytes must survive migration.
+        string legacyNative = Path.Combine(root, "legacy-native.memoline");
+        WriteV1(legacyNative, frames.Select(f => JsonNode.Parse(f.GetRawText())!).ToArray());
+        byte[] legacyBytes = File.ReadAllBytes(legacyNative);
+        var legacyIndex = JsonNode.Parse(Encoding.UTF8.GetString(EntryBytes(destination, "index.json")))!;
+        legacyIndex["schema"] = BundleArchive.LegacySchema;
+        legacyIndex["mechanical"]!["codec"] = null; legacyIndex["aggregation"]!["codec"] = null;
+        legacyIndex["mechanical"]!["sha256"] = Hash(legacyBytes);
+        legacyIndex["mechanical"]!["size"] = legacyBytes.Length;
+        string legacy = Path.Combine(root, "legacy.memoline");
+        using (var zip = ZipFile.Open(legacy, ZipArchiveMode.Create))
+        {
+            using (var target = zip.CreateEntry(BundleArchive.MechanicalEntry, CompressionLevel.NoCompression).Open()) target.Write(legacyBytes);
+            using (var target = zip.CreateEntry(BundleArchive.AggregationEntry, CompressionLevel.Fastest).Open()) target.Write(originalAggregate);
+            using (var target = zip.CreateEntry("index.json").Open()) JsonSerializer.Serialize(target, legacyIndex);
+        }
+        byte[] legacyFileHash = SHA256.HashData(File.ReadAllBytes(legacy));
+        Check(BundleArchive.Verify(legacy).PacketCount == verified.PacketCount, "old containers remain readable");
+        string compacted = Path.Combine(root, "legacy-compact.memoline");
+        var compactResult = BundleArchive.Compact(legacy, compacted);
+        Check(new FileInfo(compacted).Length < new FileInfo(legacy).Length, "whole-stream compression reduces the real old container");
+        Check(EntryBytes(compacted, BundleArchive.MechanicalEntry).SequenceEqual(legacyBytes)
+            && EntryBytes(compacted, BundleArchive.AggregationEntry).SequenceEqual(originalAggregate),
+            "compaction restores both original streams byte for byte");
+        Check(compactResult.FixedSha256 == seal.FixedSha256
+            && legacyFileHash.SequenceEqual(SHA256.HashData(File.ReadAllBytes(legacy))), "compaction keeps fixed packets and original file unchanged");
+        string extracted = Path.Combine(root, "extracted.memoline");
+        BundleArchive.ExtractMechanical(compacted, extracted);
+        Check(File.ReadAllBytes(extracted).SequenceEqual(legacyBytes), "native extraction supports the new storage codec");
+        Reject<IOException>(() => BundleArchive.Compact(legacy, legacy), "compaction cannot replace its input");
+        string compactedAgain = Path.Combine(root, "compact-again.memoline");
+        BundleArchive.Compact(compacted, compactedAgain);
+        Check(new FileInfo(compactedAgain).Length <= new FileInfo(compacted).Length
+            && EntryBytes(compactedAgain, BundleArchive.MechanicalEntry).SequenceEqual(legacyBytes),
+            "already compact input never grows or loses native bytes");
+        string mixedRevision = Path.Combine(root, "legacy-upgraded.memoline");
+        BundleArchive.UpgradeDimensions(legacy, revision, "v2", mixedRevision);
+        Check(EntryBytes(mixedRevision, BundleArchive.MechanicalEntry).SequenceEqual(legacyBytes)
+            && BundleArchive.ReadDimensions(mixedRevision).All(r => r.GetProperty("algorithmVersion").GetString() == "v2"),
+            "upgrading a legacy container reads plain and Brotli entries together");
+        string compactedRevision = Path.Combine(root, "revision-compact.memoline");
+        BundleArchive.Compact(upgraded, compactedRevision);
+        Check(EntryBytes(compactedRevision, "dimensions/v2.jsonl").SequenceEqual(File.ReadAllBytes(revision))
+            && BundleArchive.ReadDimensions(compactedRevision).All(r => r.GetProperty("algorithmVersion").GetString() == "v2"),
+            "compaction keeps every dimension revision and active selection");
+        string compactCancelled = Path.Combine(root, "compact-cancelled.memoline");
+        Reject<OperationCanceledException>(() => BundleArchive.Compact(legacy, compactCancelled, cancelled.Token), "cancelled compaction");
+        Check(!File.Exists(compactCancelled) && legacyFileHash.SequenceEqual(SHA256.HashData(File.ReadAllBytes(legacy))),
+            "cancelled compaction leaves the original file intact");
+        var missingAssetRows = rows.Select(row => (JsonObject)row.DeepClone()).ToList();
+        missingAssetRows[3]["imageAssets"] = JsonSerializer.SerializeToNode(new[] { new { path = "patch.png", assetId = "missing" } });
+        string missingAsset = Path.Combine(root, "missing-image.jsonl"); WriteRows(missingAsset, missingAssetRows);
+        Reject<InvalidDataException>(() => BundleArchive.Seal(native, missingAsset, Path.Combine(root, "missing-image.memoline")),
+            "a shared image reference must resolve to stored bytes");
+        string unknownCodec = Path.Combine(root, "unknown-codec.memoline"); File.Copy(destination, unknownCodec);
+        using (var zip = ZipFile.Open(unknownCodec, ZipArchiveMode.Update))
+        {
+            var unsupported = JsonNode.Parse(Encoding.UTF8.GetString(EntryBytes(destination, "index.json")))!;
+            unsupported["mechanical"]!["codec"] = "unknown";
+            zip.GetEntry("index.json")!.Delete();
+            using var target = zip.CreateEntry("index.json").Open(); JsonSerializer.Serialize(target, unsupported);
+        }
+        Reject<InvalidDataException>(() => BundleArchive.Verify(unknownCodec), "unknown storage codecs are rejected");
         return checks;
     }
 
@@ -164,7 +230,10 @@ public static class BundleChecks
         string.Join("\r\n", rows.Select(row => row.ToJsonString())) + "\r\n", new UTF8Encoding(false));
     private static byte[] EntryBytes(string path, string entry)
     {
-        using var archive = ZipFile.OpenRead(path); using var stream = archive.GetEntry(entry)!.Open();
+        using var archive = ZipFile.OpenRead(path);
+        var stored = archive.GetEntry(entry) ?? archive.GetEntry(entry + ".br")!;
+        using var raw = stored.Open();
+        using Stream stream = stored.FullName.EndsWith(".br", StringComparison.Ordinal) ? new BrotliStream(raw, CompressionMode.Decompress) : raw;
         using var bytes = new MemoryStream(); stream.CopyTo(bytes); return bytes.ToArray();
     }
     private static void WriteV1(string path, IEnumerable<JsonNode> frames)

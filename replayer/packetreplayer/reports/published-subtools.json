@@ -1,0 +1,628 @@
+{
+  "packageId": null,
+  "initial": false,
+  "rawResult": {
+    "schemaVersion": 1,
+    "status": "ok",
+    "observedAt": "2026-10-06T07:54:58.961Z",
+    "entries": [
+      {
+        "kind": "subtool",
+        "text": "G筆",
+        "name": "G筆",
+        "bbox": [
+          292,
+          39,
+          36,
+          26
+        ],
+        "coordinateSpace": "panel",
+        "score": 0.98219,
+        "selectionState": "selected",
+        "selectionScore": 0.1803921568627451,
+        "matchStatus": "unique",
+        "matches": [
+          {
+            "id": "tool_24",
+            "uuid": "2e9538829638428087045198ca1de791",
+            "name": "G筆",
+            "toolId": "tool_22",
+            "groupId": "tool_23",
+            "path": [
+              "沾水筆",
+              "沾水筆",
+              "G筆"
+            ],
+            "pathIds": [
+              "tool_22",
+              "tool_23",
+              "tool_24"
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "subtool",
+        "text": "擬真G筆",
+        "name": "擬真G筆",
+        "bbox": [
+          259,
+          94,
+          68,
+          24
+        ],
+        "coordinateSpace": "panel",
+        "score": 0.99465,
+        "selectionState": "unknown",
+        "selectionScore": 0.0,
+        "matchStatus": "unique",
+        "matches": [
+          {
+            "id": "tool_301",
+            "uuid": "b7c376bcbc7e460293b0d588a6bb313e",
+            "name": "擬真G筆",
+            "toolId": "tool_22",
+            "groupId": "tool_23",
+            "path": [
+              "沾水筆",
+              "沾水筆",
+              "擬真G筆"
+            ],
+            "pathIds": [
+              "tool_22",
+              "tool_23",
+              "tool_301"
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "subtool",
+        "text": "圓筆",
+        "name": "圓筆",
+        "bbox": [
+          285,
+          147,
+          43,
+          26
+        ],
+        "coordinateSpace": "panel",
+        "score": 0.90538,
+        "selectionState": "unknown",
+        "selectionScore": 0.0,
+        "matchStatus": "unique",
+        "matches": [
+          {
+            "id": "tool_25",
+            "uuid": "12597feb27b344daa182638a1e3351a8",
+            "name": "圓筆",
+            "toolId": "tool_22",
+            "groupId": "tool_23",
+            "path": [
+              "沾水筆",
+              "沾水筆",
+              "圓筆"
+            ],
+            "pathIds": [
+              "tool_22",
+              "tool_23",
+              "tool_25"
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "subtool",
+        "text": "粗線沾水筆",
+        "name": "粗線沾水筆",
+        "bbox": [
+          233,
+          202,
+          94,
+          24
+        ],
+        "coordinateSpace": "panel",
+        "score": 0.99646,
+        "selectionState": "unknown",
+        "selectionScore": 0.0,
+        "matchStatus": "unique",
+        "matches": [
+          {
+            "id": "tool_26",
+            "uuid": "bba9297fef42462b9f129d3d7bf0fc0d",
+            "name": "粗線沾水筆",
+            "toolId": "tool_22",
+            "groupId": "tool_23",
+            "path": [
+              "沾水筆",
+              "沾水筆",
+              "粗線沾水筆"
+            ],
+            "pathIds": [
+              "tool_22",
+              "tool_23",
+              "tool_26"
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "subtool",
+        "text": "美術字",
+        "name": "美術字",
+        "bbox": [
+          267,
+          255,
+          61,
+          27
+        ],
+        "coordinateSpace": "panel",
+        "score": 0.99862,
+        "selectionState": "unknown",
+        "selectionScore": 0.0,
+        "matchStatus": "unique",
+        "matches": [
+          {
+            "id": "tool_27",
+            "uuid": "ce8b3bbea66946baa9e4619beea2f1ff",
+            "name": "美術字",
+            "toolId": "tool_22",
+            "groupId": "tool_23",
+            "path": [
+              "沾水筆",
+              "沾水筆",
+              "美術字"
+            ],
+            "pathIds": [
+              "tool_22",
+              "tool_23",
+              "tool_27"
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "subtool",
+        "text": "粗澀筆",
+        "name": "粗澀筆",
+        "bbox": [
+          268,
+          310,
+          59,
+          25
+        ],
+        "coordinateSpace": "panel",
+        "score": 0.95683,
+        "selectionState": "unknown",
+        "selectionScore": 0.0,
+        "matchStatus": "unique",
+        "matches": [
+          {
+            "id": "tool_322",
+            "uuid": "62c2989af3c54363b6579c6290ec2049",
+            "name": "粗澀筆",
+            "toolId": "tool_22",
+            "groupId": "tool_23",
+            "path": [
+              "沾水筆",
+              "沾水筆",
+              "粗澀筆"
+            ],
+            "pathIds": [
+              "tool_22",
+              "tool_23",
+              "tool_322"
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "subtool",
+        "text": "粗糙沾水笔",
+        "name": "粗糙沾水笔",
+        "bbox": [
+          234,
+          365,
+          93,
+          22
+        ],
+        "coordinateSpace": "panel",
+        "score": 0.99859,
+        "selectionState": "unknown",
+        "selectionScore": 0.0,
+        "matchStatus": "unique",
+        "matches": [
+          {
+            "id": "tool_409",
+            "uuid": "29d81bf9c1234d4fa2e169de6a19cfb3",
+            "name": "粗糙沾水笔",
+            "toolId": "tool_22",
+            "groupId": "tool_23",
+            "path": [
+              "沾水筆",
+              "沾水筆",
+              "粗糙沾水笔"
+            ],
+            "pathIds": [
+              "tool_22",
+              "tool_23",
+              "tool_409"
+            ]
+          }
+        ]
+      }
+    ],
+    "groupEntries": [],
+    "unmatchedText": [
+      {
+        "text": "+",
+        "score": 0.92114
+      },
+      {
+        "text": "添加下载的素材",
+        "score": 0.99989
+      }
+    ],
+    "catalogSourceFile": "C:\\Users\\dogeegg\\AppData\\Roaming\\CELSYSUserData\\CELSYS\\CLIPStudioPaintVer1_5_0\\Tool\\EditImageTool.todb",
+    "selectionSource": "imageBackgroundHeuristic"
+  },
+  "module": "subtoolState",
+  "status": "changed",
+  "state": {
+    "entries": [
+      {
+        "name": "G筆",
+        "nodeIds": [
+          "tool_24"
+        ],
+        "selectionState": "selected"
+      },
+      {
+        "name": "擬真G筆",
+        "nodeIds": [
+          "tool_301"
+        ],
+        "selectionState": "unknown"
+      },
+      {
+        "name": "圓筆",
+        "nodeIds": [
+          "tool_25"
+        ],
+        "selectionState": "unknown"
+      },
+      {
+        "name": "粗線沾水筆",
+        "nodeIds": [
+          "tool_26"
+        ],
+        "selectionState": "unknown"
+      },
+      {
+        "name": "美術字",
+        "nodeIds": [
+          "tool_27"
+        ],
+        "selectionState": "unknown"
+      },
+      {
+        "name": "粗澀筆",
+        "nodeIds": [
+          "tool_322"
+        ],
+        "selectionState": "unknown"
+      },
+      {
+        "name": "粗糙沾水笔",
+        "nodeIds": [
+          "tool_409"
+        ],
+        "selectionState": "unknown"
+      }
+    ],
+    "groups": []
+  },
+  "error": null,
+  "evidence": {
+    "panelRoi": [
+      300,
+      500,
+      339,
+      475
+    ],
+    "captureId": "published-consumer-check",
+    "capturedTicks": 100,
+    "captureEndTicks": 110,
+    "completedTicks": 200
+  },
+  "ocrEntries": [
+    {
+      "kind": "subtool",
+      "text": "G筆",
+      "name": "G筆",
+      "bbox": [
+        292,
+        39,
+        36,
+        26
+      ],
+      "coordinateSpace": "panel",
+      "score": 0.98219,
+      "selectionState": "selected",
+      "selectionScore": 0.1803921568627451,
+      "matchStatus": "unique",
+      "matches": [
+        {
+          "id": "tool_24",
+          "uuid": "2e9538829638428087045198ca1de791",
+          "name": "G筆",
+          "toolId": "tool_22",
+          "groupId": "tool_23",
+          "path": [
+            "沾水筆",
+            "沾水筆",
+            "G筆"
+          ],
+          "pathIds": [
+            "tool_22",
+            "tool_23",
+            "tool_24"
+          ]
+        }
+      ],
+      "screenBbox": [
+        592,
+        539,
+        36,
+        26
+      ]
+    },
+    {
+      "kind": "subtool",
+      "text": "擬真G筆",
+      "name": "擬真G筆",
+      "bbox": [
+        259,
+        94,
+        68,
+        24
+      ],
+      "coordinateSpace": "panel",
+      "score": 0.99465,
+      "selectionState": "unknown",
+      "selectionScore": 0.0,
+      "matchStatus": "unique",
+      "matches": [
+        {
+          "id": "tool_301",
+          "uuid": "b7c376bcbc7e460293b0d588a6bb313e",
+          "name": "擬真G筆",
+          "toolId": "tool_22",
+          "groupId": "tool_23",
+          "path": [
+            "沾水筆",
+            "沾水筆",
+            "擬真G筆"
+          ],
+          "pathIds": [
+            "tool_22",
+            "tool_23",
+            "tool_301"
+          ]
+        }
+      ],
+      "screenBbox": [
+        559,
+        594,
+        68,
+        24
+      ]
+    },
+    {
+      "kind": "subtool",
+      "text": "圓筆",
+      "name": "圓筆",
+      "bbox": [
+        285,
+        147,
+        43,
+        26
+      ],
+      "coordinateSpace": "panel",
+      "score": 0.90538,
+      "selectionState": "unknown",
+      "selectionScore": 0.0,
+      "matchStatus": "unique",
+      "matches": [
+        {
+          "id": "tool_25",
+          "uuid": "12597feb27b344daa182638a1e3351a8",
+          "name": "圓筆",
+          "toolId": "tool_22",
+          "groupId": "tool_23",
+          "path": [
+            "沾水筆",
+            "沾水筆",
+            "圓筆"
+          ],
+          "pathIds": [
+            "tool_22",
+            "tool_23",
+            "tool_25"
+          ]
+        }
+      ],
+      "screenBbox": [
+        585,
+        647,
+        43,
+        26
+      ]
+    },
+    {
+      "kind": "subtool",
+      "text": "粗線沾水筆",
+      "name": "粗線沾水筆",
+      "bbox": [
+        233,
+        202,
+        94,
+        24
+      ],
+      "coordinateSpace": "panel",
+      "score": 0.99646,
+      "selectionState": "unknown",
+      "selectionScore": 0.0,
+      "matchStatus": "unique",
+      "matches": [
+        {
+          "id": "tool_26",
+          "uuid": "bba9297fef42462b9f129d3d7bf0fc0d",
+          "name": "粗線沾水筆",
+          "toolId": "tool_22",
+          "groupId": "tool_23",
+          "path": [
+            "沾水筆",
+            "沾水筆",
+            "粗線沾水筆"
+          ],
+          "pathIds": [
+            "tool_22",
+            "tool_23",
+            "tool_26"
+          ]
+        }
+      ],
+      "screenBbox": [
+        533,
+        702,
+        94,
+        24
+      ]
+    },
+    {
+      "kind": "subtool",
+      "text": "美術字",
+      "name": "美術字",
+      "bbox": [
+        267,
+        255,
+        61,
+        27
+      ],
+      "coordinateSpace": "panel",
+      "score": 0.99862,
+      "selectionState": "unknown",
+      "selectionScore": 0.0,
+      "matchStatus": "unique",
+      "matches": [
+        {
+          "id": "tool_27",
+          "uuid": "ce8b3bbea66946baa9e4619beea2f1ff",
+          "name": "美術字",
+          "toolId": "tool_22",
+          "groupId": "tool_23",
+          "path": [
+            "沾水筆",
+            "沾水筆",
+            "美術字"
+          ],
+          "pathIds": [
+            "tool_22",
+            "tool_23",
+            "tool_27"
+          ]
+        }
+      ],
+      "screenBbox": [
+        567,
+        755,
+        61,
+        27
+      ]
+    },
+    {
+      "kind": "subtool",
+      "text": "粗澀筆",
+      "name": "粗澀筆",
+      "bbox": [
+        268,
+        310,
+        59,
+        25
+      ],
+      "coordinateSpace": "panel",
+      "score": 0.95683,
+      "selectionState": "unknown",
+      "selectionScore": 0.0,
+      "matchStatus": "unique",
+      "matches": [
+        {
+          "id": "tool_322",
+          "uuid": "62c2989af3c54363b6579c6290ec2049",
+          "name": "粗澀筆",
+          "toolId": "tool_22",
+          "groupId": "tool_23",
+          "path": [
+            "沾水筆",
+            "沾水筆",
+            "粗澀筆"
+          ],
+          "pathIds": [
+            "tool_22",
+            "tool_23",
+            "tool_322"
+          ]
+        }
+      ],
+      "screenBbox": [
+        568,
+        810,
+        59,
+        25
+      ]
+    },
+    {
+      "kind": "subtool",
+      "text": "粗糙沾水笔",
+      "name": "粗糙沾水笔",
+      "bbox": [
+        234,
+        365,
+        93,
+        22
+      ],
+      "coordinateSpace": "panel",
+      "score": 0.99859,
+      "selectionState": "unknown",
+      "selectionScore": 0.0,
+      "matchStatus": "unique",
+      "matches": [
+        {
+          "id": "tool_409",
+          "uuid": "29d81bf9c1234d4fa2e169de6a19cfb3",
+          "name": "粗糙沾水笔",
+          "toolId": "tool_22",
+          "groupId": "tool_23",
+          "path": [
+            "沾水筆",
+            "沾水筆",
+            "粗糙沾水笔"
+          ],
+          "pathIds": [
+            "tool_22",
+            "tool_23",
+            "tool_409"
+          ]
+        }
+      ],
+      "screenBbox": [
+        534,
+        865,
+        93,
+        22
+      ]
+    }
+  ],
+  "groupEntries": []
+}

@@ -21,8 +21,26 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
     public LayerSaveGuard Guard { get; }
     private volatile bool _recordingReady;
     public bool RecordingReady => _recordingReady;
+    private PanelRegionMap _penRegions = PanelRegionMap.Unavailable();
+    public PenDownLocation ClassifyPenDown(int x, int y) => Volatile.Read(ref _penRegions).Classify(x, y);
     private readonly string _initialPackage;
     private readonly DriverInitializationService? _driverInitialization;
+    private readonly RecorderStateRequests _stateRequests = new();
+
+    public async Task<RecorderStateResponse> RequestStatesAsync(RecorderStateRequest request, CancellationToken token)
+    {
+        if (_stopping || !_recordingReady) throw new IOException("State capture helper is unavailable or not initialized.");
+        long ticks = _writer.NowTicks;
+        string package = _writer.ReserveStatePackage(_writer.LastHardwareEventId, ticks, "externalStateRequest");
+        var completion = _stateRequests.Add(package, request, ticks);
+        try
+        {
+            if (!_outgoing.Writer.TryWrite(new { type = "requestStates", requestId = request.RequestId, packageId = package,
+                modules = request.Modules, saveId = request.SaveId, ticks })) throw new IOException("State capture helper has stopped.");
+            return await completion.WaitAsync(TimeSpan.FromSeconds(30), token);
+        }
+        finally { _stateRequests.Remove(package); }
+    }
 
     private UpdateActivatorBridge(MemolineWriter writer, Process process, ProcessLifetimeJob processJob,
         DriverInitializationService? driverInitialization)
@@ -37,6 +55,7 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
         if (driverInitialization is not null)
             _outgoing.Writer.TryWrite(new { type = "driverConfigurations", data = driverInitialization.Catalog });
         _writer.HardwareAppended += OnHardware;
+        _writer.RecordAppended += OnRecord;
         _send = SendAsync();
         _receive = ReceiveAsync();
         _errors = ErrorsAsync();
@@ -90,6 +109,12 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
         }
     }
 
+    private void OnRecord(MemolineEvent evt)
+    {
+        if (evt.Kind == "workspaceStatus")
+            Volatile.Write(ref _penRegions, PanelRegionMap.FromWorkspaceStatus(evt.Data, evt.AppendId, evt.Ticks));
+    }
+
     public void ObserveCursor(int x, int y, bool inCsp, bool foreground, int[] heldKeys, ulong[] operations)
     {
         long ticks = _writer.NowTicks;
@@ -123,6 +148,11 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
                 using var document = JsonDocument.Parse(line);
                 var msg = document.RootElement;
                 string type = msg.GetProperty("type").GetString()!;
+                if (type == "stateRequestPart")
+                {
+                    _stateRequests.Part(msg.GetProperty("packageId").GetString()!, msg.GetProperty("module").GetString()!, msg.GetProperty("data"));
+                    continue;
+                }
                 if (type == "selectDriverConfiguration")
                 {
                     try
@@ -186,6 +216,9 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
                 var refs = msg.GetProperty("relatedEventIds").EnumerateArray().Select(v => v.GetUInt64()).ToArray();
                 _writer.AppendState(kind, msg.GetProperty("ticks").GetInt64(), refs, msg.GetProperty("data"),
                     msg.TryGetProperty("path", out var path) ? path.GetString()! : "immediate");
+                if (kind == "coreStateUpdated" && msg.GetProperty("data") is { } core
+                    && core.TryGetProperty("packageId", out var packageId) && packageId.ValueKind == JsonValueKind.String)
+                    _stateRequests.Part(packageId.GetString()!, core.GetProperty("module").GetString()!, core);
                 if (kind == "workspaceStatus")
                     Console.WriteLine($"[Workspace] {msg.GetProperty("data").GetProperty("status").GetString()}");
                 else if (kind == "updateActivatorError")
@@ -283,7 +316,9 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
     private void Fail(string message)
     {
         if (_stopping) return;
+        Volatile.Write(ref _penRegions, PanelRegionMap.Unavailable());
         _stopping = true;
+        _stateRequests.FailAll(message);
         _outgoing.Writer.TryComplete();
         _writer.AppendState("updateActivatorError", _writer.NowTicks, [], new { message });
         string gap = _writer.ReserveStatePackage(_writer.LastHardwareEventId, _writer.NowTicks, "stateIntegrationUnavailable");
@@ -294,8 +329,10 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _writer.HardwareAppended -= OnHardware;
+        _writer.RecordAppended -= OnRecord;
         await Guard.DisposeAsync();
         _stopping = true;
+        _stateRequests.FailAll("Recording session stopped.");
         _outgoing.Writer.TryComplete();
         var shutdown = Task.WhenAll(_send, _receive, _errors, _process.WaitForExitAsync());
         try

@@ -1,5 +1,6 @@
 import sys
 import unittest
+import threading
 from pathlib import Path
 from unittest.mock import patch
 
@@ -7,6 +8,7 @@ ROOT=Path(__file__).resolve().parents[2]
 sys.path[:0]=[str(ROOT / "recorder_integration"),str(ROOT.parent / "CSP_Shortcut_Manager")]
 from pipeline import Pipeline
 from state_timeline import StateTimeline, semantic_state
+from catalog import BRUSH
 
 
 class CoreRealtimeContractTests(unittest.TestCase):
@@ -71,6 +73,60 @@ class CoreRealtimeContractTests(unittest.TestCase):
         self.assertEqual(message["data"]["status"],"error")
         self.assertEqual(message["data"]["error"],"OCR failed")
         self.assertIsNone(message["data"]["state"])
+
+    def test_brush_value_locations_are_projected_to_screen_without_changing_value_state(self):
+        raw = dict(schema_version=4,brush=dict(name="Pen",status="ok",properties=[
+            dict(key="brush_size",type="number",value=5.4,status="ok")]),value_regions=[
+            dict(property_key="brush_size",property_index=0,category="number",value=5.4,
+                 bbox=[200,40,30,18],source="ocr",status="ok",score=.99,text="5.4",unit="px")])
+        with patch("pipeline.now_ticks",return_value=200):
+            self.timeline.observe("brushState",raw,dict(captureId="first",panelRoi=[-300,500,360,260]))
+        first = self.records[-1]["data"]
+        self.assertEqual(first["valueRegions"][0]["screenBbox"],[-100,540,30,18])
+        self.assertEqual(first["valueRegions"][0]["category"],"number")
+        self.assertEqual(first["valueRegions"][0]["text"],"5.4")
+        self.assertEqual(first["valueRegions"][0]["unit"],"px")
+        self.assertEqual(first["rawResult"],raw)
+        raw["value_regions"][0]["bbox"]=[210,60,30,18]
+        with patch("pipeline.now_ticks",return_value=300):
+            self.timeline.observe("brushState",raw,dict(captureId="second",panelRoi=[100,600,360,260]))
+        second = self.records[-1]["data"]
+        self.assertEqual(second["status"],"unchanged")
+        self.assertEqual(second["valueRegions"][0]["screenBbox"],[310,660,30,18])
+        self.assertEqual(second["evidence"]["captureId"],"second")
+        self.assertEqual(second["state"],first["state"])
+
+    def test_brush_error_returns_empty_locations_and_missing_origin_has_no_screen_box(self):
+        raw = dict(brush=dict(name="Pen",status="ok",properties=[]),value_regions=[
+            dict(property_key="mode",property_index=0,category="icon",value=1,
+                 bbox=[40,50,20,20],source="image",status="ok")])
+        with patch("pipeline.now_ticks",return_value=200):
+            self.timeline.observe("brushState",raw,{})
+        self.assertNotIn("screenBbox",self.records[-1]["data"]["valueRegions"][0])
+        with patch("pipeline.now_ticks",return_value=300):
+            self.timeline.observe("brushState",None,{},"OCR failed")
+        self.assertEqual(self.records[-1]["data"]["valueRegions"],[])
+        self.assertEqual(self.records[-1]["data"]["status"],"error")
+
+    def test_brush_completion_carries_the_origin_of_the_same_capture(self):
+        self.pipeline.analysis_lock=threading.RLock()
+        self.pipeline.panel_activity={}
+        self.pipeline.settings=dict(analysisQuietMs=150)
+        self.pipeline.timeline=self.timeline
+        self.timeline.expect("p",{"brushState"})
+        job=dict(module=BRUSH,crops={BRUSH:dict(screenshotId="image1",roi=[-300,500,360,260])},
+                 ticks=100,refs=[7],captureId="capture1",packageId="p",triggerTicks=90,
+                 captureEndTicks=105,captureLatencyMs=15,captureDurationMs=5,captureBudgetExceeded=False,
+                 reason="operation",initialize=False,causalAmbiguous=False,observedAfterEventId=7)
+        raw=dict(brush=dict(name="Pen",status="ok",properties=[]),value_regions=[
+            dict(property_key="size",property_index=0,category="number",value=5.4,
+                 bbox=[200,40,30,18],source="ocr",status="ok")])
+        with patch("pipeline.now_ticks",return_value=200):
+            self.pipeline._complete_analysis(job,raw,150)
+        data=self.records[-1]["data"]
+        self.assertEqual(data["evidence"]["panelRoi"],[-300,500,360,260])
+        self.assertEqual(data["evidence"]["captureId"],"capture1")
+        self.assertEqual(data["valueRegions"][0]["screenBbox"],[-100,540,30,18])
 
 
 if __name__ == "__main__":

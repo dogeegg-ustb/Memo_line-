@@ -6,3 +6,7 @@ checks/artifacts/
 publish/
 .work/
 recordings/
+Memoline.exe
+clip-layer-bridge.exe
+watcher.log
+.stage/

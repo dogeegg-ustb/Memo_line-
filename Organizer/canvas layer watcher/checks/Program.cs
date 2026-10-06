@@ -214,11 +214,11 @@ compatibility.Accept(Pen(5));
 var mapped = compatibility.Accept(ViewEvent(6, 20));
 Check(mapped?.Layer is { Id: 3, Name: "图层 1", Uuid: "aa-bb" }, "Live current layer maps to layer property core ID rather than stale saved selection");
 var renamed = JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 20, name = "重命名", uuid = "AABB" }, new { id = 3, name = "图层 1", uuid = "other" } } });
-Check(LayerMapping.FromFile(renamed, "图层1", mapped!.Layer).Id == 20, "Layer UUID preserves identity through rename and ID change");
+Check(LayerMapping.FromFile(renamed, "图层1", mapped!.Layer).Id == 3, "Fresh saved name maps to its actual ID instead of a stale UUID");
 try
 {
-    LayerMapping.FromFile(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "图层 1", uuid = "replacement" } } }), "图层1", mapped.Layer);
-    throw new Exception("Replaced same-name layer accepted");
+    LayerMapping.FromFile(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "图层 1", uuid = "replacement" }, new { id = 19, name = "图层1", uuid = "new" } } }), "图层1", mapped.Layer);
+    throw new Exception("Ambiguous saved names accepted");
 }
 catch (InvalidDataException) { checks++; }
 try
@@ -228,6 +228,8 @@ try
 }
 catch (InvalidDataException) { checks++; }
 Check(LayerMapping.FromFile(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "Ink" } } }), "Ink", new(3, "Ink", null)).Id == 3, "Core ID and canonical name used when UUID unavailable");
+Check(LayerMapping.FromFile(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 19, name = "图层 1", uuid = "replacement" } } }), "图层1", mapped.Layer).Id == 19,
+    "Recreated same-name layer maps to the freshly saved file ID");
 try
 {
     SaveCapture.ResolveLayerName(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "Ink" } } }), "Missing");
@@ -285,6 +287,10 @@ using (var timeout = new CancellationTokenSource(250))
 await File.WriteAllTextAsync(source, "after-save");
 using (var timeout = new CancellationTokenSource(3000)) await SaveCapture.StableSnapshotAsync(source, target, signature, timeout.Token);
 Check(await File.ReadAllTextAsync(target) == "after-save", "Only changed stable file copied");
+signature = SaveCapture.Stat(source);
+using (var timeout = new CancellationTokenSource(3000))
+    await SaveCapture.StableSnapshotAsync(source, target, signature, timeout.Token, allowUnchanged: true);
+Check(await File.ReadAllTextAsync(target) == "after-save", "Final save can read a clean document after a stable quiet period");
 
 string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../"));
 string bridge = Path.Combine(root, "bridge/target/release/clip-layer-bridge.exe");
@@ -389,6 +395,34 @@ var integratedWriter = new MemolineWriter(Path.Combine(artifacts, "integrated-ip
 var integratedHub = new RecorderRealtimeHub(integratedWriter);
 var integratedServer = new RecorderRealtimePipeServer(integratedHub);
 using var integratedStop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+var integratedControl = Task.Run(async () =>
+{
+    try
+    {
+        while (!integratedStop.IsCancellationRequested)
+        {
+            await using var pipe = new NamedPipeServerStream(RecorderControlClient.PipeNameFor(Environment.ProcessId),
+                PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            await pipe.WaitForConnectionAsync(integratedStop.Token);
+            using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
+            await using var output = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+            using var request = JsonDocument.Parse((await reader.ReadLineAsync(integratedStop.Token))!);
+            object response;
+            if (J.Text(request.RootElement, "command") == "prepareRecordingEnd")
+            {
+                MemolineEvent? marker = null;
+                void Observe(MemolineEvent frame) { if (frame.Kind == "recordingEndRequested") marker = frame; }
+                integratedWriter.RecordAppended += Observe;
+                try { integratedWriter.AppendState("recordingEndRequested", integratedWriter.NowTicks, [], new { }, "immediate"); }
+                finally { integratedWriter.RecordAppended -= Observe; }
+                response = new { success = true, sessionId = integratedWriter.SessionId, triggerTicks = marker!.Ticks, appendId = marker.AppendId };
+            }
+            else response = new { success = true };
+            await output.WriteLineAsync(JsonSerializer.Serialize(response));
+        }
+    }
+    catch (OperationCanceledException) when (integratedStop.IsCancellationRequested) { }
+});
 var integratedMonitor = new RecognizerMonitor(requireConfirmedViewChange: true) { CaptureRequestsPaused = true };
 var integratedConfigured = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 var integratedCaptured = new TaskCompletionSource<CaptureRequest>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -454,6 +488,21 @@ try
         "The real pipe exposes a later empty aggregation boundary without dispatching any save input");
     Check(integratedMessages.Any(message => message.Kind == "evidenceCaptured") && integratedMessages.Any(message => message.Kind == "penBegin"),
         "The raw-message hook includes evidence and hardware messages even in confirmed-only mode");
+    integratedMonitor.CaptureRequestsPaused = true;
+    int observedBeforeEnd = integratedObservations.Count;
+    var tailBegin = integratedWriter.AppendHardware("penBegin", new { heldKeys = Array.Empty<int>() }, new("tablet", "fixture", "fixture", "fixture"));
+    integratedWriter.AppendHardware("penEnd", new { heldKeys = Array.Empty<int>() }, new("tablet", "fixture", "fixture", "fixture"), tailBegin.EventId);
+    ViewportObservation? endObserved = null;
+    integratedMonitor.RecordingEndObserved += observation => endObserved = observation;
+    var endCapture = await integratedMonitor.PrepareRecordingEndAsync(integratedStop.Token);
+    Check(endCapture is { TriggerKind: "recordingEnd", Context: not null } && endObserved is not null
+        && endCapture.TriggerTicks == endObserved.TriggerTicks && endObserved.Message.AppendId > 0,
+        "Final capture uses the native end marker delivered after queued hardware");
+    Check(endCapture!.Operations.Contains((long)tailBegin.EventId)
+        && endCapture.Context!.Evidence.Snapshot(emptyTicks, endCapture.TriggerTicks).Inputs.Length == 2,
+        "Final capture freezes the unaggregated pen input without a new viewport change");
+    Check(integratedObservations.Count == observedBeforeEnd, "Ending does not invent a viewport-change sample");
+    integratedMonitor.Complete(endCapture, true);
     await integratedWriter.DisposeAsync(); await integratedHub.DisposeAsync();
     await integratedEnded.Task.WaitAsync(integratedStop.Token);
     Check(integratedMessages.Any(message => message.Kind == "sessionEnded"), "The raw-message hook receives the actual session-ended notification");
@@ -461,6 +510,7 @@ try
 finally
 {
     await integratedStop.CancelAsync();
+    await integratedControl;
     try { await integratedRunning; } catch (OperationCanceledException) { }
     await integratedWriter.DisposeAsync(); await integratedHub.DisposeAsync(); await integratedServer.DisposeAsync();
 }

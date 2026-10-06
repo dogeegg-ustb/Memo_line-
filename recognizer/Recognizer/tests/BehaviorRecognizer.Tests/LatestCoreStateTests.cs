@@ -10,6 +10,7 @@ public class LatestCoreStateTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("brushState")]
+    [InlineData("subtoolState")]
     [InlineData("currentLayerState")]
     [InlineData("colorState")]
     [InlineData("canvasViewState")]

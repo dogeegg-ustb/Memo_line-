@@ -18,9 +18,18 @@ $recorderExe = 'D:\Memo_Line\Memo_Line\recognizer\Recognizer\publish\win-x64\Beh
 & $recorderExe --subscribe tablet --pipe 'MemoLine.Recognizer.<sessionId>'
 & $recorderExe --subscribe cores --pipe 'MemoLine.Recognizer.<sessionId>'
 & $recorderExe --subscribe core.canvasViewState --pipe 'MemoLine.Recognizer.<sessionId>'
+& $recorderExe --subscribe shortcuts,layers,layerstage --pipe 'MemoLine.Recognizer.<sessionId>'
 ```
 
-stdout 为 UTF-8 JSONL（一行一条消息），stderr 输出连接错误，Ctrl+C 取消当前订阅。正常录制结束返回 0；连接失败、突然断开或数据缺口返回 1。`all` 展开为全部 8 个频道，`cores` 展开为 5 个解析核心频道。
+stdout 为 UTF-8 JSONL（一行一条消息），stderr 输出连接错误，Ctrl+C 取消当前订阅。正常录制结束返回 0；连接失败、突然断开或数据缺口返回 1。`all` 展开为全部 13 个频道，`cores` 展开为 6 个解析核心频道。
+
+`shortcuts/configurationUpdated` 发布完整的已保存快捷键与功能对照表，含配置目录、来源文件、绑定、修饰键操作、滚轮配置及 warnings；连接时回放最新配置，Recognizer 重载配置后再推送更新。独立查询可使用 `BehaviorRecognizer --shortcuts [--config-dir <directory>]`，无需开始录制。
+
+图层状态核心 `currentLayerState` 对应 `layerstage/currentLayerUpdated`，只发布当前所处图层名称。文件图层结构核心 `clipState` 对应 `layers/layerStructureUpdated`，只发布完整父子结构、内部属性和保存时的当前图层 ID。两个接口的订阅与缓存独立。各自保留对应核心消息的 `status/state/lastConfirmedState/changedFields/evidence/error`、时间和原生帧身份；每条专用投影另占一个实时 sequence。`all` 同时包含原始核心消息与这两个图层投影，消费者可按频道筛选。完整接入说明见 [Memoline 集成接口](../../../../Memoline_demo_csponly/INTERFACES.md)。
+
+`subtools/ocrUpdated` 是新增 `core.subtoolState/stateUpdated` 的独立投影，提供本帧子工具名称的 `data.ocrEntries[]` 和子工具组名称的 `groupEntries[]`：`name/text/kind/bbox/screenBbox/coordinateSpace/score/selectionState/selectionScore/matchStatus/matches`。`matches` 保留完整配置身份和工具/组路径，重名节点不合并。`evidence.panelRoi/captureId/capturedTicks/captureEndTicks` 关联该面板实际采集帧。名称未变化时也更新位置；截图后失败保留 ROI/采集身份并返回空位置，快照遵循现有确认结果与最新诊断的回放语义。
+
+快捷键配置新增 `toolCatalog` 全部工具/组/子工具节点及 `brushPackages` 已安装子工具组列表，工具绑定另有 `tool/subtools/savedSelectedSubtoolId`。保存选中项的 `selectionSource=savedCspConfiguration` 与 OCR 当前图片选择证据独立。接入细节见 [子工具及配置目录](../../../../Memoline_demo_csponly/INTERFACES.md#子工具面板-ocr-接口subtools)。C# 新增 `FollowSubtoolsAsync` 与 `SubscribeSubtools`。
 
 外部 C# 程序引用 `Memoline.Core.csproj` 或程序集：
 
@@ -29,14 +38,14 @@ using BehaviorRecognizer.Realtime;
 
 await foreach (var message in RecorderRealtimeClient.FollowKeyboardAsync(pipeName, token))
     Handle(message);
-// 另外提供 FollowMouseAsync、FollowTabletAsync、FollowCoreAsync(pipeName, module, token)、FollowCoresAsync。
+// 另外提供 FollowMouseAsync、FollowTabletAsync、FollowCoreAsync(pipeName, module, token)、FollowCoresAsync、FollowShortcutsAsync、FollowLayersAsync、FollowLayerStageAsync。
 // 可同时过滤多个频道，并关闭连接时的历史快照：
 await foreach (var message in RecorderRealtimeClient.SubscribeAsync(pipeName,
     ["keyboard", "core.colorState"], includeSnapshot: false, cancellationToken: token))
     Handle(message);
 ```
 
-进程内可以直接创建 `RecorderRealtimeHub(writer)`，然后 `SubscribeKeyboard()`、`SubscribeMouse()`、`SubscribeTablet()`、`SubscribeCore(module)`、`SubscribeCores()`。返回 `RecorderRealtimeSubscription`，通过 `ReadAllAsync(token)` 消费，`DisposeAsync()` 退订。通用 `Subscribe(topics, includeSnapshot: true, capacity: 2048)` 可设置队列大小（最小 8）。先关闭 writer，再关闭 hub；若有 pipe server，最后关闭 server，以便发出 `sessionEnded`。
+进程内可以直接创建 `RecorderRealtimeHub(writer)`，然后 `SubscribeKeyboard()`、`SubscribeMouse()`、`SubscribeTablet()`、`SubscribeCore(module)`、`SubscribeCores()`、`SubscribeShortcuts()`、`SubscribeLayers()`、`SubscribeLayerStage()`。返回 `RecorderRealtimeSubscription`，通过 `ReadAllAsync(token)` 消费，`DisposeAsync()` 退订。通用 `Subscribe(topics, includeSnapshot: true, capacity: 2048)` 可设置队列大小（最小 8）。先关闭 writer，再关闭 hub；若有 pipe server，最后关闭 server，以便发出 `sessionEnded`。
 
 其他语言可直接使用 `\\.\pipe\MemoLine.Recognizer.<sessionId>`：双向字节管道，UTF-8 无 BOM。连接后 5 秒内发送一行请求并刷新：
 
@@ -117,6 +126,7 @@ OTD 单个笔点字段：
 | `channel` / `module` | `data.state` 的信息 |
 |---|---|
 | `core.brushState` / `brushState` | `name`（笔刷名）、`properties[]`，每项含 `key/value/type/unit/enabled/status` 中该属性实际提供的字段；包括笔刷大小、透明度、硬度等被面板识别到的属性 |
+| `core.subtoolState` / `subtoolState` | `entries[]` 和 `groups[]` 的可见名称、候选节点 ID、图片选择状态；位置和 OCR 置信度单独在 `ocrEntries/groupEntries/rawResult` 中提供 |
 | `core.currentLayerState` / `currentLayerState` | 当前唯一选中图层的名称字符串；识别不到时为 null，状态为 unknown |
 | `core.colorState` / `colorState` | `kind`（色彩/透明等类型）、`rgb`、`hex` |
 | `core.canvasViewState` / `canvasViewState` | `canvasOriginScreenPx`、`ocrScalePercent`、`ocrRotationDegrees`；`transform` 内含 `canvasPixelWidth/Height`、`scaleReference`、`cumulativeRelativeScale`、`rotationDegrees`、`scaleGeometryEstimate`；`rawResult` 另保留屏幕 ROI、视口边界、完整变换快照、置信度和失败阶段 |
@@ -134,6 +144,12 @@ OTD 单个笔点字段：
 | `rawResult`, `observedState` | 完整核心原始输出；未能确认的部分观察还可在 observedState 中查看 |
 | `evidence` | 核心实际提供的截图 ID、采样/触发/完成 ticks、相关硬件 ID、`causalAmbiguous`、`observedAfterEventId`；Clip 还可有 saveId、observedTicks 等 |
 | `error` | 失败信息，正常情况为 null |
+
+笔刷频道额外提供 `data.valueRegions[]`，只返回已识别属性值的位置，`category` 为 `number`（数字）、`icon`（复选框/图标/图案）或 `text`（当前文字选项）。区域含 `propertyKey/propertyIndex/value/status/source/bbox/coordinateSpace`，OCR 区域可含 `score`；`bbox` 为面板局部 `[x,y,width,height]`，同帧截图原点可用时附 `screenBbox`（屏幕像素）。`evidence.panelRoi` 与 `captureId` 给出同帧采集范围和身份。位置变化不会单独触发属性值 `changed`，即使 `unchanged` 也应读取本次区域。失败更新区域为空，快照保留其原观察帧的位置。
+
+笔刷 `rawResult.schema_version` 升级为 4：`value_regions` 及每个属性的 `value_category/value_regions/value_location_status` 记录分类和定位结果；旧的 `raw_ocr` 和属性 `evidence[].bbox` 只含值区域，名称与标题诊断不再返回框。无法拆分的属性名+值 OCR 混合框不导出，值可以保留并将定位标为 `unresolved`。命名管道外层版本保持 1。完整字段说明见 [笔刷位置接口](../../../../Memoline_demo_csponly/INTERFACES.md#笔刷属性值的位置接口)。
+
+OCR 值区域另含实际值文字 `text`，可读单位通过 `unit` 保留；文字选项的语义值可能是序号，`text` 仍保留面板上的当前选项文字。即时取证通知的 `evidence.roi` 标记为 `roiRole: "panelCapture"`，表示截图范围，OCR 值位置应读取解析完成的 `valueRegions`。
 
 截图核心的最终证据新增 `analysisStartedTicks`（核心开始执行时间）、`analysisQuietMs`（默认 150）、`analysisToken`（该面板的激活版本）和 `finalEvidence`。未单独解析的中间包标记 `unknown`，`evidence.reason=supersededBeforeAnalysis`；对应图片仍以 `screenshotBlob.statePackageId` 保留在文件中。执行期间再次激活的旧结果只保留为带 `superseded=true` 的原始 `stateResult` 诊断，不覆盖频道的最新已确认状态。Recognizer 将这些诊断和失败状态保存到会话同名的 `*.diagnostics.jsonl`，memoline 只保存成功状态。失败更新仍实时发布，`appendId=0`；从 memoline 恢复历史时仅可恢复成功状态。
 

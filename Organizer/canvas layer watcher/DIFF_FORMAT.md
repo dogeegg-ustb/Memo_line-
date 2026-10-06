@@ -1,6 +1,8 @@
 # dirty-matrix-image-diff/v1
 
-输出根目录是程序旁的 `layer-diffs/`。`current.json` 保存两个完整源图像的描述和相对路径，`snapshots/` 最多保留两个 PNG。`packets/<id>/` 的差异补丁和 JSON 独立保留，不受完整快照轮换影响。
+输出根目录是程序旁的 `layer-diffs/`。`current.json.layerStacks` 按 CLIP 图层编号保存独立的 after/now 快照栈，每层最多保留两个完整源 PNG。顶层 `after/now` 仍指向当前选中的栈，兼容旧读取方式。`packets/<id>/` 的差异补丁和 JSON 独立保留，不受完整快照轮换影响。
+
+切换到另一个编号仅切换快照栈，A → B → A 返回时与 A 自己上次快照比较；不会跨图层比较。首次捕获一个编号、同编号 UUID 改变或源快照缺失时为该层建立新的基准。同一次运行、Recognizer 会话、连接代次和画布尺寸内保留各层历史；这些范围改变时重建整组基准。每层最近快照中最早的 triggerTicks 是事件缓存保留界限，避免 B 的封包清掉 A 尚需关联的笔画。
 
 ## manifest.json
 
@@ -22,7 +24,7 @@
 
 `triggerTicks`、保存派发和输入／状态时间都是从 Recognizer 录制开始计的 Stopwatch ticks；秒数为 `ticks / recognizer.frequency`，不是 Unix 时间。前后两轮的分界使用 API 的 triggerTicks，完成、发布时间和保存派发时间不参与分界。CSP 没有提供精确的文件内容冻结时刻，读取的像素来自实际保存后的文件，不代表可回溯得到过去时刻的像素。
 
-`recognizer.fromTicks/toTicks` 描述 `(前次 triggerTicks, 本次 triggerTicks]`；基准包从 0 开始。触发保存请求时就固定取证缓存，不在图层解析完成后重新读取实时缓存。`capture.triggerKind=evidenceCaptured` 且 `viewPending=true` 表示保存由存证事件提前发起，`capture.view` 是当时最近的已确认视口，尚未声称新视口已识别；后续解析结果仍独立发送。`capture.timeSource` 明确记录 triggerTicks 或旧协议回退来源。`complete` 只表示该输入窗口没有已知连接／缓存缺口，不代表异步核心已全部完成。首张图像前若程序尚未连接，complete 为 false；缓存上限是 50000 个输入点和 2048 条状态，丢弃导致的缺口也明确记录。
+`recognizer.fromTicks/toTicks` 描述 `(该图层前次 triggerTicks, 本次 triggerTicks]`；基准包从 0 开始。触发保存请求时就固定取证缓存，不在图层解析完成后重新读取实时缓存。`capture.triggerKind=evidenceCaptured` 且 `viewPending=true` 表示保存由存证事件提前发起，`capture.view` 是当时最近的已确认视口，尚未声称新视口已识别；后续解析结果仍独立发送。`capture.timeSource` 明确记录 triggerTicks 或旧协议回退来源。`complete` 只表示该输入窗口没有已知连接／缓存缺口，不代表异步核心已全部完成。首张图像前若程序尚未连接，complete 为 false；缓存上限是 50000 个输入点和 2048 条状态，丢弃导致的缺口也明确记录。
 
 `states[]` 的每项包含 `id/channel/ticks/publishedTicks/data`。核心 data 原样保留 status、state、lastConfirmedState、changedFields、rawResult、evidence 和 error 等实际字段。状态优先按 `evidence.triggerTicks` 排序，缺少时依次回退到 capturedTicks、消息 ticks。还包含初始化配置、驱动／设备元数据、键盘状态；存证消息以 `core.<module>.evidence` 单独保存，避免替换确认状态。窗口之前每个频道的最近状态作为上下文保留；`captureStateIds` 指向截止本次 triggerTicks 的最近观察，不强制它们已确认。
 

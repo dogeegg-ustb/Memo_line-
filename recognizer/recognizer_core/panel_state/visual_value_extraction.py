@@ -97,7 +97,7 @@ def _highlighted_pattern(image: np.ndarray, label: list[int]) -> tuple[list[int]
         return None
     return [region.x+x, region.y+y, w, h], base64.b64encode(png.tobytes()).decode('ascii')
 
-def _solid_swatch_index(image: np.ndarray, label: list[int]) -> int | None:
+def _solid_swatch_index(image: np.ndarray, label: list[int]) -> tuple[int, list[int]] | None:
     """Number a row of outlined, plain color cells from left to right (1-based)."""
     region = _right_region(image, label)
     if region is None:
@@ -133,29 +133,162 @@ def _solid_swatch_index(image: np.ndarray, label: list[int]) -> int | None:
     if len(centers) < 2:
         return None
     nearest = min(range(len(centers)), key=lambda i: abs(centers[i]-(sx+sw/2)))
-    return nearest+1 if abs(centers[nearest]-(sx+sw/2)) <= sw*.35 else None
+    if abs(centers[nearest]-(sx+sw/2)) <= sw*.35:
+        return nearest+1, [region.x+sx, region.y+sy, sw, sh]
+    return None
 
-def apply_visual_values(image: np.ndarray, recognition: RoiRecognition) -> None:
+def _hardness_indicator(image, label):
+    """Count the filled prefix of the five-cell hardness indicator.
+
+    These cells are cumulative, unlike the exclusive anti-alias buttons.
+    Never number the entire connected filled region as one radio choice.
+    """
+    height,width=image.shape[:2]
+    left=max(0,int(label[0]+label[2]-2))
+    top=max(0,int(label[1]-label[3]*.65))
+    bottom=min(height,int(label[1]+label[3]*1.8))
+    crop=image[top:bottom,left:width]
+    if crop.size==0:
+        return None
+    gray=cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY)
+    contours,_=cv2.findContours(cv2.Canny(gray,15,50),cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+    boxes=[]
+    for contour in contours:
+        x,y,w,h=cv2.boundingRect(contour)
+        if (w>=18 and label[3]*.7<=h<=label[3]*1.8 and 1<=w/h<=2.2
+                and abs(top+y+h/2-(label[1]+label[3]/2))<=label[3]*.65):
+            boxes.append((x,y,w,h))
+    if not boxes:
+        return None
+    typical=float(np.median([b[2] for b in boxes]))
+    unique=[]
+    for box in sorted(boxes,key=lambda b:b[0]+b[2]/2):
+        if abs(box[2]-typical)>typical*.2:
+            continue
+        if not unique or abs(box[0]+box[2]/2-(unique[-1][0]+unique[-1][2]/2))>typical*.5:
+            unique.append(box)
+    if len(unique)!=5:
+        return None
+    centers=[b[0]+b[2]/2 for b in unique]
+    gaps=np.diff(centers)
+    if max(gaps)-min(gaps)>typical*.15:
+        return None
+    active=[]
+    for x,y,w,h in unique:
+        hsv=cv2.cvtColor(crop[y+3:y+h-3,x+3:x+w-3],cv2.COLOR_BGR2HSV)
+        active.append(float(np.mean(hsv[:,:,1]>=32))>=.5)
+    count=sum(active)
+    if not count or active!=[True]*count+[False]*(5-count):
+        return None
+    x,y,w,h=unique[count-1]
+    return count,[left+x,top+y,w,h]
+
+
+def _antialias_choice(image, label, options, definition):
+    """Identify a missed text choice using the verified four-button order.
+
+    Two or more recognized labels anchor the grid. A unique filled highlight
+    must align with it; unreadable dropdowns or irregular grids stay unknown.
+    """
+    from .property_catalog import normalize
+    values = definition.get('enum_values', [])
+    if len(values) != 4:
+        return None
+    aliases = {normalize(text): i for i, texts in enumerate(values) for text in texts}
+    anchors = [(aliases[normalize(o.text)], o.bbox()[0]+o.bbox()[2]/2)
+               for o in options if normalize(o.text) in aliases]
+    if len(anchors) < 2 or len({i for i,_ in anchors}) != len(anchors):
+        return None
+    indices, centers = zip(*anchors)
+    slope, origin = np.polyfit(indices, centers, 1)
+    if slope < max(18, label[3]) or any(abs(origin+slope*i-x) > slope*.15 for i,x in anchors):
+        return None
+    height, width = image.shape[:2]
+    left, right = max(label[0]+label[2]+2, int(origin-slope*.6)), min(width, int(origin+slope*3.6))
+    top, bottom = max(0,int(label[1]-label[3]*.6)), min(height,int(label[1]+label[3]*1.7))
+    if left >= right or top >= bottom:
+        return None
+    hsv = cv2.cvtColor(image[top:bottom,left:right], cv2.COLOR_BGR2HSV)
+    mask = np.uint8((hsv[:,:,1] >= 32) & (hsv[:,:,2] >= 35))
+    _,_,stats,_ = cv2.connectedComponentsWithStats(mask,8)
+    tiles = [(int(x),int(y),int(w),int(h)) for x,y,w,h,area in stats[1:]
+             if slope*.45 <= w <= slope*1.2 and h >= max(12,label[3]*.55) and area >= .45*w*h]
+    if len(tiles) != 1:
+        return None
+    x,y,w,h = tiles[0]
+    coordinate = (left+x+w/2-origin)/slope
+    index = round(coordinate)
+    if not 0 <= index < 4 or abs(coordinate-index) > .25:
+        return None
+    return index+1, [left+x,top+y,w,h], values[index][0]
+
+
+def apply_visual_values(image: np.ndarray, recognition: RoiRecognition, catalog=None) -> None:
     """Classify colored selection controls in a full OCR frame as well."""
     _apply_disabled_styles(image, recognition)
     states_by_item = {id(item): state for item, state in zip(recognition.ocr, recognition.visual)}
     for parameter in recognition.parameters:
         label = _label_box(parameter)
-        if label is None:
+        if label is None or parameter['type'] in ('number', 'checkbox'):
             continue
         options = _row_options(recognition, label)
+        # Do not treat a second property's label/value on this row as a choice.
+        next_labels = [box[0] for other in recognition.parameters if other is not parameter
+                       and (box := _label_box(other)) and box[0] > label[0]
+                       and abs(box[1]+box[3]/2-(label[1]+label[3]/2)) <= max(12, label[3]*.75)]
+        if next_labels:
+            options = [option for option in options if option.bbox()[0] < min(next_labels)]
+        if parameter['key'] in ('brush_tip.hardness','dual.brush_tip.hardness') and not options:
+            indicator=_hardness_indicator(image,label)
+            if indicator is not None:
+                index,box=indicator
+                parameter.update(type='highlight_index',value=index,raw_text=str(index),status='ok',unit=None,
+                    observed={'label':parameter['label'],'selected_index':index,'total_cells':5,
+                              'control_kind':'cumulative_indicator'},value_source='image')
+                parameter['_value_category']='icon'
+                parameter['_value_evidence']=[dict(roi_id=recognition.roi_id,bbox=box,type='selected_icon',
+                    reason='五格累积硬度指示器，定位最后一格填色单元')]
+                continue
+            if parameter.get('value') == 'unknown':
+                continue
+        if catalog and parameter['key'] in ('antialiasing','2_brush_shape.anti_aliasing'):
+            choice = _antialias_choice(image,label,options,catalog.by_key[parameter['key']])
+            if choice is not None:
+                index,box,text = choice
+                parameter.update(type='highlight_index',value=index,raw_text=str(index),status='ok',unit=None,
+                                 observed={'label':parameter['label'],'selected_index':index,'option_text':text},
+                                 value_source='image')
+                parameter['_value_category'] = 'text'
+                parameter['_value_evidence'] = [dict(roi_id=recognition.roi_id,bbox=box,type='selected_background',
+                    text=text,reason='已识别选项锚定四档顺序，同帧唯一高亮单元格')]
+                continue
         index = (_highlight_index_from_visual(options, states_by_item)
                  if len(states_by_item) == len(recognition.ocr)
                  else _highlight_index(image, options))
         if index is not None:
+            selected = options[index-1]
+            if catalog and parameter['key'] in ('antialiasing','2_brush_shape.anti_aliasing'):
+                from .property_catalog import normalize
+                values = catalog.by_key[parameter['key']].get('enum_values', [])
+                known = [i+1 for i,aliases in enumerate(values) if normalize(selected.text) in {normalize(a) for a in aliases}]
+                if len(known) != 1:
+                    continue
+                index = known[0]
             parameter.update(type='highlight_index', value=index, raw_text=str(index), status='ok', unit=None,
-                             observed={'label': parameter['label'], 'selected_index': index, 'option_text': options[index-1].text},
+                             observed={'label': parameter['label'], 'selected_index': index, 'option_text': selected.text},
                              value_source='image')
+            parameter['_value_category'] = 'text'
+            parameter['_value_evidence'] = [{'roi_id': recognition.roi_id, 'bbox': selected.bbox(),
+                'type': 'ocr_text', 'text': selected.text, 'ocr_score': selected.score, 'reason': '当前高亮文字选项'}]
         elif not options and parameter.get('value') == 'unknown' and parameter['type'] not in ('number', 'checkbox'):
-            index = _solid_swatch_index(image, label)
-            if index is not None:
+            swatch = _solid_swatch_index(image, label)
+            if swatch is not None:
+                index, box = swatch
                 parameter.update(type='highlight_index', value=index, raw_text=str(index), status='ok', unit=None,
                                  observed={'label': parameter['label'], 'selected_index': index}, value_source='image')
+                parameter['_value_category'] = 'icon'
+                parameter['_value_evidence'] = [{'roi_id': recognition.roi_id, 'bbox': box,
+                    'type': 'selected_icon', 'reason': '当前高亮图标单元格'}]
                 continue
             pattern = _highlighted_pattern(image, label)
             if pattern is not None:
@@ -163,6 +296,9 @@ def apply_visual_values(image: np.ndarray, recognition: RoiRecognition) -> None:
                 parameter.update(type='highlight_pattern', value={'mime_type': 'image/png', 'png_base64': png}, raw_text=None, status='ok',
                                  observed={'label': parameter['label'], 'image_bbox': box}, value_source='image',
                                  evidence=parameter['evidence'] + [{'roi_id': recognition.roi_id, 'bbox': box, 'type': 'selected_pattern', 'reason': '当前帧高亮区域包含的图案 PNG'}])
+                parameter['_value_category'] = 'icon'
+                parameter['_value_evidence'] = [{'roi_id': recognition.roi_id, 'bbox': box,
+                    'type': 'selected_pattern', 'reason': '当前高亮图案'}]
     for parameter in recognition.parameters:
         if parameter.get('enabled') == 'disabled':
             parameter['status'] = 'disabled'

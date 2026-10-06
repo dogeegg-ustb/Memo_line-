@@ -1,0 +1,10 @@
+{
+  "SessionId": "73b4478f875147ed9d40bb07410dbaae",
+  "Frequency": 10000000,
+  "MechanicalSha256": "19f13c3b038e7514846613d12eb7b6617a00513df86a898935238b101bb06871",
+  "AggregationSha256": "ecb5afb5f5ab1201a6db7d1bb653f9996aa0a6af7de02bdb089ac869bc5c81de",
+  "FixedSha256": "a3a4dd7b997ce85452f5563e1f81ae0e961c5a25954778c5ab39c375a0237b1d",
+  "PacketCount": 6,
+  "AssetCount": 23,
+  "DimensionSampleCount": 7
+}

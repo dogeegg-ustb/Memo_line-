@@ -16,6 +16,7 @@ internal sealed class RecognizerMonitor
     public event Action<string>? Diagnostic;
     public event Action<CaptureRequest>? Capture;
     public event Action<ViewportObservation>? ViewportObserved;
+    public event Action<ViewportObservation>? RecordingEndObserved;
     public event Action<RecorderRealtimeEvent>? MessageReceived;
     private readonly bool _requireConfirmedViewChange;
     private bool _captureRequestsPaused;
@@ -34,23 +35,45 @@ internal sealed class RecognizerMonitor
     private string? _clipPath;
     private Size? _pixelSize;
     private string? _controlPipe;
+    private int _controlProcessId;
     private string _session = "";
     private bool _earlyEvidence;
+    private TaskCompletionSource<ViewportObservation> _recordingEnd = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public string SessionId { get { lock (_sync) return _session; } }
     public EvidenceWindow GetEvidence(long from, long to) { lock (_sync) return _evidence.Snapshot(from, to); }
     public string? ControlPipe { get { lock (_sync) return _controlPipe; } }
+    public int ControlProcessId { get { lock (_sync) return _controlProcessId; } }
     public Size? PixelSize { get { lock (_sync) return _pixelSize; } }
     public bool Current(CaptureRequest request) { lock (_sync) return _state.Valid(request); }
     public bool InContact { get { lock (_sync) return _state.InContact; } }
-    public void Complete(CaptureRequest request, bool success)
+    public void Complete(CaptureRequest request, bool success, long? evidenceRetentionTicks = null)
     {
         lock (_sync)
         {
             _state.Complete(request, success);
-            if (success && request.Generation == _state.Generation) _evidence.Trim(request.TriggerTicks);
+            if (success && request.Generation == _state.Generation)
+                _evidence.Trim(Math.Clamp(evidenceRetentionTicks ?? request.TriggerTicks, 0, request.TriggerTicks));
         }
     }
     public string? ClipPath { get { lock (_sync) return _clipPath; } }
+
+    public async Task<CaptureRequest?> PrepareRecordingEndAsync(CancellationToken token)
+    {
+        var control = ControlPipe;
+        if (control is null) throw new InvalidOperationException("Recognizer 控制接口尚未就绪，末尾包将保留失败原因。");
+        var result = await new RecorderControlClient(control, text => Diagnostic?.Invoke(text)).PrepareRecordingEndAsync(token);
+        var observation = await _recordingEnd.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+        if (J.Text(result, "sessionId") != observation.Message.SessionId
+            || J.Tick(result, "triggerTicks", -1) != observation.TriggerTicks
+            || J.Tick(result, "appendId", -1) != (long)observation.Message.AppendId)
+            throw new InvalidDataException("结束边界与 Recognizer 原生消息不一致。");
+        lock (_sync)
+        {
+            var request = _state.ReserveRecordingEnd(observation.Message);
+            if (request is null || _clipPath is null || _pixelSize is not { } pixels || _controlPipe is not { } pipe) return null;
+            return request with { Context = new(_session, pixels, pipe, _evidence.Freeze(request.TriggerTicks)) };
+        }
+    }
 
     public async Task RunAsync(string endpoint, string clipPath, CancellationToken token)
     {
@@ -69,6 +92,7 @@ internal sealed class RecognizerMonitor
                 {
                     _state.Reset(); _clipPath = null; _pixelSize = null; _session = "";
                     _controlPipe = selected.ProcessId > 0 ? RecorderControlClient.PipeNameFor(selected.ProcessId) : null;
+                    _controlProcessId = selected.ProcessId;
                 }
                 Status?.Invoke("连接 Recognizer：" + pipe);
                 Diagnostic?.Invoke($"实时订阅：pipe={pipe}，processId={selected.ProcessId}，channels=keyboard,mouse,tablet,cores，controlPipe={ControlPipe}");
@@ -83,6 +107,8 @@ internal sealed class RecognizerMonitor
                         {
                             lock (_sync)
                             {
+                                if (_session != message.SessionId)
+                                    _recordingEnd = new(TaskCreationOptions.RunContinuationsAsynchronously);
                                 _session = message.SessionId;
                                 _earlyEvidence = J.Get(message.Data, "evidenceCapturedNotifications").ValueKind == JsonValueKind.True;
                                 _evidence.Reset(_session, J.Tick(message.Data, "frequency", 0), message.Ticks);
@@ -93,6 +119,15 @@ internal sealed class RecognizerMonitor
                             Diagnostic?.Invoke(_requireConfirmedViewChange ? "聚集模式使用已确认的视口变化作为封包边界"
                                 : _earlyEvidence ? "Recognizer 支持存证即时消息，保存不等待视口解析结果" : "Recognizer 未声明存证即时消息能力，当前连接回退到解析结果触发保存；请启动新版 Recognizer");
                             configuration = ReadConfigurationAsync(recording, clipPath, connection.Token);
+                        }
+                        if (message.Kind == "recordingEndRequested")
+                        {
+                            lock (_sync)
+                            {
+                                var observation = new ViewportObservation(message, message.Ticks, 0, false, _state.Dirty);
+                                RecordingEndObserved?.Invoke(observation);
+                                _recordingEnd.TrySetResult(observation);
+                            }
                         }
                         if (message.Kind == "sessionEnded") { _ended.Add(pipe); Status?.Invoke("录制已结束，等待新会话"); }
                         continue;

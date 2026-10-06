@@ -45,8 +45,10 @@ internal static class SaveCapture
         if (!Native.InputIdle() || inContact()) throw new InvalidOperationException("用户仍在按键或笔接触中；本次保存已跳过");
         if (!stillValid()) throw new InvalidOperationException("会话或图层状态已改变；本次保存已跳过");
         Signature before = Stat(clip);
-        status(request.ViewPending ? "画布已存证，调用 Recognizer 保存接口，不等待视口解析…" : "画布视图已变化，调用 Recognizer 保存接口…");
-        var controlResponse = await control.SaveClipAsync(clip, ct, request.TriggerTicks);
+        bool finalCapture = request.TriggerKind == "recordingEnd";
+        status(finalCapture ? "录制结束，调用 Recognizer 保存接口并解析最终图层…"
+            : request.ViewPending ? "画布已存证，调用 Recognizer 保存接口，不等待视口解析…" : "画布视图已变化，调用 Recognizer 保存接口…");
+        var controlResponse = await control.SaveClipAsync(clip, ct, request.TriggerTicks, activateCsp: finalCapture);
         string directory = Path.Combine(AppContext.BaseDirectory, "snapshots");
         Directory.CreateDirectory(directory);
         string unique = "trigger-" + request.TriggerTicks.ToString("D20", System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N");
@@ -54,7 +56,7 @@ internal static class SaveCapture
         bool keepPng = false;
         try
         {
-            await StableSnapshotAsync(clip, snapshot, before, ct);
+            await StableSnapshotAsync(clip, snapshot, before, ct, allowUnchanged: finalCapture);
             if (!stillValid()) throw new InvalidOperationException("监听会话已改变；旧结果已丢弃");
             string inspection = await Bridge.RunAsync(bridge, ["inspect", snapshot], token);
             using var inspected = JsonDocument.Parse(inspection);
@@ -85,7 +87,8 @@ internal static class SaveCapture
     internal static string ResolveLayerName(JsonElement inspection, string observedName)
         => LayerMapping.FromFile(inspection, observedName, null).Name;
 
-    internal static async Task StableSnapshotAsync(string source, string target, Signature before, CancellationToken token)
+    internal static async Task StableSnapshotAsync(string source, string target, Signature before, CancellationToken token,
+        bool allowUnchanged = false)
     {
         Signature? previous = null;
         var stable = Stopwatch.StartNew();
@@ -95,8 +98,8 @@ internal static class SaveCapture
             try
             {
                 var now = Stat(source);
-                if (now == before || now != previous) { previous = now; stable.Restart(); }
-                else if (stable.ElapsedMilliseconds >= 700)
+                if ((!allowUnchanged && now == before) || now != previous) { previous = now; stable.Restart(); }
+                else if (stable.ElapsedMilliseconds >= (now == before ? 1500 : 700))
                 {
                     // Refuse to copy while CSP has a writable handle; allow source replacement on next poll.
                     using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -116,6 +119,9 @@ internal static class SaveCapture
 
 internal static class Native
 {
+    [DllImport("user32.dll")] private static extern bool AllowSetForegroundWindow(uint processId);
+    internal static void AllowRecorderForeground(int processId)
+    { if (processId > 0) AllowSetForegroundWindow((uint)processId); }
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     internal static bool InputIdle() => new[] { 1, 2, 4, 16, 17, 18, 32, 91, 92, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5 }
         .All(k => (GetAsyncKeyState(k) & 0x8000) == 0);

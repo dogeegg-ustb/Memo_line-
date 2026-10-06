@@ -16,6 +16,7 @@ out/
 __pycache__/
 *.pyc
 *.pyo
+**/.test-temp/
 
 # Python virtualenvs (recreate from requirements.txt)
 .venv/

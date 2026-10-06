@@ -1,0 +1,1255 @@
+{
+  "appendId": 0,
+  "path": "delayed",
+  "kind": "coreStateUpdated",
+  "eventId": 0,
+  "ticks": 726195452,
+  "appendedTicks": 733483676,
+  "operationId": null,
+  "relatedEventIds": [],
+  "deviceSource": null,
+  "data": {
+    "packageId": "d34c336f5cf749c8b589c0cf31acaed9",
+    "initial": false,
+    "rawResult": {
+      "schema_version": 4,
+      "frame_id": 0,
+      "captured_at": "2026-10-06T09:01:44.392Z",
+      "recognized_at": "2026-10-06T09:01:45.069Z",
+      "last_observed_at": "2026-10-06T09:01:45.069Z",
+      "status": "partial",
+      "brush": {
+        "name": "三",
+        "status": "ok",
+        "candidates": [],
+        "evidence": [
+          {
+            "roi_id": "tool_properties",
+            "type": "ocr_text",
+            "ocr_score": 0.9843,
+            "reason": "当前工具属性标题明确显示的工具名称"
+          },
+          {
+            "roi_id": "tool_properties",
+            "type": "ocr_text",
+            "ocr_score": 0.99907,
+            "reason": "当前工具属性标题明确显示的工具名称"
+          },
+          {
+            "roi_id": "tool_properties",
+            "type": "ocr_text",
+            "ocr_score": 0.99523,
+            "reason": "当前工具属性标题明确显示的工具名称"
+          }
+        ],
+        "source": "tool_properties",
+        "incomplete": false,
+        "properties": [
+          {
+            "key": "brush_size",
+            "label": "笔刷尺寸",
+            "type": "number",
+            "value": 27.2,
+            "unit": null,
+            "raw_text": "27.2",
+            "enabled": "unknown",
+            "status": "ok",
+            "evidence": [
+              {
+                "roi_id": "tool_properties",
+                "bbox": [
+                  242,
+                  108,
+                  60,
+                  24
+                ],
+                "type": "ocr_text",
+                "text": "27.2",
+                "ocr_score": 0.99971,
+                "reason": "数字值词段"
+              }
+            ],
+            "observed": {
+              "label": "笔刷尺寸",
+              "number": 27.2,
+              "unit": null
+            },
+            "definition": {
+              "property_id": "brush_size.brush_size",
+              "category": "Brush size",
+              "value_kind": "number",
+              "read_support": "visible_number_checkbox_or_text_enum",
+              "sources": [
+                {
+                  "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/B.htm",
+                  "section": "Brush size",
+                  "item": "Brush size"
+                },
+                {
+                  "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/12.htm",
+                  "section": "筆刷尺寸",
+                  "item": "筆刷尺寸"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.7",
+                  "kind": "installed_ui_translation"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.120",
+                  "kind": "installed_ui_translation"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.47",
+                  "kind": "installed_ui_translation"
+                }
+              ],
+              "catalog_version": "2026-09-24",
+              "match_method": "exact",
+              "context_candidates": []
+            },
+            "value_category": "number",
+            "value_regions": [
+              {
+                "property_key": "brush_size",
+                "property_index": 0,
+                "category": "number",
+                "value": 27.2,
+                "bbox": [
+                  242,
+                  108,
+                  60,
+                  24
+                ],
+                "coordinate_space": "panel",
+                "source": "ocr",
+                "roi_id": "tool_properties",
+                "status": "ok",
+                "score": 0.99971,
+                "text": "27.2"
+              }
+            ],
+            "value_location_status": "located"
+          },
+          {
+            "key": "antialiasing",
+            "label": "消除锯齿",
+            "type": "enum",
+            "value": "unknown",
+            "unit": null,
+            "raw_text": null,
+            "enabled": "unknown",
+            "status": "partial",
+            "evidence": [],
+            "observed": {
+              "label": "消除锯齿",
+              "option": "unknown"
+            },
+            "definition": {
+              "property_id": "anti_aliasing.anti_aliasing",
+              "category": "Anti-aliasing",
+              "value_kind": "enum",
+              "read_support": "visible_number_checkbox_or_text_enum",
+              "sources": [
+                {
+                  "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/A.htm",
+                  "section": "Anti-aliasing",
+                  "item": "Anti-aliasing"
+                },
+                {
+                  "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/10.htm",
+                  "section": "消除鋸齒",
+                  "item": "消除鋸齒"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.42.1.37",
+                  "kind": "installed_ui_translation"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.3",
+                  "kind": "installed_ui_translation"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.55",
+                  "kind": "installed_ui_translation"
+                }
+              ],
+              "catalog_version": "2026-09-24",
+              "match_method": "exact",
+              "context_candidates": []
+            },
+            "value_category": "text",
+            "value_regions": [],
+            "value_location_status": "unresolved"
+          },
+          {
+            "key": "brush_tip.hardness",
+            "label": "硬度",
+            "type": "highlight_index",
+            "value": 1,
+            "unit": null,
+            "raw_text": "1",
+            "enabled": "unknown",
+            "status": "ok",
+            "evidence": [
+              {
+                "roi_id": "tool_properties",
+                "bbox": [
+                  162,
+                  203,
+                  45,
+                  32
+                ],
+                "type": "selected_icon",
+                "reason": "当前高亮图标单元格"
+              }
+            ],
+            "observed": {
+              "label": "硬度",
+              "selected_index": 1
+            },
+            "definition": {
+              "property_id": "brush_tip.hardness",
+              "category": "Brush tip",
+              "value_kind": "compound",
+              "read_support": "visible_number_checkbox_or_text_enum",
+              "sources": [
+                {
+                  "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/B.htm",
+                  "section": "Brush tip",
+                  "item": "Hardness"
+                },
+                {
+                  "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/12.htm",
+                  "section": "筆刷前端",
+                  "item": "硬度"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.20",
+                  "kind": "installed_ui_translation"
+                }
+              ],
+              "catalog_version": "2026-09-24",
+              "match_method": "exact",
+              "context_candidates": []
+            },
+            "value_source": "image",
+            "value_category": "icon",
+            "value_regions": [
+              {
+                "property_key": "brush_tip.hardness",
+                "property_index": 2,
+                "category": "icon",
+                "value": 1,
+                "bbox": [
+                  162,
+                  203,
+                  45,
+                  32
+                ],
+                "coordinate_space": "panel",
+                "source": "image",
+                "roi_id": "tool_properties",
+                "status": "ok"
+              }
+            ],
+            "value_location_status": "located"
+          },
+          {
+            "key": "brush_tip.brush_density",
+            "label": "笔刷浓度",
+            "type": "number",
+            "value": 100,
+            "unit": null,
+            "raw_text": "100",
+            "enabled": "unknown",
+            "status": "ok",
+            "evidence": [
+              {
+                "roi_id": "tool_properties",
+                "bbox": [
+                  253,
+                  257,
+                  36,
+                  21
+                ],
+                "type": "ocr_text",
+                "text": "100",
+                "ocr_score": 0.99993,
+                "reason": "数字值词段"
+              }
+            ],
+            "observed": {
+              "label": "笔刷浓度",
+              "number": 100,
+              "unit": null
+            },
+            "definition": {
+              "property_id": "brush_tip.brush_density",
+              "category": "Brush tip",
+              "value_kind": "number",
+              "read_support": "visible_number_checkbox_or_text_enum",
+              "sources": [
+                {
+                  "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/B.htm",
+                  "section": "Brush tip",
+                  "item": "Brush density"
+                },
+                {
+                  "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/12.htm",
+                  "section": "筆刷前端",
+                  "item": "筆刷濃度"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.16",
+                  "kind": "installed_ui_translation"
+                }
+              ],
+              "catalog_version": "2026-09-24",
+              "match_method": "exact",
+              "context_candidates": []
+            },
+            "value_category": "number",
+            "value_regions": [
+              {
+                "property_key": "brush_tip.brush_density",
+                "property_index": 3,
+                "category": "number",
+                "value": 100,
+                "bbox": [
+                  253,
+                  257,
+                  36,
+                  21
+                ],
+                "coordinate_space": "panel",
+                "source": "ocr",
+                "roi_id": "tool_properties",
+                "status": "ok",
+                "score": 0.99993,
+                "text": "100"
+              }
+            ],
+            "value_location_status": "located"
+          },
+          {
+            "key": "stabilization",
+            "label": "手颤修正",
+            "type": "number",
+            "value": 2,
+            "unit": null,
+            "raw_text": "2",
+            "enabled": "unknown",
+            "status": "ok",
+            "evidence": [
+              {
+                "roi_id": "tool_properties",
+                "bbox": [
+                  271,
+                  356,
+                  16,
+                  19
+                ],
+                "type": "ocr_text",
+                "text": "2",
+                "ocr_score": 0.9998,
+                "reason": "数字值词段"
+              }
+            ],
+            "observed": {
+              "label": "手颤修正",
+              "number": 2,
+              "unit": null
+            },
+            "definition": {
+              "property_id": "correction.stabilization",
+              "category": "Correction",
+              "value_kind": "number",
+              "read_support": "visible_number_checkbox_or_text_enum",
+              "sources": [
+                {
+                  "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/C.htm",
+                  "section": "Correction",
+                  "item": "Stabilization"
+                },
+                {
+                  "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/9.htm",
+                  "section": "修正",
+                  "item": "抖動修正"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.11",
+                  "kind": "installed_ui_translation"
+                }
+              ],
+              "catalog_version": "2026-09-24",
+              "match_method": "exact",
+              "context_candidates": []
+            },
+            "value_category": "number",
+            "value_regions": [
+              {
+                "property_key": "stabilization",
+                "property_index": 4,
+                "category": "number",
+                "value": 2,
+                "bbox": [
+                  271,
+                  356,
+                  16,
+                  19
+                ],
+                "coordinate_space": "panel",
+                "source": "ocr",
+                "roi_id": "tool_properties",
+                "status": "ok",
+                "score": 0.9998,
+                "text": "2"
+              }
+            ],
+            "value_location_status": "located"
+          }
+        ]
+      },
+      "unresolved": [
+        {
+          "roi_id": "tool_properties",
+          "raw_text": "較硬",
+          "reason": "未匹配到已知属性标签",
+          "evidence": [
+            {
+              "roi_id": "tool_properties",
+              "type": "ocr_text",
+              "ocr_score": 0.93143,
+              "reason": "当前帧文字未匹配属性库"
+            }
+          ]
+        },
+        {
+          "roi_id": "tool_properties",
+          "raw_text": "√矢量擦除",
+          "reason": "未匹配到已知属性标签",
+          "evidence": [
+            {
+              "roi_id": "tool_properties",
+              "type": "ocr_text",
+              "ocr_score": 0.91391,
+              "reason": "当前帧文字未匹配属性库"
+            }
+          ]
+        }
+      ],
+      "timings_ms": {
+        "capture": 0,
+        "ocr": 670,
+        "parse": 7,
+        "total": 677
+      },
+      "panels": [
+        {
+          "roi_id": "tool_properties",
+          "role": "tool_properties",
+          "input_pixels": 169740,
+          "roi_pixels": 169740,
+          "ocr_ms": 670,
+          "status": "read"
+        }
+      ],
+      "catalog": {
+        "version": "2026-09-24",
+        "property_count": 150
+      },
+      "value_regions": [
+        {
+          "property_key": "brush_size",
+          "property_index": 0,
+          "category": "number",
+          "value": 27.2,
+          "bbox": [
+            242,
+            108,
+            60,
+            24
+          ],
+          "coordinate_space": "panel",
+          "source": "ocr",
+          "roi_id": "tool_properties",
+          "status": "ok",
+          "score": 0.99971,
+          "text": "27.2"
+        },
+        {
+          "property_key": "brush_tip.hardness",
+          "property_index": 2,
+          "category": "icon",
+          "value": 1,
+          "bbox": [
+            162,
+            203,
+            45,
+            32
+          ],
+          "coordinate_space": "panel",
+          "source": "image",
+          "roi_id": "tool_properties",
+          "status": "ok"
+        },
+        {
+          "property_key": "brush_tip.brush_density",
+          "property_index": 3,
+          "category": "number",
+          "value": 100,
+          "bbox": [
+            253,
+            257,
+            36,
+            21
+          ],
+          "coordinate_space": "panel",
+          "source": "ocr",
+          "roi_id": "tool_properties",
+          "status": "ok",
+          "score": 0.99993,
+          "text": "100"
+        },
+        {
+          "property_key": "stabilization",
+          "property_index": 4,
+          "category": "number",
+          "value": 2,
+          "bbox": [
+            271,
+            356,
+            16,
+            19
+          ],
+          "coordinate_space": "panel",
+          "source": "ocr",
+          "roi_id": "tool_properties",
+          "status": "ok",
+          "score": 0.9998,
+          "text": "2"
+        }
+      ],
+      "raw_ocr": [
+        {
+          "roi_id": "tool_properties",
+          "property_key": "brush_size",
+          "category": "number",
+          "text": "27.2",
+          "bbox": [
+            242,
+            108,
+            60,
+            24
+          ],
+          "score": 0.99971
+        },
+        {
+          "roi_id": "tool_properties",
+          "property_key": "brush_tip.brush_density",
+          "category": "number",
+          "text": "100",
+          "bbox": [
+            253,
+            257,
+            36,
+            21
+          ],
+          "score": 0.99993
+        },
+        {
+          "roi_id": "tool_properties",
+          "property_key": "stabilization",
+          "category": "number",
+          "text": "2",
+          "bbox": [
+            271,
+            356,
+            16,
+            19
+          ],
+          "score": 0.9998
+        }
+      ]
+    },
+    "module": "brushState",
+    "status": "unknown",
+    "state": null,
+    "error": null,
+    "evidence": {
+      "screenshotIds": [
+        "48227019aa5f4d879732173742ef734c"
+      ],
+      "capturedTicks": 726195452,
+      "captureId": "8c04449005a04e0684e77d7cf9bd80f7",
+      "panelRoi": [
+        65,
+        524,
+        345,
+        492
+      ],
+      "triggerTicks": 725670937,
+      "causalAmbiguous": true,
+      "relatedEventIds": [],
+      "completedTicks": 733480019,
+      "analysisStartedTicks": 726693318,
+      "analysisQuietMs": 150.0,
+      "analysisToken": null,
+      "finalEvidence": true,
+      "observedAfterEventId": 54
+    },
+    "observedState": {
+      "schema_version": 4,
+      "frame_id": 0,
+      "captured_at": "2026-10-06T09:01:44.392Z",
+      "recognized_at": "2026-10-06T09:01:45.069Z",
+      "last_observed_at": "2026-10-06T09:01:45.069Z",
+      "status": "partial",
+      "brush": {
+        "name": "三",
+        "status": "ok",
+        "candidates": [],
+        "evidence": [
+          {
+            "roi_id": "tool_properties",
+            "type": "ocr_text",
+            "ocr_score": 0.9843,
+            "reason": "当前工具属性标题明确显示的工具名称"
+          },
+          {
+            "roi_id": "tool_properties",
+            "type": "ocr_text",
+            "ocr_score": 0.99907,
+            "reason": "当前工具属性标题明确显示的工具名称"
+          },
+          {
+            "roi_id": "tool_properties",
+            "type": "ocr_text",
+            "ocr_score": 0.99523,
+            "reason": "当前工具属性标题明确显示的工具名称"
+          }
+        ],
+        "source": "tool_properties",
+        "incomplete": false,
+        "properties": [
+          {
+            "key": "brush_size",
+            "label": "笔刷尺寸",
+            "type": "number",
+            "value": 27.2,
+            "unit": null,
+            "raw_text": "27.2",
+            "enabled": "unknown",
+            "status": "ok",
+            "evidence": [
+              {
+                "roi_id": "tool_properties",
+                "bbox": [
+                  242,
+                  108,
+                  60,
+                  24
+                ],
+                "type": "ocr_text",
+                "text": "27.2",
+                "ocr_score": 0.99971,
+                "reason": "数字值词段"
+              }
+            ],
+            "observed": {
+              "label": "笔刷尺寸",
+              "number": 27.2,
+              "unit": null
+            },
+            "definition": {
+              "property_id": "brush_size.brush_size",
+              "category": "Brush size",
+              "value_kind": "number",
+              "read_support": "visible_number_checkbox_or_text_enum",
+              "sources": [
+                {
+                  "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/B.htm",
+                  "section": "Brush size",
+                  "item": "Brush size"
+                },
+                {
+                  "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/12.htm",
+                  "section": "筆刷尺寸",
+                  "item": "筆刷尺寸"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.7",
+                  "kind": "installed_ui_translation"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.120",
+                  "kind": "installed_ui_translation"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.47",
+                  "kind": "installed_ui_translation"
+                }
+              ],
+              "catalog_version": "2026-09-24",
+              "match_method": "exact",
+              "context_candidates": []
+            },
+            "value_category": "number",
+            "value_regions": [
+              {
+                "property_key": "brush_size",
+                "property_index": 0,
+                "category": "number",
+                "value": 27.2,
+                "bbox": [
+                  242,
+                  108,
+                  60,
+                  24
+                ],
+                "coordinate_space": "panel",
+                "source": "ocr",
+                "roi_id": "tool_properties",
+                "status": "ok",
+                "score": 0.99971,
+                "text": "27.2"
+              }
+            ],
+            "value_location_status": "located"
+          },
+          {
+            "key": "antialiasing",
+            "label": "消除锯齿",
+            "type": "enum",
+            "value": "unknown",
+            "unit": null,
+            "raw_text": null,
+            "enabled": "unknown",
+            "status": "partial",
+            "evidence": [],
+            "observed": {
+              "label": "消除锯齿",
+              "option": "unknown"
+            },
+            "definition": {
+              "property_id": "anti_aliasing.anti_aliasing",
+              "category": "Anti-aliasing",
+              "value_kind": "enum",
+              "read_support": "visible_number_checkbox_or_text_enum",
+              "sources": [
+                {
+                  "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/A.htm",
+                  "section": "Anti-aliasing",
+                  "item": "Anti-aliasing"
+                },
+                {
+                  "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/10.htm",
+                  "section": "消除鋸齒",
+                  "item": "消除鋸齒"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.42.1.37",
+                  "kind": "installed_ui_translation"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.3",
+                  "kind": "installed_ui_translation"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.55",
+                  "kind": "installed_ui_translation"
+                }
+              ],
+              "catalog_version": "2026-09-24",
+              "match_method": "exact",
+              "context_candidates": []
+            },
+            "value_category": "text",
+            "value_regions": [],
+            "value_location_status": "unresolved"
+          },
+          {
+            "key": "brush_tip.hardness",
+            "label": "硬度",
+            "type": "highlight_index",
+            "value": 1,
+            "unit": null,
+            "raw_text": "1",
+            "enabled": "unknown",
+            "status": "ok",
+            "evidence": [
+              {
+                "roi_id": "tool_properties",
+                "bbox": [
+                  162,
+                  203,
+                  45,
+                  32
+                ],
+                "type": "selected_icon",
+                "reason": "当前高亮图标单元格"
+              }
+            ],
+            "observed": {
+              "label": "硬度",
+              "selected_index": 1
+            },
+            "definition": {
+              "property_id": "brush_tip.hardness",
+              "category": "Brush tip",
+              "value_kind": "compound",
+              "read_support": "visible_number_checkbox_or_text_enum",
+              "sources": [
+                {
+                  "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/B.htm",
+                  "section": "Brush tip",
+                  "item": "Hardness"
+                },
+                {
+                  "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/12.htm",
+                  "section": "筆刷前端",
+                  "item": "硬度"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.20",
+                  "kind": "installed_ui_translation"
+                }
+              ],
+              "catalog_version": "2026-09-24",
+              "match_method": "exact",
+              "context_candidates": []
+            },
+            "value_source": "image",
+            "value_category": "icon",
+            "value_regions": [
+              {
+                "property_key": "brush_tip.hardness",
+                "property_index": 2,
+                "category": "icon",
+                "value": 1,
+                "bbox": [
+                  162,
+                  203,
+                  45,
+                  32
+                ],
+                "coordinate_space": "panel",
+                "source": "image",
+                "roi_id": "tool_properties",
+                "status": "ok"
+              }
+            ],
+            "value_location_status": "located"
+          },
+          {
+            "key": "brush_tip.brush_density",
+            "label": "笔刷浓度",
+            "type": "number",
+            "value": 100,
+            "unit": null,
+            "raw_text": "100",
+            "enabled": "unknown",
+            "status": "ok",
+            "evidence": [
+              {
+                "roi_id": "tool_properties",
+                "bbox": [
+                  253,
+                  257,
+                  36,
+                  21
+                ],
+                "type": "ocr_text",
+                "text": "100",
+                "ocr_score": 0.99993,
+                "reason": "数字值词段"
+              }
+            ],
+            "observed": {
+              "label": "笔刷浓度",
+              "number": 100,
+              "unit": null
+            },
+            "definition": {
+              "property_id": "brush_tip.brush_density",
+              "category": "Brush tip",
+              "value_kind": "number",
+              "read_support": "visible_number_checkbox_or_text_enum",
+              "sources": [
+                {
+                  "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/B.htm",
+                  "section": "Brush tip",
+                  "item": "Brush density"
+                },
+                {
+                  "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/12.htm",
+                  "section": "筆刷前端",
+                  "item": "筆刷濃度"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.22.1.16",
+                  "kind": "installed_ui_translation"
+                }
+              ],
+              "catalog_version": "2026-09-24",
+              "match_method": "exact",
+              "context_candidates": []
+            },
+            "value_category": "number",
+            "value_regions": [
+              {
+                "property_key": "brush_tip.brush_density",
+                "property_index": 3,
+                "category": "number",
+                "value": 100,
+                "bbox": [
+                  253,
+                  257,
+                  36,
+                  21
+                ],
+                "coordinate_space": "panel",
+                "source": "ocr",
+                "roi_id": "tool_properties",
+                "status": "ok",
+                "score": 0.99993,
+                "text": "100"
+              }
+            ],
+            "value_location_status": "located"
+          },
+          {
+            "key": "stabilization",
+            "label": "手颤修正",
+            "type": "number",
+            "value": 2,
+            "unit": null,
+            "raw_text": "2",
+            "enabled": "unknown",
+            "status": "ok",
+            "evidence": [
+              {
+                "roi_id": "tool_properties",
+                "bbox": [
+                  271,
+                  356,
+                  16,
+                  19
+                ],
+                "type": "ocr_text",
+                "text": "2",
+                "ocr_score": 0.9998,
+                "reason": "数字值词段"
+              }
+            ],
+            "observed": {
+              "label": "手颤修正",
+              "number": 2,
+              "unit": null
+            },
+            "definition": {
+              "property_id": "correction.stabilization",
+              "category": "Correction",
+              "value_kind": "number",
+              "read_support": "visible_number_checkbox_or_text_enum",
+              "sources": [
+                {
+                  "url": "https://help.clip-studio.com/en-us/manual_en/810_subtools/C.htm",
+                  "section": "Correction",
+                  "item": "Stabilization"
+                },
+                {
+                  "url": "https://help.clip-studio.com/zh-tw/manual_tc/810_subtools/9.htm",
+                  "section": "修正",
+                  "item": "抖動修正"
+                },
+                {
+                  "resource_key": "E79C2AC5-BC3F-4838-9E87-F49B629F84B5:1.45.1.11",
+                  "kind": "installed_ui_translation"
+                }
+              ],
+              "catalog_version": "2026-09-24",
+              "match_method": "exact",
+              "context_candidates": []
+            },
+            "value_category": "number",
+            "value_regions": [
+              {
+                "property_key": "stabilization",
+                "property_index": 4,
+                "category": "number",
+                "value": 2,
+                "bbox": [
+                  271,
+                  356,
+                  16,
+                  19
+                ],
+                "coordinate_space": "panel",
+                "source": "ocr",
+                "roi_id": "tool_properties",
+                "status": "ok",
+                "score": 0.9998,
+                "text": "2"
+              }
+            ],
+            "value_location_status": "located"
+          }
+        ]
+      },
+      "unresolved": [
+        {
+          "roi_id": "tool_properties",
+          "raw_text": "較硬",
+          "reason": "未匹配到已知属性标签",
+          "evidence": [
+            {
+              "roi_id": "tool_properties",
+              "type": "ocr_text",
+              "ocr_score": 0.93143,
+              "reason": "当前帧文字未匹配属性库"
+            }
+          ]
+        },
+        {
+          "roi_id": "tool_properties",
+          "raw_text": "√矢量擦除",
+          "reason": "未匹配到已知属性标签",
+          "evidence": [
+            {
+              "roi_id": "tool_properties",
+              "type": "ocr_text",
+              "ocr_score": 0.91391,
+              "reason": "当前帧文字未匹配属性库"
+            }
+          ]
+        }
+      ],
+      "timings_ms": {
+        "capture": 0,
+        "ocr": 670,
+        "parse": 7,
+        "total": 677
+      },
+      "panels": [
+        {
+          "roi_id": "tool_properties",
+          "role": "tool_properties",
+          "input_pixels": 169740,
+          "roi_pixels": 169740,
+          "ocr_ms": 670,
+          "status": "read"
+        }
+      ],
+      "catalog": {
+        "version": "2026-09-24",
+        "property_count": 150
+      },
+      "value_regions": [
+        {
+          "property_key": "brush_size",
+          "property_index": 0,
+          "category": "number",
+          "value": 27.2,
+          "bbox": [
+            242,
+            108,
+            60,
+            24
+          ],
+          "coordinate_space": "panel",
+          "source": "ocr",
+          "roi_id": "tool_properties",
+          "status": "ok",
+          "score": 0.99971,
+          "text": "27.2"
+        },
+        {
+          "property_key": "brush_tip.hardness",
+          "property_index": 2,
+          "category": "icon",
+          "value": 1,
+          "bbox": [
+            162,
+            203,
+            45,
+            32
+          ],
+          "coordinate_space": "panel",
+          "source": "image",
+          "roi_id": "tool_properties",
+          "status": "ok"
+        },
+        {
+          "property_key": "brush_tip.brush_density",
+          "property_index": 3,
+          "category": "number",
+          "value": 100,
+          "bbox": [
+            253,
+            257,
+            36,
+            21
+          ],
+          "coordinate_space": "panel",
+          "source": "ocr",
+          "roi_id": "tool_properties",
+          "status": "ok",
+          "score": 0.99993,
+          "text": "100"
+        },
+        {
+          "property_key": "stabilization",
+          "property_index": 4,
+          "category": "number",
+          "value": 2,
+          "bbox": [
+            271,
+            356,
+            16,
+            19
+          ],
+          "coordinate_space": "panel",
+          "source": "ocr",
+          "roi_id": "tool_properties",
+          "status": "ok",
+          "score": 0.9998,
+          "text": "2"
+        }
+      ],
+      "raw_ocr": [
+        {
+          "roi_id": "tool_properties",
+          "property_key": "brush_size",
+          "category": "number",
+          "text": "27.2",
+          "bbox": [
+            242,
+            108,
+            60,
+            24
+          ],
+          "score": 0.99971
+        },
+        {
+          "roi_id": "tool_properties",
+          "property_key": "brush_tip.brush_density",
+          "category": "number",
+          "text": "100",
+          "bbox": [
+            253,
+            257,
+            36,
+            21
+          ],
+          "score": 0.99993
+        },
+        {
+          "roi_id": "tool_properties",
+          "property_key": "stabilization",
+          "category": "number",
+          "text": "2",
+          "bbox": [
+            271,
+            356,
+            16,
+            19
+          ],
+          "score": 0.9998
+        }
+      ]
+    },
+    "valueRegions": [
+      {
+        "propertyKey": "brush_size",
+        "propertyIndex": 0,
+        "category": "number",
+        "value": 27.2,
+        "bbox": [
+          242,
+          108,
+          60,
+          24
+        ],
+        "coordinateSpace": "panel",
+        "source": "ocr",
+        "status": "ok",
+        "score": 0.99971,
+        "text": "27.2",
+        "screenBbox": [
+          307,
+          632,
+          60,
+          24
+        ]
+      },
+      {
+        "propertyKey": "brush_tip.hardness",
+        "propertyIndex": 2,
+        "category": "icon",
+        "value": 1,
+        "bbox": [
+          162,
+          203,
+          45,
+          32
+        ],
+        "coordinateSpace": "panel",
+        "source": "image",
+        "status": "ok",
+        "screenBbox": [
+          227,
+          727,
+          45,
+          32
+        ]
+      },
+      {
+        "propertyKey": "brush_tip.brush_density",
+        "propertyIndex": 3,
+        "category": "number",
+        "value": 100,
+        "bbox": [
+          253,
+          257,
+          36,
+          21
+        ],
+        "coordinateSpace": "panel",
+        "source": "ocr",
+        "status": "ok",
+        "score": 0.99993,
+        "text": "100",
+        "screenBbox": [
+          318,
+          781,
+          36,
+          21
+        ]
+      },
+      {
+        "propertyKey": "stabilization",
+        "propertyIndex": 4,
+        "category": "number",
+        "value": 2,
+        "bbox": [
+          271,
+          356,
+          16,
+          19
+        ],
+        "coordinateSpace": "panel",
+        "source": "ocr",
+        "status": "ok",
+        "score": 0.9998,
+        "text": "2",
+        "screenBbox": [
+          336,
+          880,
+          16,
+          19
+        ]
+      }
+    ]
+  }
+}

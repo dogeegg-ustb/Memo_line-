@@ -2,7 +2,7 @@
 import time
 from catalog import BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR, TOOLBAR, TOOLGROUP
 
-STATE_MODULES = {BRUSH: "brushState", CANVAS: "canvasViewState", NAVIGATOR: "canvasViewState", LAYERS: "currentLayerState", COLOR: "colorState"}
+STATE_MODULES = {BRUSH: "brushState", TOOLGROUP: "subtoolState", CANVAS: "canvasViewState", NAVIGATOR: "canvasViewState", LAYERS: "currentLayerState", COLOR: "colorState"}
 
 
 class UpdateEngine:
@@ -53,7 +53,10 @@ class UpdateEngine:
 
     @staticmethod
     def capture_targets(panels):
-        return {BRUSH if panel in {TOOLBAR, TOOLGROUP} else panel for panel in panels}
+        targets = set()
+        for panel in panels:
+            targets.update((BRUSH,TOOLGROUP) if panel in {TOOLBAR,TOOLGROUP} else (panel,))
+        return targets
 
     @staticmethod
     def contains(roi, x, y):
