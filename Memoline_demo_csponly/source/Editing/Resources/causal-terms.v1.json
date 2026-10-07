@@ -1,0 +1,20 @@
+{
+  "version": "csp-property-presence-v1",
+  "source": "recognizer/recognizer_core/panel_state/data/properties.sqlite3:properties.definition_json",
+  "terms": [
+    { "key": "ink.color_mixing", "category": "ink", "read": "underTip" },
+    { "key": "ink.mixing_mode", "category": "ink", "read": "underTip" },
+    { "key": "ink.amount_of_paint", "category": "ink", "read": "underTip" },
+    { "key": "ink.density_of_paint", "category": "ink", "read": "underTip" },
+    { "key": "ink.color_stretch", "category": "ink", "read": "underTip" },
+    { "key": "ink.blending_quality", "category": "ink", "read": "underTip" },
+    { "key": "ink.blending_mode", "category": "ink", "read": "underTip" },
+    { "key": "ink.intensity_of_blur", "category": "ink", "read": "underTip" },
+    { "key": "anti_overflow.do_not_cross_lines_of_reference_layer", "category": "antiOverflow", "read": "referenceLayers" },
+    { "key": "anti_overflow.color_margin", "category": "antiOverflow", "read": "referenceLayers" },
+    { "key": "anti_overflow.area_scaling", "category": "antiOverflow", "read": "referenceLayers" },
+    { "key": "anti_overflow.scaling_mode", "category": "antiOverflow", "read": "referenceLayers" },
+    { "key": "anti_overflow.fill_up_to_vector_path", "category": "antiOverflow", "read": "referenceLayers" }
+  ],
+  "unresolvedCategories": ["copyStamp"]
+}

@@ -32,12 +32,12 @@ internal static class LayerAndRegionChecks
         var negative = PanelRegionMap.FromRegions(JsonSerializer.SerializeToElement(new Dictionary<string,int[]> { ["画布视口"]=[-2000,-100,1000,800] }));
         Check(negative.Classify(-1500,0).Region == "canvasViewport", "Negative screen coordinates are retained");
 
-        var fresh = JsonSerializer.SerializeToElement(new { layers = new[] { new { id=19, name="图层 1", uuid="new-layer" } } });
+        var fresh = JsonSerializer.SerializeToElement(new { layers = new[] { new { id=19, name="图层 1", uuid="new-layer", kind=1, is_folder=false } } });
         var mapped = LayerMapping.FromFile(fresh,"图层1",new(3,"图层 1","old-layer"));
         Check(mapped is { Id:19, Uuid:"new-layer" }, "Saved layer name binds to new ID despite stale initialization identity");
         Check(LayerMapping.FromFile(fresh,"图层1",null).Id == 19, "Name maps without an initial core ID");
         foreach (var bad in new[] { JsonSerializer.SerializeToElement(new { layers=Array.Empty<object>() }),
-            JsonSerializer.SerializeToElement(new { layers=new[] { new { id=19,name="图层 1" },new { id=20,name="图层1" } } }) })
+            JsonSerializer.SerializeToElement(new { layers=new[] { new { id=19,name="图层 1",kind=1,is_folder=false },new { id=20,name="图层1",kind=1,is_folder=false } } }) })
         {
             try { LayerMapping.FromFile(bad,"图层1",new(3,"图层 1","old-layer")); }
             catch (InvalidDataException) { count++; continue; }

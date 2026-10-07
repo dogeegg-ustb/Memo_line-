@@ -27,23 +27,15 @@ internal static class LayerClipboard
         var bounds = result.Root.GetProperty("bounds"); int left = bounds.GetProperty("left").GetInt32(), top = bounds.GetProperty("top").GetInt32();
         int patchWidth = result.Number("width"), patchHeight = result.Number("height");
         var rgba = File.ReadAllBytes(result.String("rgbaPath")); var mask = File.ReadAllBytes(result.String("maskPath"));
-        var output = new byte[checked(124 + width * height * 4)];
-        using (var stream = new MemoryStream(output, true)) using (var w = new BinaryWriter(stream))
-        {
-            w.Write(124u); w.Write(width); w.Write(-height); w.Write((ushort)1); w.Write((ushort)32);
-            w.Write(3u); w.Write((uint)(width * height * 4)); w.Write(0); w.Write(0); w.Write(0u); w.Write(0u);
-            w.Write(0x00ff0000u); w.Write(0x0000ff00u); w.Write(0x000000ffu); w.Write(0xff000000u);
-            w.Write(0x73524742u); // LCS_sRGB
-            stream.Position = 108; w.Write(4u); // LCS_GM_IMAGES
-        }
+        var outputRgba = new byte[checked(width * height * 4)];
         for (int y = 0; y < patchHeight; y++) for (int x = 0; x < patchWidth; x++)
         {
             int pixel = y * patchWidth + x; if (mask[pixel] == 0) continue;
-            int source = pixel * 4, target = 124 + ((y + top) * width + x + left) * 4;
-            output[target] = rgba[source + 2]; output[target + 1] = rgba[source + 1];
-            output[target + 2] = rgba[source]; output[target + 3] = rgba[source + 3];
+            int source = pixel * 4, target = ((y + top) * width + x + left) * 4;
+            outputRgba[target] = rgba[source]; outputRgba[target + 1] = rgba[source + 1];
+            outputRgba[target + 2] = rgba[source + 2]; outputRgba[target + 3] = rgba[source + 3];
         }
-        return output;
+        return ClipboardImageCodec.EncodeDibV5(width, height, outputRgba);
     }
     internal static string[] Write(ExportResult result, bool compatibleImage)
     {

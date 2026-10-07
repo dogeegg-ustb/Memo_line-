@@ -236,7 +236,7 @@ public static class BundleChecks
         using Stream stream = stored.FullName.EndsWith(".br", StringComparison.Ordinal) ? new BrotliStream(raw, CompressionMode.Decompress) : raw;
         using var bytes = new MemoryStream(); stream.CopyTo(bytes); return bytes.ToArray();
     }
-    private static void WriteV1(string path, IEnumerable<JsonNode> frames)
+    internal static void WriteV1(string path, IEnumerable<JsonNode> frames)
     {
         using var stream = File.Create(path); stream.Write("MEMOLINE"u8);
         byte[] header = new byte[8]; BinaryPrimitives.WriteUInt32LittleEndian(header, 1); stream.Write(header, 0, 4);

@@ -17,6 +17,14 @@
     <ProjectReference Include="../../recognizer/core/memoline/Memoline.Core.csproj" />
     <Compile Include="../../Organizer/canvas layer watcher/source/*.cs" Exclude="../../Organizer/canvas layer watcher/source/Program.cs" Link="Watcher/%(Filename)%(Extension)" />
     <Compile Include="../../Organizer/dirty matrix/source/Core/Coverage.cs" Link="DirtyMatrix/Coverage.cs" />
+    <Compile Include="../../replayer/packetreplayer/source/*.cs"
+             Exclude="../../replayer/packetreplayer/source/Program.cs;../../replayer/packetreplayer/source/PacketReplayWindow.cs;../../replayer/packetreplayer/source/AssemblyInfo.cs"
+             Link="PacketReplay/%(Filename)%(Extension)" />
+    <Compile Include="../../replayer/strokereplayer/source/*.cs"
+             Exclude="../../replayer/strokereplayer/source/Program.cs;../../replayer/strokereplayer/source/ReplayWindow.cs;../../replayer/strokereplayer/source/AssemblyInfo.cs;../../replayer/strokereplayer/source/CspPlacement.cs;../../replayer/strokereplayer/source/DriverProfile.cs;../../replayer/strokereplayer/source/StrokeBinaryReader.cs;../../replayer/strokereplayer/source/StrokeJsonReader.cs;../../replayer/strokereplayer/source/StrokeModels.cs"
+             Link="StrokeReplay/%(Filename)%(Extension)" />
+    <Compile Include="../../replayer/dirty matrix paster/source/ClipboardImageCodec.cs" Link="DirtyMatrix/ClipboardImageCodec.cs" />
     <InternalsVisibleTo Include="MemolineDemo.Checks" />
+    <EmbeddedResource Include="Editing/Resources/*.json" />
   </ItemGroup>
 </Project>

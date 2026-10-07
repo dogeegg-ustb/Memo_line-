@@ -1,0 +1,10 @@
+{
+  "version": "csp-probe-guaranteed-v1",
+  "keys": [
+    "brush_size", "opacity", "antialiasing", "stabilization", "adjust_stabilization_by_speed", "brush_density",
+    "correction.adjust_by_scale", "correction.adjust_by_speed_post_correction", "correction.bezier_curve",
+    "correction.enable_snapping", "correction.post_correction", "correction.sharp_angles", "correction.snap_to_default_border",
+    "correction.stabilization_mode", "correction.taper", "starting_and_ending.ending", "starting_and_ending.how_to_specify",
+    "starting_and_ending.starting", "starting_and_ending.starting_and_ending", "starting_and_ending.starting_and_ending_by_speed"
+  ]
+}
