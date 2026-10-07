@@ -1,8 +1,10 @@
 import sqlite3
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from csp_shortcuts import read_menu_shortcuts, read_tool_shortcuts
 
 
