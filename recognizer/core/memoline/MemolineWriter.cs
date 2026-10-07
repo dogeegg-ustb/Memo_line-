@@ -44,6 +44,7 @@ public sealed class MemolineWriter : IAsyncDisposable
     public long NowTicks => Stopwatch.GetTimestamp() - _origin;
     public long ClockOriginTicks => _origin;
     public ulong LastHardwareEventId { get { lock (_sync) return _eventId; } }
+    public ulong LastAppendId { get { lock (_sync) return _appendId; } }
     // Runs under the writer lock on the capture worker; small logical slot reservations are permitted.
     public event Action<MemolineEvent>? HardwareAppended;
     // Subscribers must enqueue only: this callback runs on the producer's ordered append path.
@@ -75,17 +76,28 @@ public sealed class MemolineWriter : IAsyncDisposable
     public EventStamp AppendHardware(string kind, object data, HardwareDeviceSource deviceSource,
         ulong? operationId = null)
     {
+        var record = AppendHardwareRecord(kind, data, deviceSource, operationId);
+        return new(record.EventId, record.Ticks);
+    }
+
+    /// <summary>Returns this exact native frame even when synchronous subscribers append more frames.</summary>
+    public MemolineEvent AppendHardwareRecord(string kind, object data, HardwareDeviceSource deviceSource,
+        ulong? operationId = null)
+    {
         ArgumentNullException.ThrowIfNull(deviceSource);
         lock (_sync)
         {
             var stamp = new EventStamp(++_eventId, NowTicks);
-            Append("hardware", kind, stamp, operationId, null, deviceSource, data);
-            return stamp;
+            return Append("hardware", kind, stamp, operationId, null, deviceSource, data);
         }
     }
 
     /// <summary>Occurrence time is in this session's ticks, never wall time. References survive delayed append.</summary>
     public void AppendState(string kind, long occurredTicks, ulong[] relatedEventIds, object data, string path = "state")
+        => AppendStateRecord(kind, occurredTicks, relatedEventIds, data, path);
+
+    /// <summary>Returns the exact native frame, or null when the observation is diagnostics only.</summary>
+    public MemolineEvent? AppendStateRecord(string kind, long occurredTicks, ulong[] relatedEventIds, object data, string path = "state")
     {
         lock (_sync)
         {
@@ -95,9 +107,9 @@ public sealed class MemolineWriter : IAsyncDisposable
             if (_options.SuccessfulStatesOnly && MemolineStatePersistence.IsDiagnostic(kind, data))
             {
                 AppendDiagnostic(path, kind, occurredTicks, relatedEventIds, data);
-                return;
+                return null;
             }
-            Append(path, kind, new EventStamp(0, occurredTicks), null, relatedEventIds, null, data);
+            return Append(path, kind, new EventStamp(0, occurredTicks), null, relatedEventIds, null, data);
         }
     }
 
@@ -159,7 +171,13 @@ public sealed class MemolineWriter : IAsyncDisposable
         DiagnosticRecorded?.Invoke(record);
     }
 
-    private void Append(string path, string kind, EventStamp stamp, ulong? operationId,
+    public MemolineEvent AppendImmediateState(string kind, object data)
+    {
+        lock (_sync)
+            return Append("immediate", kind, new EventStamp(0, NowTicks), null, [], null, data);
+    }
+
+    private MemolineEvent Append(string path, string kind, EventStamp stamp, ulong? operationId,
         ulong[]? related, HardwareDeviceSource? deviceSource, object data)
     {
         ObjectDisposedException.ThrowIf(_closed, this);
@@ -171,6 +189,7 @@ public sealed class MemolineWriter : IAsyncDisposable
         Enqueue(record);
         RecordAppended?.Invoke(record);
         if (path == "hardware") HardwareAppended?.Invoke(record);
+        return record;
     }
 
     private void Enqueue(object value)

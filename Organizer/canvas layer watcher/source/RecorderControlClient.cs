@@ -10,10 +10,10 @@ internal sealed class RecorderControlClient(string pipeName, Action<string>? dia
     public static string PipeNameFor(int processId) => processId > 0
         ? $"memoline-recorder-input-{processId}" : throw new ArgumentOutOfRangeException(nameof(processId));
 
-    public async Task<JsonElement> SendAsync(object request, CancellationToken token)
+    public async Task<JsonElement> SendAsync(object request, CancellationToken token, TimeSpan? timeout = null)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-        deadline.CancelAfter(TimeSpan.FromSeconds(5));
+        deadline.CancelAfter(timeout ?? TimeSpan.FromSeconds(5));
         await using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         await pipe.ConnectAsync(deadline.Token);
         using var reader = new StreamReader(pipe, new UTF8Encoding(false, true), false, 4096, leaveOpen: true);
@@ -33,6 +33,12 @@ internal sealed class RecorderControlClient(string pipeName, Action<string>? dia
     public Task<JsonElement> StatusAsync(CancellationToken token) => SendAsync(new { command = "getInputControlStatus" }, token);
     public Task<JsonElement> PrepareRecordingEndAsync(CancellationToken token)
         => SendAsync(new { command = "prepareRecordingEnd" }, token);
+    public Task<JsonElement> PrepareEditBoundaryAsync(string requestId, CancellationToken token)
+        => SendAsync(new { command = "prepareEditBoundary", requestId }, token, TimeSpan.FromSeconds(35));
+    public Task<JsonElement> BeginEditTransactionAsync(string transactionId, CancellationToken token)
+        => SendAsync(new { command = "beginEditTransaction", transactionId }, token);
+    public Task<JsonElement> EndEditTransactionAsync(string transactionId, string outcome, CancellationToken token)
+        => SendAsync(new { command = "endEditTransaction", transactionId, outcome }, token);
     public async Task<JsonElement> SaveClipAsync(string expectedClipPath, CancellationToken token, long? triggerTicks = null,
         bool activateCsp = false)
     {

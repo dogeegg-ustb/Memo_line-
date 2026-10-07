@@ -1,4 +1,3 @@
-using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using DirtyMatrix.Core;
 using BehaviorRecognizer.Storage.Memoline;
@@ -47,14 +46,6 @@ internal static unsafe class LayerDiff
         return result;
     }
     private static bool Different(byte* a, byte* b) => (a[3] != 0 || b[3] != 0) && *(uint*)a != *(uint*)b;
-    private static Bitmap Small(Bitmap image)
-    {
-        var result = new Bitmap((image.Width + CoarseFactor - 1) / CoarseFactor, (image.Height + CoarseFactor - 1) / CoarseFactor, PixelFormat.Format32bppArgb);
-        using var g = Graphics.FromImage(result); g.CompositingMode = CompositingMode.SourceCopy;
-        g.InterpolationMode = InterpolationMode.HighQualityBilinear; g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-        g.DrawImage(image, new Rectangle(Point.Empty, result.Size), 0, 0, image.Width, image.Height, GraphicsUnit.Pixel);
-        return result;
-    }
     private static IEnumerable<int> Cells(DirtyTileMatrix matrix) => matrix.Runs.SelectMany(r =>
         Enumerable.Range(r.Start, r.End - r.Start).Select(c => r.Row * matrix.Columns + c));
     internal static ImageDirtyLabel[] Describe(DirtyEvidence evidence, Size size)
@@ -85,29 +76,18 @@ internal static unsafe class LayerDiff
             foreach (int cell in Cells(own))
             { if (!owners.TryGetValue(cell, out var ids)) owners[cell] = ids = []; ids.Add(label.Id); }
         }
-        var predicted = Cells(matrix).ToHashSet(); var search = new HashSet<int>(predicted);
-        using var smallAfter = Small(after); using var smallNow = Small(now);
-        long coarseCompared = 0;
-        using (var a = new Pixels(smallAfter, ImageLockMode.ReadOnly))
-        using (var b = new Pixels(smallNow, ImageLockMode.ReadOnly))
-            for (int row = 0; row < matrix.Rows; row++)
-                for (int col = 0; col < matrix.Columns; col++)
-                {
-                    token.ThrowIfCancellationRequested(); int cell = row * matrix.Columns + col;
-                    if (predicted.Contains(cell)) continue;
-                    int left = col * TileSize * smallNow.Width / size.Width, top = row * TileSize * smallNow.Height / size.Height;
-                    int right = (int)Math.Ceiling((double)Math.Min(size.Width, (col + 1) * TileSize) * smallNow.Width / size.Width);
-                    int bottom = (int)Math.Ceiling((double)Math.Min(size.Height, (row + 1) * TileSize) * smallNow.Height / size.Height);
-                    bool changed = false;
-                    for (int y = top; y < bottom && !changed; y++)
-                        for (int x = left; x < right; x++)
-                        { coarseCompared++; if (Different(a.At(x, y), b.At(x, y))) { changed = true; break; } }
-                    if (changed) search.Add(cell);
-                }
+        // Keep the recognizer prediction as ownership metadata. Full
+        // resolution scanning below still visits every tile, including tiles
+        // outside this set.
+        var predicted = Cells(matrix).ToHashSet();
         Directory.CreateDirectory(outputDirectory);
         using var fullAfter = new Pixels(after, ImageLockMode.ReadOnly); using var fullNow = new Pixels(now, ImageLockMode.ReadOnly);
         var changedCells = new Dictionary<int, (PixelBox Box, long Count)>(); long compared = 0;
-        foreach (int cell in search.Order())
+        // Every tile participates in the same full-resolution comparison. The
+        // predicted matrix remains evidence metadata and label ownership only;
+        // it is never used to skip pixels because edits can occur outside the
+        // recognizer's predicted coverage.
+        foreach (int cell in Enumerable.Range(0, matrix.Rows * matrix.Columns))
         {
             token.ThrowIfCancellationRequested(); int cx = cell % matrix.Columns, cy = cell / matrix.Columns;
             int left = cx * TileSize, top = cy * TileSize, right = Math.Min(size.Width, left + TileSize), bottom = Math.Min(size.Height, top + TileSize);
@@ -171,6 +151,6 @@ internal static unsafe class LayerDiff
         }
         var resultLabels = labelList.Select(label => label with { ImageIds = images.Where(image => image.LabelIds.Contains(label.Id)).Select(image => image.Id).ToArray() }).ToArray();
         return new(MatrixData.From(matrix, size), resultLabels, images.ToArray(), images.Sum(i => i.ChangedPixels), compared,
-            coarseCompared, smallNow.Width, smallNow.Height);
+            0, 0, 0);
     }
 }

@@ -61,12 +61,26 @@ while (Console.ReadLine() is { } line)
                     .Select(p => new ScreenPoint(p.X+captureOrigin.X, p.Y+captureOrigin.Y)).ToArray();
         }
         // Expose calibrated digit rectangles in physical screen pixels without serializing native pipeline details.
+        var snapshotJson = result.Snapshot is { } currentSnapshot
+            ? System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(currentSnapshot, options))!.AsObject()
+            : null;
+        if (snapshotJson is not null && result.Snapshot is { } matrixSnapshot)
+        {
+            var toCanvas = matrixSnapshot.Raw.ScreenToCanvas;
+            var toScreen = matrixSnapshot.Raw.CanvasToScreen;
+            snapshotJson["matrices"] = JsonSerializer.SerializeToNode(new
+            {
+                screenToCanvas = new[] { toCanvas.M0, toCanvas.M1, toCanvas.M2, toCanvas.M3, toCanvas.M4, toCanvas.M5 },
+                canvasToScreen = new[] { toScreen.M0, toScreen.M1, toScreen.M2, toScreen.M3, toScreen.M4, toScreen.M5 },
+                convention = "sct-affine-row-major/v1", canvasSpace = "normalized"
+            }, options);
+        }
         Console.WriteLine(JsonSerializer.Serialize(new { result.Success, result.CanvasWindowRoiScreenPx,
             result.NavigatorThumbnailRoiScreenPx, result.ScreenCoordinateOriginScreenPx,
             result.CanvasOriginScreenPx, result.OcrScalePercent, result.OcrRotationDegrees,
             completedViewportScreenPx = completedViewport,
             ocrLayout = result.PipelineState?.OcrLayoutUsed,
-            result.Snapshot, result.FailedStage, result.Status, result.Message }, options));
+            snapshot = snapshotJson, result.FailedStage, result.Status, result.Message }, options));
     }
     catch (Exception ex) { Console.WriteLine(JsonSerializer.Serialize(new { success = false, message = ex.Message }, options)); }
 }

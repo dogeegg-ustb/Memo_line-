@@ -6,7 +6,7 @@ using BehaviorRecognizer.Storage.Memoline;
 namespace BehaviorRecognizer.Capture;
 
 /// <summary>Interprets hardware transitions before persistence; one operation ID groups each gesture.</summary>
-public sealed class UnifiedInputCapture : IAsyncDisposable
+public sealed partial class UnifiedInputCapture : IAsyncDisposable
 {
     private static readonly HardwareDeviceSource MouseSource = new("mouse", "Windows.LowLevelMouseHook", null, "classOnly");
     private static readonly HardwareDeviceSource KeyboardSource = new("keyboard", "Windows.LowLevelKeyboardHook", null, "classOnly");
@@ -28,6 +28,9 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
     private float? _penTabletX, _penTabletY;
     private (int X, int Y, bool InCsp, bool Foreground, int Buttons, bool Pen)? _lastCursorState;
     private long _lastCursorStateTicks, _lastTabletHoverTicks;
+    // Reset under _sync for each physical notification; only direct input writes
+    // can provide this reference. Writer callbacks and state requests cannot.
+    private ulong _inputAppendId;
     private bool _tabletNearCsp;
     private (float? X, float? Y, float? Pressure, float? TiltX, float? TiltY)? _lastTabletHover;
     private readonly Channel<CaptureWork> _pending = Channel.CreateUnbounded<CaptureWork>(
@@ -50,8 +53,8 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
     // Producers only enqueue: neither a Windows hook callback nor an OTD report thread
     // performs a process lookup, JSON serialization, or file write.
     public void PostPen(InputEvent evt) => _pending.Writer.TryWrite(new CaptureWork(evt, 0, 0, 0, 0, 0, 0, false, false, false));
-    public void PostMouse(int message, int x, int y, int mouseData, bool passivePen = false) =>
-        _pending.Writer.TryWrite(new CaptureWork(null, message, x, y, mouseData, 0, 0, false, false, passivePen));
+    public void PostMouse(int message, int x, int y, int mouseData, bool passivePen = false, bool injected = false, nuint extraInfo = 0) =>
+        _pending.Writer.TryWrite(new CaptureWork(null, message, x, y, mouseData, 0, 0, false, false, passivePen, injected, extraInfo));
     public void PostKey(int vk, uint scanCode, bool extended, bool pressed, bool injected = false, nuint extraInfo = 0, bool guardIntercepted = false, nint nextHookResult = 0) =>
         _pending.Writer.TryWrite(new CaptureWork(null, 0, 0, 0, 0, vk, scanCode, extended, pressed, false, injected, extraInfo, guardIntercepted, nextHookResult));
 
@@ -61,13 +64,16 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
         {
             try
             {
+                if (work.Control is { } control) { await control(); continue; }
                 if (_updates is not null && !_updates.RecordingReady) continue;
+                if (work.ExtraInfo == WindowsInputHooks.RecorderInputTag) continue;
                 if (work.Pen is not null) OnPen(work.Pen);
-                else if (work.PassivePen) OnPassivePenMouse(work.MouseMessage, work.X, work.Y);
-                else if (work.MouseMessage != 0) OnMouse(work.MouseMessage, work.X, work.Y, work.MouseData);
+                else if (work.PassivePen) OnPassivePenMouse(work.MouseMessage, work.X, work.Y, work.Injected);
+                else if (work.MouseMessage != 0) OnMouse(work.MouseMessage, work.X, work.Y, work.MouseData, work.Injected);
                 else OnKey(work.VirtualKey, work.ScanCode, work.Extended, work.Pressed, work.Injected, work.ExtraInfo, work.GuardIntercepted, work.NextHookResult);
             }
             catch (Exception ex) { Console.Error.WriteLine($"[InputCapture] {ex.Message}"); }
+            finally { CompleteEditBoundaries(); }
         }
     }
 
@@ -88,12 +94,17 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
         await _pollCancellation.CancelAsync();
         await _cursorPoller;
         _pollCancellation.Dispose();
-        _pending.Writer.TryComplete();
-        await _worker;
+        try { await DrainPendingInputAsync(); await EndActiveEditTransactionAsync(); }
+        finally
+        {
+            _pending.Writer.TryComplete();
+            await _worker;
+            CancelEditBoundaries();
+        }
     }
 
     private readonly record struct CaptureWork(InputEvent? Pen, int MouseMessage, int X, int Y,
-        int MouseData, int VirtualKey, uint ScanCode, bool Extended, bool Pressed, bool PassivePen, bool Injected = false, nuint ExtraInfo = 0, bool GuardIntercepted = false, nint NextHookResult = 0);
+        int MouseData, int VirtualKey, uint ScanCode, bool Extended, bool Pressed, bool PassivePen, bool Injected = false, nuint ExtraInfo = 0, bool GuardIntercepted = false, nint NextHookResult = 0, Func<Task>? Control = null);
 
     public void RefreshCursor()
     {
@@ -132,6 +143,20 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
 
     public void OnPen(InputEvent evt)
     {
+        lock (_sync)
+        {
+            _inputAppendId = 0;
+            try { RecordPen(evt); }
+            finally
+            {
+                if (evt.Type is InputEventType.PenDown or InputEventType.PenMove or InputEventType.PenUp or InputEventType.PenHover or InputEventType.PenButtonChanged)
+                    ReportPhysicalInput("pen", injected: false);
+            }
+        }
+    }
+
+    private void RecordPen(InputEvent evt)
+    {
         if (evt.Type is not (InputEventType.PenDown or InputEventType.PenMove or InputEventType.PenUp or InputEventType.PenHover or InputEventType.PenButtonChanged)) return;
         lock (_sync)
         {
@@ -140,7 +165,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
             bool hovering = _targetProbe.TryGetCspCursor(out var cursor);
             if (evt.Type == InputEventType.PenButtonChanged)
             {
-                if (hovering) _writer.AppendState("tabletStateChanged", _writer.NowTicks, [], new
+                if (hovering) AppendInputState("tabletStateChanged", _writer.NowTicks, [], new
                 { action = "buttons", inCsp = true, sample = PenData(evt, cursor) });
                 return;
             }
@@ -152,7 +177,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
                 if ((hovering || _tabletNearCsp) && (near != _tabletNearCsp ||
                     (near && _lastTabletHover != sampleState && now - _lastTabletHoverTicks >= System.Diagnostics.Stopwatch.Frequency / 30)))
                 {
-                    _writer.AppendState("tabletStateChanged", now, [], new
+                    AppendInputState("tabletStateChanged", now, [], new
                     { action = !hovering ? "leave" : near ? "hover" : "outOfRange", inCsp = hovering, sample = PenData(evt, cursor) });
                     _lastTabletHover = sampleState;
                     _lastTabletHoverTicks = now;
@@ -171,7 +196,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
             {
                 if (_penOperation is not null)
                 {
-                    _writer.AppendHardware("penEnd", PenData(evt, cursor, "penUp"),
+                    AppendInputHardware("penEnd", PenData(evt, cursor, "penUp"),
                         OtdPenSource(evt.DeviceId), _penOperation);
                     _penOperation = null;
                     _penDownLocation = null;
@@ -186,10 +211,10 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
             if (_penOperation is null)
             {
                 foreach (var operation in _mouse.Values.Distinct())
-                    _writer.AppendState("mouseInterrupted", _writer.NowTicks, [operation], new { reason = "penContact", heldButtons = Array.Empty<string>(), heldKeys = HeldKeys() });
+                    AppendInputState("mouseInterrupted", _writer.NowTicks, [operation], new { reason = "penContact", heldButtons = Array.Empty<string>(), heldKeys = HeldKeys() });
                 _mouse.Clear();
                 _penDownLocation = _locatePenDown(cursor.X, cursor.Y);
-                var start = _writer.AppendHardware("penBegin", PenData(evt, cursor), OtdPenSource(evt.DeviceId));
+                var start = AppendInputHardware("penBegin", PenData(evt, cursor), OtdPenSource(evt.DeviceId));
                 _penOperation = start.EventId;
                 _penEvents.Add(start.EventId);
                 _penX = cursor.X; _penY = cursor.Y; _penPressure = evt.Pressure;
@@ -200,7 +225,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
             if (cursor.X == _penX && cursor.Y == _penY && evt.Pressure == _penPressure &&
                 evt.Position?.X == _penTabletX && evt.Position?.Y == _penTabletY &&
                 evt.Tilt?.X == _penTiltX && evt.Tilt?.Y == _penTiltY && evt.Type != InputEventType.PenDown) return;
-            var sample = _writer.AppendHardware("penSample", PenData(evt, cursor),
+            var sample = AppendInputHardware("penSample", PenData(evt, cursor),
                 OtdPenSource(evt.DeviceId), _penOperation);
             _penEvents.Add(sample.EventId);
             _penX = cursor.X; _penY = cursor.Y; _penPressure = evt.Pressure;
@@ -234,13 +259,23 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
     private void InterruptPen(string reason)
     {
         if (_penOperation is null) return;
-        _writer.AppendState("penInterrupted", _writer.NowTicks, _penEvents.ToArray(), new { reason, penDownLocation = _penDownLocation });
+        AppendInputState("penInterrupted", _writer.NowTicks, _penEvents.ToArray(), new { reason, penDownLocation = _penDownLocation });
         _penOperation = null;
         _penDownLocation = null;
         _penEvents.Clear();
     }
 
-    private void OnPassivePenMouse(int message, int x, int y)
+    private void OnPassivePenMouse(int message, int x, int y, bool injected)
+    {
+        lock (_sync)
+        {
+            _inputAppendId = 0;
+            try { RecordPassivePenMouse(message, x, y, injected); }
+            finally { ReportPhysicalInput("pen", injected); }
+        }
+    }
+
+    private void RecordPassivePenMouse(int message, int x, int y, bool injected)
     {
         if (message is not (0x0200 or 0x0201 or 0x0202)) return;
         lock (_sync)
@@ -257,12 +292,12 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
                 if (_penPhysicalDown) return;
                 _penPhysicalDown = true;
                 foreach (var operation in _mouse.Values.Distinct())
-                    _writer.AppendState("mouseInterrupted", _writer.NowTicks, [operation], new { reason = "penContact", heldButtons = Array.Empty<string>(), heldKeys = HeldKeys() });
+                    AppendInputState("mouseInterrupted", _writer.NowTicks, [operation], new { reason = "penContact", heldButtons = Array.Empty<string>(), heldKeys = HeldKeys() });
                 _mouse.Clear();
                 _penDownLocation = _locatePenDown(x, y);
-                var start = _writer.AppendHardware("penBegin", new
+                var start = AppendInputHardware("penBegin", new
                 {
-                    x, y, pressure = (float?)null, deviceId = "windows-pen",
+                    x, y, injected, pressure = (float?)null, deviceId = "windows-pen",
                     source = "windowsPenCompatibility", heldKeys = HeldKeys(), penDownLocation = _penDownLocation
                 }, PassivePenSource);
                 _penOperation = start.EventId;
@@ -271,9 +306,9 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
             }
             else if (message == 0x0200 && _penOperation is not null && (x != _penX || y != _penY))
             {
-                var sample = _writer.AppendHardware("penSample", new
+                var sample = AppendInputHardware("penSample", new
                 {
-                    x, y, pressure = (float?)null, deviceId = "windows-pen",
+                    x, y, injected, pressure = (float?)null, deviceId = "windows-pen",
                     source = "windowsPenCompatibility", heldKeys = HeldKeys(), penDownLocation = _penDownLocation
                 }, PassivePenSource, _penOperation);
                 _penEvents.Add(sample.EventId);
@@ -283,7 +318,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
             {
                 _penPhysicalDown = false;
                 if (_penOperation is not null)
-                    _writer.AppendHardware("penEnd", new { x, y, reason = "penUp", heldKeys = HeldKeys(), penDownLocation = _penDownLocation },
+                    AppendInputHardware("penEnd", new { x, y, injected, reason = "penUp", heldKeys = HeldKeys(), penDownLocation = _penDownLocation },
                         PassivePenSource, _penOperation);
                 _penOperation = null;
                 _penDownLocation = null;
@@ -292,7 +327,17 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
         }
     }
 
-    public void OnMouse(int message, int x, int y, int mouseData)
+    public void OnMouse(int message, int x, int y, int mouseData, bool injected = false)
+    {
+        lock (_sync)
+        {
+            _inputAppendId = 0;
+            try { RecordMouse(message, x, y, mouseData, injected); }
+            finally { ReportPhysicalInput("mouse", injected); }
+        }
+    }
+
+    private void RecordMouse(int message, int x, int y, int mouseData, bool injected)
     {
         lock (_sync)
         {
@@ -301,7 +346,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
             {
                 int delta = (short)((mouseData >> 16) & 0xffff);
                 if (hovering && delta != 0)
-                    _writer.AppendHardware("mouseWheel", new { x, y, delta,
+                    AppendInputHardware("mouseWheel", new { x, y, injected, delta,
                         axis = message == 0x020A ? "vertical" : "horizontal", heldKeys = HeldKeys(), heldButtons = HeldMouseButtons() }, MouseSource);
                 return;
             }
@@ -311,14 +356,14 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
             if (!hovering)
             {
                 foreach (var operation in _mouse.Values.Distinct())
-                    _writer.AppendState("mouseInterrupted", _writer.NowTicks, [operation], new { reason = "cursorLeftCsp", heldButtons = Array.Empty<string>(), heldKeys = HeldKeys() });
+                    AppendInputState("mouseInterrupted", _writer.NowTicks, [operation], new { reason = "cursorLeftCsp", heldButtons = Array.Empty<string>(), heldKeys = HeldKeys() });
                 _mouse.Clear();
                 return;
             }
             if (message == 0x0200) // WM_MOUSEMOVE
             {
                 foreach (var (heldButton, operation) in _mouse)
-                    _writer.AppendHardware("mouseDrag", new { button = ButtonName(heldButton), x, y, heldKeys = HeldKeys(), heldButtons = HeldMouseButtons() },
+                    AppendInputHardware("mouseDrag", new { button = ButtonName(heldButton), x, y, injected, heldKeys = HeldKeys(), heldButtons = HeldMouseButtons() },
                         MouseSource, operation);
                 return;
             }
@@ -332,18 +377,29 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
             if (pressed)
             {
                 if (_mouse.ContainsKey(button)) return;
-                var stamp = _writer.AppendHardware("mouseDown", new { button = ButtonName(button), x, y, heldKeys = HeldKeys(),
+                var stamp = AppendInputHardware("mouseDown", new { button = ButtonName(button), x, y, injected, heldKeys = HeldKeys(),
                     heldButtons = _mouse.Keys.Append(button).Order().Select(ButtonName).ToArray() }, MouseSource);
                 _mouse[button] = stamp.EventId;
             }
             else if (_mouse.Remove(button, out var operation))
-                _writer.AppendHardware("mouseUp", new { button = ButtonName(button), x, y, heldKeys = HeldKeys(), heldButtons = HeldMouseButtons() }, MouseSource, operation);
+                AppendInputHardware("mouseUp", new { button = ButtonName(button), x, y, injected, heldKeys = HeldKeys(), heldButtons = HeldMouseButtons() }, MouseSource, operation);
         }
     }
 
     private static string ButtonName(int button) => button switch { 1 => "left", 2 => "right", 3 => "middle", 5 => "x1", 6 => "x2", _ => $"button{button}" };
 
     public void OnKey(int vk, uint scanCode, bool extended, bool pressed, bool injected = false, nuint extraInfo = 0, bool guardIntercepted = false, nint nextHookResult = 0)
+    {
+        if (extraInfo == WindowsInputHooks.RecorderInputTag) return;
+        lock (_sync)
+        {
+            _inputAppendId = 0;
+            try { RecordKey(vk, scanCode, extended, pressed, injected, extraInfo, guardIntercepted, nextHookResult); }
+            finally { ReportPhysicalInput("keyboard", injected); }
+        }
+    }
+
+    private void RecordKey(int vk, uint scanCode, bool extended, bool pressed, bool injected, nuint extraInfo, bool guardIntercepted, nint nextHookResult)
     {
         lock (_sync)
         {
@@ -361,7 +417,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
                 if (modifier) return;
                 var modifiers = _keysDown.Where(IsModifier).Order().Select(KeyName).ToArray();
                 foreach (var key in _keysDown.Where(IsModifier)) _usedModifiers.Add(key);
-                _writer.AppendHardware("keyInput", new { key = KeyName(vk), vk, scanCode, extended, injected, extraInfo = $"0x{extraInfo:X}", guardIntercepted, nextHookResult = nextHookResult.ToInt64(),
+                AppendInputHardware("keyInput", new { key = KeyName(vk), vk, scanCode, extended, injected, extraInfo = $"0x{extraInfo:X}", guardIntercepted, nextHookResult = nextHookResult.ToInt64(),
                     modifiers, combination = modifiers.Length > 0, repeat, heldKeys = HeldKeys(),
                     shortcutMatch = (string?)null }, KeyboardSource);
                 Console.WriteLine($"[键盘监视] {string.Join("+", modifiers.Append(KeyName(vk)))} 注入={injected} 图层保护拦截={guardIntercepted} 后续Hook阻止={!guardIntercepted && nextHookResult != 0} 来源标记=0x{extraInfo:X}");
@@ -371,7 +427,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
                 if (!_keysDown.Remove(vk)) return;
                 RecordKeyboardTransition("keyUp", vk, scanCode, extended, false, false, injected, extraInfo, guardIntercepted, nextHookResult);
                 if (modifier && !_usedModifiers.Remove(vk))
-                    _writer.AppendHardware("keyInput", new { key = KeyName(vk), vk, scanCode, extended, injected, extraInfo = $"0x{extraInfo:X}", guardIntercepted, nextHookResult = nextHookResult.ToInt64(),
+                    AppendInputHardware("keyInput", new { key = KeyName(vk), vk, scanCode, extended, injected, extraInfo = $"0x{extraInfo:X}", guardIntercepted, nextHookResult = nextHookResult.ToInt64(),
                         modifiers = Array.Empty<string>(), combination = false, repeat = false, heldKeys = HeldKeys(),
                         shortcutMatch = (string?)null }, KeyboardSource);
             }
@@ -380,7 +436,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
 
     private void RecordKeyboardTransition(string action, int vk, uint scanCode, bool extended, bool pressed,
         bool repeat, bool injected, nuint extraInfo, bool guardIntercepted, nint nextHookResult) =>
-        _writer.AppendState("keyboardStateChanged", _writer.NowTicks, [], new
+        AppendInputState("keyboardStateChanged", _writer.NowTicks, [], new
         {
             action, key = KeyName(vk), vk, scanCode, extended, pressed, repeat, injected,
             extraInfo = $"0x{extraInfo:X}", guardIntercepted, nextHookResult = nextHookResult.ToInt64(),
@@ -390,10 +446,23 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
 
     private void ResetKeyboard(string reason)
     {
-        if (_keysDown.Count > 0) _writer.AppendState("keyboardStateChanged", _writer.NowTicks, [], new
+        if (_keysDown.Count > 0) AppendInputState("keyboardStateChanged", _writer.NowTicks, [], new
         { action = "reset", reason, heldKeys = Array.Empty<int>(), modifiers = Array.Empty<string>(), deviceSource = KeyboardSource });
         _keysDown.Clear();
         _usedModifiers.Clear();
+    }
+
+    private EventStamp AppendInputHardware(string kind, object data, HardwareDeviceSource source, ulong? operationId = null)
+    {
+        var record = _writer.AppendHardwareRecord(kind, data, source, operationId);
+        _inputAppendId = record.AppendId;
+        return new(record.EventId, record.Ticks);
+    }
+
+    private void AppendInputState(string kind, long ticks, ulong[] relatedEventIds, object data)
+    {
+        var record = _writer.AppendStateRecord(kind, ticks, relatedEventIds, data);
+        if (record is not null) _inputAppendId = record.AppendId;
     }
 
     private static bool IsModifier(int vk) => vk is 0x10 or 0x11 or 0x12 or 0x5B or 0x5C or 0xA0 or 0xA1 or 0xA2 or 0xA3 or 0xA4 or 0xA5;

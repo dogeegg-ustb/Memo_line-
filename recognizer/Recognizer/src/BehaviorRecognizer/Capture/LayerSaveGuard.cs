@@ -35,6 +35,7 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
     private Configuration _config = new(false, [], [], "", 0);
     private Configuration? _controlConfig;
     private readonly SemaphoreSlim _controlLock = new(1, 1);
+    private string? _editProtectionOwner;
     private readonly SemaphoreSlim _workAvailable = new(0, 1);
     private Configuration? _activeConfig;
     private nint _activeWindow;
@@ -82,14 +83,48 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
         }
     }
 
-    public async Task<RecorderInputControlStatus> ConfigureInputInterceptionAsync(
+    public Task<RecorderInputControlStatus> ConfigureInputInterceptionAsync(
         RecorderInputControlRequest request, CancellationToken cancellationToken = default)
+        => ConfigureInputInterceptionCoreAsync(request, cancellationToken, null);
+
+    internal Task<RecorderInputControlStatus> ConfigureEditInterceptionAsync(string owner,
+        RecorderInputControlRequest request, CancellationToken cancellationToken = default)
+        => ConfigureInputInterceptionCoreAsync(request, cancellationToken, owner);
+
+    internal RecorderInputControlStatus ClaimEditProtection(string owner)
+    {
+        _controlLock.Wait();
+        try
+        {
+            if (_editProtectionOwner is not null) throw new InvalidOperationException("Input protection belongs to an edit transaction.");
+            var previous = GetInputControlStatus();
+            _editProtectionOwner = owner;
+            return previous;
+        }
+        finally { _controlLock.Release(); }
+    }
+
+    internal void ReleaseEditProtection(string owner)
+    {
+        _controlLock.Wait();
+        try
+        {
+            if (_editProtectionOwner != owner) throw new InvalidOperationException("Input protection owner does not match.");
+            _editProtectionOwner = null;
+        }
+        finally { _controlLock.Release(); }
+    }
+
+    private async Task<RecorderInputControlStatus> ConfigureInputInterceptionCoreAsync(
+        RecorderInputControlRequest request, CancellationToken cancellationToken, string? owner)
     {
         ArgumentNullException.ThrowIfNull(request);
         await _controlLock.WaitAsync(cancellationToken);
         try
         {
             ObjectDisposedException.ThrowIf(_closed, this);
+            if (_editProtectionOwner is not null && _editProtectionOwner != owner)
+                throw new InvalidOperationException("Input protection belongs to an edit transaction.");
             string exe = Volatile.Read(ref _config).Executable;
             var config = new Configuration(request.Enabled, [], [], exe, Stopwatch.GetTimestamp(), Controlled: true);
             if (request.Enabled)
@@ -115,7 +150,11 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
         finally { _controlLock.Release(); }
     }
 
-    public RecorderInputControlStatus RestoreAutomaticInputProtection()
+    public RecorderInputControlStatus RestoreAutomaticInputProtection() => RestoreAutomaticInputProtectionCore(null);
+
+    internal RecorderInputControlStatus RestoreAutomaticEditProtection(string owner) => RestoreAutomaticInputProtectionCore(owner);
+
+    private RecorderInputControlStatus RestoreAutomaticInputProtectionCore(string? owner)
     {
         // Serialize with asynchronous configuration so a finishing warmup cannot
         // re-arm controlled interception after the caller restored automatic policy.
@@ -123,6 +162,8 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
         try
         {
             ObjectDisposedException.ThrowIf(_closed, this);
+            if (_editProtectionOwner is not null && _editProtectionOwner != owner)
+                throw new InvalidOperationException("Input protection belongs to an edit transaction.");
             Volatile.Write(ref _controlConfig, null);
             var status = GetInputControlStatus();
             _writer.AppendState("inputControlChanged", _writer.NowTicks, [], status, "immediate");

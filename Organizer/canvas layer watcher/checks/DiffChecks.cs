@@ -28,7 +28,7 @@ internal static class DiffChecks
         { canvasOriginScreenPx = new { x = 100, y = 200 }, ocrScalePercent = 50, ocrRotationDegrees = 0 }));
         evidence.Accept(Core("brushState", 1, Brush(10)));
         evidence.Accept(Core("colorState", 1, new { rgb = new[] { 1, 2, 3 }, hex = "#010203" }));
-        evidence.Accept(Core("clipState", 1, new { canvas = new { resolution = 254 }, layers = new[] { new { id = 3, name = "Ink", uuid = "ink" } } }));
+        evidence.Accept(Core("clipState", 1, new { canvas = new { resolution = 254 }, layers = new[] { new { id = 3, name = "Ink", uuid = "ink", type_raw = 1 } } }));
         evidence.Accept(Event("tablet", "driverConfiguration", 1, new { snapshotId = "driver-1", pressureMappingStatus = "available" }));
         return evidence;
     }
@@ -134,7 +134,9 @@ internal static class DiffChecks
         using (var loaded = LayerDiff.Load(after)) check(loaded.GetPixel(6, 6).ToArgb() == Color.FromArgb(128, 7, 19, 31).ToArgb(), "Full-resolution load preserves translucent RGBA exactly");
         var diff = LayerDiff.Compare(after, now, minimal, Path.Combine(root, "patches"), CancellationToken.None);
         check(diff.Images.Length == 2 && diff.ChangedPixels == 259, "Precise dirty diff and coarse outside hit both produce image differences");
-        check(diff.FullResolutionComparedPixels == 8192 && diff.CoarseComparedPixels > 0, "Only predicted and coarse-hit tiles are searched at full resolution");
+        check(diff.FullResolutionComparedPixels == 256L * 256 && diff.CoarseComparedPixels == 0, "Every canvas pixel is compared at full resolution");
+        check(diff.Images.Any(image => image.Bounds.Left <= 200 && image.Bounds.Top <= 200
+            && image.Bounds.Right > 200 && image.Bounds.Bottom > 200), "A one-pixel alpha=1 change outside predicted coverage is detected");
         var fine = diff.Images.Single(i => i.LabelIds.Contains("stroke"));
         var coarse = diff.Images.Single(i => !i.LabelIds.Contains("stroke"));
         check(fine.Bounds == new PixelBox(4, 4, 7, 7), "Diff patch bounds use full-canvas coordinates");
@@ -293,6 +295,48 @@ internal static class DiffChecks
             "Only A's obsolete third snapshot rotates out; B's stack remains available");
         check(DiffViewPacket.Read(legacyManifest).CanvasImagePath is null,"Legacy lookup does not substitute a newer snapshot after its exact image rotates out");
         check(history.EvidenceRetentionTicks==50,"Updating A advances retention to B's still-needed boundary");
+
+        // Stage 1: an explicit recording-start baseline must make the first
+        // captured window a diff, while chain verification reports the exact
+        // package where its after/now link is broken.
+        string seededRoot = Path.Combine(root, "seeded-history"); var seededHistory = new SnapshotHistory(seededRoot);
+        var seedSource = Png(root, "recording-start-baseline", width: 32, height: 32);
+        using (var seedBitmap = LayerDiff.Load(seedSource))
+        {
+            var seedMetadata = JsonSerializer.SerializeToElement(new { width = 32, height = 32, layerId = 7, layerUuid = "seeded" });
+            seededHistory.SeedBaseline(new LayerSnapshot("seed-1", "ignored", "test", 1, 1000,
+                "external-baseline.png", 32, 32, new LayerReference(7, "Seeded", "seeded"), seedMetadata, [], 0,
+                "recordingStart"), seedSource);
+        }
+        var seededResult = new CaptureResult(Png(root, "seeded-window", image => image.SetPixel(2, 2, Color.Red), 32, 32),
+            JsonSerializer.Serialize(new { width = 32, height = 32, fullCanvas = true, layerId = 7, layerUuid = "seeded" }),
+            "Seeded", 2000, JsonSerializer.SerializeToElement(new { success = true }));
+        var seededRequest = Request(20, "Seeded") with { Context = new("test", new(32, 32), "test-control", historyEvidence.Freeze(20)) };
+        var seededUpdate = seededHistory.Advance(seededResult, seededRequest, "test", Collect, () => true, CancellationToken.None);
+        check(!seededUpdate.Baseline && seededUpdate.DiffImages > 0 && seededHistory.Pair.After!.Id == "seed-1",
+            "Recording-start baseline makes the first capture a diff");
+        string seededManifest = Path.Combine(seededUpdate.PacketDirectory, "manifest.json");
+        using (var seededPacket = JsonDocument.Parse(File.ReadAllText(seededManifest)))
+            check(J.Text(seededPacket.RootElement, "comparison") == "fullResolution/v2"
+                && J.Text(J.Get(seededPacket.RootElement, "search"), "outsideInspection") == "full-resolution every pixel",
+                "Diff manifest records the full-resolution comparison contract");
+        var chainOk = seededHistory.VerifyChain("seeded");
+        check(chainOk.Valid, "Seeded history chain verifies");
+        var brokenNode = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(seededManifest))!.AsObject();
+        brokenNode["after"]!["id"] = "wrong-after-id";
+        File.WriteAllText(seededManifest, brokenNode.ToJsonString(SnapshotHistory.Json));
+        var chainBroken = seededHistory.VerifyChain("seeded");
+        check(!chainBroken.Valid && chainBroken.Breakpoint == seededUpdate.PacketDirectory
+            && chainBroken.ExpectedAfterId == "seed-1" && chainBroken.ActualAfterId == "wrong-after-id",
+            "History chain verification reports the broken after/now link");
+
+        string perfAfter = Png(root, "performance-after", width: 4961, height: 7016);
+        string perfNow = Png(root, "performance-now", image => image.SetPixel(4960, 7015, Color.FromArgb(255, 1, 2, 3)), 4961, 7016);
+        var perfWatch = System.Diagnostics.Stopwatch.StartNew();
+        var perfDiff = LayerDiff.Compare(perfAfter, perfNow, minimal, Path.Combine(root, "performance"), CancellationToken.None);
+        perfWatch.Stop();
+        check(perfDiff.ChangedPixels == 1 && perfDiff.FullResolutionComparedPixels == 4961L * 7016 && perfDiff.CoarseComparedPixels == 0
+            && perfWatch.ElapsedMilliseconds < 400, "4961x7016 full-resolution compare completes within the release performance budget");
         var recreatedResult=Result("recreated-ink",57) with { Metadata=JsonSerializer.Serialize(new
             { width=256,height=256,fullCanvas=true,layerId=3,layerUuid="recreated-ink" }) };
         var recreated=history.Advance(recreatedResult,Request(57),"test",Collect,()=>true,CancellationToken.None);

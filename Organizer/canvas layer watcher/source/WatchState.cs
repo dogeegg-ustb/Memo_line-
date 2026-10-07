@@ -44,6 +44,7 @@ internal sealed record CaptureRequest(long Generation, long Ticks, string LayerN
     LayerReference? Layer = null, string TimeSource = "triggerTicks", string TriggerKind = "stateUpdated", bool ViewPending = false)
 {
     public long TriggerTicks => Ticks;
+    public string? BoundaryRequestId { get; init; }
     [System.Text.Json.Serialization.JsonIgnore]
     public CaptureContext? Context { get; init; }
 }
@@ -55,6 +56,11 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
     private readonly SortedDictionary<long, LayerReference[]> _clipLayers = [];
     private readonly Dictionary<long, long> _dirty = [];
     private readonly Dictionary<long, long> _lastDirty = [];
+    private readonly Dictionary<long, long> _strokeBegins = [];
+    private readonly Dictionary<long, long> _strokeLast = [];
+    private readonly Dictionary<string, long> _capturedLayers = new(StringComparer.Ordinal);
+    private readonly HashSet<long> _pendingBoundaryLayers = [];
+    private long _lastEditBoundaryTicks = -1;
     private long? _mouseOperation, _penOperation;
     private View? _view;
     private long _viewTicks = -1, _evidenceTicks = -1, _completedTriggerTicks = -1, _syntheticOperation;
@@ -73,6 +79,7 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
     public void Reset()
     {
         Generation++; _layers.Clear(); _clipLayers.Clear(); _dirty.Clear(); _lastDirty.Clear(); _view = null;
+        _strokeBegins.Clear(); _strokeLast.Clear(); _capturedLayers.Clear(); _pendingBoundaryLayers.Clear(); _lastEditBoundaryTicks = -1;
         _mouseOperation = _penOperation = null;
         _viewTicks = _evidenceTicks = _completedTriggerTicks = -1;
         _reserved = _penContact = _mouseContact = false; _penEditable = true; _canvasArea = null;
@@ -80,6 +87,8 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
     public CaptureRequest? Accept(RecorderRealtimeEvent message)
     {
         long ticks = J.ObservationTicks(message);
+        if (message.Channel == "system" && message.Kind == "editBoundaryRequested")
+        { _lastEditBoundaryTicks = message.Ticks; return null; }
         if (message.Channel == "core.canvasViewState" && message.Kind == "evidenceCaptured")
         {
             CaptureRequest? EarlySkip(string reason) { ViewDiagnostic(message, ticks, reason, _view); return null; }
@@ -97,6 +106,7 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
             if (message.Kind == "penBegin")
             {
                 _penOperation = message.OperationId is { } penId ? (long)penId : --_syntheticOperation;
+                _strokeBegins.TryAdd(_penOperation.Value, message.Ticks);
                 var location = PanelRegionMap.ReadLocation(message.Data);
                 _penEditable = location is not null ? location.Region == "canvasViewport"
                     : _canvasArea is not { } area || J.Number(message.Data, "x") is not { } x || J.Number(message.Data, "y") is not { } y
@@ -110,6 +120,10 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
                 if (operation is { } op && _dirty.ContainsKey(op)) _lastDirty[op] = message.Ticks;
                 _penContact = false; _penOperation = null;
             }
+            if (message.Kind is "penBegin" or "penSample" or "penEnd" or "penInterrupted"
+                && (message.OperationId is { } strokeId ? (long)strokeId : _penOperation) is { } strokeOperation
+                && _strokeBegins.ContainsKey(strokeOperation))
+                _strokeLast[strokeOperation] = message.Ticks;
         }
         if (message.Channel == "tablet" && !message.IsSnapshot && message.Kind is "penBegin" or "penSample")
         {
@@ -192,6 +206,45 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         return Reserve(message, message.Ticks, _view, pending: false, force: true) is { } request
             ? request with { TimeSource = "triggerTicks", TriggerKind = "recordingEnd" } : null;
     }
+    public IReadOnlyList<LayerReference> KnownLayersAt(long triggerTicks)
+        => _clipLayers.LastOrDefault(pair => pair.Key <= triggerTicks).Value ?? [];
+
+    public IReadOnlyList<CaptureRequest> ReserveEditBoundary(string requestId, IReadOnlyList<LayerReference> layers)
+        => ReserveEditBoundary(requestId, layers, _lastEditBoundaryTicks);
+
+    public IReadOnlyList<CaptureRequest> ReserveEditBoundary(string requestId, IReadOnlyList<LayerReference> layers, long triggerTicks)
+    {
+        if (string.IsNullOrWhiteSpace(requestId) || triggerTicks < 0)
+            throw new InvalidDataException("编辑边界缺少 requestId 或原生 triggerTicks");
+        if (_reserved || InContact) throw new InvalidOperationException("编辑边界必须等待捕获和完整笔接触结束");
+        if (_view is null) throw new InvalidDataException("编辑边界画布视图未确认");
+        string current = _layers.LastOrDefault(pair => pair.Key <= triggerTicks).Value
+            ?? throw new InvalidDataException("编辑边界当前图层未确认");
+        var touched = new Dictionary<string, List<long>>(StringComparer.Ordinal);
+        touched.Add(LayerMapping.Compact(current), []);
+        foreach (var stroke in _strokeBegins.Where(pair => pair.Value <= triggerTicks))
+        {
+            string name = _layers.LastOrDefault(pair => pair.Key <= stroke.Value).Value
+                ?? throw new InvalidDataException("笔接触开始时的历史图层未确认");
+            string key = LayerMapping.Compact(name);
+            if (_strokeLast.GetValueOrDefault(stroke.Key, stroke.Value) <= _capturedLayers.GetValueOrDefault(key, -1)) continue;
+            if (!touched.TryGetValue(key, out var operations)) touched[key] = operations = [];
+            operations.Add(stroke.Key);
+        }
+        var requests = new List<CaptureRequest>();
+        foreach (var entry in touched)
+        {
+            var matches = layers.Where(layer => LayerMapping.Compact(layer.Name) == entry.Key).ToArray();
+            if (matches.Length != 1 || string.IsNullOrWhiteSpace(matches[0].Uuid))
+                throw new InvalidDataException($"编辑边界图层「{entry.Key}」无法唯一确认 UUID");
+            var layer = matches[0];
+            requests.Add(new(Generation, triggerTicks, layer.Name, _view, entry.Value.Order().ToArray(), layer,
+                "triggerTicks", "editBoundary") { BoundaryRequestId = requestId });
+        }
+        _reserved = true;
+        foreach (var request in requests) _pendingBoundaryLayers.Add(request.Layer!.Id);
+        return requests;
+    }
     private CaptureRequest? Reserve(RecorderRealtimeEvent message, long ticks, View view, bool pending, bool force = false)
     {
         CaptureRequest? Skip(string reason) { ViewDiagnostic(message, ticks, reason, view); return null; }
@@ -226,16 +279,29 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
             error = J.Text(message.Data, "error")
         }, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
     public bool Valid(CaptureRequest request) => request.Generation == Generation
-        && LayerMapping.SameName(_layers.LastOrDefault(p => p.Key <= request.TriggerTicks).Value, request.LayerName);
+        && (request.TriggerKind == "editBoundary" ? request.Layer is { } layer && _pendingBoundaryLayers.Contains(layer.Id)
+            : LayerMapping.SameName(_layers.LastOrDefault(p => p.Key <= request.TriggerTicks).Value, request.LayerName));
     public void Complete(CaptureRequest request, bool success)
     {
         if (request.Generation != Generation) return;
         if (success) _completedTriggerTicks = Math.Max(_completedTriggerTicks, request.TriggerTicks);
+        if (success)
+        {
+            string layerKey = LayerMapping.Compact(request.LayerName);
+            _capturedLayers[layerKey] = Math.Max(_capturedLayers.GetValueOrDefault(layerKey, -1), request.TriggerTicks);
+            foreach (long operation in _strokeBegins.Where(pair => pair.Value <= request.TriggerTicks
+                && _strokeLast.GetValueOrDefault(pair.Key, pair.Value) <= request.TriggerTicks
+                && LayerMapping.SameName(_layers.LastOrDefault(layer => layer.Key <= pair.Value).Value, request.LayerName))
+                .Select(pair => pair.Key).ToArray())
+            { _strokeBegins.Remove(operation); _strokeLast.Remove(operation); }
+        }
         if (success) foreach (long operation in request.Operations)
         {
             if (_lastDirty.GetValueOrDefault(operation) <= request.TriggerTicks) { _dirty.Remove(operation); _lastDirty.Remove(operation); }
             else _dirty[operation] = request.TriggerTicks + 1;
         }
-        _reserved = false;
+        if (request.TriggerKind == "editBoundary" && request.Layer is { } completedLayer)
+            _pendingBoundaryLayers.Remove(completedLayer.Id);
+        _reserved = _pendingBoundaryLayers.Count > 0;
     }
 }

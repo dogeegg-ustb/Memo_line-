@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BehaviorRecognizer.Storage.Memoline;
 
 namespace CanvasLayerWatcher;
 
@@ -20,7 +21,7 @@ internal sealed class MainWindow : Form
     private CancellationTokenSource? _stopSource;
     private Task? _monitorTask;
     private readonly HashSet<Task> _captureTasks = [];
-    private readonly SemaphoreSlim _captureSerial = new(1, 1);
+    public CaptureCoordinator CaptureCoordinator { get; } = new();
     private readonly List<Control> _configurationControls = [];
     private RecognizerMonitor? _monitor;
     private Bitmap? _image;
@@ -146,7 +147,6 @@ internal sealed class MainWindow : Form
             _startingSource = validation;
             await Bridge.RunAsync(bridge, ["inspect", clip], validation.Token);
             if (_host is not null) _endpoint.Text = await _host.PrepareAsync(clip, validation.Token);
-            _startingSource = null;
             if (_closing || IsDisposed) return;
             File.WriteAllText(_settingsPath, JsonSerializer.Serialize(new Settings(clip, _endpoint.Text.Trim())));
             _history = new SnapshotHistory(_diffRoot);
@@ -161,12 +161,24 @@ internal sealed class MainWindow : Form
                 _host?.CaptureQueued(request);
                 _captureTasks.Add(HandleCaptureAsync(monitor, clip, bridge, request, token));
             };
+            monitor.CaptureRequestsPaused = true;
             _monitorTask = RunMonitorAsync(monitor, _endpoint.Text.Trim(), clip, token);
+            var configuration = await monitor.WaitForConfigurationAsync(validation.Token);
+            await SeedRecordingBaselineAsync(monitor, clip, bridge, configuration, validation.Token);
+            monitor.CaptureRequestsPaused = false;
+            _startingSource = null;
+            Status("录制开始 baseline 已建立；持续监听中");
         }
         catch (Exception ex)
         {
             _startingSource = null; _start.Enabled = true;
             foreach (var control in _configurationControls) control.Enabled = true;
+            if (_stopSource is { } failedStop)
+            {
+                try { await failedStop.CancelAsync(); if (_monitorTask is not null) await _monitorTask; }
+                catch (Exception cleanup) { WriteLog("停止初始化中的 watcher：" + cleanup.Message); }
+                failedStop.Dispose(); _stopSource = null; _monitor = null; _monitorTask = null;
+            }
             if (_host is not null)
                 try { await _host.FinishRecordingAsync(CancellationToken.None); _stop.Enabled = _host.HasPendingSeal; }
                 catch (Exception cleanup) { WriteLog("停止初始化中的 Recognizer：" + cleanup.Message); }
@@ -175,6 +187,45 @@ internal sealed class MainWindow : Form
     }
     private async Task RunMonitorAsync(RecognizerMonitor monitor, string endpoint, string clip, CancellationToken token)
     { try { await monitor.RunAsync(endpoint, clip, token); } catch (OperationCanceledException) when (token.IsCancellationRequested) { } catch (Exception ex) { Status(ex.Message); } }
+    private async Task SeedRecordingBaselineAsync(RecognizerMonitor monitor, string clip, string bridge,
+        RecognizerMonitor.MonitorConfiguration configuration, CancellationToken token)
+    {
+        var history = _history ?? throw new InvalidOperationException("图层快照历史尚未建立");
+        var control = new RecorderControlClient(configuration.ControlPipe, WriteLog);
+        string liveFile = monitor.LiveFilePath ?? throw new InvalidDataException("Recognizer 未提供机械录制文件路径，无法核对开始 baseline 边界");
+        using var reader = MemolineReader.Open(liveFile);
+        bool CurrentSession() => monitor.SessionId == configuration.SessionId
+            && monitor.ControlPipe == configuration.ControlPipe && monitor.Generation == configuration.Generation;
+        async Task<BaselineBarrier> Barrier(string requestId, CancellationToken cancellation)
+        {
+            if (!CurrentSession()) throw new InvalidOperationException("开始 baseline 的录制会话已改变");
+            // The server waits on the input consumer and FlushAsync before
+            // responding, so its appendId proves queued hardware was persisted.
+            var response = await control.PrepareEditBoundaryAsync(requestId, cancellation);
+            if (!CurrentSession()) throw new InvalidOperationException("开始 baseline 的录制会话已改变");
+            return BaselineBarrier.FromResponse(response, requestId);
+        }
+        void Commit(BaselineCaptureResult capture, long triggerTicks)
+        {
+            if (!CurrentSession()) throw new InvalidOperationException("开始 baseline 的录制会话已改变");
+            var seeds = new List<BaselineSeed>(capture.Layers.Count);
+            foreach (var layer in capture.Layers)
+            {
+                string id = "baseline-" + triggerTicks.ToString("D20", System.Globalization.CultureInfo.InvariantCulture)
+                    + "-" + layer.Layer.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    + "-" + Guid.NewGuid().ToString("N")[..8];
+                var snapshot = new LayerSnapshot(id, history.Root, configuration.SessionId, configuration.Generation,
+                    capture.SaveDispatchedTicks, string.Empty, configuration.PixelSize.Width, configuration.PixelSize.Height,
+                    layer.Layer, layer.Metadata, [], triggerTicks, "recordingStart");
+                seeds.Add(new(snapshot, layer.PngPath));
+            }
+            history.SeedBaselines(seeds);
+        }
+        await RecordingBaselineInitialization.RunAsync(configuration.SessionId, Barrier,
+            cancellation => SaveCapture.CaptureBaselineAsync(clip, bridge, control, configuration.PixelSize,
+                CurrentSession, () => monitor.InContact, Status, cancellation),
+            () => reader.ReadAvailable(maxRecords: 1), Commit, Status, token);
+    }
     private async Task HandleCaptureAsync(RecognizerMonitor monitor, string clip, string bridge, CaptureRequest request, CancellationToken token)
     {
         bool success = false;
@@ -183,7 +234,7 @@ internal sealed class MainWindow : Form
         string? pendingPng = null;
         try
         {
-            await _captureSerial.WaitAsync(token); acquired = true;
+            await CaptureCoordinator.WaitAsync(token); acquired = true;
             var context = request.Context ?? throw new InvalidOperationException("缺少已固定的 triggerTicks 上下文");
             var control = new RecorderControlClient(context.ControlPipe, WriteLog);
             var result = await SaveCapture.CaptureAsync(clip, bridge, control, context.PixelSize,
@@ -219,7 +270,7 @@ internal sealed class MainWindow : Form
             finally
             {
                 monitor.Complete(request, success, success ? _history?.EvidenceRetentionTicks : null);
-                if (acquired) _captureSerial.Release();
+                if (acquired) CaptureCoordinator.Release();
             }
         }
     }

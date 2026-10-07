@@ -7,6 +7,8 @@ namespace CanvasLayerWatcher;
 
 internal sealed class RecognizerMonitor
 {
+    internal readonly record struct BaselineMarker(string SessionId, ulong AppendId, long PenBeginCount);
+    internal readonly record struct MonitorConfiguration(string SessionId, Size PixelSize, string ControlPipe, long Generation);
     private sealed record Endpoint(string PipeName, int ProcessId);
     private readonly WatchState _state;
     private readonly RecognitionEvidence _evidence = new();
@@ -33,17 +35,23 @@ internal sealed class RecognizerMonitor
         set { lock (_sync) _captureRequestsPaused = value; }
     }
     private string? _clipPath;
+    private string? _liveFilePath;
     private Size? _pixelSize;
     private string? _controlPipe;
     private int _controlProcessId;
     private string _session = "";
     private bool _earlyEvidence;
     private TaskCompletionSource<ViewportObservation> _recordingEnd = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly Dictionary<string, TaskCompletionSource<RecorderRealtimeEvent>> _editBoundaries = new(StringComparer.Ordinal);
+    private readonly TaskCompletionSource<MonitorConfiguration> _configurationReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private ulong _lastAppendId;
+    private long _penBeginCount;
     public string SessionId { get { lock (_sync) return _session; } }
     public EvidenceWindow GetEvidence(long from, long to) { lock (_sync) return _evidence.Snapshot(from, to); }
     public string? ControlPipe { get { lock (_sync) return _controlPipe; } }
     public int ControlProcessId { get { lock (_sync) return _controlProcessId; } }
     public Size? PixelSize { get { lock (_sync) return _pixelSize; } }
+    public long Generation { get { lock (_sync) return _state.Generation; } }
     public bool Current(CaptureRequest request) { lock (_sync) return _state.Valid(request); }
     public bool InContact { get { lock (_sync) return _state.InContact; } }
     public void Complete(CaptureRequest request, bool success, long? evidenceRetentionTicks = null)
@@ -56,6 +64,19 @@ internal sealed class RecognizerMonitor
         }
     }
     public string? ClipPath { get { lock (_sync) return _clipPath; } }
+    /// <summary>Path of the append-only native mechanical stream for this session.</summary>
+    public string? LiveFilePath { get { lock (_sync) return _liveFilePath; } }
+    public Task<MonitorConfiguration> WaitForConfigurationAsync(CancellationToken token)
+        => _configurationReady.Task.WaitAsync(token);
+    public BaselineMarker GetBaselineMarker()
+    {
+        lock (_sync) return new(_session, _lastAppendId, _penBeginCount);
+    }
+    public bool HasPenBeginSince(BaselineMarker marker)
+    {
+        lock (_sync) return !string.Equals(marker.SessionId, _session, StringComparison.Ordinal)
+            || _penBeginCount != marker.PenBeginCount;
+    }
 
     public async Task<CaptureRequest?> PrepareRecordingEndAsync(CancellationToken token)
     {
@@ -75,6 +96,33 @@ internal sealed class RecognizerMonitor
         }
     }
 
+    public async Task<IReadOnlyList<CaptureRequest>> PrepareEditBoundaryAsync(string requestId, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(requestId)) throw new ArgumentException("编辑边界 requestId 不能为空", nameof(requestId));
+        var control = ControlPipe ?? throw new InvalidOperationException("Recognizer 控制接口尚未就绪");
+        TaskCompletionSource<RecorderRealtimeEvent> completion;
+        lock (_sync)
+        {
+            if (!_editBoundaries.TryGetValue(requestId, out completion!))
+                _editBoundaries.Add(requestId, completion = new(TaskCreationOptions.RunContinuationsAsynchronously));
+        }
+        var response = await new RecorderControlClient(control, text => Diagnostic?.Invoke(text)).PrepareEditBoundaryAsync(requestId, token);
+        var observation = await completion.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+        if (J.Text(response, "sessionId") != observation.SessionId || J.Text(response, "requestId") != requestId
+            || J.Tick(response, "triggerTicks", -1) != observation.Ticks
+            || J.Tick(response, "appendId", -1) != checked((long)observation.AppendId))
+            throw new InvalidDataException("编辑边界响应与 Recognizer 原生消息不一致");
+        lock (_sync)
+        {
+            if (_session != observation.SessionId || _pixelSize is not { } pixels || _controlPipe is not { } pipe)
+                throw new InvalidOperationException("编辑边界录制会话已改变");
+            _state.Accept(observation);
+            var requests = _state.ReserveEditBoundary(requestId, _state.KnownLayersAt(observation.Ticks), observation.Ticks);
+            var frozen = _evidence.Freeze(observation.Ticks);
+            return requests.Select(request => request with { Context = new(_session, pixels, pipe, frozen) }).ToArray();
+        }
+    }
+
     public async Task RunAsync(string endpoint, string clipPath, CancellationToken token)
     {
         while (!token.IsCancellationRequested)
@@ -90,7 +138,10 @@ internal sealed class RecognizerMonitor
                 string pipe = selected.PipeName;
                 lock (_sync)
                 {
-                    _state.Reset(); _clipPath = null; _pixelSize = null; _session = "";
+                    _state.Reset(); _clipPath = null; _liveFilePath = null; _pixelSize = null; _session = "";
+                    _lastAppendId = 0; _penBeginCount = 0;
+                    foreach (var boundary in _editBoundaries.Values) boundary.TrySetException(new IOException("Recognizer 会话已重连"));
+                    _editBoundaries.Clear();
                     _controlPipe = selected.ProcessId > 0 ? RecorderControlClient.PipeNameFor(selected.ProcessId) : null;
                     _controlProcessId = selected.ProcessId;
                 }
@@ -101,6 +152,12 @@ internal sealed class RecognizerMonitor
                     ["keyboard", "mouse", "tablet", "cores"], true, connection.Token))
                 {
                     MessageReceived?.Invoke(message);
+                    lock (_sync)
+                    {
+                        if (message.AppendId > _lastAppendId) _lastAppendId = message.AppendId;
+                        if (message.Channel == "tablet" && message.Kind == "penBegin" && !message.IsSnapshot)
+                            _penBeginCount++;
+                    }
                     if (message.Channel == "system")
                     {
                         if (message.Kind == "hello")
@@ -115,6 +172,7 @@ internal sealed class RecognizerMonitor
                             }
                             string? recording = J.Text(message.Data, "liveFilePath") ?? J.Text(message.Data, "filePath");
                             if (recording is null) throw new InvalidDataException("接口未提供录制文件，无法核对 .clip 路径");
+                            lock (_sync) _liveFilePath = Path.GetFullPath(recording);
                             Status?.Invoke("已连接；等待画布、图层和录制配置");
                             Diagnostic?.Invoke(_requireConfirmedViewChange ? "聚集模式使用已确认的视口变化作为封包边界"
                                 : _earlyEvidence ? "Recognizer 支持存证即时消息，保存不等待视口解析结果" : "Recognizer 未声明存证即时消息能力，当前连接回退到解析结果触发保存；请启动新版 Recognizer");
@@ -127,6 +185,16 @@ internal sealed class RecognizerMonitor
                                 var observation = new ViewportObservation(message, message.Ticks, 0, false, _state.Dirty);
                                 RecordingEndObserved?.Invoke(observation);
                                 _recordingEnd.TrySetResult(observation);
+                            }
+                        }
+                        if (message.Kind == "editBoundaryRequested" && J.Text(message.Data, "requestId") is { } requestId)
+                        {
+                            lock (_sync)
+                            {
+                                _state.Accept(message);
+                                if (!_editBoundaries.TryGetValue(requestId, out var completion))
+                                    _editBoundaries.Add(requestId, completion = new(TaskCreationOptions.RunContinuationsAsynchronously));
+                                completion.TrySetResult(message);
                             }
                         }
                         if (message.Kind == "sessionEnded") { _ended.Add(pipe); Status?.Invoke("录制已结束，等待新会话"); }
@@ -169,7 +237,7 @@ internal sealed class RecognizerMonitor
                 if (configuration is not null) try { await configuration; } catch (Exception) { }
                 if (controlStatus is not null) await controlStatus;
                 Diagnostic?.Invoke($"本次订阅统计：视口事件={viewEvents}，图层事件={layerEvents}，penBegin={penBegins}，mouseDown={mousePresses}");
-                lock (_sync) { _state.Reset(); _clipPath = null; _pixelSize = null; _controlPipe = null; _session = ""; }
+                lock (_sync) { _state.Reset(); _clipPath = null; _liveFilePath = null; _pixelSize = null; _controlPipe = null; _session = ""; }
             }
             await Task.Delay(1000, token);
         }
@@ -233,6 +301,9 @@ internal sealed class RecognizerMonitor
                             append.ValueKind == JsonValueKind.Number && append.TryGetUInt64(out var appendId) ? appendId : 0);
                         _pixelSize = new(width, height); _clipPath = Path.GetFullPath(configured);
                         if (!_state.HasCanvasArea && ScreenArea(J.Get(regions, "画布视口")) is { } area) _state.SetCanvasArea(area);
+                        if (_controlPipe is not { } controlPipe)
+                            throw new InvalidDataException("Recognizer 实时接口未关联控制管道，无法建立录制开始 baseline");
+                        _configurationReady.TrySetResult(new(_session, new(width, height), controlPipe, _state.Generation));
                     }
                     Diagnostic?.Invoke($"录制配置：clip={configured}，完整画布={width}×{height}，mouseFallbackArea={J.Get(regions, "画布视口")}");
                     Status?.Invoke(_requireConfirmedViewChange ? "持续监听中；仅按已确认的画布视口变化封包"

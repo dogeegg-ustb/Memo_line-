@@ -273,6 +273,8 @@ class LayerOcrReader:
                 evidence=[{
                     "type": "group_row" if is_group else "paper_row" if data["paper"] else "layer_row",
                     "bbox": self._compact_rect(data["property_rect"], data["name_rect"], image.shape[1], image.shape[0]),
+                    "row_bounds": [0, max(0, y0), image.shape[1], max(0, min(image.shape[0], y1)-max(0, y0))],
+                    "eye_bounds": list(self._eye_bounds(image, y0, y1)),
                     "name_bbox": list(data["name_rect"]),
                     "property_bbox": list(data["property_rect"]) if data["property_rect"] else None,
                     "recognized_name": data["name"],
@@ -570,10 +572,16 @@ class LayerOcrReader:
         return roots
 
     @staticmethod
-    def _visible_state(image: np.ndarray, top: int, bottom: int) -> bool | None:
+    def _eye_bounds(image: np.ndarray, top: int, bottom: int) -> tuple[int, int, int, int]:
         height, width = image.shape[:2]
+        y0, y1 = max(0, top), min(height, bottom)
+        return 0, y0, max(1, int(width * 0.095)), max(0, y1-y0)
+
+    @staticmethod
+    def _visible_state(image: np.ndarray, top: int, bottom: int) -> bool | None:
         # CSP's eye column sits at the far-left edge of each layer row.
-        eye = image[top:bottom, :max(1, int(width * 0.095))]
+        x, y, width, height = LayerOcrReader._eye_bounds(image, top, bottom)
+        eye = image[y:y+height, x:x+width]
         if eye.size == 0:
             return None
         gray = cv2.cvtColor(eye, cv2.COLOR_BGR2GRAY)

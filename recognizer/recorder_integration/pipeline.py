@@ -576,6 +576,9 @@ class Pipeline:
                         subtool_image=subtool_pixels,subtool_evidence=({
                             **{k:companion.get(k) for k in ('screenshotId','roi','capturedTicks','captureEndTicks')},
                             'captureId':job['captureId']} if companion else None))
+                elif module == LAYERS:
+                    result = self.cores[module].process_with_locator(pixels,
+                        panel_roi=list(crops[module]['roi']), capture_frame_id=job['captureId'])
                 else:
                     result = self.cores[module].process(pixels)
             self._complete_analysis(job,result,analysis_started)
@@ -599,7 +602,7 @@ class Pipeline:
                     self.timeline.complete_if_pending(job["packageId"],MODULES[module],None,dict(
                         triggerTicks=job["triggerTicks"],relatedEventIds=job["refs"],completedTicks=now_ticks(),
                         **(dict(captureId=job['captureId'],capturedTicks=job['ticks'],captureEndTicks=job['captureEndTicks'],
-                                panelRoi=list(crops[module]['roi'])) if module in (BRUSH,TOOLGROUP) else {})),str(ex))
+                                panelRoi=list(crops[module]['roi'])) if module in (BRUSH,TOOLGROUP,LAYERS) else {})),str(ex))
 
     def _complete_analysis(self, job, result, analysis_started):
         # Activation and publication share a lock: an older in-flight analysis
@@ -631,8 +634,8 @@ class Pipeline:
                 self.timeline.complete_if_pending(job["packageId"],MODULES[module],result,dict(
                     screenshotIds=[c["screenshotId"] for c in crops.values()],capturedTicks=job["ticks"],
                     captureId=job["captureId"],
-                    **(dict(captureEndTicks=job['captureEndTicks']) if module == TOOLGROUP else {}),
-                    **(dict(panelRoi=list(crops[module]["roi"])) if module in (BRUSH,TOOLGROUP) else {}),
+                    **(dict(captureEndTicks=job['captureEndTicks']) if module in (TOOLGROUP,LAYERS) else {}),
+                    **(dict(panelRoi=list(crops[module]["roi"])) if module in (BRUSH,TOOLGROUP,LAYERS) else {}),
                     triggerTicks=job["triggerTicks"],causalAmbiguous=job["causalAmbiguous"],
                     relatedEventIds=job["refs"],completedTicks=now_ticks(),analysisStartedTicks=analysis_started,
                     analysisQuietMs=self.analysis_quiet_ms(module),

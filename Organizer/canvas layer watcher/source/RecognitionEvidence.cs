@@ -178,8 +178,8 @@ internal sealed class RecognitionEvidence
                 }
                 if (!eligibleMouse.Contains(input.OperationId)) continue;
             }
-            if (!TryCanvasPoint(view.Data, parsed, x.Value, y.Value, canvas, out var point))
-            { warnings.Add("rotatedCanvasWithoutAffineMapping"); last.Remove(input.OperationId); continue; }
+            if (!TryCanvasPoint(view.Data, parsed, x.Value, y.Value, canvas, out var point, out string mappingWarning))
+            { warnings.Add(mappingWarning); last.Remove(input.OperationId); continue; }
             if (Math.Abs(point.X) > 1000000 || Math.Abs(point.Y) > 1000000) { warnings.Add("invalidCanvasCoordinates"); continue; }
             var brush = at.GetValueOrDefault("core.brushState");
             var clip = at.GetValueOrDefault("core.clipState");
@@ -223,10 +223,41 @@ internal sealed class RecognitionEvidence
             pair.Value.From, pair.Value.To, pair.Value.Source, pair.Value.States,
             new(pair.Value.Segments.ToArray(), pair.Value.Radius), pair.Value.Warnings, pair.Value.Location)).ToArray(), warnings.ToArray());
     }
-    private static bool TryCanvasPoint(JsonElement data, View view, double x, double y, Size canvas, out PointD point)
+    private static bool TryCanvasPoint(JsonElement data, View view, double x, double y, Size canvas,
+        out PointD point, out string warning)
     {
+        point = default;
+        warning = "rotatedCanvasWithoutAffineMapping";
+        var snapshot = J.Get(J.Get(data, "rawResult"), "snapshot");
+        var transform = J.Get(J.Get(data, "state"), "transform");
+        var matrices = J.Get(snapshot, "matrices");
+        if (matrices.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) matrices = J.Get(transform, "matrices");
+        if (matrices.ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Null))
+        {
+            // The published contract is row-major and normalized. Once it is
+            // present, an invalid contract must not silently use an estimate.
+            warning = "canvasAffineConventionMismatch";
+            if (J.Text(matrices, "convention") != "sct-affine-row-major/v1" || J.Text(matrices, "canvasSpace") != "normalized")
+                return false;
+            warning = "canvasAffineCanvasSizeMismatch";
+            if (canvas.Width <= 0 || canvas.Height <= 0
+                || J.Get(transform, "canvasPixelWidth").ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Null)
+                    && J.Tick(transform, "canvasPixelWidth", -1) != canvas.Width
+                || J.Get(transform, "canvasPixelHeight").ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Null)
+                    && J.Tick(transform, "canvasPixelHeight", -1) != canvas.Height)
+                return false;
+            warning = "invalidCanvasAffineMapping";
+            if (!ReadAffineArray(matrices, "screenToCanvas", out var published)
+                || !ReadAffineArray(matrices, "canvasToScreen", out var inverse)
+                || !Invertible(published) || !Invertible(inverse)
+                || !InversePair(published, inverse))
+                return false;
+            point = new((published[0] * x + published[1] * y + published[2]) * canvas.Width,
+                (published[3] * x + published[4] * y + published[5]) * canvas.Height);
+            return double.IsFinite(point.X) && double.IsFinite(point.Y);
+        }
         // The native ScreenToCanvas matrix maps to normalized canvas coordinates.
-        var affine = J.Get(J.Get(J.Get(data, "rawResult"), "snapshot"), "screenToCanvas");
+        var affine = J.Get(snapshot, "screenToCanvas");
         double?[] m = Enumerable.Range(0, 6).Select(i => J.Number(affine, "m" + i)).ToArray();
         if (m.All(v => v.HasValue) && Math.Abs(m[0]!.Value * m[4]!.Value - m[1]!.Value * m[3]!.Value) > 1e-18)
         {
@@ -237,12 +268,55 @@ internal sealed class RecognitionEvidence
         // Recognizer publishes native geometry rotation separately from OCR.
         // Its marker is canvas (0,0); positive geometry rotation is clockwise
         // in screen coordinates. Invert the resulting similarity transform.
-        double? rotation = J.Number(J.Get(J.Get(data, "state"), "transform"), "rotationDegrees");
+        double? rotation = J.Number(transform, "rotationDegrees");
         if (rotation is null && Math.Abs(Math.IEEERemainder(view.Rotation, 360)) > .01)
         { point = default; return false; }
         double angle = Math.IEEERemainder(rotation ?? 0, 360) * Math.PI / 180;
         double c = Math.Cos(angle), s = Math.Sin(angle), dx = x - view.X, dy = y - view.Y, zoom = view.Scale / 100;
         point = new((c * dx + s * dy) / zoom, (-s * dx + c * dy) / zoom);
         return double.IsFinite(point.X) && double.IsFinite(point.Y);
+    }
+
+    private static bool ReadAffineArray(JsonElement matrices, string key, out double[] values)
+    {
+        values = [];
+        var array = J.Get(matrices, key);
+        if (array.ValueKind != JsonValueKind.Array || array.GetArrayLength() != 6) return false;
+        values = new double[6];
+        for (int i = 0; i < values.Length; i++)
+            if (array[i].ValueKind != JsonValueKind.Number || !array[i].TryGetDouble(out values[i]) || !double.IsFinite(values[i]))
+                return false;
+        return true;
+    }
+
+    private static bool Invertible(double[] matrix)
+    {
+        // Normalize the linear part so a valid small or large scale does not
+        // overflow or underflow merely while computing its determinant.
+        double scale = new[] { Math.Abs(matrix[0]), Math.Abs(matrix[1]), Math.Abs(matrix[3]), Math.Abs(matrix[4]) }.Max();
+        if (scale == 0) return false;
+        double a = matrix[0] / scale, b = matrix[1] / scale, c = matrix[3] / scale, d = matrix[4] / scale;
+        double determinant = a * d - b * c;
+        if (!double.IsFinite(determinant) || determinant == 0) return false;
+        double inverseA = d / determinant / scale, inverseB = -b / determinant / scale;
+        double inverseC = -c / determinant / scale, inverseD = a / determinant / scale;
+        return double.IsFinite(inverseA) && double.IsFinite(inverseB) && double.IsFinite(inverseC) && double.IsFinite(inverseD)
+            && double.IsFinite(-(inverseA * matrix[2] + inverseB * matrix[5]))
+            && double.IsFinite(-(inverseC * matrix[2] + inverseD * matrix[5]));
+    }
+
+    private static bool InversePair(double[] a, double[] b)
+    {
+        static bool Identity(double[] left, double[] right)
+        {
+            double[] product = [
+                left[0] * right[0] + left[1] * right[3], left[0] * right[1] + left[1] * right[4],
+                left[0] * right[2] + left[1] * right[5] + left[2],
+                left[3] * right[0] + left[4] * right[3], left[3] * right[1] + left[4] * right[4],
+                left[3] * right[2] + left[4] * right[5] + left[5]];
+            double[] expected = [1, 0, 0, 0, 1, 0];
+            return product.Select((value, index) => double.IsFinite(value) && Math.Abs(value - expected[index]) <= 1e-8).All(value => value);
+        }
+        return Identity(a, b) && Identity(b, a);
     }
 }

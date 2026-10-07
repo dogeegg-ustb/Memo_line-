@@ -12,6 +12,8 @@ def synchronized(method):
 
 
 def semantic_state(module, result):
+    if module == 'currentLayerState' and isinstance(result, dict) and 'selectedName' in result:
+        return result['selectedName']
     if module == 'subtoolState':
         if not isinstance(result,dict) or result.get('status') != 'ok':
             return None
@@ -38,7 +40,7 @@ def semantic_state(module, result):
         state = {key:result.get(key) for key in ("canvasOriginScreenPx","ocrScalePercent","ocrRotationDegrees")}
         snapshot = result.get("snapshot") or {}
         state["transform"] = {k:snapshot.get(k) for k in ("canvasPixelWidth","canvasPixelHeight","scaleReference",
-            "cumulativeRelativeScale","rotationDegrees","scaleGeometryEstimate")}
+            "cumulativeRelativeScale","rotationDegrees","scaleGeometryEstimate","matrices")}
         return state
     if module == "clipState" and isinstance(result,dict):
         return {k:v for k,v in result.items() if k != "source"}

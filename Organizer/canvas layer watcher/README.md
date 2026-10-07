@@ -6,9 +6,9 @@
 
 双击 `Start.cmd`。发布版 `publish/win-x64/CanvasLayerWatcher.exe` 自包含，无需安装 .NET 或 Rust。
 
-1. 启动 `recognizer/Recognizer/publish/win-x64-injected-input-evidence/BehaviorRecognizer.exe`。在 CSP 打开已经保存的 `.clip`，启动 Recognizer 录制，并完成图层、画布和数位板校准。程序自动发现活动会话，也可手工选择其他兼容版本的描述文件；Recognizer 必须支持 `requestClipSave` 命令及其可选 `triggerTicks` 参数。
+1. 启动 `recognizer/Recognizer/publish/win-x64-injected-input-evidence/BehaviorRecognizer.exe`。在 CSP 打开已经保存的 `.clip`，启动 Recognizer 录制，并完成图层、画布和数位板校准。程序自动发现活动会话，也可手工选择其他兼容版本的描述文件；Recognizer 必须支持 `requestClipSave` 命令及其可选 `triggerTicks` 参数，以及可重复、刷盘后返回原生 `appendId` 的 `prepareEditBoundary` 命令。
 2. 在本程序选择**与 Recognizer 本次录制配置相同的 `.clip` 文件**。实时接口留空会自动发现；也可选择本次会话的 `.memoline.live.json`，或填写管道名。
-3. 点击「开始监听」，切回 CSP 绘画。绘画后平移、缩放或旋转画布，Recognizer 在证据像素采集完成时发送消息，本程序即请求保存并更新图层预览。新接口通过 `hello.data.evidenceCapturedNotifications=true` 声明能力；旧进程只发送 `stateUpdated` 时，会记录回退说明并沿用解析结果触发，需重启新版 Recognizer 才能提前保存。
+3. 点击「开始监听」，等待「录制开始 baseline 已建立」后切回 CSP 绘画。初始化先保存并导出每个非文件夹栅格图层的完整 baseline；期间若有新的笔接触，会整体重试，最多三次。绘画后平移、缩放或旋转画布，Recognizer 在证据像素采集完成时发送消息，本程序即请求保存并更新图层预览。新接口通过 `hello.data.evidenceCapturedNotifications=true` 声明能力；旧进程只发送 `stateUpdated` 时，会记录回退说明并沿用解析结果触发，需重启新版 Recognizer 才能提前保存。
 4. 「完整图层」页显示完整画布；成功比较后自动切换到「图像差异」页。左侧放大显示当前区域的更改图像，默认直接读取 `now` 与 `after` 比较后留下的原始 `now` 像素，未更改处透明。右侧同时显示完整图层总览，用一个粉色框标出左侧图像的画布位置。默认选择第一个区域，可逐个切换，或选「全部更改」查看各补丁按原位置合并后的局部图像。脏矩阵默认隐藏，可勾选后只在总览上查看。底部显示变化像素数、标签来源、笔刷和颜色。首张基准和没有变化时清除旧差异。
 5. 「修改前原像素」用于对照被改掉或擦除的旧内容；「变化遮罩」用白色标出全部变化，包括擦成透明的像素。「通道差值」是额外检查模式。「适应窗口」只改变显示比例；取消勾选以 100% 滚动查看完整图层或左侧更改图像，右侧总览始终适应窗口。「另存 PNG」保存当前页所示图像：完整图层保持完整尺寸，更改图像保持原始补丁像素，位置框不写入导出 PNG。「差异包」打开数据目录，差异页的「打开差异…」可直接查看已有 manifest.json，无需启动录制。「置顶」方便同时查看；自动更新不激活本窗口。
 
@@ -30,30 +30,44 @@ Recognizer 已移除 CSP 文档标题／文件名匹配校验。请选择当前 
 
 ## 监听和保存语义
 
-- 使用 `Memoline.Core` 的 `RecorderRealtimeClient`，订阅 `keyboard`、`mouse`、`tablet` 和全部五个 `core.*`，包括当前图层、图层属性、画布视口、笔刷、颜色；不占用 HID，不另外运行 OCR。连接时还以只读 `getInputControlStatus` 检查同进程控制管道。
-- 初始／连接快照只建立基线，不触发保存。悬停、侧键状态和按住 Space／Ctrl／Alt 的常见导航接触不会标记修改。兼容只有鼠标帧的数位板／注入输入：校准画布区域内的左键按下也表示可能编辑，面板点击、中键和导航手势跳过。接口将这类帧标为鼠标，无法区分真实鼠标和数位笔；本程序不据此声称设备身份，也不能判断实际像素是否改变。
+- 使用 `Memoline.Core` 的 `RecorderRealtimeClient`，订阅 `keyboard`、`mouse`、`tablet` 和全部 `core.*`，包括当前图层、图层属性、画布视口、笔刷、颜色；不占用 HID，不另外运行 OCR。连接时还以只读 `getInputControlStatus` 检查同进程控制管道。
+- 初始／连接快照只建立视口状态，不作为普通捕获触发；开始监听时另有一次明确的全层 baseline 保存。悬停、侧键状态和按住 Space／Ctrl／Alt 的常见导航接触不会标记修改。兼容只有鼠标帧的数位板／注入输入：校准画布区域内的左键按下也表示可能编辑，面板点击、中键和导航手势跳过。接口将这类帧标为鼠标，无法区分真实鼠标和数位笔；本程序不据此声称设备身份，也不能判断实际像素是否改变。
 - 各核心优先使用 Recognizer 的 `evidence.triggerTicks` 排列图层、视口及笔刷状态，旧消息缺少时才回退到 `capturedTicks` 或消息 ticks，并记录时间来源。`completedTicks/publishedTicks` 不作为选择图层和数据分界的时间。`status=unknown/ambiguous/error` 不覆盖已确认值；`causalAmbiguous` 仅诊断输入归属，`supersededBeforeAnalysis` 的中间图层消息不覆盖已确认图层。
 - `core.canvasViewState/evidenceCaptured` 在原始证据像素采集完成时发送，早于 PNG 编码、持久化、静默等待和核心解析。已有编辑输入且基线／目标图层可用时，本程序立刻请求保存；消息尚不能证明视口确已改变，因此可能提前保存一次后来识别为未改变的视口。初始存证及连接快照不保存；同一 triggerTicks 的中间／最终存证合并，随后 stateUpdated 只更新视口，不重复已成功保存的请求。输入仍接触或导航键未释放时，等待输入释放后派发。
-- 切换时冻结当前图层 OCR 名称，并与切换前最近的图层属性核心列表对应，保存其规范名称、ID、UUID；兼容“图层1”和“图层 1”的空格差异，多个同名候选不猜测。保存后优先按 UUID 核对文件，其次按 ID 与名称核对，然后按文件中的 ID 导出图像。属性核心尚无该图层时，保存后尝试唯一名称匹配。不会用属性核心上次保存的 `canvas.current_layer_id` 替代切换时的实时选中图层；两者可能不同。已知身份与文件不符时报告失败，不换读另一个同名图层。
+- 普通切换捕获冻结当前图层 OCR 名称，切换前的图层属性核心 ID／UUID 保留为初始提示；保存后将冻结名称唯一映射到新保存文件中的栅格图层，再按其实际 ID 导出。兼容“图层1”和“图层 1”的空格差异，多个同名候选不猜测；同名图层被重新创建后，使用文件内的新 ID／UUID。不会用属性核心上次保存的 `canvas.current_layer_id` 替代切换时的实时选中图层；两者可能不同。多层编辑边界捕获接口另外要求保存前后 UUID 和名称一致。
 - 连续存证／视图更新合并为一次正在处理的请求。触发时固定图层身份、会话、控制管道、画布尺寸和取证缓存，随后保存／解析不会改用新的状态。保存、解析和差异包提交全部成功后才清除输入，分界为本次 `triggerTicks`，不是 `saveInputDispatchedTicks` 或解析完成时间；新操作以及同一笔在 triggerTicks 之后的采样保留到下一轮。失败不移动快照槽，下次触发重试。接口断开／数据缺口会重连并重建基线，不把旧会话的操作带入新会话。
 - Ctrl+S 派发不代表 CSP 保存完成。必须观测文件大小或修改时间变化、至少 700 ms 稳定，且能在禁止并发写入的共享模式下复制，再通过 clipfile-rs 的容器／数据库／图层解析。等待保存上限 30 秒，读取组件上限 60 秒。没有文件更新时不展示可能过时的副本；手动已保存后 CSP 不再重写文件也会进入这一情况。triggerTicks 固定请求的时间归属；读取的是 CSP 实际写入的文件，不能追溯重建触发时刻尚未保存的历史像素。
 - Recognizer 各核心异步完成；若迟到的图层观察否定了已冻结的名称，丢弃结果并等待下次切换。识别不到图层、同名图层或切换文档期间不会自动猜测目标。
 
 临时 CLIP 副本读取后删除，暂存的 PNG 在差异包提交后移入 `layer-diffs/snapshots/`。状态和失败原因写入 `watcher.log`，选择路径保存在 `watcher-settings.json`。
 
+开始 baseline 期间暂停普通捕获请求。每次尝试先调用 `prepareEditBoundary`，等待当前笔接触结束、输入消费者队列处理到边界，并由 Recognizer 刷盘；保存和全部图层导出后再次取得边界。同一个机械流 reader 逐帧读取至两个响应给出的 `appendId`，校验连续性、边界 kind／ticks 和保存时间，并检查区间内是否出现 `penBegin`。有笔接触就清理本次所有临时 PNG，重新保存和导出；连续三次被打断则停止初始化。通过后 `SeedBaselines` 一次登记全部图层，来源为 `recordingStart`，不生成 baseline 差异包。日志记录尝试次数及前后 `appendId`。
+
+普通捕获和停止时的末尾捕获，在保存、图层导出及差异包提交期间共用 `MainWindow.CaptureCoordinator` 的同一串行锁。调用方也可通过 `EnterAsync` 持有该锁；取消等待不会释放其他任务持有的锁。多层边界捕获接口一次保存，再逐层导出；这些核心接口为后续编辑接线提供基础。
+
 `watcher.log` 现在同时记录每条视口消息的状态、实际视口值、待保存输入数、图层和触发／跳过原因，以及控制请求发送确认、完整响应和本次订阅计数。可据此区分「没有视口事件」「没有绘画输入」「任务已经在处理」「接口拒绝」「保存文件未更新」。
 
 ## after/now、脏矩阵和图像差异
 
-每个 CLIP 图层编号独立维护快照栈。该层第一次成功解析的完整图层图像写入 `after`，暂时没有 `now` 或图像差异；第二次写入 `now`，比较 `after → now`；以后先将该层旧 `now` 移为 `after`，新图写入 `now`，提交成功后删除该层再前一张完整图层 PNG。切换到 B 保留 A 的两个槽，返回 A 接续 A 的最近图像。事件缓存保留至所有层最近快照中最早的 triggerTicks。同编号 UUID 改变时仅重建该层基准；重启监听、Recognizer 重连、更换会话或画布尺寸变化时重建整组基准。
+每个 CLIP 图层编号独立维护快照栈。开始监听时已登记 baseline 的层占用 `after` 槽，首次普通捕获直接写入 `now` 并生成 `after → now` 差异；以后先将该层旧 `now` 移为 `after`，新图写入 `now`，提交成功后删除该层再前一张完整图层 PNG。没有已证明 baseline 的层仍能保存首张图像作为快照槽起点，但该图不被标成 `recordingStart`，精确链校验返回 `NoBaseline`。切换到 B 保留 A 的两个槽，返回 A 接续 A 的最近图像。事件缓存保留至所有层最近快照中最早的 triggerTicks。同编号 UUID 改变时仅重建该层快照槽；重启监听、Recognizer 重连、更换会话或画布尺寸变化时重建整组快照槽。
 
 两张源 PNG 始终保持完整画布尺寸。输入屏幕坐标结合输入发生前的已确认视口原点和缩放映射为画布像素；当前接口的 `canvasWindowRoiScreenPx` 及旧版 ROI 字段都支持。优先采用 CSP 使用的 Windows 光标 `x/y`，缺少时使用数位板 `screenX/screenY`；保留原始压力、驱动映射、设备来源等数据。笔刷大小、px/mm、DPI 和屏幕固定大小选项来自 Recognizer；大小未知暂用 20 px，缺少单位按 px，并在标签内记录对应说明。沿接触折线扩展笔刷半径、抗锯齿／安全余量和 12 屏幕像素附加余量，再使用原脏矩阵的稀疏行区间算法，单元尺寸为 64 画布像素。
 
-脏单元内逐像素比较 RGBA；范围外将整个画布缩至约 1/8 宽高作简单检查，检测到变化的单元再回到完整分辨率比较。两边 alpha 都为零时忽略隐藏 RGB。低分辨率检查是近似筛选，可能漏掉范围外很小的变化。缺少输入历史或可靠坐标变换时记录原因，仍进行低分辨率检查。坐标映射优先采用接口实际提供的归一化 `rawResult.snapshot.screenToCanvas.m0..m5`；当前版本未序列化这组矩阵时，使用画布原点、缩放以及 `state.transform.rotationDegrees` 原生几何旋转建立逆变换。旋转时如果连几何旋转也缺失，则使用低分辨率检查，不凭 OCR 角度猜测方向。
+所有 64 像素单元都逐像素比较完整分辨率 RGBA，包括预测范围外的单元；预测范围只用于标签归属。两边 alpha 都为零时忽略隐藏 RGB；任一侧非零时比较全部 RGBA，所以预测范围外单像素、alpha=1 的变化也会保留。缺少输入历史或可靠坐标变换时记录原因，仍执行全分辨率比较。坐标映射优先读取实际发布的 `rawResult.snapshot.matrices.screenToCanvas` 六元素数组，原始矩阵缺席时也接受 `state.transform.matrices`；契约必须为 `convention="sct-affine-row-major/v1"`、`canvasSpace="normalized"`。两组矩阵均需恰好六个有限系数、可逆且互为逆矩阵；发布的画布尺寸须与当前完整画布一致。映射后的归一化 x／y 分别乘画布宽／高，支持负屏幕原点和旋转。已发布的新矩阵不合法时记录具体警告并停止给笔迹分配推测坐标。新矩阵缺席时，继续兼容旧的 `rawResult.snapshot.screenToCanvas.m0..m5` 对象；再缺席时使用画布原点、缩放及 `state.transform.rotationDegrees` 的原生几何旋转。旋转时如果连几何旋转也缺失，则不凭 OCR 角度猜测方向，变化由全分辨率比较检出并记录缺少可靠笔迹归属的说明。
 
-每组连通的变化单元提供一张主更改图像 `images[].image`，指向只保留更改像素的原始 `now` 补丁。另保留 `after/mask/difference` 作为前后对照、擦除定位和通道检查的辅助数据；四张 PNG 均使用完整画布坐标标明放置范围，保持原像素分辨率。完整源图层仍由两个快照槽保存。独立 mask 区分「没有变化」与「擦成透明」。每份更改图像关联一个或多个脏矩阵标签；范围外发现的变化使用 `low-resolution-fallback` 标签。标签包含影响范围、输入操作、时间和状态 ID，反向记录对应图像 ID。
+每组连通的变化单元提供一张主更改图像 `images[].image`，指向只保留更改像素的原始 `now` 补丁。另保留 `after/mask/difference` 作为前后对照、擦除定位和通道检查的辅助数据；四张 PNG 均使用完整画布坐标标明放置范围，保持原像素分辨率。完整源图层仍由两个快照槽保存。独立 mask 区分「没有变化」与「擦成透明」。每份更改图像关联一个或多个脏矩阵标签；范围外发现的变化沿用 `low-resolution-fallback` 标签名，并记录 `outsidePredictedStrokeCoverage`，该名称不表示比较时使用了低分辨率。标签包含影响范围、输入操作、时间和状态 ID，反向记录对应图像 ID。
 
 `layer-diffs/current.json` 的 `layerStacks` 按图层编号保存各层 `after/now`，顶层 `after/now` 指向当前栈。`layer-diffs/packets/<id>/manifest.json` 和 PNG 保存历次差异包。删除旧的完整快照不会删除差异补丁。包内同时保留 Recognizer 各核心原始状态／识别状态／证据、配置、驱动、键盘、输入点和保存控制响应。状态按取证时间排列；各核心异步解析，包记录提交时已收到的观察，不声称它们都在保存时同步完成。首张基准之前未监听到的输入标记为不完整。详细结构见 [差异包格式](DIFF_FORMAT.md)。
+
+本轮写入的 manifest 字段如下：
+
+- `schema="dirty-matrix-image-diff/v1"`，新增 `comparison="fullResolution/v2"`；`kind` 为 `baseline` 或 `diff`。
+- `after`／`now` 包含 `id`、`sessionId`、`generation`、`triggerTicks`、`saveDispatchedTicks`、`savedTicks`、`width`、`height`、`layer`、`rasterMetadata`、`recognizerStates` 和 `baselineSource`。未证明的首捕获 `now=null`、`baselineSource=null`；已登记来源为 `recordingStart`、`createdEmpty` 或 `reproduction`，后续快照继承来源。顶层也写入 `baselineSource`。当前 bridge 无法证明新层来自空层创建，因此不会自动赋予 `createdEmpty`。
+- `search.tileSize=64`、`outsideDownsampleFactor=0`、`coarseWidth=0`、`coarseHeight=0`、`coarseComparedPixels=0`，`outsideInspection="full-resolution every pixel"`；同时写入 `warnings`、`fullResolutionComparedPixels` 和 `changedPixels`。没有 diff 的首快照，其比较计数为零。
+- `capture` 保留 `triggerTicks`、`ticks`、`timeSource`、`triggerKind`、`viewPending`、图层映射信息、`view`、`operations`、`saveDispatchedTicks` 和 `controlResponse`；多层边界请求使用 `triggerKind="editBoundary"`，每层包共享该边界的 `triggerTicks`。
+- `images[]` 包含 `id`、`bounds`、`changedPixels`、`afterImage`、`nowImage`、`maskImage`、`differenceImage`、`labelIds` 和 `image`；`image` 等于 `nowImage`。`canvasPreviewImage="canvas-preview.png"` 是最长边 1600 像素的显示缩略图。
+
+`current.json` 另外保存已证明 baseline 的 `baselineIds` 和完整 `baselines` 描述符。`VerifyChain(layerUuid)` 检查首个 diff 的 baseline 身份、尺寸／会话／generation，以及每个后续包的 `after.id` 是否等于前包的 `now.id`，返回具体断点和 `NoBaseline`、`ChainBroken` 或 `ChainLossy` 错误码；损坏的已提交 manifest 会导致校验失败。
 
 ## 构建与检查
 
@@ -67,7 +81,7 @@ cargo test --locked --manifest-path './Organizer/canvas layer watcher/bridge/Car
 & './Organizer/canvas layer watcher/publish/win-x64/CanvasLayerWatcher.exe' --smoke './Organizer/canvas layer watcher/checks/artifacts/ui'
 ```
 
-检查包含触发状态机、失败重试／会话隔离、保存文件稳定性、实际当前用户命名管道与录制配置绑定、真实空白 CLIP 的透明 PNG、合成彩色 tile 的逐像素往返、完整画布边缘及正负偏移，以及快照轮换、取消／失效后的提交保护、图层隔离、矩阵内精细比较、范围外低分辨率补查、擦除 mask、半透明 RGBA 保真和状态打包。差异显示检查还覆盖原像素读取与合并、前后图／mask、完整画布定位、重叠透明补丁、总览大小上限、完整快照删除后的历史总览和旧包兼容。管道检查需要本机当前用户权限，限制命名管道的沙箱中无法运行。UI smoke 验证双区域显示、原像素默认模式、区域选择与位置框对应、前后图、mask、快速切换、基准／无变化提示及最小窗口布局，不派发 CSP 输入。`--smoke <输出目录> <manifest.json>` 可额外渲染一个实际差异包进行检查。
+检查包含触发状态机、失败重试／会话隔离、保存文件稳定性、实际当前用户命名管道与录制配置绑定、真实空白 CLIP 的透明 PNG、合成彩色 tile 的逐像素往返、完整画布边缘及正负偏移，以及快照轮换、取消／失效后的提交保护、图层隔离、全画布逐像素比较、预测外 alpha=1 单像素变化、擦除 mask、半透明 RGBA 保真和状态打包。新增 fake 检查覆盖开始 baseline 前后刷盘边界、迟到的队列笔接触导致重试、三次中断后清理、多层边界各自产生一个包、链断点和复现层 baseline。差异显示检查还覆盖原像素读取与合并、前后图／mask、完整画布定位、重叠透明补丁、总览大小上限、完整快照删除后的历史总览和旧包兼容。管道检查需要本机当前用户权限，限制命名管道的沙箱中无法运行。UI smoke 验证双区域显示、原像素默认模式、区域选择与位置框对应、前后图、mask、快速切换、基准／无变化提示及最小窗口布局，不派发 CSP 输入。`--smoke <输出目录> <manifest.json>` 可额外渲染一个实际差异包进行检查。
 
 `checks --replay-dirty <录制文件>` 只读回放真实 Recognizer 帧，输出每次切换的输入、状态与矩阵；`checks --diff-recorded <回放 capture-N.json> <完整 PNG> <输出目录>` 使用同一份真实图层导出验证全尺寸比较，两者均不调用保存控制接口。
 

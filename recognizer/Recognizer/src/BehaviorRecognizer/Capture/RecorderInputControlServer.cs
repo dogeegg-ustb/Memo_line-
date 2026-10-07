@@ -26,18 +26,21 @@ public sealed class RecorderInputControlServer : IAsyncDisposable
     private readonly Func<bool> _recordingReady;
     private readonly MemolineWriter? _recording;
     private readonly Func<RecorderStateRequest, CancellationToken, Task<RecorderStateResponse>>? _requestStates;
+    private readonly UnifiedInputCapture? _capture;
     private MemolineEvent? _endBoundary;
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _server;
     public string PipeName { get; }
 
     public RecorderInputControlServer(IRecorderInputControl control, Func<bool>? recordingReady = null, string? pipeName = null,
-        MemolineWriter? recording = null, Func<RecorderStateRequest, CancellationToken, Task<RecorderStateResponse>>? requestStates = null)
+        MemolineWriter? recording = null, Func<RecorderStateRequest, CancellationToken, Task<RecorderStateResponse>>? requestStates = null,
+        UnifiedInputCapture? capture = null)
     {
         _control = control;
         _recordingReady = recordingReady ?? (() => true);
         _recording = recording;
         _requestStates = requestStates;
+        _capture = capture;
         PipeName = pipeName ?? $"memoline-recorder-input-{System.Environment.ProcessId}";
         _server = Task.Run(RunAsync);
     }
@@ -82,6 +85,36 @@ public sealed class RecorderInputControlServer : IAsyncDisposable
                                 case "getInputControlStatus":
                                     response = _control.GetInputControlStatus();
                                     break;
+                                case "prepareEditBoundary":
+                                    RequireEditCapture();
+                                    ValidateOptions(request, "command", "requestId");
+                                    string editRequestId = ReadIdentity(request, "requestId");
+                                    using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token))
+                                    {
+                                        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+                                        MemolineEvent editBoundary;
+                                        try { editBoundary = await _capture!.PrepareEditBoundaryAsync(editRequestId, timeout.Token); }
+                                        catch (OperationCanceledException) when (!_stop.IsCancellationRequested)
+                                        { throw new TimeoutException("Wait for the current pen contact to end (30 second timeout)."); }
+                                        await _recording!.FlushAsync(cancellationToken: _stop.Token);
+                                        response = new { success = true, sessionId = _recording.SessionId, requestId = editRequestId,
+                                            appendId = editBoundary.AppendId, triggerTicks = editBoundary.Ticks };
+                                    }
+                                    break;
+                                case "beginEditTransaction":
+                                    RequireEditCapture();
+                                    ValidateOptions(request, "command", "transactionId");
+                                    string beginId = ReadIdentity(request, "transactionId");
+                                    var began = await _capture!.BeginEditTransactionAsync(beginId, _control, _stop.Token);
+                                    response = new { success = true, sessionId = _recording!.SessionId, transactionId = beginId, appendId = began.AppendId };
+                                    break;
+                                case "endEditTransaction":
+                                    RequireEditCapture();
+                                    ValidateOptions(request, "command", "transactionId", "outcome");
+                                    string endId = ReadIdentity(request, "transactionId");
+                                    var ended = await _capture!.EndEditTransactionAsync(endId, ReadIdentity(request, "outcome"), _control, _stop.Token);
+                                    response = new { success = true, sessionId = _recording!.SessionId, transactionId = endId, appendId = ended.AppendId };
+                                    break;
                                 case "prepareRecordingEnd":
                                     if (request.EnumerateObject().Any(p => p.Name != "command"))
                                         throw new ArgumentException("prepareRecordingEnd only accepts command.");
@@ -101,6 +134,7 @@ public sealed class RecorderInputControlServer : IAsyncDisposable
                                         triggerTicks = boundary.Ticks, appendId = boundary.AppendId };
                                     break;
                                 case "configureInputInterception":
+                                    if (_capture?.EditTransactionActive == true) throw new InvalidOperationException("Input protection is owned by the active edit transaction.");
                                     foreach (var property in request.EnumerateObject())
                                         if (property.Name is not ("command" or "enabled"))
                                             throw new ArgumentException($"Unknown input control option: {property.Name}");
@@ -114,6 +148,7 @@ public sealed class RecorderInputControlServer : IAsyncDisposable
                                         : await _control.ConfigureInputInterceptionAsync(configuration, _stop.Token);
                                     break;
                                 case "restoreAutomaticInputProtection":
+                                    if (_capture?.EditTransactionActive == true) throw new InvalidOperationException("Input protection is owned by the active edit transaction.");
                                     response = _control.RestoreAutomaticInputProtection();
                                     break;
                                 case "requestClipSave":
@@ -167,5 +202,21 @@ public sealed class RecorderInputControlServer : IAsyncDisposable
         await _stop.CancelAsync();
         await _server;
         _stop.Dispose();
+    }
+
+    private void RequireEditCapture()
+    {
+        if (!_recordingReady() || _recording is null || _capture is null)
+            throw new InvalidOperationException("Editing requires the current initialized input capture session.");
+    }
+    private static void ValidateOptions(JsonElement request, params string[] allowed)
+    {
+        if (request.EnumerateObject().Any(p => !allowed.Contains(p.Name))) throw new ArgumentException("Unknown editing option.");
+    }
+    private static string ReadIdentity(JsonElement request, string name)
+    {
+        string? identity = request.GetProperty(name).GetString();
+        if (string.IsNullOrWhiteSpace(identity) || identity.Length > 128) throw new ArgumentException($"{name} must be nonempty and at most 128 characters.");
+        return identity;
     }
 }

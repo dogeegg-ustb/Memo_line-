@@ -1,5 +1,13 @@
 # Recognizer 实时状态接口（schemaVersion 1）
 
+## 编辑边界与事务通知（2026-10-07）
+
+`system` 频道新增四种原生状态帧通知：`editBoundaryRequested`（data.requestId）、`editTransactionBegan`（data.transactionId）、`editTransactionEnded`（data.transactionId/outcome）、`physicalInputDuringTransaction`（data.transactionId/deviceType/appendId/inputRecorded/latestAppendId）。外层 appendId 定位通知自身；物理告警内的 appendId 定位输入直接写入的实际记录，未产生单独记录时为0且inputRecorded=false。latestAppendId只是追加水位，可含解析桥的同步状态追加，不能代替精确输入引用。无单独帧的物理输入仍需按transactionId触发中止。通知保留原生追加顺序，不缓存为新订阅者的状态快照。
+
+对应控制管道命令在 [宿主接口说明](../../../../Memoline_demo_csponly/INTERFACES.md#事件编辑恢复接口2026-10-07)。prepare 等笔接触结束、追加并刷盘后返回，不写 footer。事务持有输入拦截策略所有权，恢复失败保留原生事务区间供重试。物理输入照常写入并告警，外部 injected 输入保留标记，`0x4D4C5243` 的 Memoline 输入在采集入口忽略。
+
+这组通知属于已验证的底层协议。宿主收到告警后中止重建、持久化日志以及 v3 封盘仍待实现，不能仅凭底层事务通知认定完整编辑完成。
+
 实现位于 `Memoline.Core.dll`，命名空间 `BehaviorRecognizer.Realtime`。Recognizer 每次录制自动建立当前 Windows 用户专用的本机命名管道。输入监听、核心解析和文件写入不等待订阅客户端。
 
 ## 连接方式

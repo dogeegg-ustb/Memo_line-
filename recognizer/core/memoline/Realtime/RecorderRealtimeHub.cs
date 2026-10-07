@@ -119,7 +119,7 @@ public sealed class RecorderRealtimeHub : IAsyncDisposable
         "coreStateUpdated" => ("core." + frame.Data.GetProperty("module").GetString(), "stateUpdated"),
         "coreEvidenceCaptured" => ("core." + frame.Data.GetProperty("module").GetString(), "evidenceCaptured"),
         "shortcutConfiguration" => (RecorderRealtimeTopics.Shortcuts, "configurationUpdated"),
-        "recordingEndRequested" => ("system", frame.Kind),
+        "recordingEndRequested" or "editBoundaryRequested" or "editTransactionBegan" or "editTransactionEnded" or "physicalInputDuringTransaction" => ("system", frame.Kind),
         _ => null
     };
     private void OnRecord(MemolineEvent frame)
@@ -128,7 +128,8 @@ public sealed class RecorderRealtimeHub : IAsyncDisposable
         if (frame.Kind is "keyboardStateChanged" or "keyInput" or "shortcutResolved" or
             "mouseCursorChanged" or "mouseDown" or "mouseUp" or "mouseDrag" or "mouseWheel" or "mouseInterrupted" or
             "penBegin" or "penSample" or "penEnd" or "penInterrupted" or "tabletStateChanged" or
-            "tabletDeviceChanged" or "driverConfiguration" or "coreStateUpdated" or "coreEvidenceCaptured" or "shortcutConfiguration" or "recordingEndRequested") _pending.Writer.TryWrite(frame);
+            "tabletDeviceChanged" or "driverConfiguration" or "coreStateUpdated" or "coreEvidenceCaptured" or "shortcutConfiguration" or "recordingEndRequested" or
+            "editBoundaryRequested" or "editTransactionBegan" or "editTransactionEnded" or "physicalInputDuringTransaction") _pending.Writer.TryWrite(frame);
     }
 
     private async Task PumpAsync()
@@ -158,7 +159,7 @@ public sealed class RecorderRealtimeHub : IAsyncDisposable
                         frame.RelatedEventIds, frame.DeviceSource, data);
                     // Evidence notifications are live boundaries, not confirmed
                     // states or initial snapshots. Do not overwrite either cache.
-                    if (frame.Kind is "coreEvidenceCaptured" or "recordingEndRequested") { Publish(message); continue; }
+                    if (frame.Kind is "coreEvidenceCaptured" || topic == "system") { Publish(message); continue; }
                     if (frame.Kind == "coreStateUpdated" && data.GetProperty("status").GetString() is "changed" or "unchanged"
                         && data.GetProperty("state").ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined))
                         _confirmedMessages[topic] = message;

@@ -19,8 +19,8 @@ internal sealed class WindowsMouseInputRouter(UnifiedInputCapture capture, bool 
             if (passivePen)
             {
                 if (message == 0x0201) _passivePenDown = true;
-                if (message != 0x0200 || _passivePenDown)
-                    capture.PostMouse(message, x, y, (int)mouseData, passivePen: true);
+                if (message != 0x0200 || _passivePenDown || capture.EditTransactionActive)
+                    capture.PostMouse(message, x, y, (int)mouseData, passivePen: true, injected: (flags & 1) != 0, extraInfo: extraInfo);
                 if (message == 0x0202) _passivePenDown = false;
             }
             return guard?.Mouse(message, x, y, mouseData, penCompatibility: true) == true;
@@ -36,8 +36,8 @@ internal sealed class WindowsMouseInputRouter(UnifiedInputCapture capture, bool 
             _ => 0
         };
         if (message is 0x0201 or 0x0204 or 0x0207 or 0x020B) _buttonsDown |= button;
-        if (message != 0x0200 || _buttonsDown != 0)
-            capture.PostMouse(message, x, y, (int)mouseData);
+        if (message != 0x0200 || _buttonsDown != 0 || capture.EditTransactionActive)
+            capture.PostMouse(message, x, y, (int)mouseData, injected: (flags & 1) != 0, extraInfo: extraInfo);
         if (message is 0x0202 or 0x0205 or 0x0208 or 0x020C) _buttonsDown &= ~button;
         return guard?.Mouse(message, x, y, mouseData) == true;
     }

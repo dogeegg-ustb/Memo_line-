@@ -6,6 +6,8 @@ using System.Text.Json;
 namespace CanvasLayerWatcher;
 
 internal sealed record CaptureResult(string PngPath, string Metadata, string LayerName, long SaveDispatchedTicks, JsonElement ControlResponse);
+internal sealed record BaselineLayerResult(LayerReference Layer, string PngPath, JsonElement Metadata);
+internal sealed record BaselineCaptureResult(IReadOnlyList<BaselineLayerResult> Layers, long SaveDispatchedTicks, JsonElement ControlResponse);
 
 internal static class Bridge
 {
@@ -32,6 +34,66 @@ internal static class SaveCapture
     internal readonly record struct Signature(long Length, long Modified);
     internal static Signature Stat(string path)
     { var info = new FileInfo(path); return new(info.Length, info.LastWriteTimeUtc.Ticks); }
+
+    public static Task<IReadOnlyList<BoundaryLayerCapture>> CaptureBoundaryAsync(string clip, string bridge,
+        RecorderControlClient control, Size pixelSize, IReadOnlyList<CaptureRequest> requests,
+        Func<bool> stillValid, Func<bool> inContact, Action<string> status, CancellationToken token)
+        => CaptureBoundaryAsync(new ClipLayerCaptureBackend(clip, bridge, control), pixelSize, requests,
+            stillValid, inContact, status, token);
+
+    internal static async Task<IReadOnlyList<BoundaryLayerCapture>> CaptureBoundaryAsync(ILayerCaptureBackend backend,
+        Size pixelSize, IReadOnlyList<CaptureRequest> requests, Func<bool> stillValid, Func<bool> inContact,
+        Action<string> status, CancellationToken token)
+    {
+        if (requests.Count == 0 || pixelSize.Width <= 0 || pixelSize.Height <= 0)
+            throw new InvalidDataException("编辑边界缺少图层或完整画布尺寸");
+        long ticks = requests[0].TriggerTicks;
+        string? requestId = requests[0].BoundaryRequestId;
+        if (ticks < 0 || string.IsNullOrWhiteSpace(requestId) || requests.Any(request => request.TriggerKind != "editBoundary"
+            || request.TriggerTicks != ticks || request.BoundaryRequestId != requestId || request.Generation != requests[0].Generation
+            || request.Layer is null || string.IsNullOrWhiteSpace(request.Layer.Uuid))
+            || requests.Select(request => request.Layer!.Uuid).Distinct(StringComparer.OrdinalIgnoreCase).Count() != requests.Count)
+            throw new InvalidDataException("多层捕获请求不属于同一已确认的编辑边界");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(60));
+        var ct = deadline.Token;
+        for (int attempt = 0; attempt < 100 && (!backend.InputIdle || inContact()); attempt++) await Task.Delay(50, ct);
+        if (!backend.InputIdle || inContact()) throw new InvalidOperationException("用户仍在输入中；编辑边界捕获暂停");
+        if (!stillValid()) throw new InvalidOperationException("编辑边界会话已改变");
+        SavedLayerDocument? document = null;
+        var outputs = new List<BoundaryLayerCapture>();
+        bool success = false;
+        try
+        {
+            status("编辑边界，保存一次并捕获全部涉及图层…");
+            document = await backend.SaveSnapshotAsync(ticks, ct);
+            if (document.SaveDispatchedTicks < 0) throw new InvalidDataException("Recognizer 未确认保存时间");
+            var savedLayers = await backend.InspectAsync(document, ct);
+            foreach (var request in requests)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!stillValid()) throw new InvalidOperationException("编辑边界会话已改变");
+                var matches = savedLayers.Where(layer => string.Equals(layer.Uuid, request.Layer!.Uuid, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (matches.Length != 1 || !LayerMapping.SameName(matches[0].Name, request.LayerName))
+                    throw new InvalidDataException($"编辑边界图层「{request.LayerName}」身份未确认");
+                var result = await backend.ExportAsync(document, matches[0], pixelSize, ct);
+                outputs.Add(new(request, result));
+                using var metadata = JsonDocument.Parse(result.Metadata);
+                if (J.Get(metadata.RootElement, "fullCanvas").ValueKind != JsonValueKind.True
+                    || J.Tick(metadata.RootElement, "width", -1) != pixelSize.Width || J.Tick(metadata.RootElement, "height", -1) != pixelSize.Height
+                    || J.Tick(metadata.RootElement, "layerId", -1) != matches[0].Id
+                    || !string.Equals(J.Text(metadata.RootElement, "layerUuid"), matches[0].Uuid, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("编辑边界导出尺寸或图层 UUID 不一致");
+            }
+            if (!stillValid()) throw new InvalidOperationException("编辑边界会话已改变");
+            success = true;
+            return outputs;
+        }
+        finally
+        {
+            if (document is not null) backend.Cleanup(document);
+            if (!success) foreach (var output in outputs) TryDelete(output.Result.PngPath);
+        }
+    }
 
     public static async Task<CaptureResult> CaptureAsync(string clip, string bridge, RecorderControlClient control, Size pixelSize, CaptureRequest request,
         Func<bool> stillValid, Func<bool> inContact, Action<string> status, CancellationToken token)
@@ -82,6 +144,57 @@ internal static class SaveCapture
             TryDelete(snapshot);
             if (!keepPng) TryDelete(png);
         }
+    }
+
+    public static async Task<BaselineCaptureResult> CaptureBaselineAsync(string clip, string bridge,
+        RecorderControlClient control, Size pixelSize, Func<bool> stillValid, Func<bool> inContact,
+        Action<string> status, CancellationToken token)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(60));
+        var ct = deadline.Token;
+        for (int attempt = 0; attempt < 100 && (!Native.InputIdle() || inContact()); attempt++) await Task.Delay(50, ct);
+        if (!Native.InputIdle() || inContact()) throw new InvalidOperationException("用户仍在按键或笔接触中；录制开始 baseline 暂停");
+        if (!stillValid()) throw new InvalidOperationException("录制会话尚未稳定，无法建立开始 baseline");
+        Signature before = Stat(clip);
+        status("录制开始，保存完整图层 baseline…");
+        var controlResponse = await control.SaveClipAsync(clip, ct);
+        string directory = Path.Combine(AppContext.BaseDirectory, "snapshots");
+        Directory.CreateDirectory(directory);
+        string unique = "baseline-" + Guid.NewGuid().ToString("N");
+        string snapshot = Path.Combine(directory, unique + ".clip");
+        var outputs = new List<BaselineLayerResult>();
+        try
+        {
+            await StableSnapshotAsync(clip, snapshot, before, ct, allowUnchanged: true);
+            if (!stillValid()) throw new InvalidOperationException("监听会话已改变；开始 baseline 已丢弃");
+            string inspection = await Bridge.RunAsync(bridge, ["inspect", snapshot], ct);
+            using var inspected = JsonDocument.Parse(inspection);
+            foreach (var layer in LayerMapping.ReadLayers(inspected.RootElement))
+            {
+                ct.ThrowIfCancellationRequested();
+                string png = Path.Combine(directory, unique + "-" + layer.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".png");
+                string metadata = await Bridge.RunAsync(bridge, ["export-id", snapshot,
+                    layer.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), png,
+                    pixelSize.Width.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    pixelSize.Height.ToString(System.Globalization.CultureInfo.InvariantCulture)], ct);
+                using var parsed = JsonDocument.Parse(metadata);
+                if (J.Get(parsed.RootElement, "fullCanvas").ValueKind != JsonValueKind.True
+                    || J.Tick(parsed.RootElement, "width", 0) != pixelSize.Width
+                    || J.Tick(parsed.RootElement, "height", 0) != pixelSize.Height
+                    || J.Tick(parsed.RootElement, "layerId", 0) != layer.Id)
+                    throw new InvalidDataException($"开始 baseline 图层 {layer.Id} 的导出尺寸或身份不一致");
+                outputs.Add(new(layer, png, parsed.RootElement.Clone()));
+            }
+            if (outputs.Count == 0) throw new InvalidDataException("开始 baseline 没有可导出的非文件夹图层");
+            return new(outputs, J.Tick(controlResponse, "saveInputDispatchedTicks", 0), controlResponse);
+        }
+        catch
+        {
+            foreach (var output in outputs) TryDelete(output.PngPath);
+            throw;
+        }
+        finally { TryDelete(snapshot); }
     }
 
     internal static string ResolveLayerName(JsonElement inspection, string observedName)

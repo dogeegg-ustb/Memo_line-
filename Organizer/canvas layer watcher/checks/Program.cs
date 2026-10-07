@@ -7,6 +7,22 @@ using CanvasLayerWatcher;
 
 int checks = 0;
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); checks++; }
+if (args.Length == 1 && args[0] == "--affine-checks")
+{
+    AffineMatrixChecks.Run(Check);
+    Console.WriteLine($"AFFINE CHECKS: {checks} passed");
+    return;
+}
+if (args.Length == 1 && args[0] == "--stage12")
+{
+    string stageArtifacts = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../artifacts"));
+    Directory.CreateDirectory(stageArtifacts);
+    Stage12Checks.Run(Check, stageArtifacts);
+    await Stage12Checks.RunBoundaryAsync(Check, stageArtifacts);
+    await BaselineBarrierChecks.RunAsync(Check, stageArtifacts);
+    Console.WriteLine($"STAGE 1/2 CHECKS: {checks} passed");
+    return;
+}
 RecorderRealtimeEvent Event(string channel, string kind, long ticks, object data, bool snapshot = false, ulong? op = null)
     => new(1, "test", ticks, channel, kind, snapshot, 0, 0, ticks, ticks, ticks, op, null, null, JsonSerializer.SerializeToElement(data));
 RecorderRealtimeEvent Layer(long t, string? name = "Ink", string status = "changed") => Event("core.currentLayerState", "stateUpdated", t, new { status, state = name, evidence = new { capturedTicks = t } });
@@ -196,28 +212,28 @@ Check(pointerWindow.States.Any(state => state.Channel == "configuration" && stat
     && pointerWindow.Inputs is [{ AppendId: 600, EventId: 900 }] && pointerWindow.Inputs[0].RelatedEventIds!.SequenceEqual(new ulong[] { 899 }),
     "Frozen evidence preserves native append pointers for configuration, core states, and hardware inputs");
 Check(RecognizerMonitor.ScreenArea(JsonSerializer.SerializeToElement(new { missing = true })) is null, "Incomplete canvas area is rejected without crashing");
-Check(SaveCapture.ResolveLayerName(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "图层 1" }, new { id = 9, name = "图层 2" } } }), "图层1") == "图层 1", "OCR whitespace resolved to unique stored layer name");
+Check(SaveCapture.ResolveLayerName(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "图层 1", kind = 1 }, new { id = 9, name = "图层 2", kind = 1 } } }), "图层1") == "图层 1", "OCR whitespace resolved to unique stored layer name");
 try
 {
-    SaveCapture.ResolveLayerName(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "AB" }, new { id = 9, name = "A B" } } }), "AB");
+    SaveCapture.ResolveLayerName(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "AB", kind = 1 }, new { id = 9, name = "A B", kind = 1 } } }), "AB");
     throw new Exception("Whitespace-colliding names were accepted");
 }
 catch (InvalidDataException) { checks++; }
 
 var coreProperties = JsonSerializer.SerializeToElement(new {
     canvas = new { current_layer_id = 9 }, // Saved selection can differ from the live OCR selection.
-    layers = new[] { new { id = 3, name = "图层 1", uuid = "aa-bb" }, new { id = 9, name = "图层 2", uuid = "cc-dd" } }
+    layers = new[] { new { id = 3, name = "图层 1", uuid = "aa-bb", type_raw = 1 }, new { id = 9, name = "图层 2", uuid = "cc-dd", type_raw = 1 } }
 });
 compatibility = Ready(); compatibility.Accept(Layer(3, "图层1"));
 compatibility.Accept(Event("core.clipState", "stateUpdated", 4, new { status = "changed", state = coreProperties }));
 compatibility.Accept(Pen(5));
 var mapped = compatibility.Accept(ViewEvent(6, 20));
 Check(mapped?.Layer is { Id: 3, Name: "图层 1", Uuid: "aa-bb" }, "Live current layer maps to layer property core ID rather than stale saved selection");
-var renamed = JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 20, name = "重命名", uuid = "AABB" }, new { id = 3, name = "图层 1", uuid = "other" } } });
+var renamed = JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 20, name = "重命名", uuid = "AABB", type_raw = 1 }, new { id = 3, name = "图层 1", uuid = "other", type_raw = 1 } } });
 Check(LayerMapping.FromFile(renamed, "图层1", mapped!.Layer).Id == 3, "Fresh saved name maps to its actual ID instead of a stale UUID");
 try
 {
-    LayerMapping.FromFile(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "图层 1", uuid = "replacement" }, new { id = 19, name = "图层1", uuid = "new" } } }), "图层1", mapped.Layer);
+    LayerMapping.FromFile(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "图层 1", uuid = "replacement", type_raw = 1 }, new { id = 19, name = "图层1", uuid = "new", type_raw = 1 } } }), "图层1", mapped.Layer);
     throw new Exception("Ambiguous saved names accepted");
 }
 catch (InvalidDataException) { checks++; }
@@ -227,12 +243,12 @@ try
     throw new Exception("Ambiguous property core names accepted");
 }
 catch (InvalidDataException) { checks++; }
-Check(LayerMapping.FromFile(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "Ink" } } }), "Ink", new(3, "Ink", null)).Id == 3, "Core ID and canonical name used when UUID unavailable");
-Check(LayerMapping.FromFile(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 19, name = "图层 1", uuid = "replacement" } } }), "图层1", mapped.Layer).Id == 19,
+Check(LayerMapping.FromFile(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "Ink", type_raw = 1 } } }), "Ink", new(3, "Ink", null)).Id == 3, "Core ID and canonical name used when UUID unavailable");
+Check(LayerMapping.FromFile(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 19, name = "图层 1", uuid = "replacement", type_raw = 1 } } }), "图层1", mapped.Layer).Id == 19,
     "Recreated same-name layer maps to the freshly saved file ID");
 try
 {
-    SaveCapture.ResolveLayerName(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "Ink" } } }), "Missing");
+    SaveCapture.ResolveLayerName(JsonSerializer.SerializeToElement(new { layers = new[] { new { id = 3, name = "Ink", type_raw = 1 } } }), "Missing");
     throw new Exception("Missing OCR layer was accepted");
 }
 catch (InvalidDataException) { checks++; }
@@ -277,6 +293,10 @@ Check(!state.Valid(capture!), "Old session result invalidated");
 
 string artifacts = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../artifacts")); Directory.CreateDirectory(artifacts);
 DiffChecks.Run(Check, artifacts);
+AffineMatrixChecks.Run(Check);
+Stage12Checks.Run(Check, artifacts);
+await Stage12Checks.RunBoundaryAsync(Check, artifacts);
+await BaselineBarrierChecks.RunAsync(Check, artifacts);
 string source = Path.Combine(artifacts, "source.tmp"), target = Path.Combine(artifacts, "snapshot.tmp");
 await File.WriteAllTextAsync(source, "before"); var signature = SaveCapture.Stat(source);
 using (var timeout = new CancellationTokenSource(250))
@@ -336,7 +356,7 @@ writer.AppendState("coreStateUpdated", writer.NowTicks, [], new {
 });
 writer.AppendState("coreStateUpdated", writer.NowTicks, [], new { module = "brushState", status = "changed", state = new { name = "IPC brush", properties = new[] { new { key = "brush_size", value = 10, unit = "px" } } } });
 writer.AppendState("coreStateUpdated", writer.NowTicks, [], new { module = "colorState", status = "changed", state = new { hex = "#123456" } });
-writer.AppendState("coreStateUpdated", writer.NowTicks, [], new { module = "clipState", status = "changed", state = new { layers = new[] { new { id = 3, name = "Ink", uuid = "ink" } } } });
+writer.AppendState("coreStateUpdated", writer.NowTicks, [], new { module = "clipState", status = "changed", state = new { layers = new[] { new { id = 3, name = "Ink", uuid = "ink", type_raw = 1 } } } });
 writer.AppendState("driverConfiguration", writer.NowTicks, [], new { snapshotId = "IPC-driver" });
 await writer.FlushAsync();
 var running = monitor.RunAsync(server.ManifestPath, fixture, stop.Token);

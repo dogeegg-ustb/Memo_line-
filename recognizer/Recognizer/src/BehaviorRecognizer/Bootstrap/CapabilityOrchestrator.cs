@@ -133,10 +133,11 @@ public sealed class CapabilityOrchestrator
         foreach (var tablet in _inputSource.DetectedDevices)
             _memoline.AppendState("tabletDeviceChanged", _memoline.NowTicks, [], tablet, "immediate");
         _updateActivator = UpdateActivatorBridge.Start(_memoline, _driverInitialization);
+        _unifiedCapture = new UnifiedInputCapture(_memoline, _updateActivator);
         if (_updateActivator is not null)
             _inputControlServer = new RecorderInputControlServer(_updateActivator.Guard,
-                () => _updateActivator?.RecordingReady == true, recording: _memoline, requestStates: _updateActivator.RequestStatesAsync);
-        _unifiedCapture = new UnifiedInputCapture(_memoline, _updateActivator);
+                () => _updateActivator?.RecordingReady == true, recording: _memoline, requestStates: _updateActivator.RequestStatesAsync,
+                capture: _unifiedCapture);
         _windowsHooks = new WindowsInputHooks(_unifiedCapture, passivePen: !_captureOptions.EnableOtdHid, _updateActivator?.Guard);
 
         _normalizer = new InputEventNormalizer(profile, () => _driverInitialization.Current);
@@ -177,8 +178,8 @@ public sealed class CapabilityOrchestrator
         _windowsHooks?.Dispose();
         _windowsHooks = null;
         await _inputSource.StopAsync(cancellationToken);
-        if (_unifiedCapture is not null) await _unifiedCapture.DisposeAsync();
         if (_inputControlServer is not null) await _inputControlServer.DisposeAsync();
+        if (_unifiedCapture is not null) await _unifiedCapture.DisposeAsync();
         if (_updateActivator is not null) await _updateActivator.DisposeAsync();
         if (_memoline is not null) await _memoline.DisposeAsync();
         if (_realtime is not null) await _realtime.DisposeAsync();

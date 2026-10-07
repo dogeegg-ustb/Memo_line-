@@ -1,16 +1,22 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Encodings.Web;
+using System.Drawing.Imaging;
 using DirtyMatrix.Core;
 
 namespace CanvasLayerWatcher;
 
 internal sealed record LayerSnapshot(string Id, string RunId, string SessionId, long Generation, long SavedTicks, string ImageFile,
-    int Width, int Height, LayerReference Layer, JsonElement RasterMetadata, RecognizerState[] RecognizerStates, long TriggerTicks = -1);
+    int Width, int Height, LayerReference Layer, JsonElement RasterMetadata, RecognizerState[] RecognizerStates, long TriggerTicks = -1,
+    string? BaselineSource = null);
 internal sealed record SnapshotPair(LayerSnapshot? After, LayerSnapshot? Now);
 internal sealed record SnapshotHistoryIndex(LayerSnapshot? After, LayerSnapshot? Now,
-    Dictionary<long, SnapshotPair>? LayerStacks = null);
+    Dictionary<long, SnapshotPair>? LayerStacks = null, HashSet<string>? BaselineIds = null,
+    Dictionary<string, LayerSnapshot>? Baselines = null);
 internal sealed record SnapshotUpdate(string ImagePath, string PacketDirectory, bool Baseline, int DiffImages, int DirtyLabels);
+internal sealed record BaselineSeed(LayerSnapshot Snapshot, string FullPngPath);
+internal sealed record ChainVerification(bool Valid, string? Breakpoint, string? ExpectedAfterId, string? ActualAfterId, string? Message,
+    string? Code = null);
 
 internal sealed class SnapshotHistory
 {
@@ -23,6 +29,8 @@ internal sealed class SnapshotHistory
     public string Root { get; }
     public SnapshotPair Pair { get; private set; } = new(null, null);
     private Dictionary<long, SnapshotPair> _layerStacks = [];
+    private HashSet<string> _baselineIds = new(StringComparer.Ordinal);
+    private Dictionary<string, LayerSnapshot> _baselines = new(StringComparer.Ordinal);
     public IReadOnlyDictionary<long, SnapshotPair> LayerStacks => _layerStacks;
     public long EvidenceRetentionTicks => _layerStacks.Values.Select(pair => (pair.Now ?? pair.After)?.TriggerTicks)
         .OfType<long>().Where(ticks => ticks >= 0).DefaultIfEmpty(0).Min();
@@ -37,6 +45,8 @@ internal sealed class SnapshotHistory
             {
                 Pair = new(index.After, index.Now);
                 _layerStacks = index.LayerStacks ?? [];
+                _baselineIds = index.BaselineIds ?? new(StringComparer.Ordinal);
+                _baselines = index.Baselines ?? new(StringComparer.Ordinal);
                 if ((Pair.Now ?? Pair.After) is { } active) _layerStacks.TryAdd(active.Layer.Id, Pair);
             }
         }
@@ -45,6 +55,187 @@ internal sealed class SnapshotHistory
     private static bool SameLayer(LayerReference a, LayerReference b)
         => a.Uuid is { Length: > 0 } && b.Uuid is { Length: > 0 } ? a.Uuid.Equals(b.Uuid, StringComparison.OrdinalIgnoreCase)
             : a.Id == b.Id;
+
+    public void SeedBaseline(LayerSnapshot snapshot, string fullPngPath)
+    {
+        SeedBaselines([new(snapshot, fullPngPath)]);
+    }
+
+    // Validate and stage every layer before changing the in-memory stacks or
+    // current index. This keeps a retryable recording-start baseline atomic.
+    public void SeedBaselines(IReadOnlyList<BaselineSeed> seeds)
+    {
+        if (seeds is null || seeds.Count == 0) throw new InvalidDataException("baseline 没有可提交的图层");
+        var normalized = new List<(BaselineSeed Seed, LayerSnapshot Snapshot, string ImageFile, string Source)>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        var layerIds = new HashSet<long>();
+        foreach (var seed in seeds)
+        {
+            var snapshot = seed.Snapshot;
+            if (snapshot.Layer.Id <= 0 || snapshot.Width <= 0 || snapshot.Height <= 0 || snapshot.TriggerTicks < 0)
+                throw new InvalidDataException("baseline 缺少有效的图层、尺寸或 triggerTicks");
+            if (string.IsNullOrWhiteSpace(snapshot.Layer.Uuid) || string.IsNullOrWhiteSpace(snapshot.SessionId)
+                || snapshot.BaselineSource is not ("recordingStart" or "createdEmpty" or "reproduction"))
+                throw new InvalidDataException("baseline 缺少已确认的 UUID、会话或来源");
+            if (!layerIds.Add(snapshot.Layer.Id)) throw new InvalidDataException("baseline 图层重复");
+            string source = Path.GetFullPath(seed.FullPngPath);
+            if (!File.Exists(source)) throw new FileNotFoundException("baseline PNG 不存在", source);
+            string id = string.IsNullOrWhiteSpace(snapshot.Id) ? throw new InvalidDataException("baseline id 不能为空") : snapshot.Id;
+            if (!string.Equals(Path.GetFileName(id), id, StringComparison.Ordinal))
+                throw new InvalidDataException("baseline id 不能包含路径分隔符");
+            if (!ids.Add(id)) throw new InvalidDataException("baseline id 重复");
+            string imageFile = "snapshots/" + id + ".png";
+            if (File.Exists(Path.Combine(Root, imageFile))) throw new InvalidDataException("baseline id 已存在");
+            using var image = LayerDiff.Load(source);
+            if (image.Width != snapshot.Width || image.Height != snapshot.Height)
+                throw new InvalidDataException("baseline PNG 尺寸与快照元数据不一致");
+            normalized.Add((seed, snapshot with { RunId = _run, ImageFile = imageFile }, imageFile, source));
+        }
+
+        string stage = Path.Combine(Root, ".baseline-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(stage);
+        var written = new List<string>();
+        try
+        {
+            // Encode all images into private temporary files first. A corrupt
+            // source or disk failure therefore leaves the existing history intact.
+            foreach (var item in normalized)
+            {
+                string staged = Path.Combine(stage, Path.GetFileName(item.ImageFile));
+                using var image = LayerDiff.Load(item.Source);
+                image.Save(staged, ImageFormat.Png);
+            }
+            var nextStacks = new Dictionary<long, SnapshotPair>(_layerStacks);
+            var nextBaselineIds = new HashSet<string>(_baselineIds, StringComparer.Ordinal);
+            var nextBaselines = new Dictionary<string, LayerSnapshot>(_baselines, StringComparer.Ordinal);
+            SnapshotPair? last = null;
+            foreach (var item in normalized)
+            {
+                string destination = Path.GetFullPath(Path.Combine(Root, item.ImageFile));
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Move(Path.Combine(stage, Path.GetFileName(item.ImageFile)), destination);
+                written.Add(destination);
+                var next = new SnapshotPair(item.Snapshot, null);
+                nextStacks[item.Snapshot.Layer.Id] = next;
+                nextBaselineIds.Add(item.Snapshot.Id);
+                nextBaselines.Add(item.Snapshot.Id, item.Snapshot);
+                last = next;
+            }
+            var active = last ?? throw new InvalidDataException("baseline 没有可提交的图层");
+            string temp = Path.Combine(Root, "current-baseline-" + Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                File.WriteAllText(temp, JsonSerializer.Serialize(new SnapshotHistoryIndex(active.After, active.Now, nextStacks, nextBaselineIds, nextBaselines), Json));
+                File.Move(temp, Path.Combine(Root, "current.json"), overwrite: true);
+            }
+            finally { SaveCapture.TryDelete(temp); }
+            _layerStacks = nextStacks;
+            _baselineIds = nextBaselineIds;
+            _baselines = nextBaselines;
+            Pair = active;
+        }
+        catch
+        {
+            foreach (string path in written) SaveCapture.TryDelete(path);
+            throw;
+        }
+        finally { DeleteOwnDirectory(stage); }
+    }
+
+    public void RegisterBaseline(LayerReference layer, string fullPngPath, long triggerTicks)
+    {
+        if (triggerTicks < 0) throw new InvalidDataException("baseline triggerTicks 必须非负");
+        using var image = LayerDiff.Load(fullPngPath);
+        var current = _layerStacks.GetValueOrDefault(layer.Id)?.Now ?? _layerStacks.GetValueOrDefault(layer.Id)?.After
+            ?? Pair.Now ?? Pair.After;
+        if (current is null || string.IsNullOrWhiteSpace(current.SessionId))
+            throw new InvalidDataException("复现层 baseline 缺少当前录制会话");
+        JsonElement metadata = JsonSerializer.SerializeToElement(new { width = image.Width, height = image.Height, fullCanvas = true, layerId = layer.Id, layerUuid = layer.Uuid });
+        var snapshot = new LayerSnapshot("baseline-" + triggerTicks.ToString("D20", System.Globalization.CultureInfo.InvariantCulture)
+            + "-" + layer.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N"), _run,
+            current.SessionId, current.Generation, triggerTicks, string.Empty, image.Width, image.Height, layer,
+            metadata, current.RecognizerStates, triggerTicks, "reproduction");
+        SeedBaseline(snapshot, fullPngPath);
+    }
+
+    public ChainVerification VerifyChain(string layerUuid)
+    {
+        var files = Directory.Exists(Path.Combine(Root, "packets"))
+            ? Directory.EnumerateFiles(Path.Combine(Root, "packets"), "manifest.json", SearchOption.AllDirectories) : [];
+        var manifests = new List<(string Directory, JsonElement Root, long SortTicks, bool IsDiff)>();
+        foreach (var file in files)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(file));
+                var root = document.RootElement.Clone();
+                var after = J.Get(root, "after");
+                var layer = after.TryGetProperty("layer", out var layerProperty) ? layerProperty : default;
+                string uuid = layer.ValueKind == JsonValueKind.Object ? J.Text(layer, "uuid") ?? string.Empty : string.Empty;
+                if (!string.Equals(uuid, layerUuid, StringComparison.OrdinalIgnoreCase)) continue;
+                var now = J.Get(root, "now");
+                long ticks = J.Tick(now, "triggerTicks", J.Tick(after, "triggerTicks", long.MaxValue));
+                manifests.Add((Path.GetDirectoryName(file)!, root, ticks, now.ValueKind == JsonValueKind.Object));
+            }
+            catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+            { return new(false, Path.GetDirectoryName(file), null, null, "committed manifest cannot be read: " + ex.Message, "ChainBroken"); }
+        }
+        manifests.Sort((a, b) => a.SortTicks.CompareTo(b.SortTicks));
+        var baselines = _baselines.Values.Where(snapshot => string.Equals(snapshot.Layer.Uuid, layerUuid, StringComparison.OrdinalIgnoreCase)
+            && snapshot.BaselineSource is "recordingStart" or "createdEmpty" or "reproduction").ToDictionary(snapshot => snapshot.Id, StringComparer.Ordinal);
+        var baselineIds = baselines.Keys.ToHashSet(StringComparer.Ordinal);
+        if (baselineIds.Count == 0)
+            return new(false, manifests.FirstOrDefault().Directory, null, null, "layer has no proven baseline", "NoBaseline");
+        (long Width, long Height, string Uuid, string Session, long Generation)? signature = null;
+        string? expected = null;
+        foreach (var packet in manifests)
+        {
+            var after = J.Get(packet.Root, "after");
+            if (!packet.IsDiff) continue;
+            string actualAfter = J.Text(after, "id") ?? string.Empty;
+            var now = J.Get(packet.Root, "now");
+            if (J.Text(packet.Root, "comparison") != "fullResolution/v2")
+                return new(false, packet.Directory, null, null, "packet uses a lossy or unknown image comparison", "ChainLossy");
+            string afterUuid = J.Text(J.Get(after, "layer"), "uuid") ?? string.Empty;
+            string nowUuid = J.Text(J.Get(now, "layer"), "uuid") ?? string.Empty;
+            var currentSignature = (J.Tick(after, "width", -1), J.Tick(after, "height", -1), afterUuid,
+                J.Text(after, "sessionId") ?? string.Empty, J.Tick(after, "generation", -1));
+            var nowSignature = (J.Tick(now, "width", -1), J.Tick(now, "height", -1), nowUuid,
+                J.Text(now, "sessionId") ?? string.Empty, J.Tick(now, "generation", -1));
+            if (currentSignature != nowSignature)
+                return new(false, packet.Directory, null, null, "after/now metadata is inconsistent", "ChainBroken");
+            if (signature is null) signature = currentSignature;
+            else if (signature.Value != currentSignature)
+                return new(false, packet.Directory, null, null, "history metadata changed within one layer chain", "ChainBroken");
+            if (expected is null && !baselineIds.Contains(actualAfter))
+            {
+                var expectedBaseline = baselineIds.Order(StringComparer.Ordinal).FirstOrDefault();
+                return new(false, packet.Directory, expectedBaseline, actualAfter,
+                    "first diff does not reference a registered baseline", "ChainBroken");
+            }
+            if (expected is null && baselines.TryGetValue(actualAfter, out var baseline)
+                && (baseline.Width != currentSignature.Item1 || baseline.Height != currentSignature.Item2
+                    || !string.Equals(baseline.Layer.Uuid, afterUuid, StringComparison.OrdinalIgnoreCase)
+                    || baseline.SessionId != currentSignature.Item4 || baseline.Generation != currentSignature.Item5
+                    || baseline.TriggerTicks != J.Tick(after, "triggerTicks", -1)))
+                return new(false, packet.Directory, baseline.Id, actualAfter, "first diff metadata differs from its registered baseline", "ChainBroken");
+            if (expected is not null && !string.Equals(expected, actualAfter, StringComparison.Ordinal))
+                return new(false, packet.Directory, expected, actualAfter, "after.id does not match the previous now.id", "ChainBroken");
+            expected = J.Text(now, "id") ?? string.Empty;
+        }
+        return new(true, null, null, null, null);
+    }
+
+    private void PersistIndex(SnapshotPair active)
+    {
+        string temp = Path.Combine(Root, "current-" + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            File.WriteAllText(temp, JsonSerializer.Serialize(new SnapshotHistoryIndex(active.After, active.Now, _layerStacks, _baselineIds, _baselines), Json));
+            File.Move(temp, Path.Combine(Root, "current.json"), overwrite: true);
+        }
+        finally { SaveCapture.TryDelete(temp); }
+    }
     public SnapshotUpdate Advance(CaptureResult result, CaptureRequest request, string session,
         Func<long, long, EvidenceWindow> collect, Func<bool> valid, CancellationToken token)
     {
@@ -72,7 +263,7 @@ internal sealed class SnapshotHistory
         string id = "trigger-" + request.TriggerTicks.ToString("D20", System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..8];
         var currentStates = window.States.Where(s => window.CaptureStateIds.Contains(s.Id)).ToArray();
         var snapshot = new LayerSnapshot(id, _run, session, request.Generation, result.SaveDispatchedTicks, "snapshots/" + id + ".png",
-            width, height, layer, metadata.Clone(), currentStates, request.TriggerTicks);
+            width, height, layer, metadata.Clone(), currentStates, request.TriggerTicks, previous?.BaselineSource);
         string stage = Path.Combine(Root, ".pending-" + id), packet = Path.Combine(Root, "packets", id);
         string imagePath = Path.Combine(Root, snapshot.ImageFile);
         string indexTemp = Path.Combine(Root, "current-" + id + ".tmp");
@@ -89,12 +280,13 @@ internal sealed class SnapshotHistory
             CanvasThumbnail.Save(result.PngPath, Path.Combine(stage, canvasPreviewImage), new(width, height), token);
             // Historical packets own their cropped before/now pixels. Each layer
             // rotates its own full-size sources independently.
-            object Descriptor(LayerSnapshot s) => new { s.Id, s.SessionId, s.Generation, s.TriggerTicks,
+            object Descriptor(LayerSnapshot s) => new { s.Id, s.SessionId, s.Generation, s.TriggerTicks, s.BaselineSource,
                 saveDispatchedTicks = s.SavedTicks, s.SavedTicks, s.Width, s.Height, s.Layer, s.RasterMetadata, s.RecognizerStates };
             var manifest = new
             {
-                schema = "dirty-matrix-image-diff/v1", kind = baseline ? "baseline" : "diff", id,
+                schema = "dirty-matrix-image-diff/v1", comparison = "fullResolution/v2", kind = baseline ? "baseline" : "diff", id,
                 after = Descriptor(baseline ? snapshot : previous!), now = baseline ? null : Descriptor(snapshot),
+                baselineSource = (baseline ? snapshot : previous!).BaselineSource,
                 recognizer = new { window.SessionId, window.Frequency, window.FromTicks, window.ToTicks, window.Complete,
                     window.States, window.CaptureStateIds, window.Inputs },
                 capture = new { request.TriggerTicks, request.Ticks, request.TimeSource, request.TriggerKind, request.ViewPending,
@@ -102,10 +294,9 @@ internal sealed class SnapshotHistory
                     observedLayerName = request.LayerName, initialLayerHint = request.Layer,
                     layerMapping = "currentLayerNameToSavedClipId", request.View,
                     request.Operations, saveDispatchedTicks = result.SaveDispatchedTicks, result.ControlResponse },
-                search = new { tileSize = LayerDiff.TileSize, outsideDownsampleFactor = LayerDiff.CoarseFactor,
-                    coarseWidth = diff?.CoarseWidth ?? (width + LayerDiff.CoarseFactor - 1) / LayerDiff.CoarseFactor,
-                    coarseHeight = diff?.CoarseHeight ?? (height + LayerDiff.CoarseFactor - 1) / LayerDiff.CoarseFactor,
-                    outsideInspection = "approximate; coarse hits refined at full resolution", evidence.Warnings,
+                search = new { tileSize = LayerDiff.TileSize, outsideDownsampleFactor = 0,
+                    coarseWidth = 0, coarseHeight = 0,
+                    outsideInspection = "full-resolution every pixel", evidence.Warnings,
                     fullResolutionComparedPixels = diff?.FullResolutionComparedPixels ?? 0,
                     coarseComparedPixels = diff?.CoarseComparedPixels ?? 0, changedPixels = diff?.ChangedPixels ?? 0 },
                 predictedMatrix = diff?.PredictedMatrix ?? LayerDiff.Predicted(evidence, new(width, height)),
@@ -115,7 +306,7 @@ internal sealed class SnapshotHistory
             File.WriteAllText(Path.Combine(stage, "manifest.json"), JsonSerializer.Serialize(manifest, Json));
             var next = baseline ? new SnapshotPair(snapshot, null) : new SnapshotPair(previous, snapshot);
             nextStacks[layer.Id] = next;
-            File.WriteAllText(indexTemp, JsonSerializer.Serialize(new SnapshotHistoryIndex(next.After, next.Now, nextStacks), Json));
+            File.WriteAllText(indexTemp, JsonSerializer.Serialize(new SnapshotHistoryIndex(next.After, next.Now, nextStacks, _baselineIds, _baselines), Json));
             token.ThrowIfCancellationRequested(); if (!valid()) throw new InvalidOperationException("会话或图层已改变，差异包未提交");
             File.Move(result.PngPath, imagePath); movedImage = true;
             Directory.CreateDirectory(Path.GetDirectoryName(packet)!); Directory.Move(stage, packet); published = true;

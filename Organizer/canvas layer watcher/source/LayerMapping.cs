@@ -13,8 +13,22 @@ internal static class LayerMapping
     {
         var layers = J.Get(state, "layers");
         if (layers.ValueKind != JsonValueKind.Array) return [];
-        return layers.EnumerateArray().Where(item => J.Tick(item, "id", 0) > 0 && J.Text(item, "name") is not null)
+        return layers.EnumerateArray().Where(item => J.Tick(item, "id", 0) > 0 && J.Text(item, "name") is not null
+                && RasterKind(item) is { } kind && (kind & 1) != 0
+                && J.Get(item, "is_folder").ValueKind != JsonValueKind.True
+                && J.Get(item, "folder").ValueKind != JsonValueKind.True)
             .Select(item => new LayerReference(J.Tick(item, "id", 0), J.Text(item, "name")!, J.Text(item, "uuid"))).ToArray();
+    }
+
+    // The bridge calls this field `kind`; Recognizer's clipState parser
+    // publishes the same LayerType value as `type_raw`.
+    private static long? RasterKind(JsonElement layer)
+    {
+        if (J.Get(layer, "kind") is { ValueKind: JsonValueKind.Number } kind
+            && kind.TryGetInt64(out var bridgeKind)) return bridgeKind;
+        if (J.Get(layer, "type_raw") is { ValueKind: JsonValueKind.Number } type
+            && type.TryGetInt64(out var recognizerKind)) return recognizerKind;
+        return null;
     }
 
     public static LayerReference? FromCore(IReadOnlyList<LayerReference> layers, string observedName)
