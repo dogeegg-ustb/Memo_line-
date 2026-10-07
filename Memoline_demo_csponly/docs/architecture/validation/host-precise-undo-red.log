@@ -1,0 +1,40 @@
+  正在确定要还原的项目…
+  已还原 C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj (用时 83 毫秒)。
+  2 个项目(共 3 个)是最新的，无法还原。
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+  MemolineDemo -> D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\bin\Release\net10.0-windows\MemolineDemo.dll
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(34,25): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(59,28): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(71,23): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(76,29): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(83,29): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(89,23): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(96,28): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(104,28): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(108,23): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(117,28): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(122,21): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(125,28): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(129,31): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(136,28): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+
+生成失败。
+
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(34,25): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(59,28): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(71,23): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(76,29): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(83,29): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(89,23): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(96,28): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(104,28): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(108,23): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(117,28): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(122,21): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(125,28): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(129,31): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\PreciseUndoChecks.cs(136,28): error CS0103: 当前上下文中不存在名称“PreciseUndoSelector” [C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\PreciseUndoHarness.csproj]
+    0 个警告
+    14 个错误
+
+已用时间 00:00:24.95

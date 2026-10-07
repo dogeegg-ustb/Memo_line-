@@ -1,0 +1,6 @@
+DIFF artifacts: D:\Memo_Line\Memo_Line\Organizer\canvas layer watcher\checks\artifacts\diff-75a34e74aa4844519317abee9ce402bd
+STAGE 1/2 artifacts: D:\Memo_Line\Memo_Line\Organizer\canvas layer watcher\checks\artifacts\stage12-ba89e9d76de94007813523de3339ce72
+IPC: 连接 Recognizer：MemoLine.Recognizer.2e84a48c03df43f994b242e2f37bea31
+IPC: 已连接；等待画布、图层和录制配置
+IPC: 持续监听中；画布存证后立即请求保存，不等待视口解析
+Passed 212 checks; no CSP input was injected.

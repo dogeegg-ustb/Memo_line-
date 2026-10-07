@@ -1,0 +1,10 @@
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+  MemolineDemo -> D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\bin\Release\net10.0-windows\MemolineDemo.dll
+  PreciseUndoHarness -> C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\precise-undo-harness\bin\Release\net10.0-windows\MemolineDemo.Checks.dll
+
+已成功生成。
+    0 个警告
+    0 个错误
+
+已用时间 00:00:22.09
+Precise undo checks passed: 30.

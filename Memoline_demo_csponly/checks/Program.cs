@@ -14,6 +14,13 @@ try
         Console.WriteLine($"Compositor parity checks: {await CompositorParityChecks.RunAsync(root)}.");
         return;
     }
+    if (args is ["--reconstruction-only"])
+    {
+        Console.WriteLine($"Reconstruction checks: {await ReconstructionChecks.RunAsync()}.");
+        Console.WriteLine($"Precise undo checks: {PreciseUndoChecks.Run()}.");
+        Console.WriteLine($"Cross-layer reconstruction checks: {await ReconstructionCrossLayerChecks.RunAsync()}.");
+        return;
+    }
     if (args is ["--index-hardening-only"])
     {
         Console.WriteLine($"Edit index hardening checks: {EditIndexHardeningChecks.Run()}.");
@@ -29,6 +36,9 @@ try
     Console.WriteLine($"Public interface checks: {await InterfaceChecks.RunAsync(root)}.");
     Console.WriteLine($"Editing core checks: {EditingChecks.Run(root)}.");
     Console.WriteLine($"Compositor parity checks: {await CompositorParityChecks.RunAsync(root)}.");
+    Console.WriteLine($"Reconstruction checks: {await ReconstructionChecks.RunAsync()}.");
+    Console.WriteLine($"Precise undo checks: {PreciseUndoChecks.Run()}.");
+    Console.WriteLine($"Cross-layer reconstruction checks: {await ReconstructionCrossLayerChecks.RunAsync()}.");
     Console.WriteLine($"Edit index hardening checks: {EditIndexHardeningChecks.Run()}.");
     Console.WriteLine($"Footprint contract checks: {FootprintContractChecks.Run()}.");
     Console.WriteLine($"Bundle checks: {bundleChecks}; aggregate checks: {aggregateChecks}; lifecycle checks: {lifecycleChecks}.");

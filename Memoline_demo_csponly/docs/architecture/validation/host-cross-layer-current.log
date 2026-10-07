@@ -1,0 +1,13 @@
+  正在确定要还原的项目…
+  已还原 C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\cross-layer-harness\CrossLayerHarness.csproj (用时 85 毫秒)。
+  2 个项目(共 3 个)是最新的，无法还原。
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+  MemolineDemo -> D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\bin\Release\net10.0-windows\MemolineDemo.dll
+  CrossLayerHarness -> C:\Users\dogeegg\.codex\visualizations\2026\10\07\01a1149d-738b-7501-87d9-0f05e0d93121\cross-layer-harness\bin\Release\net10.0-windows\MemolineDemo.Checks.dll
+
+已成功生成。
+    0 个警告
+    0 个错误
+
+已用时间 00:00:02.87
+Cross-layer reconstruction checks passed: 14.

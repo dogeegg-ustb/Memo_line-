@@ -1,0 +1,5 @@
+Unhandled exception. System.InvalidOperationException: runtime backwards closure must stop before install
+   at MemolineDemo.ReconstructionChecks.<>c__DisplayClass5_0.<RunAsync>g__Check|0(Boolean ok, String label) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionChecks.cs:line 91
+   at MemolineDemo.ReconstructionChecks.RunAsync() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionChecks.cs:line 158
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\reconstruction\Program.cs:line 1
+   at Program.<Main>(String[] args)

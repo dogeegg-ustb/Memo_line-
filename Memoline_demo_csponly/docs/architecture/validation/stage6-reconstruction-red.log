@@ -1,0 +1,17 @@
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+  MemolineDemo -> D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\bin\Release\net10.0-windows\MemolineDemo.dll
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionChecks.cs(59,18): error CS0246: 未能找到类型或命名空间名“ReconstructionPlan”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionChecks.cs(63,46): error CS0246: 未能找到类型或命名空间名“ICspReconstructionExecutor”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionChecks.cs(70,89): error CS0246: 未能找到类型或命名空间名“ReplayEvent”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionChecks.cs(68,48): error CS0246: 未能找到类型或命名空间名“ReplayEvent”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+
+生成失败。
+
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionChecks.cs(59,18): error CS0246: 未能找到类型或命名空间名“ReconstructionPlan”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionChecks.cs(63,46): error CS0246: 未能找到类型或命名空间名“ICspReconstructionExecutor”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionChecks.cs(70,89): error CS0246: 未能找到类型或命名空间名“ReplayEvent”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionChecks.cs(68,48): error CS0246: 未能找到类型或命名空间名“ReplayEvent”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+    0 个警告
+    4 个错误
+
+已用时间 00:01:05.24
