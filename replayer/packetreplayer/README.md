@@ -31,6 +31,43 @@ Windows x64 软件，在 StrokeReplay 的机械笔画解析、画布恢复和 PT
 
 字段定义见仓库 `Memoline_demo_csponly/INTERFACES.md`。需要此次更新后的 Memoline `requestStates` 主动请求接口；请重新启动 Memoline 并开始新录制。旧文件可提供历史数字目标，实时点击位置来自当前会话的新请求结果。目标文档路径来自当前初始化配置，保存控制进程绑定同一录制的 `.live.json`，不使用历史录制内的文档路径。
 
+## 2026-10-07：完整事件清单回放核心
+
+`source/EventReplayRunner.cs` 提供可被宿主链接编译的内部 API。调用方准备完整笔接触和历史状态，接口为：
+
+```csharp
+ScheduledStroke(
+    (string SessionId, ulong BeginAppendId) EditableKey,
+    MemolineReplayStroke Stroke,
+    HistoricalState State,
+    BrushSnapshot? OverrideBrush = null)
+
+EventReplaySchedule(
+    long Frequency,
+    IReadOnlyList<ScheduledStroke> Strokes,
+    string WorkLayerName,
+    string WorkLayerUuid)
+
+Task<EventReplayResult> EventReplayRunner.RunAsync(
+    EventReplaySchedule schedule, IReplayEnvironment env,
+    double speed, ReplayOptions options,
+    Action<string> status, CancellationToken token)
+```
+
+清单中的 `Stroke` 使用机械流解析得到的完整接触，包括跨包的全部采样。调用方按原生 penBegin eventId 排序；Runner 再检查严格递增、同一会话、事件键唯一、appendId 顺序及接触完整性。`EventReplayResult` 返回完成笔数和完成事件键。原聚集包界面的包内片段选择规则仍由 `PacketArchiveReader.Plan` 处理。
+
+所有清单事件画到调用方已确认的工作层，不按历史图层名导航。调用方负责核实工作层 UUID、名称唯一性及事务身份；Runner 每笔开始和每个采样核对当前工作层名称，并检查实时笔刷、颜色、视图和输入位置。历史图层名保留在状态和日志说明中。
+
+`OverrideBrush` 必须包含完整历史数值属性表，键集合保持一致且值有限。每笔分别恢复覆盖后的快照或原历史快照，避免上一笔的改值残留。需要输入的数值使用当前 OCR 唯一数字框，写入后请求状态读回。子工具切换沿用 `ShortcutConfiguration.RouteForBrush` 和现有反馈流程。集中模式每笔以 `Up` 结束；离散模式以 `UpAndLeave` 结束，间隔取当前笔的原始结束 ticks 和清单中下一笔的原始开始 ticks，并受 `StrokeGapSeconds` 上限约束。
+
+`IReplayEnvironment` 提供 `Feed`、`Input`、`ViewFeed`、`ViewInput`、`CurrentView`、`CreateInjector`、`Idle`、`EnsureCanvasPoint` 和 `ReleaseInputs`。`ViewFeed` 用于主动请求的视图恢复反馈；`CurrentView` 用于采样时检查最新实时视图。`WindowsReplayEnvironment(LivePacketFeed, WindowsViewInput)` 适配现有 Windows 实现；检查项目使用 fake。`PacketReplayRunner.RunAsync` 保留原签名，执行部分委托给可注入的 `RunCoreAsync`。Runner 在结束、失败和取消时释放已持有的输入；笔引擎释放活动接触。
+
+`WindowsViewInput` 的键盘、Unicode 数字、鼠标按钮、滚轮和虚拟桌面绝对光标移动均经带 `dwExtraInfo = 0x4D4C5243`（MLRC）的 `SendInput` 发送。识别器可以据此忽略这些合成键鼠输入。PT_PEN 注入使用单独的 Windows 指针 API，其录制隔离由调用方的编辑事务负责。
+
+`ColorRestorer` 当前只做颜色验证：颜色不同则主动请求新的 `colorState`，仍不匹配时报 `ReplayStateException.Code == "ColorUnrestorable"`。滑块面板 OCR、主色输入位置及色环过时状态尚待核实，因此当前核心不会点击颜色面板或写入 RGB。工作层漂移、笔刷恢复失败和视图漂移分别以 `LayerIdentityUnconfirmed`、`BrushUnrestorable`、`ViewUnrestorable` 停止。
+
+本节交付的是源码核心和检查。宿主事务接线、容器 v3、编辑 UI 与真实 CSP 验收的完成情况，应查阅宿主实施记录。
+
 ## 命令行
 
 ```powershell
@@ -56,6 +93,18 @@ Windows x64 软件，在 StrokeReplay 的机械笔画解析、画布恢复和 PT
 检查只使用模拟输入和临时本机命名管道，不向 CSP 注入操作。它验证数字/选项区别、坐标换算、因果顺序、包边界、工具大类与子工具组映射、OCR 点击与滚动查找、保存控制协议、保存结构身份、主动请求响应、无状态推送时启动、错误身份/旧采集拒绝、笔刷与图层反馈、断线和取消；也验证连续同状态多笔零请求、独立模块更新的请求次数、跨包累积状态和连续“下一笔”复用初始化。可用检查程序 `--render-ui <录制文件> <输出.png>` 离屏渲染界面。
 
 当前验证结果和实际文件包统计见 `reports/20261006-validation.md`。构建和协议检查通过不等同于已经在 CSP 中实测绘画效果。
+
+2026-10-07 完整 fake 检查通过 166 项断言，保留原 131 项，新增完整事件回放 27 项和共享剪贴板编码 8 项。新增检查包括跨包采样、覆盖值恢复、工作层和实时视图漂移、两种抬笔模式、间隔上限、取消释放、颜色拒绝及旧 Runner 的可注入执行。codec 检查包含 alpha=0 隐藏 RGB、半透明 PNG、非预乘 DIBV5 和 STA 要求，不写系统剪贴板。实际红绿输出见 `Memoline_demo_csponly/docs/architecture/IMPLEMENTATION_NOTES.md`。
+
+```powershell
+dotnet build checks/PacketReplayChecks.csproj -c Release --no-restore -m:1
+dotnet checks/bin/Release/net10.0-windows/PacketReplayChecks.dll
+# 仅运行新增切片检查
+dotnet checks/bin/Release/net10.0-windows/PacketReplayChecks.dll --event-checks
+dotnet checks/bin/Release/net10.0-windows/PacketReplayChecks.dll --codec-checks
+```
+
+完整套件的命名管道由测试自身创建，不连接真实 CSP。受限运行环境若拒绝命名管道访问，需在允许本机测试 IPC 的环境中运行；不能把该权限错误计为通过。
 
 ## 2026-10-06 的笔刷确认兼容
 

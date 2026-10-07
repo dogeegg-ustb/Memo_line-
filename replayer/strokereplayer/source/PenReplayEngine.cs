@@ -13,6 +13,8 @@ internal static class PenReplayEngine
         void Send(MappedPoint point, PointerTransition transition);
     }
 
+    internal static IPenInjector CreateSyntheticInjector() => new SyntheticPenInjector();
+
     internal static async Task ReplayStrokeAsync(MemolineReplayStroke stroke, long frequency, double speed,
         Func<MemolineReplaySample, Task> ensureReady, CancellationToken token,
         ReplayOptions? options = null, Action<string>? status = null, TimeSpan followingGap = default)

@@ -4,7 +4,15 @@ using MemolineDemo;
 
 try
 {
-if (args.Length == 3 && args[0] == "--render-ui")
+if (args.Length == 1 && args[0] == "--codec-checks")
+{
+    PacketChecks.CodecChecks();
+}
+else if (args.Length == 1 && args[0] == "--event-checks")
+{
+    await PacketChecks.EventReplayAsync();
+}
+else if (args.Length == 3 && args[0] == "--render-ui")
 {
     var renderThread = new Thread(() => PacketChecks.RenderUi(args[1], args[2]));
     renderThread.SetApartmentState(ApartmentState.STA);

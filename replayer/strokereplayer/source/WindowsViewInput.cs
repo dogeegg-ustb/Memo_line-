@@ -11,6 +11,9 @@ internal sealed class WindowsViewInput : IViewInput
     private readonly uint _processId;
     private readonly nint _window;
     private const ushort Space = 0x20, Control = 0x11, A = 0x41, Enter = 0x0D;
+    internal const nuint RecorderInputTag = 0x4D4C5243;
+    private readonly HashSet<ushort> _heldKeys = [];
+    private bool _leftDown;
 
     internal WindowsViewInput()
     {
@@ -174,32 +177,59 @@ internal sealed class WindowsViewInput : IViewInput
         }
     }
 
-    private static void Move(Point point)
+    private void Move(Point point)
     {
-        if (!Native.SetCursorPos(point.X, point.Y)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        var screen = System.Windows.Forms.SystemInformation.VirtualScreen;
+        if (!screen.Contains(point) || screen.Width <= 1 || screen.Height <= 1)
+            throw new InvalidOperationException("目标输入点超出虚拟桌面。");
+        Send(new Input { Type = 0, Data = new InputUnion { Mouse = new MouseInput {
+            X = (int)Math.Round((point.X - screen.Left) * 65535d / (screen.Width - 1)),
+            Y = (int)Math.Round((point.Y - screen.Top) * 65535d / (screen.Height - 1)), Flags = 0x0001 | 0x8000 | 0x4000 } } });
     }
-    private static void Key(ushort key, bool down) => Send(new Input { Type = 1,
-        Data = new InputUnion { Keyboard = new KeyboardInput { Key = key, Flags = down ? 0u : 2u } } });
-    private static void Mouse(uint flags) => Send(new Input { Type = 0, Data = new InputUnion { Mouse = new MouseInput { Flags = flags } } });
+    private void Key(ushort key, bool down)
+    {
+        Send(new Input { Type = 1, Data = new InputUnion { Keyboard = new KeyboardInput { Key = key, Flags = down ? 0u : 2u } } });
+        if (down) _heldKeys.Add(key); else _heldKeys.Remove(key);
+    }
+    private void Mouse(uint flags)
+    {
+        Send(new Input { Type = 0, Data = new InputUnion { Mouse = new MouseInput { Flags = flags } } });
+        if ((flags & 0x0002) != 0) _leftDown = true;
+        if ((flags & 0x0004) != 0) _leftDown = false;
+    }
+    internal void ReleaseInputs()
+    {
+        Exception? failure = null;
+        if (_leftDown) try { Mouse(0x0004); } catch (Exception ex) { failure = ex; }
+        foreach (var key in _heldKeys.Reverse().ToArray())
+            try { Key(key, false); } catch (Exception ex) { failure ??= ex; }
+        if (failure is not null) throw failure;
+    }
+    internal static Input WithRecorderTag(Input input)
+    {
+        if (input.Type == 0) input.Data.Mouse.Extra = RecorderInputTag;
+        else if (input.Type == 1) input.Data.Keyboard.Extra = RecorderInputTag;
+        else throw new ArgumentException("仅支持鼠标和键盘输入。");
+        return input;
+    }
     private static void Send(Input input)
     {
-        if (Native.SendInput(1, [input], Marshal.SizeOf<Input>()) != 1)
+        if (Native.SendInput(1, [WithRecorderTag(input)], Marshal.SizeOf<Input>()) != 1)
             throw new Win32Exception(Marshal.GetLastWin32Error(), "无法发送视图恢复输入。");
     }
 
-    [StructLayout(LayoutKind.Sequential)] private struct Input { public uint Type; public InputUnion Data; }
-    [StructLayout(LayoutKind.Explicit)] private struct InputUnion
+    [StructLayout(LayoutKind.Sequential)] internal struct Input { public uint Type; public InputUnion Data; }
+    [StructLayout(LayoutKind.Explicit)] internal struct InputUnion
     {
         [FieldOffset(0)] public MouseInput Mouse;
         [FieldOffset(0)] public KeyboardInput Keyboard;
     }
-    [StructLayout(LayoutKind.Sequential)] private struct MouseInput { public int X, Y; public uint Data, Flags, Time; public nuint Extra; }
-    [StructLayout(LayoutKind.Sequential)] private struct KeyboardInput { public ushort Key, Scan; public uint Flags, Time; public nuint Extra; }
+    [StructLayout(LayoutKind.Sequential)] internal struct MouseInput { public int X, Y; public uint Data, Flags, Time; public nuint Extra; }
+    [StructLayout(LayoutKind.Sequential)] internal struct KeyboardInput { public ushort Key, Scan; public uint Flags, Time; public nuint Extra; }
     [StructLayout(LayoutKind.Sequential)] private readonly record struct NativePoint(int X, int Y);
     private static class Native
     {
         [DllImport("user32.dll", SetLastError = true)] internal static extern uint SendInput(uint count, Input[] inputs, int size);
-        [DllImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool SetCursorPos(int x, int y);
         [DllImport("user32.dll")] internal static extern bool SetProcessDpiAwarenessContext(nint context);
         [DllImport("user32.dll")] internal static extern bool IsWindow(nint window);
         [DllImport("user32.dll")] internal static extern bool IsIconic(nint window);

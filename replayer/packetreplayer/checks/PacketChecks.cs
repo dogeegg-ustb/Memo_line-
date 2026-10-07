@@ -30,6 +30,8 @@ internal static partial class PacketChecks
         await ActivePullAsync();
         await StateControlProtocolAsync();
         await LiveProtocolAsync();
+        await EventReplayAsync();
+        CodecChecks();
         if (sample is not null) RealSample(sample);
         Console.WriteLine($"PacketReplay checks passed: {_assertions} assertions. No CSP input was injected.");
     }

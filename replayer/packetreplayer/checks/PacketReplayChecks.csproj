@@ -9,5 +9,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../source/PacketReplay.csproj" />
+    <Compile Include="../../dirty matrix paster/source/ClipboardImageCodec.cs" Link="Paster/ClipboardImageCodec.cs" />
   </ItemGroup>
 </Project>

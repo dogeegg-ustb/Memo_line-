@@ -94,17 +94,37 @@ internal static class PacketReplayRunner
                 System.Diagnostics.Stopwatch.GetTimestamp() - feed.View.ClockOriginTicks!.Value, status, token);
             prepared?.Invoke();
         }
+        await RunCoreAsync(document, plan, new WindowsReplayEnvironment(feed, windows), speed, options,
+            status, stepDone, token, startStep, endStep, restoreInitial: prepareSession);
+    }
+
+    internal static async Task RunCoreAsync(PacketDocument document, PacketPlan plan, IReplayEnvironment env, double speed,
+        ReplayOptions options, Action<string> status, Action<int>? stepDone, CancellationToken token,
+        int startStep = 0, int? endStep = null, bool restoreInitial = true)
+    {
+        Validate(plan);
+        if (!double.IsFinite(speed) || speed <= 0) throw new ArgumentException("回放速度必须为正数。");
+        options.Validate();
+        if (startStep < 0 || startStep > plan.Steps.Count || endStep is { } last && last < startStep)
+            throw new ArgumentOutOfRangeException(nameof(startStep));
+        var feed = env.Feed;
+        var input = env.Input;
+        bool requireColor = plan.InitialState.Color.ValueKind == JsonValueKind.Object || plan.Steps.Any(s => s.Kind == "color")
+            || plan.Strokes.Any(s => s.State.Color.ValueKind == JsonValueKind.Object);
         ValidateCapabilities(plan, feed);
-        var input = new PacketWindowsInput(windows);
-        var states = new PacketReplayStateTable(feed, input, new PacketViewFeed(feed), windows, status, plan.StateBefore(startStep));
-        if (prepareSession) await states.RestoreAsync(token);
+        var states = new PacketReplayStateTable(feed, input, env.ViewFeed, env.ViewInput, status, plan.StateBefore(startStep));
+        var indexes = new Dictionary<PacketStroke, int>(ReferenceEqualityComparer.Instance);
+        for (int index = 0; index < plan.Strokes.Count; index++) indexes.Add(plan.Strokes[index], index);
         int completed = startStep;
         int until = Math.Min(endStep ?? plan.Steps.Count, plan.Steps.Count);
+        try
+        {
+        if (restoreInitial) await states.RestoreAsync(token);
         foreach (var step in plan.Steps.Skip(startStep).Take(until - startStep))
         {
             token.ThrowIfCancellationRequested();
             feed.EnsureConnected();
-            windows.EnsureTarget();
+            input.EnsureTarget();
             status($"事件 {completed + 1}/{plan.Steps.Count}：{step.Description}");
             switch (step.Kind)
             {
@@ -121,25 +141,27 @@ internal static class PacketReplayRunner
                     await states.PrepareStrokeAsync(drawing, token);
                     var stroke = drawing.Stroke;
                     foreach (var point in stroke.Samples.Where(p => p.InContact))
-                        windows.EnsureCanvasPoint(point.X, point.Y, feed.View.Current!.Viewport ?? throw new InvalidOperationException("当前接口缺少画布视口。"));
-                    int nextIndex = plan.Strokes.ToList().IndexOf(drawing) + 1;
+                        env.EnsureCanvasPoint(point, env.CurrentView?.Viewport ?? throw new InvalidOperationException("当前接口缺少画布视口。"));
+                    int nextIndex = indexes[drawing] + 1;
                     var gap = options.GapBetween(stroke.EndTicks, nextIndex < plan.Strokes.Count ? plan.Strokes[nextIndex].Stroke.StartTicks : null, document.Mechanical.Frequency);
-                    await PenReplayEngine.ReplayStrokeAsync(stroke, document.Mechanical.Frequency, speed, sample =>
+                    await PenReplayEngine.ReplayStrokeCoreAsync(stroke, document.Mechanical.Frequency, speed, sample =>
                     {
                         token.ThrowIfCancellationRequested();
                         feed.EnsureConnected();
-                        windows.EnsureTarget();
+                        input.EnsureTarget();
                         if (feed.Brush?.Matches(drawing.State.Brush!) != true || J.Name(feed.Layer ?? "") != J.Name(drawing.State.Layer!)
                             || !ColorMatches(feed.Color, drawing.State.Color)) throw new InvalidOperationException("回放期间笔刷、图层或颜色发生变化，已停止。");
-                        var current = feed.View.Current ?? throw new InvalidOperationException("当前画布状态不可用。");
+                        var current = env.CurrentView ?? throw new InvalidOperationException("当前画布状态不可用。");
                         if (!ViewRestorer.Matches(current, stroke.View)) throw new InvalidOperationException("回放期间画布视图变化，已停止。");
-                        if (sample.InContact) windows.EnsureCanvasPoint(sample.X, sample.Y, current.Viewport ?? throw new InvalidOperationException("当前接口缺少画布视口。"));
+                        if (sample.InContact) env.EnsureCanvasPoint(sample, current.Viewport ?? throw new InvalidOperationException("当前接口缺少画布视口。"));
                         return Task.CompletedTask;
-                    }, token, options, status, gap);
+                    }, token, options, env.CreateInjector, env.Idle, status, gap);
                     break;
             }
             stepDone?.Invoke(++completed);
         }
+        }
+        finally { env.ReleaseInputs(); }
         status(until == plan.Steps.Count ? $"聚集包 {plan.Packet.Number} 回放完成：{plan.Strokes.Count} 笔，{plan.Steps.Count} 个事件。"
             : $"本笔完成：事件进度 {until}/{plan.Steps.Count}。");
     }
