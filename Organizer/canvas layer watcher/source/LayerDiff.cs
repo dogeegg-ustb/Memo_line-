@@ -12,7 +12,10 @@ internal sealed record MatrixData(int CanvasWidth, int CanvasHeight, int TileSiz
 }
 internal sealed record ImageDirtyLabel(string Id, string Source, long? OperationId, long FromTicks, long ToTicks,
     string[] StateIds, StrokeCoverage? Coverage, MatrixData ImpactRange, string[] Warnings, string[] ImageIds,
-    PenDownLocation? PenDownLocation = null);
+    PenDownLocation? PenDownLocation = null)
+{
+    public CoverageSettings? CoverageSettings { get; init; }
+}
 internal sealed record DiffImage(string Id, PixelBox Bounds, long ChangedPixels, string AfterImage, string NowImage,
     string MaskImage, string DifferenceImage, string[] LabelIds)
 {
@@ -53,7 +56,8 @@ internal static unsafe class LayerDiff
         {
             var m = new DirtyTileMatrix(size.Width, size.Height, TileSize); m.AddCoverage(label.Coverage);
             return new ImageDirtyLabel(label.Id, label.Source, label.OperationId, label.FromTicks, label.ToTicks, label.StateIds,
-                label.Coverage, MatrixData.From(m, size), label.Warnings, [], label.PenDownLocation);
+                label.Coverage, MatrixData.From(m, size), label.Warnings, [], label.PenDownLocation)
+                { CoverageSettings = label.CoverageSettings };
         }).ToArray();
     internal static MatrixData Predicted(DirtyEvidence evidence, Size size)
     {

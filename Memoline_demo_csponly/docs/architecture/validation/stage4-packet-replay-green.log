@@ -1,0 +1,16 @@
+System.UnauthorizedAccessException: Access to the path is denied.
+   at System.IO.Pipes.NamedPipeClientStream.TryConnect(Int32 timeout)
+   at System.IO.Pipes.NamedPipeClientStream.ConnectInternal(Int32 timeout, CancellationToken cancellationToken, Int32 startTime)
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at PacketReplay.PacketRecorderControl.ExchangeAsync(Object request, TimeSpan timeout, CancellationToken token) in D:\Memo_Line\Memo_Line\replayer\packetreplayer\source\PacketRecorderControl.cs:line 36
+   at PacketReplay.PacketRecorderControl.ExchangeAsync(Object request, TimeSpan timeout, CancellationToken token) in D:\Memo_Line\Memo_Line\replayer\packetreplayer\source\PacketRecorderControl.cs:line 43
+   at PacketReplay.PacketRecorderControl.SendAsync(Object request, TimeSpan timeout, CancellationToken token) in D:\Memo_Line\Memo_Line\replayer\packetreplayer\source\PacketRecorderControl.cs:line 27
+   at PacketReplay.PacketRecorderControl.SaveAsync(String clipPath, String requestId, Int64 triggerTicks, CancellationToken token) in D:\Memo_Line\Memo_Line\replayer\packetreplayer\source\PacketRecorderControl.cs:line 21
+   at PacketChecks.SaveControlProtocolAsync() in D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\IntegrationChecks.cs:line 203
+   at PacketChecks.SaveControlProtocolAsync() in D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\IntegrationChecks.cs:line 205
+   at PacketChecks.RunAsync(String sample) in D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\PacketChecks.cs:line 29
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\Program.cs:line 67

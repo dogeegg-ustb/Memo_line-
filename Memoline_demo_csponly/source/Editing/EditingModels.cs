@@ -171,7 +171,10 @@ public sealed record DirtyImage(
 
 public sealed record CoverageSegment(double StartX, double StartY, double EndX, double EndY);
 public sealed record LabelEvidence(string Id, ulong? OperationId, string Source, long FromTicks, long ToTicks,
-    double Radius, IReadOnlyList<CoverageSegment> Segments, IReadOnlyList<string> ImageIds);
+    double Radius, IReadOnlyList<CoverageSegment> Segments, IReadOnlyList<string> ImageIds)
+{
+    public DirtyMatrix.Core.CoverageSettings? CoverageSettings { get; init; }
+}
 
 public sealed record LayerPacket(string PacketId, LayerKey Layer, long TriggerTicks,
     ImageRgba? Before, ImageRgba? Current, IReadOnlyList<DirtyImage> Images,
@@ -198,6 +201,9 @@ internal sealed record EditableStroke(EditableStrokeKey Key, ulong OperationId, 
     public PixelMask WriteMask { get; init; } = new(0, 0, 0, 0);
     public PixelMask ProbeMask { get; init; } = new(0, 0, 0, 0);
     public PixelMask ImpactMask { get; init; } = new(0, 0, 0, 0);
+    public IReadOnlyList<LabelEvidence> CoverageLabels { get; init; } = [];
+    // A size override requires the recipe recorded by the watcher, not guessed defaults.
+    public DirtyMatrix.Core.CoverageSettings? FrozenCoverageSettings { get; init; }
 }
 
 internal sealed record LayerIndex(LayerKey Layer, IReadOnlyList<LayerPacket> Packets,

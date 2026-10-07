@@ -95,7 +95,8 @@ internal static class StateHistory
         var reservations = frames.Where(f => J.Text(f, "kind") == "statePackageReserved")
             .ToDictionary(f => J.Text(J.Get(f, "data"), "packageId")!, f => J.Get(f, "data"));
         var slots = new List<HistorySlot>();
-        var cores = frames.Where(f => J.Text(f, "kind") == "coreStateUpdated")
+        var coreFrames = frames.Where(f => J.Text(f, "kind") == "coreStateUpdated").ToArray();
+        var packageCores = coreFrames.Where(f => J.Text(J.Get(f, "data"), "packageId") is not null)
             .GroupBy(f => (J.Text(J.Get(f, "data"), "packageId"), J.Text(J.Get(f, "data"), "module")))
             .ToDictionary(g => g.Key, g => g.OrderBy(f => J.U64(f, "appendId")).Last());
         var covered = new HashSet<(string?, string?)>();
@@ -114,15 +115,21 @@ internal static class StateHistory
                 covered.Add((id, module));
             }
         }
-        foreach (var (key, frame) in cores)
+        foreach (var frame in coreFrames)
         {
-            if (covered.Contains(key)) continue;
             var d = J.Get(frame, "data");
+            string? id = J.Text(d, "packageId"), module = J.Text(d, "module");
+            if (module is null) continue;
+            // Results supersede provisional updates only within their package.
+            // Independent observations are separate causal slots; collapsing all
+            // null-package updates would discard both history and invalidations.
+            if (id is not null && (covered.Contains((id, module)) ||
+                J.U64(packageCores[(id, module)], "appendId") != J.U64(frame, "appendId"))) continue;
             ulong anchor = J.U64(J.Get(d, "evidence"), "observedAfterEventId");
             ulong order = J.U64(frame, "appendId");
-            if (key.Item1 is { } id && reservations.TryGetValue(id, out var reserved))
+            if (id is not null && reservations.TryGetValue(id, out var reserved))
             { anchor = J.U64(reserved, "afterEventId"); order = J.U64(reserved, "reservationOrder"); }
-            slots.Add(new(anchor, order, key.Item2!, d));
+            slots.Add(new(anchor, order, module, d));
         }
         return slots.OrderBy(s => s.Anchor).ThenBy(s => s.Order).ToArray();
     }

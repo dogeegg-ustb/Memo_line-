@@ -1,11 +1,26 @@
 using DirtyMatrix.Core;
 using StrokeReplay;
+using System.Text.Json;
 
 namespace MemolineDemo.Editing;
 
 /// <summary>Pixel accurate write, probe and causal impact footprints for one recorded contact.</summary>
 public static class Footprints
 {
+    internal static bool TryMapContactSamples(IReadOnlyList<MemolineReplaySample> samples, JsonElement viewData,
+        int canvasWidth, int canvasHeight, out IReadOnlyList<(double X, double Y)> points)
+    {
+        var mapped = new List<(double X, double Y)>(); points = mapped;
+        if (CanvasLayerWatcher.View.Parse(viewData) is not { } view) return false;
+        foreach (var sample in samples.Where(s => s.InContact))
+        {
+            if (!CanvasLayerWatcher.RecognitionEvidence.TryCanvasPoint(viewData, view, sample.X, sample.Y,
+                new(canvasWidth, canvasHeight), out var point, out _)) return false;
+            mapped.Add((point.X, point.Y));
+        }
+        return mapped.Count > 0;
+    }
+
     internal static (PixelMask Write, PixelMask Probe, PixelMask Impact) Build(
         IReadOnlyList<MemolineReplaySample> samples,
         CanvasViewSnapshot view,

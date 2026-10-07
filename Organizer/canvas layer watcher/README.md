@@ -53,6 +53,8 @@ Recognizer 已移除 CSP 文档标题／文件名匹配校验。请选择当前 
 
 两张源 PNG 始终保持完整画布尺寸。输入屏幕坐标结合输入发生前的已确认视口原点和缩放映射为画布像素；当前接口的 `canvasWindowRoiScreenPx` 及旧版 ROI 字段都支持。优先采用 CSP 使用的 Windows 光标 `x/y`，缺少时使用数位板 `screenX/screenY`；保留原始压力、驱动映射、设备来源等数据。笔刷大小、px/mm、DPI 和屏幕固定大小选项来自 Recognizer；大小未知暂用 20 px，缺少单位按 px，并在标签内记录对应说明。沿接触折线扩展笔刷半径、抗锯齿／安全余量和 12 屏幕像素附加余量，再使用原脏矩阵的稀疏行区间算法，单元尺寸为 64 画布像素。
 
+输入标签的 `coverageSettings` 保存本次实际计算半径所用的完整参数，包括画布宽高、`brushSize`、`brushUnit`、`dpi`、`zoomPercent`、`specifyBySizeOnScreen`、`brushEnvelopeFactor`、`antiAliasRadius`、`safetyRadius` 和 `coveragePaddingScreenPixels`，随标签写入 manifest。编辑索引共用下述矩阵映射；必然落墨探针取原生接触采样的 0.75 像素中心线，排除抬笔采样。旧包缺少 `coverageSettings` 时仍可读取；尺寸修改不能由默认参数补出原始覆盖依据。
+
 所有 64 像素单元都逐像素比较完整分辨率 RGBA，包括预测范围外的单元；预测范围只用于标签归属。两边 alpha 都为零时忽略隐藏 RGB；任一侧非零时比较全部 RGBA，所以预测范围外单像素、alpha=1 的变化也会保留。缺少输入历史或可靠坐标变换时记录原因，仍执行全分辨率比较。坐标映射优先读取实际发布的 `rawResult.snapshot.matrices.screenToCanvas` 六元素数组，原始矩阵缺席时也接受 `state.transform.matrices`；契约必须为 `convention="sct-affine-row-major/v1"`、`canvasSpace="normalized"`。两组矩阵均需恰好六个有限系数、可逆且互为逆矩阵；发布的画布尺寸须与当前完整画布一致。映射后的归一化 x／y 分别乘画布宽／高，支持负屏幕原点和旋转。已发布的新矩阵不合法时记录具体警告并停止给笔迹分配推测坐标。新矩阵缺席时，继续兼容旧的 `rawResult.snapshot.screenToCanvas.m0..m5` 对象；再缺席时使用画布原点、缩放及 `state.transform.rotationDegrees` 的原生几何旋转。旋转时如果连几何旋转也缺失，则不凭 OCR 角度猜测方向，变化由全分辨率比较检出并记录缺少可靠笔迹归属的说明。
 
 每组连通的变化单元提供一张主更改图像 `images[].image`，指向只保留更改像素的原始 `now` 补丁。另保留 `after/mask/difference` 作为前后对照、擦除定位和通道检查的辅助数据；四张 PNG 均使用完整画布坐标标明放置范围，保持原像素分辨率。完整源图层仍由两个快照槽保存。独立 mask 区分「没有变化」与「擦成透明」。每份更改图像关联一个或多个脏矩阵标签；范围外发现的变化沿用 `low-resolution-fallback` 标签名，并记录 `outsidePredictedStrokeCoverage`，该名称不表示比较时使用了低分辨率。标签包含影响范围、输入操作、时间和状态 ID，反向记录对应图像 ID。

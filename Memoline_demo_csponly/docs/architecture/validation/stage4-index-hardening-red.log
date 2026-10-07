@@ -1,0 +1,39 @@
+FAIL: A transaction entirely inside a contact excludes the complete contact.
+FAIL: An unclosed transaction beginning after penBegin excludes the complete contact.
+FAIL: A mismatched transaction end does not close the pending interval.
+FAIL: Transaction intersection is checked through penInterrupted as well as penEnd.
+FAIL: causalAmbiguous invalidates the latest brushState even when status is changed.
+FAIL: Actual panelUpdateRequested.invalidate forbids an older confirmed brushState.
+FAIL: Actual panelUpdateRequested.invalidate forbids an older confirmed currentLayerState.
+FAIL: causalAmbiguous invalidates the latest clipState even when status is changed.
+FAIL: Actual panelUpdateRequested.invalidate forbids an older confirmed clipState.
+FAIL: causalAmbiguous invalidates the latest canvasViewState even when status is changed.
+FAIL: Actual panelUpdateRequested.invalidate forbids an older confirmed canvasViewState.
+FAIL: Actual shortcutResolved.matches undo within the layer range blocks reconstruction.
+FAIL: Actual shortcutResolved.matches redo within the layer range blocks reconstruction.
+FAIL: Undo with unconfirmed target layer must conservatively block the overlapping range.
+FAIL: Undo without a native hardware reference cannot be assumed harmless.
+FAIL: Guaranteed probe uses the native contact samples instead of the deliberately coarse label polyline.
+FAIL: Without a confirmed historical view native sample geometry cannot become editable.
+FAIL: Independent no-package coreStateUpdated records retain every causal slot including the final invalidation.
+System.InvalidOperationException: Edit index hardening checks: 22/40 passed.
+A transaction entirely inside a contact excludes the complete contact.
+An unclosed transaction beginning after penBegin excludes the complete contact.
+A mismatched transaction end does not close the pending interval.
+Transaction intersection is checked through penInterrupted as well as penEnd.
+causalAmbiguous invalidates the latest brushState even when status is changed.
+Actual panelUpdateRequested.invalidate forbids an older confirmed brushState.
+Actual panelUpdateRequested.invalidate forbids an older confirmed currentLayerState.
+causalAmbiguous invalidates the latest clipState even when status is changed.
+Actual panelUpdateRequested.invalidate forbids an older confirmed clipState.
+causalAmbiguous invalidates the latest canvasViewState even when status is changed.
+Actual panelUpdateRequested.invalidate forbids an older confirmed canvasViewState.
+Actual shortcutResolved.matches undo within the layer range blocks reconstruction.
+Actual shortcutResolved.matches redo within the layer range blocks reconstruction.
+Undo with unconfirmed target layer must conservatively block the overlapping range.
+Undo without a native hardware reference cannot be assumed harmless.
+Guaranteed probe uses the native contact samples instead of the deliberately coarse label polyline.
+Without a confirmed historical view native sample geometry cannot become editable.
+Independent no-package coreStateUpdated records retain every causal slot including the final invalidation.
+   at MemolineDemo.EditIndexHardeningChecks.Run() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditIndexHardeningChecks.cs:line 152
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\stage4-index-hardening\Program.cs:line 1

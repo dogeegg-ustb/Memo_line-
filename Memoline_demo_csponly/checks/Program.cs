@@ -14,6 +14,12 @@ try
         Console.WriteLine($"Compositor parity checks: {await CompositorParityChecks.RunAsync(root)}.");
         return;
     }
+    if (args is ["--index-hardening-only"])
+    {
+        Console.WriteLine($"Edit index hardening checks: {EditIndexHardeningChecks.Run()}.");
+        Console.WriteLine($"Footprint contract checks: {FootprintContractChecks.Run()}.");
+        return;
+    }
     int bundleChecks = BundleChecks.Run(root);
     int aggregateChecks = AggregateChecks.Run(root);
     Console.WriteLine($"End packet checks: {EndPacketChecks.Run(root)}.");
@@ -23,6 +29,8 @@ try
     Console.WriteLine($"Public interface checks: {await InterfaceChecks.RunAsync(root)}.");
     Console.WriteLine($"Editing core checks: {EditingChecks.Run(root)}.");
     Console.WriteLine($"Compositor parity checks: {await CompositorParityChecks.RunAsync(root)}.");
+    Console.WriteLine($"Edit index hardening checks: {EditIndexHardeningChecks.Run()}.");
+    Console.WriteLine($"Footprint contract checks: {FootprintContractChecks.Run()}.");
     Console.WriteLine($"Bundle checks: {bundleChecks}; aggregate checks: {aggregateChecks}; lifecycle checks: {lifecycleChecks}.");
     Console.WriteLine("Memoline integration checks passed.");
 }

@@ -1,0 +1,18 @@
+Edit index hardening checks passed: 44.
+FAIL: Native Probe consumes the published normalized matrix even when OCR geometry is a different estimate.
+FAIL: Native Probe consumes the semantic matrix fallback when the raw snapshot does not publish it.
+FAIL: Native Probe rejects an invalid published affine contract: convention
+FAIL: Native Probe rejects an invalid published affine contract: canvasSpace
+FAIL: Native Probe rejects an invalid published affine contract: inverse
+FAIL: Watcher labels serialize the actual CoverageSettings recipe used to compute the frozen radius.
+FAIL: The absent recipe cannot be round-tripped through LiveSessionReader.
+System.InvalidOperationException: Footprint contract checks: 1/8 passed.
+Native Probe consumes the published normalized matrix even when OCR geometry is a different estimate.
+Native Probe consumes the semantic matrix fallback when the raw snapshot does not publish it.
+Native Probe rejects an invalid published affine contract: convention
+Native Probe rejects an invalid published affine contract: canvasSpace
+Native Probe rejects an invalid published affine contract: inverse
+Watcher labels serialize the actual CoverageSettings recipe used to compute the frozen radius.
+The absent recipe cannot be round-tripped through LiveSessionReader.
+   at MemolineDemo.FootprintContractChecks.Run() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\FootprintContractChecks.cs:line 86
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\stage4-index-hardening\Program.cs:line 3

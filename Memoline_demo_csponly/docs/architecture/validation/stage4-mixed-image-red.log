@@ -1,0 +1,6 @@
+FAIL: An unknown-layer contact keeps a mixed image unreplayable even when another linked contact is eligible.
+System.InvalidOperationException: Edit index hardening checks: 44/45 passed.
+An unknown-layer contact keeps a mixed image unreplayable even when another linked contact is eligible.
+   at MemolineDemo.EditIndexHardeningChecks.Run() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditIndexHardeningChecks.cs:line 197
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\stage4-index-hardening\Program.cs:line 1
+Footprint contract checks passed: 19.

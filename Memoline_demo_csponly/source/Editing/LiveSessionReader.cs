@@ -90,6 +90,9 @@ internal static class LiveSessionReader
             if (width <= 0 || height <= 0) throw new InvalidDataException("差异包尺寸无效。");
             string packetDir = Path.GetDirectoryName(manifestPath)!;
             var labels = ReadLabels(rootElement);
+            if (labels.Any(l => l.CoverageSettings is { } recipe &&
+                (recipe.CanvasWidth != width || recipe.CanvasHeight != height)))
+                throw new InvalidDataException("标签 frozen CoverageSettings 与差异包画布尺寸不一致。");
             var images = ReadImages(rootElement, packetDir, layer, id, width, height, labels, fullResolution, token);
             string? afterId = Text(after, "id"); string? nowId = Text(now, "id");
             bool baseline = Text(rootElement, "kind") == "baseline" || now.ValueKind != JsonValueKind.Object;
@@ -259,8 +262,31 @@ internal static class LiveSessionReader
                 throw new InvalidDataException("标签覆盖范围不是有效的画布像素几何。");
             result.Add(new(RequiredText(label, "id"), operation, RequiredText(label, "source"),
                 OptionalLong(label, "fromTicks", 0), OptionalLong(label, "toTicks", 0), radius, segments,
-                label.GetProperty("imageIds").EnumerateArray().Select(i => i.GetString()!).ToArray()));
+                label.GetProperty("imageIds").EnumerateArray().Select(i => i.GetString()!).ToArray())
+                { CoverageSettings = ReadCoverageSettings(label, radius) });
         }
         return result;
+    }
+
+    private static DirtyMatrix.Core.CoverageSettings? ReadCoverageSettings(JsonElement label, double radius)
+    {
+        var recipe = Get(label, "coverageSettings");
+        if (recipe.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) return null;
+        if (recipe.ValueKind != JsonValueKind.Object) throw new InvalidDataException("标签 coverageSettings 不是对象。");
+        string[] required = ["canvasWidth", "canvasHeight", "brushSize", "brushUnit", "dpi", "zoomPercent",
+            "specifyBySizeOnScreen", "brushEnvelopeFactor", "antiAliasRadius", "safetyRadius", "coveragePaddingScreenPixels"];
+        if (required.Any(field => Get(recipe, field).ValueKind is JsonValueKind.Undefined or JsonValueKind.Null))
+            throw new InvalidDataException("标签 coverageSettings 缺少冻结半径计算字段，不能使用默认值补齐。");
+        try
+        {
+            var settings = recipe.Deserialize<DirtyMatrix.Core.CoverageSettings>(CanvasLayerWatcher.SnapshotHistory.Json)
+                ?? throw new InvalidDataException("标签 coverageSettings 为空。");
+            settings.Validate();
+            if (Math.Abs(settings.Radius - radius) > 1e-8 * Math.Max(1, Math.Abs(radius)))
+                throw new InvalidDataException("标签 coverageSettings 与原始覆盖半径不一致。");
+            return settings;
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException or NotSupportedException)
+        { throw new InvalidDataException("标签 coverageSettings 无效。", ex); }
     }
 }

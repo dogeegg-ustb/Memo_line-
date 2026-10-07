@@ -5,50 +5,63 @@ namespace MemolineDemo.Editing;
 
 internal static class EditIndexBuilder
 {
-    private sealed record Contact(LayerKey? Layer, EditableStroke? Stroke);
+    private sealed record Contact(LayerKey? Layer, EditableStroke? Stroke, ulong BeginAppend, ulong BeginEvent);
+    private sealed record TransactionInterval(ulong Begin, ulong End);
 
     internal static EditIndex Build(SessionSnapshot session)
     {
-        var history = session.History.Count > 0 ? session.History : StateHistory.Resolve(session.Frames);
+        var history = (session.History.Count > 0 ? session.History : StateHistory.Resolve(session.Frames))
+            .OrderBy(h => h.Anchor).ThenBy(h => h.Order).ToArray();
+        var frames = session.Frames.Where(f => J.U64(f, "appendId") <= session.BoundaryAppendId).OrderBy(f => J.U64(f, "appendId")).ToArray();
+        var transactions = TransactionIntervals(frames, session.BoundaryAppendId);
         var classifier = new BrushClassifier();
         var replay = session.Replay.Strokes.ToDictionary(s => s.OperationId);
         var contacts = new Dictionary<ulong, Contact>();
         var strokes = new Dictionary<EditableStrokeKey, EditableStroke>();
-        foreach (var begin in session.Frames.Where(f => J.Text(f, "kind") == "penBegin").OrderBy(f => J.U64(f, "appendId")))
+        foreach (var begin in frames.Where(f => J.Text(f, "kind") == "penBegin"))
         {
             ulong beginAppend = J.U64(begin, "appendId"), beginEvent = J.U64(begin, "eventId");
             ulong operation = J.U64(begin, "operationId"); if (operation == 0) operation = beginEvent;
-            if (!contacts.TryAdd(operation, new(null, null))) throw new InvalidDataException("原生 penBegin operationId 重复。");
+            if (!contacts.TryAdd(operation, new(null, null, beginAppend, beginEvent))) throw new InvalidDataException("原生 penBegin operationId 重复。");
             var state = StateHistory.At(history, beginEvent);
             var clip = Latest(history, "clipState", beginEvent);
-            LayerKey? layer = ResolveLayer(session.Packets, state.Layer, clip, session.SessionId);
-            contacts[operation] = new(layer, null);
+            bool layerConfirmed = Usable(history, frames, "currentLayerState", beginEvent, beginAppend) &&
+                Usable(history, frames, "clipState", beginEvent, beginAppend);
+            LayerKey? layer = layerConfirmed ? ResolveLayer(session.Packets, state.Layer, clip, session.SessionId) : null;
+            contacts[operation] = new(layer, null, beginAppend, beginEvent);
             var brushData = Latest(history, "brushState", beginEvent);
-            var catalogFrame = session.Frames.LastOrDefault(f => J.Text(f, "kind") == "shortcutConfiguration" && J.U64(f, "appendId") < beginAppend);
+            var catalogFrame = frames.LastOrDefault(f => J.Text(f, "kind") == "shortcutConfiguration" && J.U64(f, "appendId") < beginAppend);
             var classification = classifier.Classify(brushData, ToolCatalog.FromJson(J.Get(catalogFrame, "data")));
-            bool complete = session.Frames.Any(f => J.U64(f, "appendId") >= beginAppend && J.U64(f, "appendId") <= session.BoundaryAppendId &&
+            var end = frames.FirstOrDefault(f => J.U64(f, "appendId") >= beginAppend &&
                 (J.Text(f, "kind") == "penEnd" && J.U64(f, "operationId") == operation ||
                  J.Text(f, "kind") == "penInterrupted" && J.Array(J.Get(f, "relatedEventIds")).Any(e => e.TryUnsigned() == beginEvent)));
+            ulong endAppend = end.ValueKind == JsonValueKind.Object ? J.U64(end, "appendId") : session.BoundaryAppendId;
             var location = J.Get(J.Get(begin, "data"), "penDownLocation");
-            bool valid = complete && beginAppend <= session.BoundaryAppendId && layer is not null && classification.Eligible &&
+            bool valid = end.ValueKind == JsonValueKind.Object && layer is not null && classification.Eligible && state.Brush is not null &&
+                Usable(history, frames, "brushState", beginEvent, beginAppend) && state.View is not null &&
+                Usable(history, frames, "canvasViewState", beginEvent, beginAppend) &&
                 J.Text(J.Get(begin, "deviceSource"), "deviceType") == "pen" && J.Text(location, "region") == "canvasViewport" &&
                 J.Text(location, "status") == "matched" && J.Get(J.Get(begin, "data"), "injected").ValueKind != JsonValueKind.True &&
-                !InsideTransaction(session.Frames, beginAppend, session.BoundaryAppendId) && replay.ContainsKey(operation);
+                !transactions.Any(t => t.Begin <= endAppend && t.End >= beginAppend) && replay.ContainsKey(operation);
             if (!valid) continue;
             var drawing = replay[operation];
+            if (drawing.Samples.Any(s => s.AppendId > session.BoundaryAppendId)) continue;
             var labels = session.Packets.Where(p => p.Layer == layer).SelectMany(p => p.Labels).Where(l => l.OperationId == operation).ToArray();
             var packet = session.Packets.First(p => p.Layer == layer);
             int width = packet.CanvasWidth, height = packet.CanvasHeight;
+            if (!Footprints.TryMapContactSamples(drawing.Samples, Latest(history, "canvasViewState", beginEvent), width, height, out var points)) continue;
             var write = Footprints.RasterizeCoverage(labels, width, height);
-            var probe = classification.ProbeGuaranteed ? Footprints.RasterizeCoverage(labels, width, height, centerline: true) : write.Clone();
+            var probe = classification.ProbeGuaranteed
+                ? Footprints.RasterizeCenterline(points, width, height)
+                : write.Clone();
             var impact = classification.Causal ? (classification.ReadsUnknownSource ? PixelMask.FromPredicate(0, 0, width, height, (_, _) => true) : write.Clone())
                 : new PixelMask(width, height);
             var key = new EditableStrokeKey(session.SessionId, beginAppend);
             var editable = new EditableStroke(key, operation, drawing.StartTicks, drawing.EndTicks, drawing.Samples,
                 state.Brush?.Name, layer!.Value, classification.Causal, BrushNumbers: state.Brush?.Numbers.ToDictionary(n => n.Key, n => n.Value))
             { BeginEventId = beginEvent, BrushState = J.Get(brushData, "state").Clone(), Classification = classification,
-                WriteMask = write, ProbeMask = probe, ImpactMask = impact };
-            contacts[operation] = new(layer, editable);
+                WriteMask = write, ProbeMask = probe, ImpactMask = impact, CoverageLabels = labels };
+            contacts[operation] = new(layer, editable, beginAppend, beginEvent);
             strokes.Add(key, editable);
         }
 
@@ -66,6 +79,7 @@ internal static class EditIndexBuilder
                     if (!labels.TryGetValue(labelId, out var label)) throw new InvalidDataException("图片引用不存在的标签。");
                     if (label.Source == "low-resolution-fallback" || label.OperationId is null ||
                         !contacts.TryGetValue(label.OperationId.Value, out var contact)) { unreplayable = true; continue; }
+                    if (contact.Layer is null) { unreplayable = true; continue; }
                     if (contact.Layer != packet.Layer) continue;
                     if (contact.Stroke is null) { unreplayable = true; continue; }
                     linked.Add(contact.Stroke);
@@ -91,6 +105,7 @@ internal static class EditIndexBuilder
             var packets = group.OrderBy(p => p.TriggerTicks).ToArray();
             var layerStrokes = strokes.Values.Where(s => s.Layer == group.Key).OrderBy(s => s.BeginEventId).ToArray();
             var issues = VerifyChain(packets, layerStrokes);
+            issues.AddRange(UndoRedoIssues(group.Key, contacts.Values, history, frames));
             layers.Add(group.Key, new(group.Key, packets, layerStrokes, issues.Count == 0, issues, Current: packets.Last().Current));
             allIssues.AddRange(issues);
         }
@@ -102,23 +117,111 @@ internal static class EditIndexBuilder
 
     private static LayerKey? ResolveLayer(IReadOnlyList<LayerPacket> packets, string? name, JsonElement clip, string sessionId)
     {
-        if (name is null || !J.Confirmed(clip)) return null;
-        var matches = J.Array(J.Get(J.Get(clip, "state"), "layers")).Where(l => J.Text(l, "name") is { } n && J.Name(n) == J.Name(name)).ToArray();
-        if (matches.Length != 1 || J.Text(matches[0], "uuid") is not { } uuid) return null;
+        if (ResolveLayerUuid(name, clip) is not { } uuid) return null;
         var layers = packets.Where(p => p.Layer.SessionId == sessionId && p.Layer.Uuid == uuid).Select(p => p.Layer).Distinct().ToArray();
         return layers.Length == 1 ? layers[0] : null;
     }
 
-    private static bool InsideTransaction(IReadOnlyList<JsonElement> frames, ulong beginAppend, ulong boundary)
+    private static string? ResolveLayerUuid(string? name, JsonElement clip)
     {
-        var active = new HashSet<string>();
-        foreach (var frame in frames.Where(f => J.U64(f, "appendId") < beginAppend && J.U64(f, "appendId") <= boundary).OrderBy(f => J.U64(f, "appendId")))
+        if (name is null || !Confirmed(clip)) return null;
+        var matches = J.Array(J.Get(J.Get(clip, "state"), "layers"))
+            .Where(l => J.Text(l, "name") is { } n && J.Name(n) == J.Name(name)).ToArray();
+        return matches.Length == 1 ? J.Text(matches[0], "uuid") : null;
+    }
+
+    private static bool Confirmed(JsonElement data) => J.Confirmed(data) &&
+        J.Get(J.Get(data, "evidence"), "causalAmbiguous").ValueKind != JsonValueKind.True;
+
+    private static bool Usable(IReadOnlyList<HistorySlot> history, IReadOnlyList<JsonElement> frames,
+        string module, ulong eventId, ulong appendId)
+    {
+        var latest = history.LastOrDefault(h => h.Module == module && h.Anchor < eventId);
+        if (latest is null || !Confirmed(latest.Data)) return false;
+        foreach (var invalidation in frames.Where(f => J.Text(f, "kind") == "panelUpdateRequested" &&
+            J.U64(f, "appendId") < appendId && J.Text(J.Get(f, "data"), "phase") == "invalidate" &&
+            J.Array(J.Get(J.Get(f, "data"), "modules")).Any(m => m.ValueKind == JsonValueKind.String && m.GetString() == module)))
+        {
+            var refs = J.Array(J.Get(invalidation, "relatedEventIds")).Select(r => r.TryUnsigned()).Where(r => r > 0).ToArray();
+            if (refs.Length == 0) return false; // No causal proof that the old value survived this activation.
+            ulong anchor = refs.Max();
+            if (anchor < eventId && (latest.Anchor < anchor || latest.Anchor == anchor &&
+                ConfirmationAppend(latest, frames) <= J.U64(invalidation, "appendId"))) return false;
+        }
+        var resolved = frames.Where(f => J.Text(f, "kind") == "statePackageResult")
+            .Select(f => J.Text(J.Get(f, "data"), "packageId")).ToHashSet();
+        foreach (var pending in frames.Where(f => J.Text(f, "kind") == "statePackageReserved" && J.U64(f, "appendId") < appendId))
+        {
+            var data = J.Get(pending, "data");
+            ulong anchor = J.U64(data, "afterEventId");
+            if (anchor < eventId && latest.Anchor <= anchor && !resolved.Contains(J.Text(data, "packageId"))) return false;
+        }
+        return true;
+    }
+
+    private static ulong ConfirmationAppend(HistorySlot slot, IReadOnlyList<JsonElement> frames)
+    {
+        ulong append = 0;
+        var packages = frames.Where(f => J.Text(f, "kind") == "statePackageReserved")
+            .Select(f => J.Get(f, "data")).Where(d => J.U64(d, "afterEventId") == slot.Anchor && J.U64(d, "reservationOrder") == slot.Order)
+            .Select(d => J.Text(d, "packageId")).ToHashSet();
+        foreach (var frame in frames)
+        {
+            var data = J.Get(frame, "data");
+            if (J.Text(frame, "kind") == "coreStateUpdated" && JsonElement.DeepEquals(data, slot.Data))
+                append = Math.Max(append, J.U64(frame, "appendId"));
+            if (J.Text(frame, "kind") == "statePackageResult" && packages.Contains(J.Text(data, "packageId")) &&
+                J.Array(J.Get(J.Get(data, "result"), "updates")).Any(u => JsonElement.DeepEquals(u, slot.Data)))
+                append = Math.Max(append, J.U64(frame, "appendId"));
+        }
+        return append;
+    }
+
+    private static IReadOnlyList<TransactionInterval> TransactionIntervals(IReadOnlyList<JsonElement> frames, ulong boundary)
+    {
+        var active = new Dictionary<string, ulong>();
+        var intervals = new List<TransactionInterval>();
+        foreach (var frame in frames)
         {
             var kind = J.Text(frame, "kind"); string id = J.Text(J.Get(frame, "data"), "transactionId") ?? "unknown";
-            if (kind == "editTransactionBegan") active.Add(id);
-            if (kind == "editTransactionEnded") active.Remove(id);
+            if (kind == "editTransactionBegan") active.TryAdd(id, J.U64(frame, "appendId"));
+            if (kind == "editTransactionEnded" && active.Remove(id, out ulong start))
+                intervals.Add(new(start, J.U64(frame, "appendId")));
         }
-        return active.Count > 0;
+        intervals.AddRange(active.Values.Select(start => new TransactionInterval(start, boundary)));
+        return intervals;
+    }
+
+    private static IReadOnlyList<PlanIssue> UndoRedoIssues(LayerKey layer, IEnumerable<Contact> contacts,
+        IReadOnlyList<HistorySlot> history, IReadOnlyList<JsonElement> frames)
+    {
+        var layerContacts = contacts.Where(c => c.Layer == layer).ToArray();
+        if (layerContacts.Length == 0) return [];
+        ulong first = layerContacts.Min(c => c.BeginAppend);
+        var hardware = frames.Where(f => J.Text(f, "path") == "hardware" && J.U64(f, "eventId") > 0)
+            .ToDictionary(f => J.U64(f, "eventId"));
+        var issues = new List<PlanIssue>();
+        foreach (var result in frames.Where(f => J.Text(f, "kind") == "shortcutResolved"))
+        {
+            var commands = J.Array(J.Get(J.Get(result, "data"), "matches")).Select(m => J.Text(m, "command"))
+                .Where(c => c is "undo" or "redo").Distinct().ToArray();
+            if (commands.Length == 0) continue;
+            var refs = J.Array(J.Get(result, "relatedEventIds")).Select(r => r.TryUnsigned()).Where(r => r > 0).ToArray();
+            bool ambiguous = refs.Length == 0 || refs.Any(r => !hardware.ContainsKey(r));
+            bool affects = ambiguous && J.U64(result, "appendId") >= first;
+            foreach (ulong anchor in refs.Where(hardware.ContainsKey))
+            {
+                ulong append = J.U64(hardware[anchor], "appendId");
+                if (append < first) continue;
+                string? uuid = null;
+                if (Usable(history, frames, "currentLayerState", anchor, append) && Usable(history, frames, "clipState", anchor, append))
+                    uuid = ResolveLayerUuid(StateHistory.At(history, anchor).Layer, Latest(history, "clipState", anchor));
+                if (uuid is null || uuid == layer.Uuid) affects = true;
+            }
+            if (affects) issues.Add(new(PlanIssueCode.UndoRedoInRange,
+                $"图层 {layer.Uuid} 从最早接触到编辑边界之间存在 {string.Join("/", commands)}，无法确认历史笔画是否仍生效。"));
+        }
+        return issues;
     }
 
     private static List<PlanIssue> VerifyChain(IReadOnlyList<LayerPacket> packets, IReadOnlyList<EditableStroke> strokes)

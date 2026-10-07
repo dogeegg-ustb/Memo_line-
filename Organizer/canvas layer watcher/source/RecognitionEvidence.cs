@@ -13,7 +13,10 @@ internal sealed record InputObservation(long Ticks, string Channel, string Kind,
 internal sealed record EvidenceWindow(string SessionId, long Frequency, long FromTicks, long ToTicks, bool Complete,
     RecognizerState[] States, InputObservation[] Inputs, string[] CaptureStateIds);
 internal sealed record DirtyLabel(string Id, long OperationId, long FromTicks, long ToTicks, string Source,
-    string[] StateIds, StrokeCoverage Coverage, string[] Warnings, PenDownLocation? PenDownLocation = null);
+    string[] StateIds, StrokeCoverage Coverage, string[] Warnings, PenDownLocation? PenDownLocation = null)
+{
+    public CoverageSettings? CoverageSettings { get; init; }
+}
 internal sealed record DirtyEvidence(EvidenceWindow Recognizer, DirtyLabel[] Labels, string[] Warnings);
 internal sealed class FrozenEvidence(string session, long frequency, long connectedTicks, long droppedThrough,
     long triggerTicks, RecognizerState[] states, InputObservation[] inputs)
@@ -129,7 +132,8 @@ internal sealed class RecognitionEvidence
 
     public static DirtyEvidence Build(EvidenceWindow window, CaptureRequest request, Size canvas)
     {
-        var labels = new Dictionary<string, (long Operation, long From, long To, string Source, string[] States, double Radius, List<StrokeSegment> Segments, string[] Warnings, PenDownLocation? Location)>();
+        var labels = new Dictionary<string, (long Operation, long From, long To, string Source, string[] States, double Radius,
+            List<StrokeSegment> Segments, string[] Warnings, PenDownLocation? Location, CoverageSettings Settings)>();
         var last = new Dictionary<long, (PointD Point, string Label)>();
         var eligibleMouse = new HashSet<long>();
         var warnings = new HashSet<string>();
@@ -213,7 +217,7 @@ internal sealed class RecognitionEvidence
             // Keyboard key-up changes need not fragment otherwise identical brush labels.
             string labelKey = input.OperationId + ":" + string.Join("|", stateIds.Where(id => !id.StartsWith("keyboard:")));
             if (!labels.TryGetValue(labelKey, out var label))
-                label = (input.OperationId, Math.Max(input.Ticks, window.FromTicks), input.Ticks, input.Channel, stateIds, radius, [], localWarnings.ToArray(), input.PenDownLocation);
+                label = (input.OperationId, Math.Max(input.Ticks, window.FromTicks), input.Ticks, input.Channel, stateIds, radius, [], localWarnings.ToArray(), input.PenDownLocation, settings);
             var start = last.TryGetValue(input.OperationId, out var previous) ? previous.Point : point;
             if (!input.Continuity) label.Segments.Add(new(start, point)); label.To = input.Ticks;
             labels[labelKey] = label; last[input.OperationId] = (point, labelKey);
@@ -221,9 +225,10 @@ internal sealed class RecognitionEvidence
         }
         return new(window, labels.Where(pair => pair.Value.Segments.Count > 0).Select((pair, index) => new DirtyLabel("input-" + index, pair.Value.Operation,
             pair.Value.From, pair.Value.To, pair.Value.Source, pair.Value.States,
-            new(pair.Value.Segments.ToArray(), pair.Value.Radius), pair.Value.Warnings, pair.Value.Location)).ToArray(), warnings.ToArray());
+            new(pair.Value.Segments.ToArray(), pair.Value.Radius), pair.Value.Warnings, pair.Value.Location)
+            { CoverageSettings = pair.Value.Settings }).ToArray(), warnings.ToArray());
     }
-    private static bool TryCanvasPoint(JsonElement data, View view, double x, double y, Size canvas,
+    internal static bool TryCanvasPoint(JsonElement data, View view, double x, double y, Size canvas,
         out PointD point, out string warning)
     {
         point = default;

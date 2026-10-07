@@ -1,0 +1,7 @@
+FAIL: A confirmed value published before a later same-anchor invalidation is stale.
+FAIL: A still unresolved native state package cannot fall back to older confirmations.
+System.InvalidOperationException: Edit index hardening checks: 42/44 passed.
+A confirmed value published before a later same-anchor invalidation is stale.
+A still unresolved native state package cannot fall back to older confirmations.
+   at MemolineDemo.EditIndexHardeningChecks.Run() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditIndexHardeningChecks.cs:line 175
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\stage4-index-hardening\Program.cs:line 1
