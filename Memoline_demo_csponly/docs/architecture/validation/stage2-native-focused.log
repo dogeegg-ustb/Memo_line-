@@ -1,0 +1,15 @@
+D:\Memo_Line\Memo_Line\recognizer\Recognizer\tests\BehaviorRecognizer.Tests\bin\Release\net10.0\BehaviorRecognizer.Tests.dll (.NETCoreApp,Version=v10.0)的测试运行
+总共 1 个测试文件与指定模式相匹配。
+System.AggregateException: One or more errors occurred. (vstest.console 进程未能在 90 秒后连接到 datacollector 进程。出现此问题可能是因为计算机性能较低，请设置环境变量 VSTEST_CONNECTION_TIMEOUT，增加超时时间值。)
+ ---> Microsoft.VisualStudio.TestPlatform.ObjectModel.TestPlatformException: vstest.console 进程未能在 90 秒后连接到 datacollector 进程。出现此问题可能是因为计算机性能较低，请设置环境变量 VSTEST_CONNECTION_TIMEOUT，增加超时时间值。
+   at Microsoft.VisualStudio.TestPlatform.CrossPlatEngine.DataCollection.ProxyDataCollectionManager.Initialize() in /_/src/vstest/src/Microsoft.TestPlatform.CrossPlatEngine/DataCollection/ProxyDataCollectionManager.cs:line 250
+   at Microsoft.VisualStudio.TestPlatform.CrossPlatEngine.Client.ProxyExecutionManagerWithDataCollection.Initialize(Boolean skipDefaultAdapters) in /_/src/vstest/src/Microsoft.TestPlatform.CrossPlatEngine/Client/ProxyExecutionManagerWithDataCollection.cs:line 95
+   at Microsoft.VisualStudio.TestPlatform.CrossPlatEngine.Client.Parallel.ParallelProxyExecutionManager.<>c__DisplayClass29_0.<StartTestRunOnConcurrentManager>b__0() in /_/src/vstest/src/Microsoft.TestPlatform.CrossPlatEngine/Client/Parallel/ParallelProxyExecutionManager.cs:line 442
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+   --- End of inner exception stack trace ---
+
+测试运行已中止。
+

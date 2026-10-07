@@ -1,0 +1,16 @@
+test_clockwise_rotation_inverse_and_canvas_origin (test_editing_geometry.EditingMatrixTests.test_clockwise_rotation_inverse_and_canvas_origin) ... ok
+test_matrix_coefficients_are_published_and_part_of_semantic_state (test_editing_geometry.EditingMatrixTests.test_matrix_coefficients_are_published_and_part_of_semantic_state) ... ERROR
+
+======================================================================
+ERROR: test_matrix_coefficients_are_published_and_part_of_semantic_state (test_editing_geometry.EditingMatrixTests.test_matrix_coefficients_are_published_and_part_of_semantic_state)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_editing_geometry.py", line 18, in test_matrix_coefficients_are_published_and_part_of_semantic_state
+    self.assertEqual(state['transform']['matrices'], matrices)
+                     ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'matrices'
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.001s
+
+FAILED (errors=1)

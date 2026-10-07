@@ -1,0 +1,11 @@
+D:\Memo_Line\Memo_Line\recognizer\recorder_integration\transform_host\TransformHost.csproj : warning NU1900: 获取包漏洞数据时出错: 无法加载源 https://api.nuget.org/v3/index.json 的服务索引。
+  ScreenCanvasTransform.Core -> D:\Memo_Line\Memo_Line\recognizer\recognizer_core\screen_canvas_transform\bin\Release\net8.0-windows10.0.19041.0\ScreenCanvasTransform.Core.dll
+  TransformHost -> D:\Memo_Line\Memo_Line\recognizer\recorder_integration\transform_host\bin\Release\net8.0-windows10.0.19041.0\TransformHost.dll
+
+已成功生成。
+
+D:\Memo_Line\Memo_Line\recognizer\recorder_integration\transform_host\TransformHost.csproj : warning NU1900: 获取包漏洞数据时出错: 无法加载源 https://api.nuget.org/v3/index.json 的服务索引。
+    1 个警告
+    0 个错误
+
+已用时间 00:00:04.78

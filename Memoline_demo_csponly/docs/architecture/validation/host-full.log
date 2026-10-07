@@ -1,0 +1,12 @@
+End packet checks: 46.
+Passed 14 lifecycle checks; no Recognizer or CSP input was started.
+Input selection checks: 6.
+Layer and pen region checks: 21.
+Public interface checks: 37.
+Live session reader checks passed: 21.
+Editing core checks passed: 42.
+Editing core checks: 42.
+C#/Node production compositor parity passed: 54 assertions across 7 scenarios. No CSP or clipboard input.
+Compositor parity checks: 54.
+Bundle checks: 65; aggregate checks: 47; lifecycle checks: 14.
+Memoline integration checks passed.

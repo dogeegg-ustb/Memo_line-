@@ -1,0 +1,8 @@
+test_legacy_name_and_locator_are_from_one_read_and_mapped_to_capture_pixels (test_layer_locator.LayerLocatorTests.test_legacy_name_and_locator_are_from_one_read_and_mapped_to_capture_pixels) ... ok
+test_pipeline_keeps_string_semantics_and_same_frame_raw_locator (test_layer_locator.LayerLocatorTests.test_pipeline_keeps_string_semantics_and_same_frame_raw_locator) ... ok
+test_unknown_or_duplicate_selection_does_not_invent_selected_name (test_layer_locator.LayerLocatorTests.test_unknown_or_duplicate_selection_does_not_invent_selected_name) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.001s
+
+OK

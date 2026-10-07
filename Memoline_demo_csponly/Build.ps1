@@ -29,10 +29,31 @@ if (-not (Test-Path -LiteralPath $bridge)) {
 }
 if (-not (Test-Path -LiteralPath $bridge)) { throw 'Build the canvas layer watcher bridge first, or use -RebuildBridge.' }
 if (-not $SkipChecks) {
-    dotnet build (Join-Path $PSScriptRoot 'checks/MemolineDemo.Checks.csproj') -c Release -m:1 -p:UseSharedCompilation=false -nr:false
-    if ($LASTEXITCODE -ne 0) { throw 'Memoline integration checks build failed' }
-    dotnet run --project (Join-Path $PSScriptRoot 'checks/MemolineDemo.Checks.csproj') -c Release --no-build
-    if ($LASTEXITCODE -ne 0) { throw 'Memoline integration checks failed' }
+    foreach ($checkProject in @('Memoline_demo_csponly/checks/MemolineDemo.Checks.csproj',
+        'Organizer/canvas layer watcher/checks/CanvasLayerWatcher.Checks.csproj',
+        'replayer/packetreplayer/checks/PacketReplayChecks.csproj')) {
+        $projectPath = Join-Path $repository $checkProject
+        dotnet build $projectPath -c Release -m:1 -p:UseSharedCompilation=false -nr:false
+        if ($LASTEXITCODE -ne 0) { throw "Check build failed: $checkProject" }
+        dotnet run --project $projectPath -c Release --no-build
+        if ($LASTEXITCODE -ne 0) { throw "Checks failed: $checkProject" }
+    }
+    dotnet test (Join-Path $repository 'recognizer/Recognizer/tests/BehaviorRecognizer.Tests/BehaviorRecognizer.Tests.csproj') -c Release -m:1 -p:UseSharedCompilation=false -nr:false
+    if ($LASTEXITCODE -ne 0) { throw 'Native recorder checks failed' }
+    $checkPython = if ($env:MEMOLINE_PYTHON) { $env:MEMOLINE_PYTHON } else { 'py' }
+    $pythonPrefix = if ($env:MEMOLINE_PYTHON) { @() } else { @('-3') }
+    & $checkPython @pythonPrefix -m unittest discover -s (Join-Path $repository 'recognizer/recorder_integration/tests') -p 'test_*.py' -v
+    if ($LASTEXITCODE -ne 0) { throw 'Python integration checks failed' }
+    Push-Location -LiteralPath $repository
+    try {
+        & $checkPython @pythonPrefix -m unittest CSP_Shortcut_Manager/test_csp_shortcuts.py CSP_Shortcut_Manager/test_csp_shortcut_writer.py
+        if ($LASTEXITCODE -ne 0) { throw 'Shortcut manager checks failed' }
+    } finally { Pop-Location }
+    Push-Location -LiteralPath (Join-Path $repository 'replayer/dirty matrix paster/backend')
+    try {
+        node --test --test-isolation=none checks/*.test.mjs
+        if ($LASTEXITCODE -ne 0) { throw 'Node composition parity checks failed' }
+    } finally { Pop-Location }
 }
 $output = Join-Path $PSScriptRoot 'publish/win-x64'
 dotnet publish (Join-Path $PSScriptRoot 'source/MemolineDemo.csproj') -c Release -r win-x64 --self-contained true -o $output -m:1 -p:UseSharedCompilation=false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -nr:false
@@ -70,6 +91,19 @@ foreach ($file in Get-ChildItem -LiteralPath $recorderStage -File -Recurse) {
     $relative = [System.IO.Path]::GetRelativePath($recorderStage, $file.FullName)
     if ($relative -eq 'integration\settings.json' -or $relative -eq 'integration/settings.json' -or $relative -match '^config[\\/]') { continue }
     $destination = Join-Path $recognizerOutput $relative
+    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+    Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+}
+# Matrix serialization belongs to the transform host executable, which must be
+# rebuilt as well rather than retaining the supplied package's older helper.
+$transformStage = Join-Path $PSScriptRoot '.stage/transform-host'
+dotnet publish (Join-Path $repository 'recognizer/recorder_integration/transform_host/TransformHost.csproj') -c Release -r win-x64 --self-contained true -o $transformStage -m:1 -p:UseSharedCompilation=false -nr:false
+if ($LASTEXITCODE -ne 0) { throw 'Transform host publish failed' }
+$transformOutput = Join-Path $recognizerOutput 'integration/transform_host'
+New-Item -ItemType Directory -Path $transformOutput -Force | Out-Null
+foreach ($file in Get-ChildItem -LiteralPath $transformStage -File -Recurse) {
+    $relative = [System.IO.Path]::GetRelativePath($transformStage, $file.FullName)
+    $destination = Join-Path $transformOutput $relative
     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
     Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
 }

@@ -1,0 +1,5 @@
+Unhandled exception. System.Exception: Published raw matrices map negative screen origin and rotation to exact non-square canvas pixels
+   at Program.<>c__DisplayClass0_0.<<Main>$>g__Check|0(Boolean condition, String name) in D:\Memo_Line\Memo_Line\Organizer\canvas layer watcher\checks\Program.cs:line 9
+   at AffineMatrixChecks.Run(Action`2 check) in D:\Memo_Line\Memo_Line\Organizer\canvas layer watcher\checks\AffineMatrixChecks.cs:line 39
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Organizer\canvas layer watcher\checks\Program.cs:line 12
+   at Program.<Main>(String[] args)

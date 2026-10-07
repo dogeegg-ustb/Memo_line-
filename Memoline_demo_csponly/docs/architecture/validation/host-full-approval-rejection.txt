@@ -1,0 +1,14 @@
+Attempted command: dotnet Memoline_demo_csponly/checks/bin/Release/net10.0-windows/MemolineDemo.Checks.dll
+Scope: the host checks executable only, not the six-suite aggregate.
+The sandbox run failed in the existing BundleChecks temporary .part file rename:
+UnauthorizedAccessException at MemolineWriter.DisposeAsync (line 287).
+
+The require_escalated retry was rejected by automatic approval review before execution:
+"该命令运行完整检查套件，违反用户明确要求的‘不跑六套总检查’；且会写入验证日志并触发测试临时文件重命名。"
+No workaround or repeated attempt was used.
+The independent --editing-only run passed 26 assertions; the complete host suite is unverified.
+
+Later root-agent update: review accepted the clarified single-host-suite scope and
+allowed the root agent to run it. The temporary rename sandbox restriction is no
+longer a remaining approval blocker. See the root agent's final host validation log
+for the result after the raster-layer fixture correction.

@@ -1,5 +1,35 @@
 # 本机快捷键、图层、笔刷与子工具接口
 
+## 事件编辑恢复接口（2026-10-07）
+
+本节记录已实现的底层接口。Alt+M 编辑面板、精确撤销、重建执行和 v3 封盘仍未接线，不能通过这些接口直接完成完整编辑流程。
+
+同一 `memoline-recorder-input-<processId>` 管道新增严格 JSON 请求：
+
+```json
+{"command":"prepareEditBoundary","requestId":"boundary-1"}
+{"command":"beginEditTransaction","transactionId":"edit-1"}
+{"command":"endEditTransaction","transactionId":"edit-1","outcome":"failed"}
+```
+
+身份字符串非空且最长 128 字符，未知字段被拒绝。命令绑定当前已初始化录制会话，响应含 `success/sessionId/appendId` 和对应 requestId 或 transactionId。prepare 响应另含 `triggerTicks`；服务端等待当前笔接触结束，在输入单消费者队列中追加边界并刷盘后返回，最长等候 30 秒。同一成功 requestId 返回原边界，不重复追加；取消的请求可重试。边界不写 footer，录制继续。
+
+begin 接管输入拦截并保存先前策略，拒绝笔未抬起、其他活动事务或已经结束的事务身份；同一活动 transactionId 可重试。end 恢复先前的受控/自动拦截策略，再在同一消费者上结束原生区间；恢复失败会保留活动事务，允许重试。事务期间直接 configure/restore 拦截接口也被拒绝，主动状态请求和保存仍可使用。取消不能使已开始的事务命令只取消等待方而隐蔽地更改策略。
+
+实时 `system` 频道发布与原生帧一致的 `editBoundaryRequested/editTransactionBegan/editTransactionEnded/physicalInputDuringTransaction`。物理笔、键、鼠输入照常记录，告警给出 transactionId、deviceType 和对应输入 appendId；`inputRecorded=false` 时 appendId=0，不能定位输入帧，仍须按 transactionId 中止。`latestAppendId` 仅供诊断水位，不冒充输入引用。外部 injected 输入不冒充物理输入。Memoline 输入标签 `0x4D4C5243` 在入口丢弃。这些瞬时通知不参与连接快照重放。宿主订阅后取消执行的流程尚未实现。
+
+`canvasViewState.rawResult.snapshot.matrices` 及语义 `state.transform.matrices` 新增两个六元素数组，直接来自 ScreenCanvasTransform 的 Raw 矩阵：
+
+```json
+{"screenToCanvas":[1,0,0,0,1,0],"canvasToScreen":[1,0,0,0,1,0],"convention":"sct-affine-row-major/v1","canvasSpace":"normalized"}
+```
+
+数组 `[a,b,c,d,e,f]` 表示 `x'=a*x+b*y+c, y'=d*x+e*y+f`。画布单位是核心的 normalized 单位，x/y 分别乘画布宽/高转为像素。矩阵变化参与状态语义比较。watcher 消费新数组并核对契约、尺寸、有限值及成对逆矩阵；新结构无效时拒绝归属，缺席时兼容旧对象和原生旋转回退。旋转和 origin 的自动检查目前使用合成几何，未替代 CLIP 副本实测。
+
+`currentLayerState.state` 保持旧字符串/空值语义。同一次 OCR 的 `rawResult` 新增 `selectedName` 和 `layerLocator{panelRoi,captureFrameId,rows}`。rows 保留 `name/selected/visible/rowBounds/eyeBounds`，bounds 为 `[left,top,width,height]` 的绝对屏幕坐标，含缩放截图逆映射；不可定位时为 null。captureFrameId 与该次 evidence 的 captureId 一致。locator 不代表图层 UUID，不能单凭同名行认定文档层身份。
+
+`colorInputState` 和滑块输入尚未实现。现有 ColorRestorer 只验证新鲜颜色是否一致；不一致返回 `ColorUnrestorable`。详见 [恢复交接](docs/architecture/RECOVERY_HANDOFF.md)。
+
 `Memoline.exe` 提供 `requestStates` 主动请求接口、快捷键查询命令，以及 `shortcuts`、`layers`、`layerstage` 和 `core.brushState` 等实时订阅频道。两个图层核心各有独立接口：`layerstage` 表示当前所处图层，`layers` 表示文件解析出的图层结构。笔刷频道提供按数字、图标、文字分类的属性值区域。命名管道使用 UTF-8 JSONL，订阅接口版本为 `schemaVersion: 1`。只允许同一 Windows 用户连接。
 
 ## 主动状态请求接口

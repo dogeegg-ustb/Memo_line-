@@ -1,0 +1,13 @@
+Build command:
+dotnet build Memoline_demo_csponly/checks/MemolineDemo.Checks.csproj -c Release --no-restore -m:1
+Result: succeeded, 0 warnings, 0 errors, elapsed 2.41 seconds.
+
+Check command:
+dotnet Memoline_demo_csponly/checks/bin/Release/net10.0-windows/MemolineDemo.Checks.dll --compositor-parity-only
+Exit code: 0
+Actual output:
+C#/Node production compositor parity passed: 54 assertions across 7 scenarios. No CSP or clipboard input.
+Compositor parity checks: 54.
+
+The final runner invokes the actual node engine.mjs --compose <request.json> CLI for every scenario,
+reads the reported layer.rgba/mask.gray files directly, and verifies failed overlap scenarios have nonzero CLI exit codes.

@@ -1,0 +1,15 @@
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+  MemolineDemo -> D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\bin\Release\net10.0-windows\MemolineDemo.dll
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingChecks.cs(85,21): error CS0103: 当前上下文中不存在名称“EditIndexBuilder” [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingChecks.cs(98,28): error CS0103: 当前上下文中不存在名称“EditIndexBuilder” [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingChecks.cs(103,15): error CS0103: 当前上下文中不存在名称“EditIndexBuilder” [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+
+生成失败。
+
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingChecks.cs(85,21): error CS0103: 当前上下文中不存在名称“EditIndexBuilder” [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingChecks.cs(98,28): error CS0103: 当前上下文中不存在名称“EditIndexBuilder” [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingChecks.cs(103,15): error CS0103: 当前上下文中不存在名称“EditIndexBuilder” [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+    0 个警告
+    3 个错误
+
+已用时间 00:00:22.09

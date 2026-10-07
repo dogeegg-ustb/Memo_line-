@@ -133,3 +133,15 @@ v2 的机械、聚集和维度 entry 元数据另外包含 codec；目前支持 
 升级会再次验证原容器与新维度，复制所有原 entry 的原始内容，新增版本并切换活动入口。原机械哈希、原聚集哈希和 fixedSha256 保持相同。升级输出也必须是新路径，输入不会删除或覆盖。
 
 公共核心接口为 `BundleArchive.Seal`、`Verify`、`ReadMechanical`、`ReadDimensions`、`ExtractMechanical`、`Compact` 和 `UpgradeDimensions`。ReadMechanical 通过受控临时文件调用原生 reader，逐帧返回原记录；原生 reader 自身不识别这个 ZIP 外层，独立工具请先使用 `--extract-mechanical`。
+
+## 事件编辑恢复检查点（2026-10-07）
+
+容器仍为 v2，尚未实现架构中的 v3、编辑日志 entry 或编辑事务资产封装。下列新增字段属于原生帧和 watcher manifest，不表示完整编辑功能已经上线。
+
+原生流新增 `editBoundaryRequested`、`editTransactionBegan`、`editTransactionEnded`、`physicalInputDuringTransaction` 四种状态帧，`eventId=0`，保留实际 `appendId/ticks`。边界记录的 `data.requestId` 标识幂等请求；事务记录的 `data.transactionId` 标识事务，结束记录另含 `outcome`。物理输入告警的 `data.appendId` 指向本次输入直接写入的帧，`inputRecorded=true`；原有过滤/去重未产生输入记录时为 0，`inputRecorded=false`。`latestAppendId` 只是检测时的流追加水位，可包括解析桥同步追加的状态；与告警自身的外层 appendId 也不同。即使没有单独输入帧，物理输入仍触发告警，宿主应按 transactionId 中止执行。这些帧不会终止录制，也不写 footer。带 `extraInfo=0x4D4C5243` 的 Memoline 合成输入不进入原生流；其他外部合成键鼠保留 injected 标记。
+
+新 watcher manifest 保持 `schema=dirty-matrix-image-diff/v1`，新增 `comparison=fullResolution/v2`：搜索预测不限制像素比较范围，所有格子沿用 `Different` 判据逐像素比较；两侧都完全透明时忽略隐藏 RGB，任一侧非零则比较全部 RGBA。`images[]` 中每张图片才是编辑用的脏矩阵；`afterImage`、`nowImage/image`、`maskImage`、`bounds`、`labelIds` 共同描述它。mask 标记处整体替换 RGBA，包括 alpha=0 和隐藏 RGB。
+
+快照 descriptor 带 `sessionId`、`generation`、图层 UUID、尺寸和 `baselineSource`。可信来源为 `recordingStart`、`createdEmpty`、`reproduction`；普通首次捕获不自动获得录制起点的可信性。历史链需检查相邻 `after.id == previous.now.id`、图层身份、代次、会话和尺寸；旧的粗略比较仍可读取，但不能声明可编辑。复现来源要求显式设置，尚未接入宿主编辑事务。
+
+离线 `LiveSessionReader` 读取刷盘后的指定 appendId 前缀，不要求 footer；包、图像路径、mask 数量和双向标签引用有独立校验。PNG 必须有合法首个 IHDR、正确尺寸、8 位 RGBA 色彩类型及合法压缩/过滤/交错方法，拒绝灰度、RGB 和索引图被解码器隐式转换。全部状态新鲜度及编辑闭包规则仍需补齐，见 [恢复交接](docs/architecture/RECOVERY_HANDOFF.md)。

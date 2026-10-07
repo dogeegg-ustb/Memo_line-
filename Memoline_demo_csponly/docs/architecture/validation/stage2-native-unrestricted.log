@@ -1,0 +1,142 @@
+D:\Memo_Line\Memo_Line\recognizer\Recognizer\tests\BehaviorRecognizer.Tests\bin\Release\net10.0\BehaviorRecognizer.Tests.dll (.NETCoreApp,Version=v10.0)的测试运行
+总共 1 个测试文件与指定模式相匹配。
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.12)
+[xUnit.net 00:00:00.36]   Discovering: BehaviorRecognizer.Tests
+[xUnit.net 00:00:00.41]   Discovered:  BehaviorRecognizer.Tests
+[xUnit.net 00:00:00.44]   Starting:    BehaviorRecognizer.Tests
+  已通过 BehaviorRecognizer.Tests.DeviceSelectionTests.SelectedModeRejectsReportsFromOtherDevices [151 ms]
+  已通过 BehaviorRecognizer.Tests.DeviceSelectionTests.AutomaticModeKeepsAllDevices [< 1 ms]
+  已通过 BehaviorRecognizer.Tests.NormalizerTests.PenDown_Then_Move_Then_Up [159 ms]
+  已通过 BehaviorRecognizer.Tests.NormalizerTests.OutOfRange_EmitsHover [< 1 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.CompleteFileWithoutFooter_IsRejected [223 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.Counts_MapRotationAndNegativeDesktopOrigin(rotation: 270, expectedX: -1500, expectedY: 850) [243 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.Counts_MapRotationAndNegativeDesktopOrigin(rotation: 180, expectedX: -500, expectedY: 850) [< 1 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.Counts_MapRotationAndNegativeDesktopOrigin(rotation: 0, expectedX: -1500, expectedY: 350) [< 1 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.Counts_MapRotationAndNegativeDesktopOrigin(rotation: 90, expectedX: -500, expectedY: 350) [< 1 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.Pressure_UsesActualHardwareMaximumAndDriverThreshold [4 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.MillimeterProfile_ConvertsRawDigitizerCountsBeforeMapping [< 1 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.ExplicitlyDisablingMapping_PreservesUnmappedReports [1 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.Normalizer_ZeroPressureWithoutProximityEndsMappedContact [1 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.Normalizer_MappedPressureDoesNotTurnHoverNoiseIntoContact [3 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.ActiveAreaClampsOutsidePointsWithoutChangingRawPhysicalPosition [< 1 ms]
+[���뱣�汣��] vk=162 �������ɷ�=True ԭָ�����ͷ�=True 
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.Normalizer_PreservesRawPressureAndDoesNotApplyDefaultCurveTwice [6 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.MultipleMonitors_RequireSelectionForVendorRelativeScreenBounds [1 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.ExplicitSelection_UsesRequestedProfileRatherThanFirstCandidate [< 1 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.MappingForOneDevice_IsNotAppliedToAnotherDevice [< 1 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.OtdRelativeOutputMode_IsNotMistakenForItsSavedAbsoluteArea [11 ms]
+  已通过 BehaviorRecognizer.Tests.PenActivationTests.ActualCursorOutsideCsp_DoesNotStartAnOperation [276 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.Follow_DeliversNewRecordsOnceAndEndsAtFooter [61 ms]
+[���̼���] Ctrl+A ע��=True ͼ�㱣������=False ����Hook��ֹ=False ��Դ���=0x2A
+[���̼���] Ctrl+A ע��=False ͼ�㱣������=False ����Hook��ֹ=False ��Դ���=0x0
+  已通过 BehaviorRecognizer.Tests.RealtimeInputTests.TabletPublishesHoverButtonsAndOutOfRangeWithoutFakeStrokes [290 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.RestoringAutomaticProtectionDoesNotOvertakeBufferedModifierDown [295 ms]
+  已通过 BehaviorRecognizer.Tests.PenDownLocationTests.PenRegionIsFrozenAtBeginForOtdAndWindowsPen(passive: False) [299 ms]
+  已通过 BehaviorRecognizer.Tests.PenActivationTests.HoverNoiseOutsideCsp_DoesNotBlockNextPhysicalClick [15 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.ClientCancellationDoesNotStopRecordingOrOtherSubscriptions [301 ms]
+[���̼���] Space ע��=True ͼ�㱣������=False ����Hook��ֹ=False ��Դ���=0x0
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.DriverSnapshotAndMappedPoint_SurviveMemolineRoundTrip [32 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.RelativeMode_KeepsPressureButDoesNotInventAbsolutePosition [< 1 ms]
+  已通过 BehaviorRecognizer.Tests.LatestCoreStateTests.PipeAndSnapshotReturnThisObservationForEveryCore(module: "canvasViewState") [310 ms]
+  已通过 BehaviorRecognizer.Tests.PenDownLocationTests.PenRegionIsFrozenAtBeginForOtdAndWindowsPen(passive: True) [27 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.Bezier_HandlesNormalizedControlPointDomainAndRange [17 ms]
+  已通过 BehaviorRecognizer.Tests.PenActivationTests.MappedPointOutsideCsp_DoesNotSuppressClickDragOrRelease [28 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.Normalizer_PressureCurveCannotSuppressPhysicalClick [< 1 ms]
+  已通过 BehaviorRecognizer.Tests.RealtimeInputTests.KeyboardPublishesModifiersRepeatsReleasesAndFocusReset [41 ms]
+  已通过 BehaviorRecognizer.Tests.LatestCoreStateTests.PipeAndSnapshotReturnThisObservationForEveryCore(module: "colorState") [23 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.InvalidConfiguration_DoesNotPreventDiscoveringOtherProfiles [9 ms]
+  已通过 BehaviorRecognizer.Tests.DriverMappingTests.Discovery_DoesNotApplyEvenOneProfileWithoutUserSelection [< 1 ms]
+  已通过 BehaviorRecognizer.Tests.LatestCoreStateTests.PipeAndSnapshotReturnThisObservationForEveryCore(module: "clipState") [9 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.Compression_PreservesLegacyRecordsAndScreenshotBytes [62 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.SubtoolsPipePreservesLatestOcrAndConfirmedSnapshotAcrossFailures [47 ms]
+[���̼���] Space ע��=True ͼ�㱣������=False ����Hook��ֹ=False ��Դ���=0x0
+  已通过 BehaviorRecognizer.Tests.InputControlTests.EditPipeValidatesIdentitiesAndRestoresPreviousInterception [58 ms]
+  已通过 BehaviorRecognizer.Tests.StorageTests.Write_And_Export_RoundTrip [355 ms]
+  已通过 BehaviorRecognizer.Tests.LatestCoreStateTests.PipeAndSnapshotReturnThisObservationForEveryCore(module: "subtoolState") [10 ms]
+  已通过 BehaviorRecognizer.Tests.RealtimeInputTests.MouseHookRoutesPhysicalAndInjectedGesturesToActivationEvents(flags: 3) [28 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.LateSubscriberReceivesSnapshotIncludingTabletConfiguration [14 ms]
+  已通过 BehaviorRecognizer.Tests.LatestCoreStateTests.PipeAndSnapshotReturnThisObservationForEveryCore(module: "brushState") [9 ms]
+[���̼���] Space ע��=True ͼ�㱣������=False ����Hook��ֹ=False ��Դ���=0x0
+  已通过 BehaviorRecognizer.Tests.InputControlTests.OneShotDoesNotValidateDocumentTitles(title: "another document.clip - CLIP STUDIO PAINT") [11 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.Compression_RefusesToMarkAnUnfinishedRecordingComplete [19 ms]
+  已通过 BehaviorRecognizer.Tests.RealtimeInputTests.MouseHookRoutesPhysicalAndInjectedGesturesToActivationEvents(flags: 0) [11 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.OneShotDoesNotValidateDocumentTitles(title: "") [6 ms]
+  已通过 BehaviorRecognizer.Tests.LatestCoreStateTests.PipeAndSnapshotReturnThisObservationForEveryCore(module: "currentLayerState") [9 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.IncompleteFrameHeaderAndBody_AreRetriedAtSameBoundary(version: 2, compress: True) [10 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.OneShotDoesNotValidateDocumentTitles(title: "CLIP STUDIO PAINT") [5 ms]
+  已通过 BehaviorRecognizer.Tests.RealtimeInputTests.MouseHookRoutesPhysicalAndInjectedGesturesToActivationEvents(flags: 1) [11 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.OneShotRejectsForeignForeground [6 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.IncompleteFrameHeaderAndBody_AreRetriedAtSameBoundary(version: 2, compress: False) [9 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.DiagnosticCoreUpdatesRemainLiveWithoutPersistentAppendIds [26 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.FinalSaveActivationFailureDoesNotInjectInput [6 ms]
+[���뱣�汣��] vk=162 �������ɷ�=True ԭָ�����ͷ�=True 
+[���뱣�汣��] vk=65 �������ɷ�=True ԭָ�����ͷ�=True 
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.IncompleteFrameHeaderAndBody_AreRetriedAtSameBoundary(version: 1, compress: False) [9 ms]
+  已通过 BehaviorRecognizer.Tests.RealtimeInputTests.RecorderReplayAndTouchDoNotCreateDuplicateMouseActivation [17 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.CorruptStoredPayload_IsRejectedEvenInPartFile(version: 1) [15 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.AllQueuedInputIsReleasedInOrderOnlyAfterSaveDispatch [22 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.CorruptStoredPayload_IsRejectedEvenInPartFile(version: 2) [8 ms]
+  已通过 BehaviorRecognizer.Tests.RealtimeInputTests.MousePublishesButtonSetWheelAndInterruption [21 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.CancelledBoundaryDoesNotAppendAndCanBeRetried [10 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.IncompleteFileHeader_IsRetriedFromZero [14 ms]
+[���뱣�汣��] ��꣯���� �������ɷ�=True ԭָ�����ͷ�=False CSP lost foreground; guarded input cancelled.
+[���뱣�汣��] vk=65 �������ɷ�=True ԭָ�����ͷ�=True 
+  已通过 BehaviorRecognizer.Tests.InputControlTests.PenCompatibilityMessagesArePassedThroughByControlledPolicy [17 ms]
+  已通过 BehaviorRecognizer.Tests.LatestCoreStateTests.TabletMetadataSubscriptionSkipsPenTrafficAndKeepsLiveDeviceUpdates [72 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.StateControlPipeValidatesSessionAndModulesAndDirectlyReturnsFreshResults [29 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.ForegroundChangeCancelsReplayIntoAnotherApplication [14 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.DisablingDuringSaveStillBuffersReleasesForQueuedKeyAndButton [15 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.StateRequestsStopWhenCaptureHelperEnds [1 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.SuccessfulStatesOnly_PartialPackagesKeepConfirmedModulesAndNoFailedOrUnfinishedSlots [72 ms]
+[���뱣�汣��] vk=65 �������ɷ�=True ԭָ�����ͷ�=True 
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.CompressedFrameWithWrongDecodedLength_IsRejected [9 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.SaveChordRestoresHeldModifiersAndTagsEveryInjectedEdge [12 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.ExportAndCompact_CannotOverwriteInputThroughPartPathAlias [4 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.DataAfterFooter_IsRejected [7 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.ExternalSaveDiagnosticsUseTriggerTicksAndKeepActualDispatchTiming [14 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.InvalidEncodingOrExcessiveDecompressedSize_IsRejected(length: 20, jsonLength: 20, flags: 4) [7 ms]
+  已通过 BehaviorRecognizer.Tests.LatestCoreStateTests.CoreSubscriberReceivesNewestStateThroughTabletTrafficBeforeDurableFlush [90 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.StateRequestsCollectOnlyTheRequestedPackageAndReturnFullPayloads [3 ms]
+[���뱣�汣��] vk=65 �������ɷ�=False ԭָ�����ͷ�=True save failed
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.InvalidEncodingOrExcessiveDecompressedSize_IsRejected(length: -1, jsonLength: 20, flags: 0) [6 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.StoppingDrainsSaveDiagnosticsWithDispatchAndReleaseTimings [13 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.InvalidEncodingOrExcessiveDecompressedSize_IsRejected(length: 20, jsonLength: 21, flags: 0) [8 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.OneShotReturnsFailureOnDispatchErrorAndBusyWorker [7 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.InvalidEncodingOrExcessiveDecompressedSize_IsRejected(length: 20, jsonLength: 67108865, flags: 1) [12 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.WorkerMustBeReadyBeforeInterceptionCanBeEnabled [9 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.PipeHandlesBadRequestsAndControlsKeyboardMousePolicy [20 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.NativeControlCanBePreparedWithoutAnAhkProcessOrAnyInputInjection [5 ms]
+[���̼���] A ע��=False ͼ�㱣������=False ����Hook��ֹ=False ��Դ���=0x0
+[���̼���] B ע��=True ͼ�㱣������=False ����Hook��ֹ=False ��Դ���=0x0
+  已通过 BehaviorRecognizer.Tests.InputControlTests.SaveFailureReleasesInputAndStopsFurtherInterception [16 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.Follow_IdleRecordingCanBeCancelled [63 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.FlushAndIncrementalRead_WorkBeforeCloseAndAcrossRename [18 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.PrepareEditBoundaryWaitsForCompleteContactIsIdempotentAndKeepsRecordingOpen [47 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.SuccessfulStatesOnly_ResultsResolvingOutOfOrderRetainOriginalOrderAtSameInput [13 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.PipeReportsBackpressureGapRatherThanSilentlyDroppingEvents [280 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.TransactionReportsPhysicalPenMouseAndKeyboardButNotInjectedOrTaggedInput [9 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.FinalSaveCanActivateCspWithoutChangingNormalSavePolicy [5 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.OneShotSaveDoesNotWaitForInputOrChangeInterceptionPolicy [5 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.ChannelFilteringPreservesOrderAndRecordingReferences [13 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.SuccessfulStatesOnly_FailedAndRawAttemptsGoToDiagnosticLogWithoutLosingInputs [25 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.CoreUpdatesKeepConfirmedStateAcrossUnknownAmbiguousAndError [6 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.TopicSelectionRejectsTyposAndExpandsCores [< 1 ms]
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.UncompressedOptionAndJsonExport_RoundTrip [17 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.BrushValueLocationsSurvivePipeSnapshotsAndNativeRecording [17 ms]
+[Recovery] ����δ�����ļ�: C:\Users\dogeegg\AppData\Local\Temp\br-part-1d02d6f088c248f2928f712d72b91d63\stroke\20260101_000000.strokebin.part
+[xUnit.net 00:00:02.09]   Finished:    BehaviorRecognizer.Tests
+数据收集器“Blame”消息: 所有测试都已运行完毕，将不生成序列文件。
+  已通过 BehaviorRecognizer.Tests.MemolineStorageTests.AutomaticFlush_ExposesIdleInputWithoutClosingWriter [12 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.SlowSubscriberGetsExplicitGapWithoutLosingDiskRecords [13 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.RecordingEndBoundaryFollowsHardwareAndRetainsNativeIdentity [11 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.LocalPipeServesConcurrentClientsAndEndsGracefully [14 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.EvidenceNotificationArrivesBeforeAnalysisAndDoesNotReplaceConfirmedSnapshot [14 ms]
+  已通过 BehaviorRecognizer.Tests.StrokeStorageTests.Write_Strokebin_RoundTrip_And_Export [897 ms]
+  已通过 BehaviorRecognizer.Tests.RecorderRealtimeTests.RecorderCliOutputsOnlyJsonLinesThroughEndpointManifest [350 ms]
+  已通过 BehaviorRecognizer.Tests.StrokeStorageTests.DeltaTime_Resets_Per_Stroke_And_Deduplicates_Identical_Payload [715 ms]
+  已通过 BehaviorRecognizer.Tests.StrokeStorageTests.Part_Files_Are_Not_Renamed_By_Recovery [2 ms]
+
+测试运行成功。
+测试总数: 114
+     通过数: 114
+总时间: 2.8649 秒

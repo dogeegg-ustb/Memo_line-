@@ -1,0 +1,13 @@
+D:\Memo_Line\Memo_Line\recognizer\Recognizer\tests\BehaviorRecognizer.Tests\BehaviorRecognizer.Tests.csproj : warning NU1900: 获取包漏洞数据时出错: 无法加载源 https://api.nuget.org/v3/index.json 的服务索引。
+  DriverReader.Core -> D:\Memo_Line\Memo_Line\recognizer\recognizer_core\driver_reader\bin\Release\net8.0\DriverReader.Core.dll
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+  BehaviorRecognizer -> D:\Memo_Line\Memo_Line\recognizer\Recognizer\src\BehaviorRecognizer\bin\Release\net10.0\BehaviorRecognizer.dll
+  BehaviorRecognizer.Tests -> D:\Memo_Line\Memo_Line\recognizer\Recognizer\tests\BehaviorRecognizer.Tests\bin\Release\net10.0\BehaviorRecognizer.Tests.dll
+
+已成功生成。
+
+D:\Memo_Line\Memo_Line\recognizer\Recognizer\tests\BehaviorRecognizer.Tests\BehaviorRecognizer.Tests.csproj : warning NU1900: 获取包漏洞数据时出错: 无法加载源 https://api.nuget.org/v3/index.json 的服务索引。
+    1 个警告
+    0 个错误
+
+已用时间 00:00:25.90

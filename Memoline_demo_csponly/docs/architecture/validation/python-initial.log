@@ -1,0 +1,142 @@
+test_brush_name_fallback (unittest.loader._FailedTest.test_brush_name_fallback) ... ERROR
+test_brush_value_regions (unittest.loader._FailedTest.test_brush_value_regions) ... ERROR
+test_canvas_batch_is_one_desktop_grab_with_exact_unexpanded_roi_pixels (test_canvas_frame_capture.CanvasFrameCaptureTests.test_canvas_batch_is_one_desktop_grab_with_exact_unexpanded_roi_pixels) ... ok
+test_canvas_ipc_sends_full_frame_and_three_exact_crop_descriptors (test_canvas_frame_capture.CanvasFrameCaptureTests.test_canvas_ipc_sends_full_frame_and_three_exact_crop_descriptors) ... ok
+test_continuous_repaints_keep_every_queued_capture (test_canvas_frame_capture.CanvasFrameCaptureTests.test_continuous_repaints_keep_every_queued_capture) ... ok
+test_initialization_uses_configured_rois_without_expansion (test_canvas_frame_capture.CanvasFrameCaptureTests.test_initialization_uses_configured_rois_without_expansion) ... ok
+test_live_evidence_boundary_precedes_encoding_persistence_and_analysis (test_canvas_frame_capture.CanvasFrameCaptureTests.test_live_evidence_boundary_precedes_encoding_persistence_and_analysis) ... ok
+test_non_canvas_panel_still_acquires_only_its_exact_roi (test_canvas_frame_capture.CanvasFrameCaptureTests.test_non_canvas_panel_still_acquires_only_its_exact_roi) ... ok
+test_old_400ms_settings_do_not_delay_or_poll_evidence (test_canvas_frame_capture.CanvasFrameCaptureTests.test_old_400ms_settings_do_not_delay_or_poll_evidence) ... ok
+test_persisted_full_frame_and_roi_evidence_share_capture_clock_without_extra_job (test_canvas_frame_capture.CanvasFrameCaptureTests.test_persisted_full_frame_and_roi_evidence_share_capture_clock_without_extra_job) ... ok
+test_repaint_during_grab_is_preserved_as_one_real_frame (test_canvas_frame_capture.CanvasFrameCaptureTests.test_repaint_during_grab_is_preserved_as_one_real_frame) ... ok
+test_subtool_job_uses_its_exact_panel_capture_start_and_end (test_canvas_frame_capture.CanvasFrameCaptureTests.test_subtool_job_uses_its_exact_panel_capture_start_and_end) ... ok
+test_explicit_disable_is_also_confirmed (test_driver_selection.DriverSelectionTests.test_explicit_disable_is_also_confirmed) ... ok
+test_invalid_config_returns_to_selection_without_continuing (test_driver_selection.DriverSelectionTests.test_invalid_config_returns_to_selection_without_continuing) ... ok
+test_missing_selection_does_not_start_or_request_a_mapping (test_driver_selection.DriverSelectionTests.test_missing_selection_does_not_start_or_request_a_mapping) ... ok
+test_start_waits_for_driver_confirmation (test_driver_selection.DriverSelectionTests.test_start_waits_for_driver_confirmation) ... ok
+test_successful_confirmation_resumes_once_and_saves_user_choice (test_driver_selection.DriverSelectionTests.test_successful_confirmation_resumes_once_and_saves_user_choice) ... ok
+test_clockwise_rotation_inverse_and_canvas_origin (test_editing_geometry.EditingMatrixTests.test_clockwise_rotation_inverse_and_canvas_origin) ... ok
+test_matrix_coefficients_are_published_and_part_of_semantic_state (test_editing_geometry.EditingMatrixTests.test_matrix_coefficients_are_published_and_part_of_semantic_state) ... ok
+test_hover_enters_once_and_ends (test_engine.ActivatorTests.test_hover_enters_once_and_ends) ... ok
+test_initial_capture_maps_toolbar_to_brush_and_subtool_panels (test_engine.ActivatorTests.test_initial_capture_maps_toolbar_to_brush_and_subtool_panels) ... ok
+test_layer_properties_and_image_transform_do_not_activate_layer (test_engine.ActivatorTests.test_layer_properties_and_image_transform_do_not_activate_layer) ... ok
+test_layer_shortcut_resolves_and_references_input (test_engine.ActivatorTests.test_layer_shortcut_resolves_and_references_input) ... ok
+test_layout_missing_never_requests_old_regions (test_engine.ActivatorTests.test_layout_missing_never_requests_old_regions) ... ok
+test_menu_and_gesture_modifier_encodings_are_distinct (test_engine.ActivatorTests.test_menu_and_gesture_modifier_encodings_are_distinct) ... ok
+test_navigation_tool_shortcut_does_not_arm_canvas_pointer_events (test_engine.ActivatorTests.test_navigation_tool_shortcut_does_not_arm_canvas_pointer_events) ... ok
+test_space_alone_does_not_activate_navigator (test_engine.ActivatorTests.test_space_alone_does_not_activate_navigator) ... ok
+test_space_drag_has_both_targets_and_original_reference (test_engine.ActivatorTests.test_space_drag_has_both_targets_and_original_reference) ... ok
+test_subtool_requests_are_filtered_when_the_panel_is_not_visible (test_engine.ActivatorTests.test_subtool_requests_are_filtered_when_the_panel_is_not_visible) ... ok
+test_tool_switch_click_and_scrolling_request_visible_subtool_ocr (test_engine.ActivatorTests.test_tool_switch_click_and_scrolling_request_visible_subtool_ocr) ... ok
+test_toolbar_operation_captures_brush_roi_and_keeps_input_reference (test_engine.ActivatorTests.test_toolbar_operation_captures_brush_roi_and_keeps_input_reference) ... ok
+test_unknown_binding_is_not_assumed_default (test_engine.ActivatorTests.test_unknown_binding_is_not_assumed_default) ... ok
+test_canvas_dispatch_analyzes_latest_immediate_png_without_a_quiet_recapture (test_evidence_debounce.EvidenceDebounceTests.test_canvas_dispatch_analyzes_latest_immediate_png_without_a_quiet_recapture) ... ok
+test_canvas_release_captures_immediately_and_analyzes_that_evidence_after_150ms (test_evidence_debounce.EvidenceDebounceTests.test_canvas_release_captures_immediately_and_analyzes_that_evidence_after_150ms) ... ok
+test_canvas_renewed_motion_replaces_evidence_and_restarts_only_analysis_wait (test_evidence_debounce.EvidenceDebounceTests.test_canvas_renewed_motion_replaces_evidence_and_restarts_only_analysis_wait) ... ok
+test_close_drains_early_and_final_evidence_even_before_quiet (test_evidence_debounce.EvidenceDebounceTests.test_close_drains_early_and_final_evidence_even_before_quiet) ... ok
+test_color_can_finish_while_brush_is_still_changing (test_evidence_debounce.EvidenceDebounceTests.test_color_can_finish_while_brush_is_still_changing) ... ok
+test_current_canvas_success_is_published_when_an_unrelated_input_arrives (test_evidence_debounce.EvidenceDebounceTests.test_current_canvas_success_is_published_when_an_unrelated_input_arrives) ... ok
+test_drag_evidence_is_not_blocked_until_pointer_release (test_evidence_debounce.EvidenceDebounceTests.test_drag_evidence_is_not_blocked_until_pointer_release) ... ok
+test_hover_only_does_not_capture_or_postpone_analysis (test_evidence_debounce.EvidenceDebounceTests.test_hover_only_does_not_capture_or_postpone_analysis) ... ok
+test_in_flight_older_result_cannot_publish_new_state_or_overlay (test_evidence_debounce.EvidenceDebounceTests.test_in_flight_older_result_cannot_publish_new_state_or_overlay) ... ok
+test_intermediate_package_is_unknown_but_does_not_reopen_on_late_capture (test_evidence_debounce.EvidenceDebounceTests.test_intermediate_package_is_unknown_but_does_not_reopen_on_late_capture) ... ok
+test_jobs_wait_150ms_and_only_latest_version_is_eligible (test_evidence_debounce.EvidenceDebounceTests.test_jobs_wait_150ms_and_only_latest_version_is_eligible) ... ok
+test_mixed_activation_keeps_canvas_ready_and_other_panel_final_capture_separate (test_evidence_debounce.EvidenceDebounceTests.test_mixed_activation_keeps_canvas_ready_and_other_panel_final_capture_separate) ... ok
+test_mixed_unanchored_activation_binds_each_reserved_package_to_its_own_panels (test_evidence_debounce.EvidenceDebounceTests.test_mixed_unanchored_activation_binds_each_reserved_package_to_its_own_panels) ... ok
+test_motion_samples_capture_but_stationary_cursor_does_not_reset_quiet (test_evidence_debounce.EvidenceDebounceTests.test_motion_samples_capture_but_stationary_cursor_does_not_reset_quiet) ... ok
+test_other_panel_activity_does_not_delay_canvas_quiet (test_evidence_debounce.EvidenceDebounceTests.test_other_panel_activity_does_not_delay_canvas_quiet) ... ok
+test_plain_canvas_motion_does_not_activate_view (test_evidence_debounce.EvidenceDebounceTests.test_plain_canvas_motion_does_not_activate_view) ... ok
+test_png_evidence_is_persisted_for_every_activation_and_only_last_is_dispatched (test_evidence_debounce.EvidenceDebounceTests.test_png_evidence_is_persisted_for_every_activation_and_only_last_is_dispatched) ... ok
+test_releasing_navigation_key_stops_motion_activation (test_evidence_debounce.EvidenceDebounceTests.test_releasing_navigation_key_stops_motion_activation) ... ok
+test_repeated_activations_capture_all_before_the_quiet_window (test_evidence_debounce.EvidenceDebounceTests.test_repeated_activations_capture_all_before_the_quiet_window) ... ok
+test_scrollbar_mouse_motion_still_captures_without_navigation_key (test_evidence_debounce.EvidenceDebounceTests.test_scrollbar_mouse_motion_still_captures_without_navigation_key) ... ok
+test_space_canvas_motion_captures_and_keeps_canvas_navigator_together (test_evidence_debounce.EvidenceDebounceTests.test_space_canvas_motion_captures_and_keeps_canvas_navigator_together) ... ok
+test_R_held_drag_updates_on_pen_release_without_cursor_poll (test_pen_activation.PenActivationTests.test_R_held_drag_updates_on_pen_release_without_cursor_poll) ... ok
+test_context_modifier_without_navigation_key_does_not_activate_view (test_pen_activation.PenActivationTests.test_context_modifier_without_navigation_key_does_not_activate_view) ... ok
+test_hover_and_R_without_contact_do_not_update_view (test_pen_activation.PenActivationTests.test_hover_and_R_without_contact_do_not_update_view) ... ok
+test_mouse_navigation_also_requires_current_keys_inside_canvas (test_pen_activation.PenActivationTests.test_mouse_navigation_also_requires_current_keys_inside_canvas) ... ok
+test_navigation_key_pressed_during_stroke_is_detected_by_pen_samples (test_pen_activation.PenActivationTests.test_navigation_key_pressed_during_stroke_is_detected_by_pen_samples) ... ok
+test_navigation_tool_selection_without_Space_or_R_never_arms_drawing (test_pen_activation.PenActivationTests.test_navigation_tool_selection_without_Space_or_R_never_arms_drawing) ... ok
+test_navigator_pen_click_and_configured_view_shortcuts_still_update (test_pen_activation.PenActivationTests.test_navigator_pen_click_and_configured_view_shortcuts_still_update) ... ok
+test_non_navigation_tool_targets_still_update_their_own_state (test_pen_activation.PenActivationTests.test_non_navigation_tool_targets_still_update_their_own_state) ... ok
+test_pen_space_drag_updates_canvas_and_navigator_on_release (test_pen_activation.PenActivationTests.test_pen_space_drag_updates_canvas_and_navigator_on_release) ... ok
+test_plain_strokes_never_update_canvas_even_outside_corrected_roi (test_pen_activation.PenActivationTests.test_plain_strokes_never_update_canvas_even_outside_corrected_roi) ... ok
+test_released_R_shortcut_does_not_leak_into_following_strokes (test_pen_activation.PenActivationTests.test_released_R_shortcut_does_not_leak_into_following_strokes) ... ok
+test_repeated_pen_clicks_activate_brush_and_layer_updates (test_pen_activation.PenActivationTests.test_repeated_pen_clicks_activate_brush_and_layer_updates) ... ok
+test_all_cores_publish_the_current_result_without_one_observation_lag (test_realtime_updates.CoreRealtimeContractTests.test_all_cores_publish_the_current_result_without_one_observation_lag) ... ok
+test_brush_completion_carries_the_origin_of_the_same_capture (test_realtime_updates.CoreRealtimeContractTests.test_brush_completion_carries_the_origin_of_the_same_capture) ... ok
+test_brush_error_returns_empty_locations_and_missing_origin_has_no_screen_box (test_realtime_updates.CoreRealtimeContractTests.test_brush_error_returns_empty_locations_and_missing_origin_has_no_screen_box) ... ok
+test_brush_value_locations_are_projected_to_screen_without_changing_value_state (test_realtime_updates.CoreRealtimeContractTests.test_brush_value_locations_are_projected_to_screen_without_changing_value_state) ... ok
+test_error_is_published_with_its_completion_time (test_realtime_updates.CoreRealtimeContractTests.test_error_is_published_with_its_completion_time) ... ok
+test_independent_clip_update_uses_observation_time (test_realtime_updates.CoreRealtimeContractTests.test_independent_clip_update_uses_observation_time) ... ok
+test_observation_preserves_capture_time_references_and_raw_diagnostics (test_realtime_updates.CoreRealtimeContractTests.test_observation_preserves_capture_time_references_and_raw_diagnostics) ... ok
+test_a_direct_subtool_binding_retains_its_own_identity (test_shortcut_api.ShortcutApiTests.test_a_direct_subtool_binding_retains_its_own_identity) ... ok
+test_auto_discovery_and_each_query_reads_the_latest_saved_config (test_shortcut_api.ShortcutApiTests.test_auto_discovery_and_each_query_reads_the_latest_saved_config) ... ok
+test_cyclic_sibling_links_report_partial_inventory_without_hanging (test_shortcut_api.ShortcutApiTests.test_cyclic_sibling_links_report_partial_inventory_without_hanging) ... ok
+test_missing_file_is_a_warning_without_default_bindings_or_new_files (test_shortcut_api.ShortcutApiTests.test_missing_file_is_a_warning_without_default_bindings_or_new_files) ... ok
+test_saved_mapping_keeps_duplicates_unicode_and_configuration_unchanged (test_shortcut_api.ShortcutApiTests.test_saved_mapping_keeps_duplicates_unicode_and_configuration_unchanged) ... ok
+test_standalone_cli_emits_json_and_reports_a_missing_directory (test_shortcut_api.ShortcutApiTests.test_standalone_cli_emits_json_and_reports_a_missing_directory) ... ok
+test_tool_shortcuts_expand_all_groups_and_subtools_without_assigning_fake_keys (test_shortcut_api.ShortcutApiTests.test_tool_shortcuts_expand_all_groups_and_subtools_without_assigning_fake_keys) ... ok
+test_unavailable_inventory_does_not_create_or_invent_a_library (test_shortcut_api.ShortcutApiTests.test_unavailable_inventory_does_not_create_or_invent_a_library) ... ok
+test_clip_query_preserves_save_identity_and_uses_current_document (test_state_request.StateRequestTests.test_clip_query_preserves_save_identity_and_uses_current_document) ... ok
+test_config_request_returns_direct_result_and_resolves_reserved_package (test_state_request.StateRequestTests.test_config_request_returns_direct_result_and_resolves_reserved_package) ... ok
+test_hidden_or_background_panels_return_error_without_borrowing_old_state (test_state_request.StateRequestTests.test_hidden_or_background_panels_return_error_without_borrowing_old_state) ... ok
+test_query_captures_without_input_or_automatic_activation (test_state_request.StateRequestTests.test_query_captures_without_input_or_automatic_activation) ... ok
+test_brush_evidence_changes_do_not_change_brush_values (test_state_timeline.StatePackageTests.test_brush_evidence_changes_do_not_change_brush_values) ... ok
+test_confidence_changes_do_not_create_color_changes (test_state_timeline.StatePackageTests.test_confidence_changes_do_not_create_color_changes) ... ok
+test_core_callback_is_immediate_before_package_is_complete (test_state_timeline.StatePackageTests.test_core_callback_is_immediate_before_package_is_complete) ... ok
+test_disabled_property_with_unreadable_value_is_a_known_inactive_state (test_state_timeline.StatePackageTests.test_disabled_property_with_unreadable_value_is_a_known_inactive_state) ... ok
+test_failed_initialization_finishes_attempt_and_preserves_error (test_state_timeline.StatePackageTests.test_failed_initialization_finishes_attempt_and_preserves_error) ... ok
+test_failed_updates_do_not_replace_latest_successful_observation (test_state_timeline.StatePackageTests.test_failed_updates_do_not_replace_latest_successful_observation) ... ok
+test_independent_clip_observation_has_no_package_and_ignores_source_path (test_state_timeline.StatePackageTests.test_independent_clip_observation_has_no_package_and_ignores_source_path) ... ok
+test_initial_completion_waits_for_every_module (test_state_timeline.StatePackageTests.test_initial_completion_waits_for_every_module) ... ok
+test_later_snapshot_confirms_observed_state_and_preserves_timing_evidence (test_state_timeline.StatePackageTests.test_later_snapshot_confirms_observed_state_and_preserves_timing_evidence) ... ok
+test_partial_brush_observation_is_retained_without_confirming_state (test_state_timeline.StatePackageTests.test_partial_brush_observation_is_retained_without_confirming_state) ... ok
+test_recovered_canvas_is_confirmed_and_compared_despite_later_input (test_state_timeline.StatePackageTests.test_recovered_canvas_is_confirmed_and_compared_despite_later_input) ... ok
+test_session_stop_publishes_error_for_unresolved_core (test_state_timeline.StatePackageTests.test_session_stop_publishes_error_for_unresolved_core) ... ok
+test_clips_out_of_bounds_names_and_does_not_use_saved_selection_as_live_evidence (test_subtool_ocr.SubtoolOcrTests.test_clips_out_of_bounds_names_and_does_not_use_saved_selection_as_live_evidence) ... ok
+test_combines_split_brush_name_segments_into_its_own_union_box (test_subtool_ocr.SubtoolOcrTests.test_combines_split_brush_name_segments_into_its_own_union_box) ... ok
+test_hidden_names_are_not_exported_as_visible_subtools (test_subtool_ocr.SubtoolOcrTests.test_hidden_names_are_not_exported_as_visible_subtools) ... ok
+test_hidden_subtool_panel_does_not_add_an_initialization_dependency (test_subtool_ocr.SubtoolOcrTests.test_hidden_subtool_panel_does_not_add_an_initialization_dependency) ... ok
+test_live_projection_keeps_same_frame_screen_coordinates_and_refreshes_unchanged_locations (test_subtool_ocr.SubtoolOcrTests.test_live_projection_keeps_same_frame_screen_coordinates_and_refreshes_unchanged_locations) ... ok
+test_no_matched_names_and_missing_catalog_do_not_invent_positions (test_subtool_ocr.SubtoolOcrTests.test_no_matched_names_and_missing_catalog_do_not_invent_positions) ... ok
+test_ocr_failure_is_propagated_to_the_pipeline_error_path (test_subtool_ocr.SubtoolOcrTests.test_ocr_failure_is_propagated_to_the_pipeline_error_path) ... ok
+test_pipeline_analyzes_the_subtool_crop_and_keeps_frame_identity_on_failure (test_subtool_ocr.SubtoolOcrTests.test_pipeline_analyzes_the_subtool_crop_and_keeps_frame_identity_on_failure) ... ok
+test_returns_name_boxes_and_all_duplicate_identities_but_excludes_panel_chrome (test_subtool_ocr.SubtoolOcrTests.test_returns_name_boxes_and_all_duplicate_identities_but_excludes_panel_chrome) ... ok
+test_selected_background_is_current_image_evidence (test_subtool_ocr.SubtoolOcrTests.test_selected_background_is_current_image_evidence) ... ok
+test_visible_group_names_have_separate_locations_and_matching_node_paths (test_subtool_ocr.SubtoolOcrTests.test_visible_group_names_have_separate_locations_and_matching_node_paths) ... ok
+
+======================================================================
+ERROR: test_brush_name_fallback (unittest.loader._FailedTest.test_brush_name_fallback)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_brush_name_fallback
+Traceback (most recent call last):
+  File "C:\Users\dogeegg\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\unittest\loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dogeegg\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\unittest\loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_brush_name_fallback.py", line 12, in <module>
+    import cv2
+ModuleNotFoundError: No module named 'cv2'
+
+
+======================================================================
+ERROR: test_brush_value_regions (unittest.loader._FailedTest.test_brush_value_regions)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_brush_value_regions
+Traceback (most recent call last):
+  File "C:\Users\dogeegg\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\unittest\loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dogeegg\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\unittest\loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_brush_value_regions.py", line 10, in <module>
+    import cv2
+ModuleNotFoundError: No module named 'cv2'
+
+
+----------------------------------------------------------------------
+Ran 107 tests in 1.612s
+
+FAILED (errors=2)

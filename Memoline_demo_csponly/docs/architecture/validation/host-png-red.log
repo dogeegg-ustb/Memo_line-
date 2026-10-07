@@ -1,0 +1,5 @@
+Unhandled exception. System.InvalidOperationException: Live reader silently converted non-RGBA PNG fixtures: RGB, grayscale, indexed
+   at MemolineDemo.LiveReaderChecks.Run(String root) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\LiveReaderChecks.cs:line 68
+   at MemolineDemo.EditingChecks.Run(String root) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingChecks.cs:line 114
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\Program.cs:line 9
+   at Program.<Main>(String[] args)

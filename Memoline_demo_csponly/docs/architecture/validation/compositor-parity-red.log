@@ -1,0 +1,12 @@
+Command:
+dotnet Memoline_demo_csponly/checks/bin/Release/net10.0-windows/MemolineDemo.Checks.dll --compositor-parity-only
+
+Exit code: 1
+Actual output, before adding the companion Node parity runner:
+Unhandled exception. System.IO.FileNotFoundException: C#/Node production parity runner is missing; parity cannot be skipped.
+File name: 'D:\Memo_Line\Memo_Line\replayer\dirty matrix paster\backend\checks\compositor-parity-runner.mjs'
+   at MemolineDemo.CompositorParityChecks.RunAsync(String root) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CompositorParityChecks.cs:line 27
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\Program.cs:line 14
+   at Program.<Main>(String[] args)
+
+This is an absent parity-harness API red, not evidence that the existing compositor semantics were wrong.

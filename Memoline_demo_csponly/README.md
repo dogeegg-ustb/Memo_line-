@@ -2,6 +2,8 @@
 
 这是 CSP 专用的集成演示程序：Recognizer 记录原生机械事件，watcher 在**已确认的画布视口变化**处划分聚集事件包，保存并解析当前图层，用脏矩阵辅助 after/now 图像比较。
 
+2026-10-07 事件编辑恢复检查点已加入全分辨率比较、全层开始 baseline、原生边界/事务协议及离线编辑/回放组件。完整编辑与精确撤销尚未接入 UI，根目录 `Memoline.exe` 未重新发布。后续实现入口和缺口见 [恢复交接](docs/architecture/RECOVERY_HANDOFF.md)，实机验收见 [CLIP 副本清单](docs/architecture/LIVE_CHECKLIST.md)。
+
 ## 使用
 
 1. 在 CSP 中打开已经保存的 `.clip` 文档。
@@ -13,6 +15,8 @@
 `Memoline.exe` 是 Windows 图形程序，包含 .NET 运行时，无需通过 CMD 启动或另装 .NET。请保留同目录的 `clip-layer-bridge.exe` 和 `publish` 配套目录；拷贝程序时一起拷贝整个文件夹。录制文件仍保存在 `publish/win-x64/recordings`，可点击窗口的“录制文件”打开。
 
 首次构建或更新发布内容时，运行 `Build.ps1`；开发构建需要 .NET 10 SDK。集成程序使用独立的 Recognizer 发布副本及设置，不要求同时手动启动另一个 Recognizer。请通过“停止并封盘”正常结束会话。
+
+开发检查还需要 Node（现有 backend 依赖）和带 Recognizer 依赖的 Python。host 检查会运行实际 `engine.mjs --compose` 与 C# 合成器逐字节对拍；Node 仅用于开发检查，产品发布不需要 Node 运行时。
 
 ## 运行时与封盘
 

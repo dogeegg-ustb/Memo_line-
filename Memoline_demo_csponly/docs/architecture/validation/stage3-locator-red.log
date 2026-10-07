@@ -1,0 +1,35 @@
+test_legacy_name_and_locator_are_from_one_read_and_mapped_to_capture_pixels (test_layer_locator.LayerLocatorTests.test_legacy_name_and_locator_are_from_one_read_and_mapped_to_capture_pixels) ... ERROR
+test_pipeline_keeps_string_semantics_and_same_frame_raw_locator (test_layer_locator.LayerLocatorTests.test_pipeline_keeps_string_semantics_and_same_frame_raw_locator) ... FAIL
+test_unknown_or_duplicate_selection_does_not_invent_selected_name (test_layer_locator.LayerLocatorTests.test_unknown_or_duplicate_selection_does_not_invent_selected_name) ... ERROR
+
+======================================================================
+ERROR: test_legacy_name_and_locator_are_from_one_read_and_mapped_to_capture_pixels (test_layer_locator.LayerLocatorTests.test_legacy_name_and_locator_are_from_one_read_and_mapped_to_capture_pixels)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_layer_locator.py", line 25, in test_legacy_name_and_locator_are_from_one_read_and_mapped_to_capture_pixels
+    result = core.process_with_locator(image, panel_roi=[-200, 300, 200, 100], capture_frame_id='frame-1')
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'LayerStateCore' object has no attribute 'process_with_locator'
+
+======================================================================
+ERROR: test_unknown_or_duplicate_selection_does_not_invent_selected_name (test_layer_locator.LayerLocatorTests.test_unknown_or_duplicate_selection_does_not_invent_selected_name)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_layer_locator.py", line 45, in test_unknown_or_duplicate_selection_does_not_invent_selected_name
+    result = core.process_with_locator(image, panel_roi=[0, 0, 200, 100], capture_frame_id='f')
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'LayerStateCore' object has no attribute 'process_with_locator'
+
+======================================================================
+FAIL: test_pipeline_keeps_string_semantics_and_same_frame_raw_locator (test_layer_locator.LayerLocatorTests.test_pipeline_keeps_string_semantics_and_same_frame_raw_locator)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_layer_locator.py", line 61, in test_pipeline_keeps_string_semantics_and_same_frame_raw_locator
+    self.assertEqual(data['state'], 'Ink')
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'selectedName': 'Ink', 'layerLocator': {[183 chars]]}]}} != 'Ink'
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.002s
+
+FAILED (failures=1, errors=2)
