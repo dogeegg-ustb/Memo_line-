@@ -214,11 +214,18 @@ internal static class OfflineEditProbe
         }
 
         public Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected, CancellationToken token)
+            => InstallReproductionLayerAsync(layer, expected, [], token);
+
+        public Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected,
+            IReadOnlyList<ReplayEvent> finalReplay, CancellationToken token)
         {
-            log($"    安装复现层 {layer.Uuid[..8]}" + (request.Kind == EditKind.PreciseUndo ? $"，随后离散重放 {request.Changes.Count} 笔" : ""));
-            if (request.Kind != EditKind.PreciseUndo) return Task.FromResult(expected);
-            var discrete = request.Changes.Keys.Select(k => index.Strokes[k]).OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId)
-                .Select(s => new ReplayEvent(s, null)).ToArray();
+            int undoCount = request.Kind == EditKind.PreciseUndo ? request.Changes.Count : 0;
+            log($"    安装复现层 {layer.Uuid[..8]}" + (undoCount + finalReplay.Count > 0
+                ? $"，随后离散重放 {undoCount} 笔撤销笔画 + {finalReplay.Count} 笔推迟笔画" : ""));
+            if (undoCount + finalReplay.Count == 0) return Task.FromResult(expected);
+            var discrete = request.Changes.Keys.Where(_ => undoCount > 0).Select(k => new ReplayEvent(index.Strokes[k], null))
+                .Concat(finalReplay).DistinctBy(e => e.Stroke.Key)
+                .OrderBy(e => e.Stroke.SessionOrder).ThenBy(e => e.Stroke.BeginEventId).ToArray();
             int flushes = Flushes, replayed = Replayed;
             var result = FlushAsync(layer, expected.Copy(), discrete, new Dictionary<LayerKey, ImageRgba>(), token);
             Flushes = flushes; Replayed = replayed;

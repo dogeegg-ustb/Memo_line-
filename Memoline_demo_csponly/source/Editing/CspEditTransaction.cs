@@ -151,18 +151,27 @@ internal sealed class CspEditTransaction : IEditingTransaction
         return captured.Pixels;
     }, token);
 
-    public Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected, CancellationToken token) => Guard(async ct =>
+    public Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected, CancellationToken token)
+        => InstallReproductionLayerAsync(layer, expected, [], token);
+
+    public Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected,
+        IReadOnlyList<ReplayEvent> finalReplay, CancellationToken token) => Guard(async ct =>
     {
         Active(); ValidatePixels(layer, expected);
         if (_installed.Contains(layer)) throw Error(PlanIssueCode.LayerIdentityUnconfirmed, "同一原图层不能重复安装复现层。");
         var (original, before) = await OriginalAsync(layer, hide: true, ct);
         var final = await PasteAsync(layer, original, before, expected, ct);
-        if (_discrete.TryGetValue(layer, out var discrete) && discrete.Count > 0)
+        // The undone strokes plus any contacts the reconstruction deferred, in original order:
+        // one discrete replay, after the pasted state, as the last step.
+        var undone = _discrete.TryGetValue(layer, out var discrete) ? discrete.Select(e => e with { Change = null }) : [];
+        var all = undone.Concat(finalReplay).DistinctBy(e => e.Stroke.Key).ToArray();
+        if (all.Length > 0)
         {
-            var ordered = Ordered(discrete.Select(e => e with { Change = null }).ToArray(), layer);
+            var ordered = Ordered(all, layer);
             if (ordered.Any(ReadsReferences))
                 foreach (var drawing in ordered)
-                    await ReplayAsync(final, [drawing], ReplayMode.Discrete, ReadsReferences(drawing) ? ReferencesFor(drawing) :
+                    await ReplayAsync(final, [drawing], ReplayMode.Discrete,
+                        ReadsReferences(drawing) && _discreteReferences.ContainsKey(drawing.Stroke.Key) ? ReferencesFor(drawing) :
                         new Dictionary<LayerKey, ImageRgba>(), ct);
             else
                 await ReplayAsync(final, ordered, ReplayMode.Discrete, new Dictionary<LayerKey, ImageRgba>(), ct);

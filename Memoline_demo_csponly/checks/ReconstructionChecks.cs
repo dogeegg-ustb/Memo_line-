@@ -84,6 +84,10 @@ internal static class ReconstructionChecks
         }
         public Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected, CancellationToken token)
         { token.ThrowIfCancellationRequested(); Calls.Add("install"); Installed[layer] = expected.Copy(); return Task.FromResult(Readback is null ? expected.Copy() : Readback(expected.Copy())); }
+        internal readonly List<EditableStrokeKey> Deferred = [];
+        public Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected,
+            IReadOnlyList<ReplayEvent> finalReplay, CancellationToken token)
+        { Deferred.AddRange(finalReplay.Select(e => e.Stroke.Key)); return InstallReproductionLayerAsync(layer, expected, token); }
     }
     internal static async Task<int> RunAsync()
     {
@@ -234,6 +238,18 @@ internal static class ReconstructionChecks
             r=await ReconstructionEngine.RunAsync(precise,f,CancellationToken.None);
             Check(r.Status==ReconstructionStatus.Executed&&r.Issues.Count==0,"precise undo retains actual final discrete capture");
             Bytes(r,s.Layer,10,0,0,0,0,0,0,0);
+        }
+        // Precise undo: event replay is the last step. Other contacts of a mixed image are not
+        // flushed into a work layer first; they are handed to the final discrete replay.
+        {
+            var s=new Scene();var a=s.Stroke(10,10,Mask(0));var b=s.Stroke(20,30,Mask(1));
+            s.Group(s.Image("ab",Mask(0,1),Pixels(10,30,0,0,0,0,0,0),a,b));
+            var precise=s.Plan(a);precise=precise with{Request=precise.Request with{Kind=EditKind.PreciseUndo}};
+            var f=new Fake(s);var r=await ReconstructionEngine.RunAsync(precise,f,CancellationToken.None);
+            Check(r.Status==ReconstructionStatus.Executed&&f.Calls.SequenceEqual(new[]{"install"}),
+                "precise undo installs the composed state without any earlier replay");
+            Check(f.Deferred.SequenceEqual(new[]{b}),"the mixed image's other contact joins the final replay");
+            Bytes(r,s.Layer,0,0,0,0,0,0,0,0);
         }
         n += ReconstructionRequestContractChecks.Run();
         return n;

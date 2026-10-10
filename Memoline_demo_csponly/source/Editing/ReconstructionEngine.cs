@@ -21,6 +21,12 @@ internal interface ICspReconstructionExecutor
     // The transaction verifies the paste before any discrete replay. PreciseUndo returns
     // the capture after discrete replay, which intentionally differs from the deletion seed.
     Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected, CancellationToken token);
+    // PreciseUndo never replays before installation: contacts that would need replay are handed
+    // over here and replayed last, merged in original order with the undone strokes.
+    Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected,
+        IReadOnlyList<ReplayEvent> finalReplay, CancellationToken token)
+        => finalReplay.Count == 0 ? InstallReproductionLayerAsync(layer, expected, token)
+            : throw new NotSupportedException("This executor cannot replay deferred contacts.");
 }
 internal enum ReconstructionStatus { Executed, PixelVerified, Failed, Cancelled }
 internal sealed record ReconstructionResult(ReconstructionStatus Status, IReadOnlyDictionary<LayerKey, ImageRgba> Layers,
@@ -44,6 +50,8 @@ internal static class ReconstructionEngine
         // Recorded pixels of replayed images that no replayable contact explains (mouse input,
         // unrecorded changes, labels without contacts). They are pasted after the replay.
         internal readonly List<(DirtyImage Image, PixelMask Pixels)> Residuals = [];
+        // PreciseUndo: contacts collected for the single final replay.
+        internal readonly List<ReplayEvent> Deferred = [];
         internal bool Started, Touched;
         internal long LastGroupTicks;
         internal int LastGroupSessionOrder;
@@ -95,6 +103,11 @@ internal static class ReconstructionEngine
             async Task Flush(Cursor c)
             {
                 token.ThrowIfCancellationRequested();
+                if(c.Pending.Count>0&&plan.Request.Kind==EditKind.PreciseUndo)
+                {
+                    // Event replay is the last step of a precise undo: defer, never flush into a work layer.
+                    c.Deferred.AddRange(c.Pending.Values); c.Pending.Clear();
+                }
                 if(c.Pending.Count>0)
                 {
                     var events=c.Pending.Values.OrderBy(e=>e.Stroke.SessionOrder).ThenBy(e=>e.Stroke.BeginEventId).ThenBy(e=>e.Stroke.Key.BeginAppendId)
@@ -229,7 +242,12 @@ internal static class ReconstructionEngine
             foreach(var c in cursors.Values.Where(c=>c.Touched))
             {
                 token.ThrowIfCancellationRequested();
-                var observed=await executor.InstallReproductionLayerAsync(c.Plan.Layer,c.Actual.Copy(),token);
+                var deferred=c.Deferred.OrderBy(e=>e.Stroke.SessionOrder).ThenBy(e=>e.Stroke.BeginEventId).ThenBy(e=>e.Stroke.Key.BeginAppendId)
+                    .Select(e=>e with {Stroke=e.Stroke with {Samples=e.Stroke.Samples.OrderBy(s=>s.AppendId).ToArray()}}).ToArray();
+                var observed=deferred.Length==0
+                    ? await executor.InstallReproductionLayerAsync(c.Plan.Layer,c.Actual.Copy(),token)
+                    : await executor.InstallReproductionLayerAsync(c.Plan.Layer,c.Actual.Copy(),deferred,token);
+                hasReplayed|=deferred.Length>0;
                 if(observed.Width!=c.Actual.Width||observed.Height!=c.Actual.Height)
                     return Fail(new PlanIssue(PlanIssueCode.CaptureMismatch,"复现层读回尺寸与期望不一致。"));
                 if(plan.Request.Kind!=EditKind.PreciseUndo&&!ImageCompositor.Difference(observed,c.Actual).IsEmpty)
