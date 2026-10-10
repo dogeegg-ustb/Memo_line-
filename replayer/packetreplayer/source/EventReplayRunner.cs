@@ -115,6 +115,10 @@ internal static class EventReplayRunner
         var states = new PacketStateRestorer(env.Feed, env.Input, status);
         var views = new ViewRestorer(env.ViewFeed, env.ViewInput, status);
         var colors = new ColorRestorer(env.Feed, env.Input);
+        string? lastColorKey = null; bool lastColorRestored = false;
+        static string ColorKey(System.Text.Json.JsonElement color) => color.ValueKind == System.Text.Json.JsonValueKind.Object
+            ? (J.Text(color, "kind") ?? "") + (J.Get(color, "rgb") is { ValueKind: not System.Text.Json.JsonValueKind.Undefined } rgb ? rgb.GetRawText() : "")
+            : "";
         void WorkLayer()
         {
             env.Feed.EnsureConnected(); env.Input.EnsureTarget();
@@ -130,10 +134,20 @@ internal static class EventReplayRunner
                 var brush = drawing.OverrideBrush ?? drawing.State.Brush!;
                 try { await states.RestoreBrushAsync(brush, token); }
                 catch (InvalidOperationException ex) { throw new ReplayStateException("BrushUnrestorable", ex.Message, ex); }
-                bool colorRestored = true;
-                try { await colors.RestoreAsync(drawing.State.Color, token); }
-                catch (ReplayStateException ex) when (!StrictColor && ex.Code == "ColorUnrestorable")
-                { colorRestored = false; status("颜色未还原，按当前颜色重放：" + ex.Message); }
+                // Consecutive strokes usually share one colour. Restore (and request state) only when the
+                // target colour changes; a colour that could not be set is not retried for every stroke.
+                string colorKey = ColorKey(drawing.State.Color);
+                bool colorRestored;
+                if (colorKey == lastColorKey && (!lastColorRestored || PacketReplayRunner.ColorMatches(env.Feed.Color, drawing.State.Color)))
+                    colorRestored = lastColorRestored;
+                else
+                {
+                    colorRestored = true;
+                    try { await colors.RestoreAsync(drawing.State.Color, token); }
+                    catch (ReplayStateException ex) when (!StrictColor && ex.Code == "ColorUnrestorable")
+                    { colorRestored = false; status("颜色未还原，按当前颜色重放：" + ex.Message); }
+                    lastColorKey = colorKey; lastColorRestored = colorRestored;
+                }
                 try { await views.RestoreAsync(drawing.Stroke.View, token); }
                 catch (InvalidOperationException ex) { throw new ReplayStateException("ViewUnrestorable", ex.Message, ex); }
                 WorkLayer();

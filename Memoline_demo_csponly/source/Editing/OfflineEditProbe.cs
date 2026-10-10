@@ -15,6 +15,25 @@ internal static class OfflineEditProbe
         // --offline-edit 工程.memoline 工作目录 [--layer uuid前缀] [--rect x,y,w,h]
         if (args.Length < 3) throw new ArgumentException("用法：--offline-edit 工程.memoline 空工作目录 [--layer UUID前缀] [--rect x,y,w,h] | --offline-edit --resolve 录制目录 CLIP路径");
         Console.OutputEncoding = Encoding.UTF8;
+        if (args[1] == "--frames" && args.Length >= 3)
+        {
+            // --frames 机械流 [kind过滤正则]：按时间列出帧（相对首帧秒数）。
+            var filter = args.Length > 3 ? new System.Text.RegularExpressions.Regex(args[3]) : null;
+            long? origin = null, frequency = null;
+            foreach (var frame in BehaviorRecognizer.Storage.Memoline.MemolineReader.Read(Path.GetFullPath(args[2])))
+            {
+                string kind = PacketReplay.J.Text(frame, "kind") ?? "";
+                if (kind == "header") { frequency = PacketReplay.J.I64(frame, "frequency"); continue; }
+                var data = PacketReplay.J.Get(frame, "data");
+                string module = PacketReplay.J.Text(data, "module") ?? PacketReplay.J.Text(data, "command") ?? "";
+                string line = $"{kind} {module} {PacketReplay.J.Text(data, "status")} {PacketReplay.J.Text(data, "transactionId")} {PacketReplay.J.Text(data, "reason")}".Trim();
+                if (filter is not null && !filter.IsMatch(line)) continue;
+                long ticks = PacketReplay.J.I64(frame, "ticks");
+                origin ??= ticks;
+                Console.WriteLine($"{(ticks - origin.Value) / (double)(frequency ?? 10_000_000),9:0.000}s  #{PacketReplay.J.U64(frame, "appendId")}  {line}");
+            }
+            return 0;
+        }
         if (args[1] == "--resolve" && args.Length == 4)
         {
             var watch = Stopwatch.StartNew();

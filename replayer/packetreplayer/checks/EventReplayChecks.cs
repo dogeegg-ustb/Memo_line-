@@ -82,6 +82,14 @@ internal static partial class PacketChecks
         try { await EventReplayRunner.RunAsync(schedule, environment, 100000, new(), _ => { }, default); throw new Exception("Expected color failure"); }
         catch (ReplayStateException ex) { Check(ex.Code == "ColorUnrestorable", "Unverified color writes fail with the defined error code."); }
         Check(feed.Requests.Last().SequenceEqual(new[] { "colorInputState" }) && environment.Transitions.Count == 0, "Different colors require RGB panel evidence before any pen injection.");
+        // Best effort (product default): an unsettable colour is attempted once per target colour,
+        // and both strokes still replay in the current colour.
+        EventReplayRunner.StrictColor = false; environment.Clear(); feed.Requests.Clear();
+        await EventReplayRunner.RunAsync(schedule, environment, 100000, new(), _ => { }, default);
+        Check(environment.Transitions.Count(t => t == PenReplayEngine.PointerTransition.Down) == 2 &&
+              feed.Requests.Count(r => r.Contains("colorInputState")) == 1,
+            "Consecutive strokes with one target colour request colour state once, not per stroke.");
+        EventReplayRunner.StrictColor = true;
         feed.Color = Color(1); environment.Clear();
         feed.Layers = J.Get(Structure("工作层"), "state");
         var packet = new PacketInfo(1, "legacy", 0, 1002, "captured", new HashSet<ulong>(), default);

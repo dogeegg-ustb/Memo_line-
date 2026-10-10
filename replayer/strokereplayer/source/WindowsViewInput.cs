@@ -31,10 +31,24 @@ internal sealed class WindowsViewInput : IViewInput
 
     public void EnsureTarget()
     {
+        if (IsTargetForeground()) return;
+        // A transient window (status panel, screenshot tool) can take the foreground between
+        // inputs. Try once to bring CSP back before stopping; physical input aborts elsewhere.
+        if (Native.IsWindow(_window))
+        {
+            if (Native.IsIconic(_window)) Native.ShowWindow(_window, 9);
+            Native.SetForegroundWindow(_window);
+            Thread.Sleep(60);
+        }
+        if (!IsTargetForeground())
+            throw new InvalidOperationException("CSP 已关闭或失去前台焦点，回放已停止。");
+    }
+
+    private bool IsTargetForeground()
+    {
         var foreground = Native.GetForegroundWindow();
         Native.GetWindowThreadProcessId(foreground, out uint pid);
-        if (!Native.IsWindow(_window) || pid != _processId)
-            throw new InvalidOperationException("CSP 已关闭或失去前台焦点，回放已停止。");
+        return Native.IsWindow(_window) && pid == _processId;
     }
 
     internal void EnsureCanvasPoint(double x, double y, Rectangle viewport)
