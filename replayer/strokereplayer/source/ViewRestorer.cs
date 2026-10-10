@@ -10,6 +10,8 @@ internal interface ICanvasViewFeed
     void MarkInputStarted();
     Task<CanvasViewSnapshot> WaitForViewAsync(long afterRevision, Func<CanvasViewSnapshot, bool> predicate,
         TimeSpan timeout, CancellationToken token);
+    // True when WaitForViewAsync actively requests a fresh observation instead of waiting for a push.
+    bool RequestsActively => false;
 }
 
 internal interface IViewInput
@@ -34,6 +36,7 @@ internal sealed class ViewRestorer(ICanvasViewFeed feed, IViewInput input, Actio
     {
         input.EnsureTarget();
         var current = feed.Current ?? await feed.WaitForViewAsync(-1, _ => true, ObservationTimeout, token);
+        bool adjusted = false;
         for (int attempt = 0; ; attempt++)
         {
             token.ThrowIfCancellationRequested();
@@ -42,7 +45,16 @@ internal sealed class ViewRestorer(ICanvasViewFeed feed, IViewInput input, Actio
             if (target.PixelWidth is { } width && current.PixelWidth is { } currentWidth && width != currentWidth ||
                 target.PixelHeight is { } height && current.PixelHeight is { } currentHeight && height != currentHeight)
                 throw new InvalidOperationException("当前画布尺寸与录制画布不同，无法恢复视图。");
-            if (Matches(current, target)) break;
+            if (Matches(current, target))
+            {
+                // After any adjustment, confirm with one more fresh observation before drawing:
+                // an observation taken mid-redraw can match while the view is still moving.
+                if (!adjusted || !feed.RequestsActively) break;
+                adjusted = false;
+                current = await feed.WaitForViewAsync(feed.Revision, _ => true, ObservationTimeout, token);
+                continue;
+            }
+            adjusted = true;
             if (attempt >= 128) throw new InvalidOperationException("画布视图恢复未收敛，已停止回放。");
             long revision = feed.Revision;
             feed.MarkInputStarted();

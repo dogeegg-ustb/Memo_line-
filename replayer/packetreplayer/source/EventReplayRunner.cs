@@ -34,7 +34,8 @@ internal sealed class WindowsReplayEnvironment(LivePacketFeed feed, WindowsViewI
     public IPacketInput Input { get; } = new PacketWindowsInput(windows);
     public ICanvasViewFeed ViewFeed { get; } = new PacketViewFeed(feed);
     public IViewInput ViewInput => windows;
-    public CanvasViewSnapshot? CurrentView => feed.View.Current;
+    // The actively requested view: pushed updates are not refreshed during an edit transaction.
+    public CanvasViewSnapshot? CurrentView => feed.RequestedView ?? feed.View.Current;
     public Func<PenReplayEngine.IPenInjector> CreateInjector => PenReplayEngine.CreateSyntheticInjector;
     public Func<TimeSpan, CancellationToken, Task> Idle => (delay, token) => Task.Delay(delay, token);
     public void EnsureCanvasPoint(MemolineReplaySample sample, Rectangle viewport) => windows.EnsureCanvasPoint(sample.X, sample.Y, viewport);

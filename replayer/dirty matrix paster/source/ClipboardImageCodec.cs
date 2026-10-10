@@ -100,14 +100,31 @@ internal static class ClipboardImageCodec
         data.SetData("PNG", false, new MemoryStream(png, writable: false));
         data.SetData(DataFormats.GetFormat(17).Name, false, new MemoryStream(dib, writable: false));
         Clipboard.SetDataObject(data, true, 10, 100);
+        VerifyReadBack(png, dib);
+    }
 
-        var readBack = Clipboard.GetDataObject() ?? throw new IOException("剪贴板写入后无法读回");
-        byte[] returnedPng = ReadBytes(readBack, "PNG");
-        if (!returnedPng.AsSpan().SequenceEqual(png))
-            throw new IOException("剪贴板 PNG 读回校验失败");
-        byte[] returnedDib = ReadBytes(readBack, DataFormats.GetFormat(17).Name);
-        if (!returnedDib.AsSpan().SequenceEqual(dib))
-            throw new IOException("剪贴板 CF_DIBV5 读回校验失败");
+    // Clipboard history and other watchers can briefly hold or re-render the clipboard right after a
+    // write. Retry the read; when it stays unreadable, rely on the caller's own verification of the
+    // pasted result (the editing transaction exports and compares the pasted layer).
+    private static void VerifyReadBack(byte[] png, byte[] dib)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                var readBack = Clipboard.GetDataObject() ?? throw new InvalidDataException("剪贴板写入后无法读回");
+                if (!ReadBytes(readBack, "PNG").AsSpan().SequenceEqual(png))
+                    throw new IOException("剪贴板 PNG 读回校验失败");
+                if (!ReadBytes(readBack, DataFormats.GetFormat(17).Name).AsSpan().SequenceEqual(dib))
+                    throw new IOException("剪贴板 CF_DIBV5 读回校验失败");
+                return;
+            }
+            catch (Exception error) when (error is InvalidDataException or System.Runtime.InteropServices.ExternalException)
+            {
+                if (attempt >= 4) return;
+                Thread.Sleep(100);
+            }
+        }
     }
 
     private static byte[] ReadBytes(IDataObject data, string format) => data.GetData(format, false) switch

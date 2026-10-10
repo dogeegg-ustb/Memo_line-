@@ -34,6 +34,35 @@ internal static class OfflineEditProbe
             }
             return 0;
         }
+        if (args[1] == "--views" && args.Length >= 3)
+        {
+            // --views 机械流：画布视图状态（捕获时间、原点、缩放）与落笔时间对照，秒数相对首帧。
+            long? origin = null, frequency = null;
+            double Sec(long ticks) => (ticks - origin!.Value) / (double)(frequency ?? 10_000_000);
+            foreach (var frame in BehaviorRecognizer.Storage.Memoline.MemolineReader.Read(Path.GetFullPath(args[2])))
+            {
+                string kind = PacketReplay.J.Text(frame, "kind") ?? "";
+                if (kind == "header") { frequency = PacketReplay.J.I64(frame, "frequency"); continue; }
+                long ticks = PacketReplay.J.I64(frame, "ticks"); origin ??= ticks;
+                var data = PacketReplay.J.Get(frame, "data");
+                IEnumerable<System.Text.Json.JsonElement> updates = kind == "statePackageResult"
+                    ? PacketReplay.J.Array(PacketReplay.J.Get(PacketReplay.J.Get(data, "result"), "updates"))
+                    : kind == "coreStateUpdated" ? [data] : [];
+                foreach (var update in updates.Where(u => PacketReplay.J.Text(u, "module") == "canvasViewState"))
+                {
+                    var state = PacketReplay.J.Get(update, "state"); var o = PacketReplay.J.Get(state, "canvasOriginScreenPx");
+                    long captured = PacketReplay.J.I64(PacketReplay.J.Get(update, "evidence"), "capturedTicks");
+                    Console.WriteLine($"{Sec(ticks),9:0.000}s view {kind,-18} pkg={PacketReplay.J.Text(data, "packageId")?[..8]} after={PacketReplay.J.U64(data, "afterEventId")} " +
+                        $"captured={(captured > 0 ? Sec(captured).ToString("0.000") : "?")} status={PacketReplay.J.Text(update, "status")} " +
+                        $"origin=({PacketReplay.J.Get(o, "x")},{PacketReplay.J.Get(o, "y")}) scale={PacketReplay.J.Get(state, "ocrScalePercent")} rot={PacketReplay.J.Get(state, "ocrRotationDegrees")}");
+                }
+                if (kind is "penBegin" || kind == "keyInput" && PacketReplay.J.Text(data, "action") == "down" ||
+                    kind is "mouseDown" or "mouseWheel")
+                    Console.WriteLine($"{Sec(ticks),9:0.000}s {kind} event={PacketReplay.J.U64(frame, "eventId")} " +
+                        $"({PacketReplay.J.Get(data, "x")},{PacketReplay.J.Get(data, "y")}) vk={PacketReplay.J.Get(data, "vk")}");
+            }
+            return 0;
+        }
         if (args[1] == "--resolve" && args.Length == 4)
         {
             var watch = Stopwatch.StartNew();

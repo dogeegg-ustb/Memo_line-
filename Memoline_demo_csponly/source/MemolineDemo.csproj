@@ -7,6 +7,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Same coordinate space as the recorder and the stroke replayer (both PerMonitorV2). -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <AssemblyName>MemolineDemo</AssemblyName>
     <AssemblyTitle>Memoline</AssemblyTitle>
     <Product>Memoline</Product>
