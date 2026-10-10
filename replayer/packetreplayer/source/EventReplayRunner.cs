@@ -85,7 +85,7 @@ internal static class EventReplayRunner
             }
             if (drawing.State.Brush is null || drawing.State.Layer is null)
                 throw new ReplayStateException("BrushUnrestorable", "事件缺少已确认的历史笔刷或图层状态。");
-            if (drawing.State.Color.ValueKind != System.Text.Json.JsonValueKind.Object)
+            if (StrictColor && drawing.State.Color.ValueKind != System.Text.Json.JsonValueKind.Object)
                 throw new ReplayStateException("ColorUnrestorable", "事件缺少已确认的历史颜色。");
             if (drawing.OverrideBrush is { } replacement)
             {
@@ -100,6 +100,10 @@ internal static class EventReplayRunner
         if (schedule.FollowingStrokeStartTicks is { } next && (schedule.Strokes.Count == 0 || next < schedule.Strokes[^1].Stroke.EndTicks))
             throw new InvalidDataException("批次后的笔开始时间不能早于本批次最后一笔的结束时间。");
     }
+
+    /// <summary>When false (default), colour restoration is best effort: a colour that cannot be
+    /// set or confirmed is reported in the status line and the stroke is replayed in the current colour.</summary>
+    internal static bool StrictColor { get; set; }
 
     internal static async Task<EventReplayResult> RunAsync(EventReplaySchedule schedule, IReplayEnvironment env,
         double speed, ReplayOptions options, Action<string> status, CancellationToken token)
@@ -126,7 +130,10 @@ internal static class EventReplayRunner
                 var brush = drawing.OverrideBrush ?? drawing.State.Brush!;
                 try { await states.RestoreBrushAsync(brush, token); }
                 catch (InvalidOperationException ex) { throw new ReplayStateException("BrushUnrestorable", ex.Message, ex); }
-                await colors.RestoreAsync(drawing.State.Color, token);
+                bool colorRestored = true;
+                try { await colors.RestoreAsync(drawing.State.Color, token); }
+                catch (ReplayStateException ex) when (!StrictColor && ex.Code == "ColorUnrestorable")
+                { colorRestored = false; status("颜色未还原，按当前颜色重放：" + ex.Message); }
                 try { await views.RestoreAsync(drawing.Stroke.View, token); }
                 catch (InvalidOperationException ex) { throw new ReplayStateException("ViewUnrestorable", ex.Message, ex); }
                 WorkLayer();
@@ -147,7 +154,8 @@ internal static class EventReplayRunner
                     token.ThrowIfCancellationRequested(); WorkLayer();
                     if (env.Feed.Brush?.Matches(brush) != true)
                         throw new ReplayStateException("BrushUnrestorable", "回放采样期间笔刷发生变化。");
-                    if (!PacketReplayRunner.ColorMatches(env.Feed.Color, drawing.State.Color))
+                    if (colorRestored && (StrictColor || drawing.State.Color.ValueKind == System.Text.Json.JsonValueKind.Object) &&
+                        !PacketReplayRunner.ColorMatches(env.Feed.Color, drawing.State.Color))
                         throw new ReplayStateException("ColorUnrestorable", "回放采样期间颜色发生变化。");
                     var current = env.CurrentView;
                     if (current is null || !ViewRestorer.Matches(current, drawing.Stroke.View) || current.Viewport is not { } region)

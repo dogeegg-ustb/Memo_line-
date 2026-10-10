@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 
 namespace MemolineDemo.Editing;
@@ -52,6 +52,9 @@ internal static class OfflineEditProbe
                 $"笔画 {layer.Strokes.Count}（因果 {layer.Strokes.Count(s => s.IsCausal)}），链 {(layer.ChainValid ? "有效" : "无效")}，" +
                 $"当前捕获 {(layer.Current is null ? "无" : layer.Current.Width + "×" + layer.Current.Height)}");
 
+        foreach (var layer in index.Layers.Values)
+            foreach (var command in layer.UndoRedo)
+                Log($"  未解析的 {command.Command}：会话序号 {command.SessionOrder}，输入 appendId {command.InputAppendId}，歧义 {command.Ambiguous}");
         var target = index.Layers.Values.Where(l => layerPrefix is null || l.Layer.Uuid.StartsWith(layerPrefix, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(l => l.Strokes.Count(s => s.Eligible)).FirstOrDefault()
             ?? throw new InvalidDataException("没有可用于测试的图层。");
@@ -68,6 +71,38 @@ internal static class OfflineEditProbe
         Log($"目标图层 {target.Layer.Uuid}，选区 {selection.Left},{selection.Top} {selection.Width}×{selection.Height}");
 
         bool ok = true;
+        if (args.Contains("--sweep"))
+        {
+            // 每张脏矩阵的第一笔：删除一次、改笔刷尺寸一次；汇总所有失败原因。
+            var failures = new Dictionary<string, int>(); int runs = 0, passed = 0;
+            void Quiet(string _) { }
+            foreach (var swept in index.Images.Values.Where(i => i.Events.Any(k => index.Strokes.TryGetValue(k, out var s) && s.Eligible && !s.IsUndone)))
+            {
+                var key = swept.Events.First(k => index.Strokes[k].Eligible && !index.Strokes[k].IsUndone);
+                var stroke = index.Strokes[key];
+                var changes = new List<EventChange> { new(Delete: true) };
+                if (stroke.Numbers.TryGetValue("brush_size", out double sweptSize))
+                    changes.Add(new(Numbers: stroke.Numbers.ToDictionary(n => n.Key, n => n.Key == "brush_size" ? sweptSize * 2 : n.Value)));
+                foreach (var change in changes)
+                {
+                    runs++;
+                    var request = EditRequest.Event(stroke.Layer, selection, new Dictionary<EditableStrokeKey, EventChange> { [key] = change });
+                    var plan = ReconstructionPlanner.Build(index, request);
+                    string? reason = plan.IsValid ? null : plan.Issues[0].Code + "：" + plan.Issues[0].Message;
+                    if (reason is null)
+                    {
+                        var result = ReconstructionEngine.RunAsync(plan, new SimulatedExecutor(index, request, Quiet), CancellationToken.None).GetAwaiter().GetResult();
+                        if (result.Status is not (ReconstructionStatus.Executed or ReconstructionStatus.PixelVerified))
+                            reason = "执行 " + result.Status + "：" + (result.Issues.FirstOrDefault()?.Message ?? "");
+                    }
+                    if (reason is null) passed++;
+                    else failures[reason] = failures.GetValueOrDefault(reason) + 1;
+                }
+            }
+            Log($"扫描：{passed}/{runs} 次编辑可执行");
+            foreach (var (reason, count) in failures.OrderByDescending(f => f.Value)) Log($"  ×{count} {reason}");
+            return passed == runs ? 0 : 2;
+        }
         // 1. 精确撤销
         var undo = PreciseUndoSelector.Select(index, target.Layer, selection);
         Log($"精确撤销选择：{undo.CountDisplay} 笔（候选 {undo.CandidateCount}，可见图片 {undo.VisibleImages.Count}），问题 {undo.Issues.Count}");

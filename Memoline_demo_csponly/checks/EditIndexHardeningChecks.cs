@@ -19,6 +19,14 @@ internal static class EditIndexHardeningChecks
 
     internal static int Run()
     {
+        // Undo/redo assertions here pin the optional strict gate; the product default is off.
+        ReconstructionPlanner.BlockOnUnresolvedUndo = true;
+        try { return RunStrict(); }
+        finally { ReconstructionPlanner.BlockOnUnresolvedUndo = false; }
+    }
+
+    private static int RunStrict()
+    {
         int count = 0;
         var failures = new List<string>();
         void Check(bool value, string message)

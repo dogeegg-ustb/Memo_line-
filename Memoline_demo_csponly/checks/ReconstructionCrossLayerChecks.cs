@@ -12,6 +12,14 @@ internal static class ReconstructionCrossLayerChecks
 
     internal static async Task<int> RunAsync()
     {
+        // Written against the optional strict undo/redo gate; the product default is off.
+        ReconstructionPlanner.BlockOnUnresolvedUndo = true;
+        try { return await RunStrictAsync(); }
+        finally { ReconstructionPlanner.BlockOnUnresolvedUndo = false; }
+    }
+
+    private static async Task<int> RunStrictAsync()
+    {
         int checks = 0;
         var failures = new List<string>();
         void Check(bool condition, string message)

@@ -200,7 +200,8 @@ internal static class ReconstructionChecks
             Check(Untrusted(p,yi),"cross-layer reference dependency"); s.Colors[key]=30; var f=new Fake(s); var r=await Run(s,p,f);Check(f.Replayed.Contains(key),"reference layer replay");Bytes(r,y,0,0,30,0,0,0,0,0);
         }
         // 14-16: errors stop before the executor is called.
-        foreach(var code in new[]{PlanIssueCode.UndoRedoInRange,PlanIssueCode.ChainLossy,PlanIssueCode.NoBaseline,PlanIssueCode.UnreplayableEventInMatrix})
+        // An image with unreplayable parts no longer stops reconstruction; it replays what it can.
+        foreach(var code in new[]{PlanIssueCode.UndoRedoInRange,PlanIssueCode.ChainLossy,PlanIssueCode.NoBaseline})
         {
             var s=new Scene();var a=s.Stroke(10,10,Mask(0));s.Group(s.Image("a",Mask(0),Pixels(10,0,0,0,0,0,0,0),a));var x=s.Index();
             if(code==PlanIssueCode.UnreplayableEventInMatrix){var image=x.Images.Values.Single() with {HasUnreplayableEvents=true};var l=x.Layers[s.Layer];x=x with {Images=new Dictionary<DirtyImageKey,DirtyImage>{{image.Key,image}},Layers=new Dictionary<LayerKey,LayerIndex>{{s.Layer,l with {Packets=[l.Packets[0] with {Images=[image]}]}}}};}

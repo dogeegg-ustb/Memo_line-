@@ -8,6 +8,14 @@ internal static class ReconstructionRequestContractChecks
 {
     internal static int Run()
     {
+        // These checks pin the optional strict undo/redo gate; the product default is off.
+        ReconstructionPlanner.BlockOnUnresolvedUndo = true;
+        try { return RunStrict(); }
+        finally { ReconstructionPlanner.BlockOnUnresolvedUndo = false; }
+    }
+
+    private static int RunStrict()
+    {
         int count = 0;
         var failures = new List<string>();
         void Check(bool condition, string message)

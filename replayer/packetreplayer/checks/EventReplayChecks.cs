@@ -6,6 +6,8 @@ internal static partial class PacketChecks
 {
     internal static async Task EventReplayAsync()
     {
+        // These checks pin the strict colour contract; the editing host runs colour best effort.
+        EventReplayRunner.StrictColor = true;
         Check(WindowsViewInput.WithRecorderTag(new() { Type = 0 }).Data.Mouse.Extra == 0x4D4C5243 &&
             WindowsViewInput.WithRecorderTag(new() { Type = 1 }).Data.Keyboard.Extra == 0x4D4C5243,
             "Keyboard, Unicode, button, wheel and pointer-move SendInput share the recorder tag.");

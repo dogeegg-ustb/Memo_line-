@@ -223,10 +223,13 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         _=new WindowsViewInput();
         bool needsReplay=plan.Layers.Any(l=>l.Segments.Any(s=>s.Kind==ReconstructionSegmentKind.Replay&&s.Events.Count>0) ||
             session.Index.Layers[l.Layer].UndoCheckpoints.Any(p=>p.Events.Count>0 && l.Groups.Any(g=>g.PacketId==p.PacketId)))||discrete.Count>0;
-        if(needsReplay)await feed.RequestAsync(["colorInputState"],token);
-        if(needsReplay&&RgbInputSnapshot.Parse(feed.ColorInput) is not { Slot:"main" })
-            return new(ReconstructionStatus.Failed,new Dictionary<LayerKey,ImageRgba>(),
-                [new(PlanIssueCode.ColorUnrestorable,ColorRestorer.PanelMessage)],new HashSet<DirtyImageKey>());
+        // Colour is best effort: without the RGB slider page, strokes replay in the current colour.
+        if(needsReplay&&!EventReplayRunner.StrictColor)
+        {
+            try{await feed.RequestAsync(["colorInputState"],token);}catch(InvalidOperationException){}
+            if(RgbInputSnapshot.Parse(feed.ColorInput) is not { Slot:"main" })
+                _progress?.Invoke("提示：未检测到色彩滑块 RGB 页，重放将使用当前颜色。");
+        }
         await feed.RequestAsync(["initializationConfiguration","shortcuts","canvasViewState","brushState","currentLayerState","colorState"],token);
         string bridge=Path.Combine(AppContext.BaseDirectory,"clip-layer-bridge.exe");
         if(!File.Exists(bridge)) bridge=Path.Combine(DemoController.ResolveRuntimeDirectory(),"clip-layer-bridge.exe");

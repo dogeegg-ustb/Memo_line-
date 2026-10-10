@@ -41,6 +41,9 @@ internal static class ReconstructionEngine
         internal readonly HashSet<EditableStrokeKey> Grown = [];
         internal readonly HashSet<EditableStrokeKey> Composed = [];
         internal readonly HashSet<DirtyImageKey> RuntimeUntrusted = [];
+        // Recorded pixels of replayed images that no replayable contact explains (mouse input,
+        // unrecorded changes, labels without contacts). They are pasted after the replay.
+        internal readonly List<(DirtyImage Image, PixelMask Pixels)> Residuals = [];
         internal bool Started, Touched;
         internal long LastGroupTicks;
         internal int LastGroupSessionOrder;
@@ -105,6 +108,13 @@ internal static class ReconstructionEngine
                     if(actual.Width!=c.Actual.Width||actual.Height!=c.Actual.Height) throw new ReconstructionFailure(new(PlanIssueCode.CaptureMismatch,"重放捕获的尺寸与图层不符。"));
                     c.Actual=actual; c.Pending.Clear();
                 }
+                foreach(var (image,pixels) in c.Residuals)
+                    foreach(var (x,y) in pixels.Pixels())
+                    {
+                        int source=((y-image.Mask.Top)*image.Mask.Width+x-image.Mask.Left)*4;
+                        image.Now.Bytes.AsSpan(source,4).CopyTo(c.Actual.Bytes.AsSpan((y*c.Actual.Width+x)*4,4));
+                    }
+                c.Residuals.Clear();
                 c.Difference=ImageCompositor.Difference(c.Actual,c.Historical);
                 c.PendingGrowth=new(c.Actual.Width,c.Actual.Height);
             }
@@ -113,8 +123,16 @@ internal static class ReconstructionEngine
                 var layerIndex=plan.Index.Layers[c.Plan.Layer];
                 if(ReconstructionPlanner.UndoRedoIssue(plan.Index,layerIndex,image.Events.Concat(c.Added)) is { } undoIssue)return undoIssue;
                 if(!layerIndex.ChainValid)return layerIndex.Issues.FirstOrDefault()??new(PlanIssueCode.ChainBroken,"在线新增受影响图层的差异链无效。",image.Key);
-                if(image.HasUnreplayableEvents||image.Events.Any(k=>!plan.Index.Strokes.TryGetValue(k,out var s)||!s.Eligible))
-                    return new(PlanIssueCode.UnreplayableEventInMatrix,"在线判定必须重放的矩阵含有不合格修改。",image.Key);
+                var replayable=image.Events.Where(k=>plan.Index.Strokes.TryGetValue(k,out var s)&&s.Eligible).ToArray();
+                if(image.HasUnreplayableEvents||replayable.Length!=image.Events.Count)
+                {
+                    // Replay what can be replayed; keep the rest of this image as recorded.
+                    var writes=replayable.Select(k=>plan.Index.Strokes[k].WriteMask).ToArray();
+                    var residual=new PixelMask(image.Mask.Left,image.Mask.Top,image.Mask.Width,image.Mask.Height);
+                    foreach(var (x,y) in image.Mask.Pixels())
+                        if(!writes.Any(w=>w.Contains(x,y)))residual.Set(x,y);
+                    if(!residual.IsEmpty)c.Residuals.Add((image,residual));
+                }
                 if(runtime&&image.Events.Any(c.Composed.Contains))
                     return new(PlanIssueCode.RuntimeClosureViolation,"实际捕获新增依赖指向已合成的共享接触，已停止。",image.Key);
                 foreach (var checkpoint in layerIndex.UndoCheckpoints.Where(p => p.PacketId == image.Key.PacketId))
@@ -137,7 +155,7 @@ internal static class ReconstructionEngine
                     foreach(var key in image.Events)
                         foreach(var linked in plan.Index.Strokes[key].Images)c.RuntimeUntrusted.Add(linked);
                 c.Touched=true;
-                foreach(var key in image.Events)
+                foreach(var key in replayable)
                 {
                     if(!c.Added.Add(key))continue;
                     plan.Request.Changes.TryGetValue(key,out var change);

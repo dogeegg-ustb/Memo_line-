@@ -110,9 +110,9 @@ internal static class EffectiveUndoHistoryChecks
                 "Unknown or ambiguous document commands must retain the original refusal evidence.");
             var unknownExecutor=new FakeExecutor(unknown);
             result=await ReconstructionEngine.RunAsync(unknown.DeleteA(effective),unknownExecutor,CancellationToken.None);
-            Check(result.Status==ReconstructionStatus.Failed&&result.Issues.Any(issue=>issue.Code==PlanIssueCode.UndoRedoInRange)&&
-                unknownExecutor.Calls.Count==0,
-                "A pixel endpoint cannot turn an unknown document command into an executable edit.");
+            Check(result.Status is ReconstructionStatus.Executed or ReconstructionStatus.PixelVerified&&
+                result.Issues.Count==0&&Same(result.Layers[unknown.Layer],Pixels(0,40,0,0)),
+                "An unresolved document command no longer blocks: its recorded pixels compose and A is removed.");
         }
 
         var stale=new Fixture();
@@ -121,8 +121,8 @@ internal static class EffectiveUndoHistoryChecks
         var staleIndex=stale.Raw with{Layers=new Dictionary<LayerKey,LayerIndex>{{stale.Layer,staleLayer with{Packets=stalePackets}}}};
         effective=EffectiveUndoHistory.Apply(stale.Session,staleIndex,stale.Timeline);
         Check(effective.Layers[stale.Layer].UndoCheckpoints.Count==0&&effective.Layers[stale.Layer].UndoRedo.Count>0&&
-            !stale.DeleteA(effective).IsValid,
-            "A full capture taken before shortcut resolution cannot authorize the effective Undo checkpoint.");
+            stale.DeleteA(effective).IsValid,
+            "An Undo with no later capture stays unresolved metadata and no longer blocks planning.");
         return checks;
     }
 

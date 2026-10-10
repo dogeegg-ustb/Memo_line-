@@ -19,6 +19,7 @@
     <Compile Include="../../../Memoline_demo_csponly/source/Editing/EditingModels.cs" Link="Memoline/Editing/EditingModels.cs" />
     <Compile Include="../../../Memoline_demo_csponly/source/Editing/BrushClassifier.cs" Link="Memoline/Editing/BrushClassifier.cs" />
     <Compile Include="../../../Memoline_demo_csponly/source/Editing/ToolCatalog.cs" Link="Memoline/Editing/ToolCatalog.cs" />
+    <Compile Include="../../../Memoline_demo_csponly/source/Editing/NativeUndoTimeline.cs" Link="Memoline/Editing/NativeUndoTimeline.cs" />
     <Compile Include="../../../Organizer/dirty matrix/source/Core/Coverage.cs" Link="DirtyMatrix/Coverage.cs" />
     <EmbeddedResource Include="../../../Memoline_demo_csponly/source/Editing/Resources/*.json" Link="Editing/Resources/%(Filename)%(Extension)" />
   </ItemGroup>

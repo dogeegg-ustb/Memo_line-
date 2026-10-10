@@ -80,8 +80,8 @@ internal static class ProjectEditIndexChecks
             "Unrecorded pixels compose like a dirty image: an earlier change elsewhere keeps them trusted.");
         var both = new PixelMask(2, 1); both.Set(1, 0);
         Check(ReconstructionPlanner.Assess(gapIndex, request, twoPixelBridge,
-            new Dictionary<LayerKey, PixelMask> { [route] = both })?.Rule == "unrecordedInterval",
-            "An earlier change that reaches the unrecorded pixels makes them untrustworthy.");
+            new Dictionary<LayerKey, PixelMask> { [route] = both }) is null,
+            "Unrecorded pixels are always pasted as recorded, even where an earlier change reaches them.");
         var otherRoute = route with { Uuid = "reference" };
         Check(ReconstructionPlanner.Assess(gapIndex, request, twoPixelBridge,
             new Dictionary<LayerKey, PixelMask> { [route] = new(2, 1), [otherRoute] = left }) is null,
@@ -96,8 +96,8 @@ internal static class ProjectEditIndexChecks
         var touchedPixels = first.Packets[0].Current!.Copy(); touchedPixels.Bytes[(1 + 8) * 4] = 99;
         var touching = Session("touch-gap", 17, 1000, 30, touchedPixels);
         var touchedIndex = ProjectEditIndex.Build([first, touching, second], current);
-        Check(ReconstructionPlanner.Build(touchedIndex, request).Issues.Any(i => i.Code == PlanIssueCode.UnreplayableEventInMatrix),
-            "Editing whose difference reaches an observed bridge requires unknown replay and is rejected.");
+        Check(ReconstructionPlanner.Build(touchedIndex, request).IsValid,
+            "Editing whose difference reaches an observed bridge pastes the bridge pixels instead of refusing.");
         Check(PreciseUndoSelector.Select(touchedIndex, route, selected).Selected.Count == 0,
             "A later unknown bridge covers earlier recorded strokes in visible-surface selection.");
         var gapTimeline = new LayerTimeline(gapIndex.Layers[route].Packets, gapIndex.Layers[route].Current!);

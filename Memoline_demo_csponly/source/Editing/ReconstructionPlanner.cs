@@ -114,10 +114,8 @@ internal static class ReconstructionPlanner
             foreach (var image in groups.Skip(first).SelectMany(g => g.Images))
             {
                 if (!image.FullResolution) issues.Add(new(PlanIssueCode.ChainLossy, "差异图片不是全分辨率。", image.Key));
-                if (forced.Contains(image.Key) && (image.HasUnreplayableEvents || image.Events.Any(k => !index.Strokes.TryGetValue(k, out var s) || !s.Eligible)))
-                    issues.Add(new(PlanIssueCode.UnreplayableEventInMatrix, image.UnknownHistoryInterval
-                        ? $"修改碰到了两次录制之间未被记录的变化（画布区域 {image.Mask.Left},{image.Mask.Top} 起 {image.Mask.Width}×{image.Mask.Height}），该处无法重建。"
-                        : "必须重放的矩阵含有无法重放的修改。", image.Key));
+                // A replayed image with unreplayable parts replays what it can; the engine pastes
+                // the recorded pixels its replayable contacts cannot explain (see ReconstructionEngine).
             }
             var relevant = groups.Skip(first).ToArray();
             var untrusted = relevant.SelectMany(g => g.Images).Where(i => forced.Contains(i.Key)).Select(i => i.Key).ToHashSet();
@@ -137,14 +135,8 @@ internal static class ReconstructionPlanner
         // Unknown operations may read unchanged pixels or any other layer. Their endpoint
         // difference mask cannot bound that read footprint. Later edits reach this point
         // with no earlier difference, and trusted overwrites can clear an earlier one.
-        if (image.UnknownHistoryInterval)
-        {
-            // Pixels changed outside any recording are composed like an ordinary dirty image:
-            // they only become untrustworthy where an earlier change reaches them.
-            var gapLayer = differences[image.Key.Layer];
-            var gapHit = CanvasMask(image.Impact, gapLayer).Intersect(gapLayer);
-            return gapHit.IsEmpty ? null : new("unrecordedInterval", gapHit.Pixels().Take(8).ToArray());
-        }
+        // Pixels changed outside any recording have nothing to replay: always paste them as recorded.
+        if (image.UnknownHistoryInterval) return null;
         var own = differences[image.Key.Layer];
         PixelMask hit;
         if (image.IsCausal)
@@ -200,8 +192,13 @@ internal static class ReconstructionPlanner
     private static bool ChangesSubtool(EditableStroke stroke, EventChange change)
         => change.BrushName is { } name && !PacketReplay.BrushSnapshot.SameName(name, stroke.BrushName ?? "");
 
+    // Undo/redo never blocks a plan. Its pixel effect is recorded in later dirty images, which
+    // compose like any other capture; resolved commands also mark their contacts as undone.
+    internal static bool BlockOnUnresolvedUndo { get; set; }
+
     internal static PlanIssue? UndoRedoIssue(EditIndex index, LayerIndex layer, IEnumerable<EditableStrokeKey> affectedEvents)
     {
+        if (!BlockOnUnresolvedUndo) return null;
         var earliest = affectedEvents.Where(index.Strokes.ContainsKey).Select(key => index.Strokes[key])
             .OrderBy(s=>s.SessionOrder).ThenBy(s=>s.Key.BeginAppendId).FirstOrDefault();
         var command = layer.UndoRedo.FirstOrDefault(command => command.InputAppendId == 0 || earliest is not null &&
