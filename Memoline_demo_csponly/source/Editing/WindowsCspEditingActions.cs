@@ -74,18 +74,22 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
     {
         await _feed.RequestAsync(["shortcuts"],token);
         var config=_feed.Shortcuts!;
-        string[] commands=["paste","selectdeselect","layerdelete","layervisiblelayer","layerselectupperlayer","layerselectlowerlayer"];
-        try
+        string[] commands=["paste","selectdeselect","layerdelete","layerselectupperlayer","layerselectlowerlayer"];
+        bool Usable(string command)
         {
-            foreach (string command in commands)
+            try
             {
                 var binding=config.ForCommand(command);
-                if (config.Bindings.Any(b=>b.Shortcut==binding.Shortcut && b.Command!=binding.Command)) return false;
+                return !config.Bindings.Any(b=>b.Shortcut==binding.Shortcut && b.Command!=binding.Command);
             }
-            return true;
+            catch (InvalidOperationException){return false;}
         }
-        catch (InvalidOperationException){return false;}
+        // Hiding the original is optional until a show/hide-layer shortcut is provisioned.
+        CanHideLayer=Usable("layervisiblelayer");
+        if(!CanHideLayer)_status("提示：CSP 没有显示/隐藏图层快捷键，原图层保持显示，复现层放在其上方。");
+        return commands.All(Usable);
     }
+    public bool CanHideLayer { get; private set; }
     public async Task<CspLayerInspection> SaveAndInspectAsync(CancellationToken token)
     {
         _feed.EnsureConnected(); _input.EnsureTarget();

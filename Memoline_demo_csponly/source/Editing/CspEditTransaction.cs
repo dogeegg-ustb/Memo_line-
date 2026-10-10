@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using StrokeReplay;
@@ -25,6 +25,8 @@ internal interface ICspEditingActions
     Task NavigateToLayerAsync(string name, CancellationToken token);
     Task<CspCurrentLayerEvidence> ReadCurrentLayerAsync(CancellationToken token);
     Task<CspHideEvidence> HideLayerAsync(CspLayerEvidence layer, CancellationToken token);
+    // False when CSP has no show/hide-layer shortcut: the original stays visible under the reproduction.
+    bool CanHideLayer => true;
     Task SetClipboardImageAsync(ImageRgba image, CancellationToken token);
     Task PasteAsync(CancellationToken token);
     Task<LayerExportEvidence> ExportLayerAsync(LayerKey layer, CancellationToken token);
@@ -58,6 +60,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
     private readonly CancellationTokenSource _shutdown = new();
     private readonly SemaphoreSlim _gate = new(1);
     private readonly HashSet<LayerKey> _hidden = [], _installed = [];
+    private bool _skipHide;
     private readonly HashSet<LayerKey> _requiredFinal, _usedLayers = [];
     private readonly ConcurrentQueue<Exception> _cleanupErrors = new();
     private IAsyncDisposable? _coordinator;
@@ -105,6 +108,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
         _journal.Start(_id, _sizes.Keys.ToArray()); _journalStarted = true;
         _journal.FreezePlan(_plan);
         if (!await _actions.VerifyShortcutsAsync(ct)) throw Error(PlanIssueCode.ShortcutsMissing, "CSP 编辑快捷键缺失或有冲突，请在设置页检查。");
+        _skipHide = !_actions.CanHideLayer;
         foreach (var layer in _sizes.Keys) await OriginalAsync(layer, hide: false, ct);
         _begun = true; return true;
     }, token);
@@ -129,7 +133,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
         }
         catch (Exception error) { throw Error(PlanIssueCode.CaptureMismatch, "工作层检查点刷盘或读回失败。", error); }
         var proof = await InspectAsync(layer, ct);
-        RequireLayer(proof, original.Uuid, original.Name, hidden: true);
+        RequireLayer(proof, original.Uuid, original.Name, hidden: !_skipHide);
         var confirmed = RequireLayer(proof, work.Uuid, work.Name);
         await ConfirmAsync(proof, confirmed, ct);
         try
@@ -141,7 +145,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
         await _actions.DeleteLayerAsync(ct);
         var after = await InspectAsync(layer, ct);
         if (after.Layers.Any(l => l.Uuid == work.Uuid)) throw Error(PlanIssueCode.LayerIdentityUnconfirmed, "删除后工作层 UUID 仍存在。");
-        RequireLayer(after, original.Uuid, original.Name, hidden: true);
+        RequireLayer(after, original.Uuid, original.Name, hidden: !_skipHide);
         _journal.WorkLayerDeleted(checkpoint);
         _usedLayers.Add(layer);
         return captured.Pixels;
@@ -198,7 +202,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
         await _actions.NavigateToLayerAsync(original.Name, ct);
         inspection = await InspectAsync(layer, ct); original = RequireLayer(inspection, original.Uuid, original.Name);
         await ConfirmAsync(inspection, original, ct);
-        if (hide && !_hidden.Contains(layer))
+        if (hide && !_skipHide && !_hidden.Contains(layer))
         {
             if (original.Visible)
             {
@@ -207,11 +211,11 @@ internal sealed class CspEditTransaction : IEditingTransaction
                     !evidence.SameFrame || !evidence.RowSelected || !SameName(evidence.RowName, original.Name) || !evidence.EyeClosed)
                     throw Error(PlanIssueCode.LayerIdentityUnconfirmed, "隐藏图层没有已确认的快捷键语义或同帧眼睛行证据。");
             }
-            inspection = await InspectAsync(layer, ct); original = RequireLayer(inspection, original.Uuid, original.Name, hidden: true);
+            inspection = await InspectAsync(layer, ct); original = RequireLayer(inspection, original.Uuid, original.Name, hidden: !_skipHide);
             await ConfirmAsync(inspection, original, ct);
             _journal.LayerHidden(original.Uuid); _hidden.Add(layer);
         }
-        else if (hide) original = RequireLayer(inspection, original.Uuid, original.Name, hidden: true);
+        else if (hide) original = RequireLayer(inspection, original.Uuid, original.Name, hidden: !_skipHide);
         return (original, inspection);
     }
 
@@ -229,7 +233,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
             after.Layers.ToList().IndexOf(added[0]) != before.Layers.ToList().IndexOf(original))
             throw Error(PlanIssueCode.LayerIdentityUnconfirmed, "粘贴前后必须恰好新增一个位于原层之上的非文件夹栅格层，其余结构保持一致。");
         var work = RequireLayer(after, added[0].Uuid, added[0].Name);
-        RequireLayer(after, original.Uuid, original.Name, hidden: true);
+        RequireLayer(after, original.Uuid, original.Name, hidden: !_skipHide);
         await ConfirmAsync(after, work, ct);
         var captured = LayerCapture.Read(await _actions.ExportLayerAsync(layer with { Uuid = work.Uuid }, ct),
             layer with { Uuid = work.Uuid }, _sizes[layer]);
@@ -241,7 +245,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
     {
         ct.ThrowIfCancellationRequested();
         var inspection = await InspectAsync(layer, ct);
-        RequireLayer(inspection, original.Uuid, original.Name, hidden: true);
+        RequireLayer(inspection, original.Uuid, original.Name, hidden: !_skipHide);
         await ConfirmAsync(inspection, RequireLayer(inspection, work.Uuid, work.Name), ct);
         var key = layer with { Uuid = work.Uuid };
         return LayerCapture.Read(await _actions.ExportLayerAsync(key, ct), key, _sizes[layer]);
