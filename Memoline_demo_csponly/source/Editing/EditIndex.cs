@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using PacketReplay;
 
 namespace MemolineDemo.Editing;
@@ -13,33 +13,47 @@ internal static class EditIndexBuilder
         var history = (session.History.Count > 0 ? session.History : StateHistory.Resolve(session.Frames))
             .OrderBy(h => h.Anchor).ThenBy(h => h.Order).ToArray();
         var frames = session.Frames.Where(f => J.U64(f, "appendId") <= session.BoundaryAppendId).OrderBy(f => J.U64(f, "appendId")).ToArray();
+        var controlFrames = frames.Where(f => J.Text(f, "kind") is "coreStateUpdated" or "panelUpdateRequested" or
+            "statePackageReserved" or "statePackageResult").ToArray();
+        var catalogs = frames.Where(f => J.Text(f, "kind") == "shortcutConfiguration").ToArray();
+        var endings = frames.Where(f => J.Text(f, "kind") is "penEnd" or "penInterrupted").ToArray();
         var transactions = TransactionIntervals(frames, session.BoundaryAppendId);
         var classifier = new BrushClassifier();
         var replay = session.Replay.Strokes.ToDictionary(s => s.OperationId);
         var contacts = new Dictionary<ulong, Contact>();
         var strokes = new Dictionary<EditableStrokeKey, EditableStroke>();
+        var undoProofs = new List<NativeUndoPenProof>();
+        var strokeStage = EditingProfiler.Stage("index strokes");
         foreach (var begin in frames.Where(f => J.Text(f, "kind") == "penBegin"))
         {
             ulong beginAppend = J.U64(begin, "appendId"), beginEvent = J.U64(begin, "eventId");
             ulong operation = J.U64(begin, "operationId"); if (operation == 0) operation = beginEvent;
             if (!contacts.TryAdd(operation, new(null, null, beginAppend, beginEvent))) throw new InvalidDataException("原生 penBegin operationId 重复。");
-            var state = StateHistory.At(history, beginEvent);
+            HistoricalState state; using (EditingProfiler.Part("state at")) state = StateHistory.At(history, beginEvent);
             var clip = Latest(history, "clipState", beginEvent);
-            bool layerConfirmed = Usable(history, frames, "currentLayerState", beginEvent, beginAppend) &&
-                Usable(history, frames, "clipState", beginEvent, beginAppend);
+            var usable = EditingProfiler.Part("usable/layer");
+            bool layerConfirmed = UsableAt(history, controlFrames, "currentLayerState", beginEvent, beginAppend, Ticks(begin)) &&
+                UsableAt(history, controlFrames, "clipState", beginEvent, beginAppend, Ticks(begin));
             LayerKey? layer = layerConfirmed ? ResolveLayer(session.Packets, state.Layer, clip, session.SessionId) : null;
+            usable.Dispose();
             contacts[operation] = new(layer, null, beginAppend, beginEvent);
             var brushData = Latest(history, "brushState", beginEvent);
-            var catalogFrame = frames.LastOrDefault(f => J.Text(f, "kind") == "shortcutConfiguration" && J.U64(f, "appendId") < beginAppend);
-            var classification = classifier.Classify(brushData, ToolCatalog.FromJson(J.Get(catalogFrame, "data")));
-            var end = frames.FirstOrDefault(f => J.U64(f, "appendId") >= beginAppend &&
+            var catalogFrame = catalogs.LastOrDefault(f => J.U64(f, "appendId") < beginAppend);
+            BrushClassification classification; using (EditingProfiler.Part("classify")) classification = classifier.Classify(brushData, ToolCatalog.FromJson(J.Get(catalogFrame, "data")));
+            var end = endings.FirstOrDefault(f => J.U64(f, "appendId") >= beginAppend &&
                 (J.Text(f, "kind") == "penEnd" && J.U64(f, "operationId") == operation ||
                  J.Text(f, "kind") == "penInterrupted" && J.Array(J.Get(f, "relatedEventIds")).Any(e => e.TryUnsigned() == beginEvent)));
             ulong endAppend = end.ValueKind == JsonValueKind.Object ? J.U64(end, "appendId") : session.BoundaryAppendId;
             var location = J.Get(J.Get(begin, "data"), "penDownLocation");
+            bool undoUnit = end.ValueKind == JsonValueKind.Object && J.Text(end, "kind") == "penEnd" &&
+                layer is not null && classification.Eligible && state.Brush is not null &&
+                UsableAt(history, controlFrames, "brushState", beginEvent, beginAppend, Ticks(begin)) &&
+                J.Text(location, "region") == "canvasViewport" && J.Text(location, "status") == "matched" &&
+                !transactions.Any(t => t.Begin <= endAppend && t.End >= beginAppend);
+            undoProofs.Add(new(beginAppend, operation, layer, undoUnit, false));
             bool valid = end.ValueKind == JsonValueKind.Object && layer is not null && classification.Eligible && state.Brush is not null &&
-                Usable(history, frames, "brushState", beginEvent, beginAppend) && state.View is not null &&
-                Usable(history, frames, "canvasViewState", beginEvent, beginAppend) &&
+                UsableAt(history, controlFrames, "brushState", beginEvent, beginAppend, Ticks(begin)) && state.View is not null &&
+                UsableAt(history, controlFrames, "canvasViewState", beginEvent, beginAppend, Ticks(begin)) &&
                 J.Text(J.Get(begin, "deviceSource"), "deviceType") == "pen" && J.Text(location, "region") == "canvasViewport" &&
                 J.Text(location, "status") == "matched" && J.Get(J.Get(begin, "data"), "injected").ValueKind != JsonValueKind.True &&
                 !transactions.Any(t => t.Begin <= endAppend && t.End >= beginAppend) && replay.ContainsKey(operation);
@@ -50,12 +64,14 @@ internal static class EditIndexBuilder
             var packet = session.Packets.First(p => p.Layer == layer);
             int width = packet.CanvasWidth, height = packet.CanvasHeight;
             if (!Footprints.TryMapContactSamples(drawing.Samples, Latest(history, "canvasViewState", beginEvent), width, height, out var points)) continue;
-            var write = Footprints.RasterizeCoverage(labels, width, height);
+            var raster = EditingProfiler.Part("footprints");
+            var write = Footprints.RasterizeCoverageBounded(labels, width, height);
             var probe = classification.ProbeGuaranteed
-                ? Footprints.RasterizeCenterline(points, width, height)
+                ? Footprints.RasterizeCenterlineBounded(points, width, height)
                 : write.Clone();
             var impact = classification.Causal ? (classification.ReadsUnknownSource ? PixelMask.FromPredicate(0, 0, width, height, (_, _) => true) : write.Clone())
-                : new PixelMask(width, height);
+                : new PixelMask(0, 0);
+            raster.Dispose();
             var key = new EditableStrokeKey(session.SessionId, beginAppend);
             var editable = new EditableStroke(key, operation, drawing.StartTicks, drawing.EndTicks, drawing.Samples,
                 state.Brush?.Name, layer!.Value, classification.Causal, BrushNumbers: state.Brush?.Numbers.ToDictionary(n => n.Key, n => n.Value))
@@ -63,8 +79,11 @@ internal static class EditIndexBuilder
                 WriteMask = write, ProbeMask = probe, ImpactMask = impact, CoverageLabels = labels };
             contacts[operation] = new(layer, editable, beginAppend, beginEvent);
             strokes.Add(key, editable);
+            undoProofs[^1] = undoProofs[^1] with { ReplayEligible = true };
         }
 
+        strokeStage.Dispose(); EditingProfiler.Report();
+        var imageStage = EditingProfiler.Stage("index images + chain");
         var images = new Dictionary<DirtyImageKey, DirtyImage>();
         var updatedPackets = new List<LayerPacket>();
         foreach (var packet in session.Packets)
@@ -86,11 +105,9 @@ internal static class EditIndexBuilder
                 }
                 linked = linked.DistinctBy(s => s.Key).ToList();
                 if (linked.Count == 0) unreplayable = true;
-                var write = new PixelMask(packet.CanvasWidth, packet.CanvasHeight);
-                var probe = new PixelMask(packet.CanvasWidth, packet.CanvasHeight);
-                var impact = new PixelMask(packet.CanvasWidth, packet.CanvasHeight);
-                foreach (var stroke in linked)
-                { write.UnionInPlace(stroke.WriteMask); probe.UnionInPlace(stroke.ProbeMask); impact.UnionInPlace(stroke.ImpactMask); }
+                var write = Footprints.UnionBounded(linked.Select(s=>s.WriteMask));
+                var probe = Footprints.UnionBounded(linked.Select(s=>s.ProbeMask));
+                var impact = Footprints.UnionBounded(linked.Select(s=>s.ImpactMask));
                 var resolved = image with { Events = linked.Select(s => s.Key).ToArray(), IsCausal = linked.Any(s => s.IsCausal),
                     HasUnreplayableEvents = unreplayable, W = write, Probe = probe, Impact = impact };
                 images.Add(image.Key, resolved); updated.Add(resolved);
@@ -105,11 +122,16 @@ internal static class EditIndexBuilder
             var packets = group.OrderBy(p => p.TriggerTicks).ToArray();
             var layerStrokes = strokes.Values.Where(s => s.Layer == group.Key).OrderBy(s => s.BeginEventId).ToArray();
             var issues = VerifyChain(packets, layerStrokes);
-            issues.AddRange(UndoRedoIssues(group.Key, contacts.Values, history, frames));
-            layers.Add(group.Key, new(group.Key, packets, layerStrokes, issues.Count == 0, issues, Current: packets.Last().Current));
+            layers.Add(group.Key, new(group.Key, packets, layerStrokes, issues.Count == 0, issues, Current: packets.Last().Current)
+            { UndoRedo = ReadUndoRedo(group.Key, history, frames, controlFrames) });
             allIssues.AddRange(issues);
         }
-        return new(layers, strokes, images, allIssues);
+        var index = new EditIndex(layers, strokes, images, allIssues);
+        imageStage.Dispose();
+        NativeUndoTimelineResult undoTimeline;
+        using (EditingProfiler.Stage("undo timeline")) undoTimeline = NativeUndoTimeline.Build(session, undoProofs);
+        using (EditingProfiler.Stage("effective undo history"))
+            return EffectiveUndoHistory.Apply(session, index, undoTimeline) with { UndoTimeline = undoTimeline };
     }
 
     private static JsonElement Latest(IReadOnlyList<HistorySlot> history, string module, ulong beginEvent)
@@ -135,46 +157,117 @@ internal static class EditIndexBuilder
 
     private static bool Usable(IReadOnlyList<HistorySlot> history, IReadOnlyList<JsonElement> frames,
         string module, ulong eventId, ulong appendId)
+        => UsableAt(history, frames, module, eventId, appendId,
+            Ticks(frames.FirstOrDefault(f => J.U64(f, "appendId") == appendId)));
+
+    // Frame-derived lookups reused by every contact of one build. Without them each contact
+    // rescans every control frame several times, which is quadratic in the recording length.
+    private sealed class FrameMemo(IReadOnlyList<JsonElement> frames)
+    {
+        internal readonly JsonElement[] Reserved = frames.Where(f => J.Text(f, "kind") == "statePackageReserved").ToArray();
+        internal readonly JsonElement[] Results = frames.Where(f => J.Text(f, "kind") == "statePackageResult").ToArray();
+        internal readonly JsonElement[] Invalidations = frames.Where(f => J.Text(f, "kind") == "panelUpdateRequested" &&
+            J.Text(J.Get(f, "data"), "phase") == "invalidate").ToArray();
+        internal readonly Dictionary<HistorySlot, ConfirmationEvidence?> Confirmations = new(ReferenceEqualityComparer.Instance);
+    }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<JsonElement>, FrameMemo> Memos = new();
+    private static FrameMemo Memo(IReadOnlyList<JsonElement> frames) => Memos.GetValue(frames, f => new FrameMemo(f));
+
+    private static bool UsableAt(IReadOnlyList<HistorySlot> history, IReadOnlyList<JsonElement> frames,
+        string module, ulong eventId, ulong appendId, long? inputTicks)
     {
         var latest = history.LastOrDefault(h => h.Module == module && h.Anchor < eventId);
         if (latest is null || !Confirmed(latest.Data)) return false;
-        foreach (var invalidation in frames.Where(f => J.Text(f, "kind") == "panelUpdateRequested" &&
-            J.U64(f, "appendId") < appendId && J.Text(J.Get(f, "data"), "phase") == "invalidate" &&
+        var memo = Memo(frames);
+        if (!memo.Confirmations.TryGetValue(latest, out var confirmation))
+            memo.Confirmations.Add(latest, confirmation = Confirmation(latest, frames));
+        if (confirmation is null || !BeforeInput(confirmation, appendId, inputTicks)) return false;
+        foreach (var invalidation in memo.Invalidations.Where(f => J.U64(f, "appendId") < appendId &&
             J.Array(J.Get(J.Get(f, "data"), "modules")).Any(m => m.ValueKind == JsonValueKind.String && m.GetString() == module)))
         {
             var refs = J.Array(J.Get(invalidation, "relatedEventIds")).Select(r => r.TryUnsigned()).Where(r => r > 0).ToArray();
-            if (refs.Length == 0) return false; // No causal proof that the old value survived this activation.
+            // An activation without input references invalidates every earlier observation,
+            // but a fresh same-session observation can confirm the state before this contact.
+            // Publication alone is insufficient when its screenshot predates the invalidation.
+            if (refs.Length == 0)
+            {
+                if (!AfterInvalidation(confirmation, invalidation)) return false;
+                continue;
+            }
             ulong anchor = refs.Max();
             if (anchor < eventId && (latest.Anchor < anchor || latest.Anchor == anchor &&
-                ConfirmationAppend(latest, frames) <= J.U64(invalidation, "appendId"))) return false;
+                !AfterInvalidation(confirmation, invalidation))) return false;
         }
-        var resolved = frames.Where(f => J.Text(f, "kind") == "statePackageResult")
-            .Select(f => J.Text(J.Get(f, "data"), "packageId")).ToHashSet();
-        foreach (var pending in frames.Where(f => J.Text(f, "kind") == "statePackageReserved" && J.U64(f, "appendId") < appendId))
+        HashSet<string?>? resolved = null;
+        foreach (var pending in memo.Reserved.Where(f => J.U64(f, "appendId") < appendId))
         {
             var data = J.Get(pending, "data");
             ulong anchor = J.U64(data, "afterEventId");
-            if (anchor < eventId && latest.Anchor <= anchor && !resolved.Contains(J.Text(data, "packageId"))) return false;
+            if (anchor >= eventId || latest.Anchor > anchor) continue;
+            resolved ??= memo.Results
+                .Where(f => BeforeInput(new(J.U64(f, "appendId"), CaptureTicksFromResult(f), Ticks(f)), appendId, inputTicks))
+                .Select(f => J.Text(J.Get(f, "data"), "packageId")).ToHashSet();
+            if (!resolved.Contains(J.Text(data, "packageId"))) return false;
         }
         return true;
     }
 
-    private static ulong ConfirmationAppend(HistorySlot slot, IReadOnlyList<JsonElement> frames)
+    private sealed record ConfirmationEvidence(ulong Append, long? CapturedTicks, long? FrameTicks);
+
+    private static long? Ticks(JsonElement frame)
+        => J.Get(frame, "ticks").ValueKind == JsonValueKind.Number && J.Get(frame, "ticks").TryGetInt64(out long ticks) ? ticks : null;
+
+    private static long? CaptureTicks(JsonElement data)
     {
-        ulong append = 0;
+        var value = J.Get(J.Get(data, "evidence"), "capturedTicks");
+        return value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out long ticks) && ticks >= 0 ? ticks : null;
+    }
+
+    private static long? CaptureTicksFromResult(JsonElement frame)
+    {
+        var captures = J.Array(J.Get(J.Get(J.Get(frame, "data"), "result"), "updates"))
+            .Select(CaptureTicks).Where(t => t is not null).Select(t => t!.Value).ToArray();
+        return captures.Length > 0 ? captures.Max() : null;
+    }
+
+    private static bool BeforeInput(ConfirmationEvidence evidence, ulong appendId, long? inputTicks)
+    {
+        if (evidence.CapturedTicks is { } captured && inputTicks is { } input) return captured < input;
+        // Old recordings without a capture timestamp need an observation published
+        // before the native input; a delayed future frame cannot prove their old state.
+        return evidence.Append < appendId &&
+            (evidence.FrameTicks is not { } frameTicks || inputTicks is not { } ticks || frameTicks < ticks);
+    }
+
+    private static bool AfterInvalidation(ConfirmationEvidence evidence, JsonElement invalidation)
+        => evidence.Append > J.U64(invalidation, "appendId") &&
+            (Ticks(invalidation) is not { } invalidTicks ||
+             (evidence.CapturedTicks ?? evidence.FrameTicks) is not { } observedTicks || observedTicks >= invalidTicks);
+
+    private static ulong ConfirmationAppend(HistorySlot slot, IReadOnlyList<JsonElement> frames)
+        => Confirmation(slot, frames)?.Append ?? 0;
+
+    private static ConfirmationEvidence? Confirmation(HistorySlot slot, IReadOnlyList<JsonElement> frames)
+    {
+        ConfirmationEvidence? confirmation = null;
+        string? slotPackage = J.Text(slot.Data, "packageId");
         var packages = frames.Where(f => J.Text(f, "kind") == "statePackageReserved")
             .Select(f => J.Get(f, "data")).Where(d => J.U64(d, "afterEventId") == slot.Anchor && J.U64(d, "reservationOrder") == slot.Order)
+            .Where(d => slotPackage is null || J.Text(d, "packageId") == slotPackage)
             .Select(d => J.Text(d, "packageId")).ToHashSet();
         foreach (var frame in frames)
         {
             var data = J.Get(frame, "data");
-            if (J.Text(frame, "kind") == "coreStateUpdated" && JsonElement.DeepEquals(data, slot.Data))
-                append = Math.Max(append, J.U64(frame, "appendId"));
-            if (J.Text(frame, "kind") == "statePackageResult" && packages.Contains(J.Text(data, "packageId")) &&
-                J.Array(J.Get(J.Get(data, "result"), "updates")).Any(u => JsonElement.DeepEquals(u, slot.Data)))
-                append = Math.Max(append, J.U64(frame, "appendId"));
+            bool matches = J.Text(frame, "kind") == "coreStateUpdated" && JsonElement.DeepEquals(data, slot.Data) &&
+                (packages.Contains(J.Text(data, "packageId")) || J.U64(frame, "appendId") == slot.Order);
+            matches |= J.Text(frame, "kind") == "statePackageResult" && packages.Contains(J.Text(data, "packageId")) &&
+                J.Array(J.Get(J.Get(data, "result"), "updates")).Any(u => JsonElement.DeepEquals(u, slot.Data));
+            ulong append = J.U64(frame, "appendId");
+            // Repeated identical publication must not move an old causal slot forward.
+            if (matches && append > 0 && (confirmation is null || append < confirmation.Append))
+                confirmation = new(append, CaptureTicks(slot.Data), Ticks(frame));
         }
-        return append;
+        return confirmation;
     }
 
     private static IReadOnlyList<TransactionInterval> TransactionIntervals(IReadOnlyList<JsonElement> frames, ulong boundary)
@@ -192,36 +285,34 @@ internal static class EditIndexBuilder
         return intervals;
     }
 
-    private static IReadOnlyList<PlanIssue> UndoRedoIssues(LayerKey layer, IEnumerable<Contact> contacts,
-        IReadOnlyList<HistorySlot> history, IReadOnlyList<JsonElement> frames)
+    private static IReadOnlyList<UndoRedoEvidence> ReadUndoRedo(LayerKey layer,
+        IReadOnlyList<HistorySlot> history, IReadOnlyList<JsonElement> frames, IReadOnlyList<JsonElement> controlFrames)
     {
-        var layerContacts = contacts.Where(c => c.Layer == layer).ToArray();
-        if (layerContacts.Length == 0) return [];
-        ulong first = layerContacts.Min(c => c.BeginAppend);
         var hardware = frames.Where(f => J.Text(f, "path") == "hardware" && J.U64(f, "eventId") > 0)
             .ToDictionary(f => J.U64(f, "eventId"));
-        var issues = new List<PlanIssue>();
+        var evidence = new List<UndoRedoEvidence>();
         foreach (var result in frames.Where(f => J.Text(f, "kind") == "shortcutResolved"))
         {
             var commands = J.Array(J.Get(J.Get(result, "data"), "matches")).Select(m => J.Text(m, "command"))
-                .Where(c => c is "undo" or "redo").Distinct().ToArray();
+                .Where(c => c is "undo" or "redo").OfType<string>().Distinct().ToArray();
             if (commands.Length == 0) continue;
             var refs = J.Array(J.Get(result, "relatedEventIds")).Select(r => r.TryUnsigned()).Where(r => r > 0).ToArray();
-            bool ambiguous = refs.Length == 0 || refs.Any(r => !hardware.ContainsKey(r));
-            bool affects = ambiguous && J.U64(result, "appendId") >= first;
+            // A missing native reference has no provable occurrence position.
+            // Retain it for every candidate layer; the request must reject it.
+            if (refs.Length == 0 || refs.Any(r => !hardware.ContainsKey(r)))
+                evidence.AddRange(commands.Select(command => new UndoRedoEvidence(0, command, true)));
             foreach (ulong anchor in refs.Where(hardware.ContainsKey))
             {
                 ulong append = J.U64(hardware[anchor], "appendId");
-                if (append < first) continue;
                 string? uuid = null;
-                if (Usable(history, frames, "currentLayerState", anchor, append) && Usable(history, frames, "clipState", anchor, append))
+                if (UsableAt(history, controlFrames, "currentLayerState", anchor, append, Ticks(hardware[anchor])) &&
+                    UsableAt(history, controlFrames, "clipState", anchor, append, Ticks(hardware[anchor])))
                     uuid = ResolveLayerUuid(StateHistory.At(history, anchor).Layer, Latest(history, "clipState", anchor));
-                if (uuid is null || uuid == layer.Uuid) affects = true;
+                if (uuid is null || uuid == layer.Uuid)
+                    evidence.AddRange(commands.Select(command => new UndoRedoEvidence(append, command, uuid is null)));
             }
-            if (affects) issues.Add(new(PlanIssueCode.UndoRedoInRange,
-                $"图层 {layer.Uuid} 从最早接触到编辑边界之间存在 {string.Join("/", commands)}，无法确认历史笔画是否仍生效。"));
         }
-        return issues;
+        return evidence.Distinct().OrderBy(item => item.InputAppendId).ToArray();
     }
 
     private static List<PlanIssue> VerifyChain(IReadOnlyList<LayerPacket> packets, IReadOnlyList<EditableStroke> strokes)

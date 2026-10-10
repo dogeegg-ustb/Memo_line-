@@ -37,6 +37,25 @@ public sealed class MemolineWriter : IAsyncDisposable
     private ulong _eventId, _appendId, _statePackageOrder;
     private readonly Dictionary<string, (ulong Anchor, long Ticks, string Reason, ulong Order)> _statePackages = [];
     private bool _closed;
+    private long? _editingSuppressionStart;
+    private readonly List<(long Start, long End)> _editingSuppressionRanges = [];
+    /// <summary>Keep replay observations available to IPC without persisting them as creation events.</summary>
+    public void BeginEditingSuppression()
+    {
+        lock (_sync)
+        {
+            if (_editingSuppressionStart is not null) throw new InvalidOperationException("Editing persistence is already suppressed.");
+            _editingSuppressionStart = NowTicks;
+        }
+    }
+    public void EndEditingSuppression()
+    {
+        lock (_sync)
+        {
+            if (_editingSuppressionStart is { } start) _editingSuppressionRanges.Add((start, NowTicks));
+            _editingSuppressionStart = null;
+        }
+    }
     public string FilePath { get; }
     public string LiveFilePath => FilePath + ".part";
     public string DiagnosticFilePath => System.IO.Path.ChangeExtension(FilePath, ".diagnostics.jsonl");
@@ -104,6 +123,12 @@ public sealed class MemolineWriter : IAsyncDisposable
             if (occurredTicks < 0 || occurredTicks > NowTicks || relatedEventIds.Any(id => id == 0 || id > _eventId))
                 throw new ArgumentOutOfRangeException(nameof(occurredTicks));
             if (path is not ("state" or "immediate" or "delayed")) throw new ArgumentException("Invalid write path.", nameof(path));
+            if (kind is not ("editTransactionBegan" or "editTransactionEnded" or "physicalInputDuringTransaction" or "editingActionCompleted") &&
+                (_editingSuppressionStart is not null || _editingSuppressionRanges.Any(r => occurredTicks >= r.Start && occurredTicks <= r.End)))
+            {
+                AppendDiagnostic(path, kind, occurredTicks, relatedEventIds, data);
+                return null;
+            }
             if (_options.SuccessfulStatesOnly && MemolineStatePersistence.IsDiagnostic(kind, data))
             {
                 AppendDiagnostic(path, kind, occurredTicks, relatedEventIds, data);

@@ -54,6 +54,37 @@ internal static class LiveReaderChecks
         var pngSnapshot = LiveSessionReader.Read(path, packetRoot, 1);
         Check(pngSnapshot.Packets[0].Images[0].Mask.Count == 1 && !pngSnapshot.Packets[0].Images[0].Mask.Contains(0, 0),
             "A transparent mask pixel remains mask=0 even if its stored RGB is nonzero.");
+        string longRoot = Path.Combine(root, "project-history", new string('a', 96), new string('b', 96), "session-0", "diff");
+        string longPacket = Path.Combine(longRoot, "packets", "fixture");
+        Directory.CreateDirectory(longPacket);
+        foreach (string file in Directory.EnumerateFiles(packet))
+            File.WriteAllBytes(Path.Combine(longPacket, Path.GetFileName(file)), File.ReadAllBytes(file));
+        Check(Path.Combine(longPacket, "now.png").Length > 260, "The history PNG fixture must exceed the native filename limit.");
+        var longSnapshot = LiveSessionReader.Read(path, longRoot, 1);
+        Check(longSnapshot.Packets[0].Images[0].Now.Bytes.AsSpan().SequenceEqual(pngSnapshot.Packets[0].Images[0].Now.Bytes),
+            "Nested history packet PNGs must decode without depending on GDI+ filename limits.");
+        Directory.CreateDirectory(Path.Combine(longRoot, "snapshots"));
+        File.WriteAllBytes(Path.Combine(longRoot, "snapshots", "snapshot.png"), rgba);
+        var longBaseline = LiveSessionReader.LoadSnapshot(longRoot, JsonSerializer.SerializeToElement(descriptor), 2, 1, CancellationToken.None);
+        Check(longBaseline!.Bytes.AsSpan().SequenceEqual(pngSnapshot.Packets[0].Images[0].Now.Bytes),
+            "History baselines must decode at long paths and preserve straight RGBA pixels.");
+        string singleRoot = Path.Combine(root, "single-packet");
+        string singlePacket = Path.Combine(singleRoot, "packets", "fixture");
+        string singleSnapshots = Path.Combine(singleRoot, "snapshots");
+        Directory.CreateDirectory(singlePacket); Directory.CreateDirectory(singleSnapshots);
+        foreach (string file in Directory.EnumerateFiles(packet))
+            File.WriteAllBytes(Path.Combine(singlePacket, Path.GetFileName(file)), File.ReadAllBytes(file));
+        var singleManifest = JsonNode.Parse(File.ReadAllText(Path.Combine(singlePacket, "manifest.json")))!;
+        singleManifest["now"]!["id"] = "current";
+        File.WriteAllText(Path.Combine(singlePacket, "manifest.json"), singleManifest.ToJsonString());
+        byte[] currentPixels = [1, 2, 3, 255, 4, 5, 6, 255];
+        File.WriteAllBytes(Path.Combine(singleSnapshots, "snapshot.png"), rgba);
+        File.WriteAllBytes(Path.Combine(singleSnapshots, "current.png"), DirtyMatrixPaster.ClipboardImageCodec.EncodePng(2, 1, currentPixels));
+        var single = LiveSessionReader.Read(path, singleRoot, 1).Packets.Single();
+        Check(single.Before is not null && single.Current is not null &&
+            single.Before.Bytes.AsSpan().SequenceEqual(pngSnapshot.Packets[0].Images[0].Now.Bytes) &&
+            single.Current.Bytes.AsSpan().SequenceEqual(currentPixels),
+            "A single capture packet must keep both its original baseline and its current pixels after record replacement.");
         var accepted = new List<string>();
         foreach (var (format, colorType) in new[] { ("RGB", (byte)2), ("grayscale", (byte)0), ("indexed", (byte)3) })
         {

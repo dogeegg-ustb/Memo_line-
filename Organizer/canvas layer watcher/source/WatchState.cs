@@ -58,6 +58,7 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
     private readonly Dictionary<long, long> _lastDirty = [];
     private readonly Dictionary<long, long> _strokeBegins = [];
     private readonly Dictionary<long, long> _strokeLast = [];
+    private readonly HashSet<long> _canvasStrokeOperations = [];
     private readonly Dictionary<string, long> _capturedLayers = new(StringComparer.Ordinal);
     private readonly HashSet<long> _pendingBoundaryLayers = [];
     private long _lastEditBoundaryTicks = -1;
@@ -79,7 +80,7 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
     public void Reset()
     {
         Generation++; _layers.Clear(); _clipLayers.Clear(); _dirty.Clear(); _lastDirty.Clear(); _view = null;
-        _strokeBegins.Clear(); _strokeLast.Clear(); _capturedLayers.Clear(); _pendingBoundaryLayers.Clear(); _lastEditBoundaryTicks = -1;
+        _strokeBegins.Clear(); _strokeLast.Clear(); _canvasStrokeOperations.Clear(); _capturedLayers.Clear(); _pendingBoundaryLayers.Clear(); _lastEditBoundaryTicks = -1;
         _mouseOperation = _penOperation = null;
         _viewTicks = _evidenceTicks = _completedTriggerTicks = -1;
         _reserved = _penContact = _mouseContact = false; _penEditable = true; _canvasArea = null;
@@ -109,8 +110,11 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
                 _strokeBegins.TryAdd(_penOperation.Value, message.Ticks);
                 var location = PanelRegionMap.ReadLocation(message.Data);
                 _penEditable = location is not null ? location.Region == "canvasViewport"
+                    || !(location.Status == "matched" && location.Region != "other" || location.Status == "outsideRegions")
                     : _canvasArea is not { } area || J.Number(message.Data, "x") is not { } x || J.Number(message.Data, "y") is not { } y
                         || area.Contains((int)x, (int)y);
+                if (_penEditable && J.Get(message.Data, "inCsp").ValueKind != JsonValueKind.False && !NavigationHeld(message.Data))
+                    _canvasStrokeOperations.Add(_penOperation.Value);
                 Diagnostic?.Invoke($"数位笔下笔区域：{location?.Name ?? (_penEditable ? "画布区域或旧接口未分类" : "画布外")}，operation={_penOperation}，位置=({J.Number(message.Data, "x")},{J.Number(message.Data, "y")})");
             }
             if (message.Kind is "penBegin" or "penSample") _penContact = true;
@@ -143,20 +147,23 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
             if (message.Kind is "mouseDrag" or "mouseUp")
             {
                 var activeOperation = message.OperationId is { } mouseId ? (long)mouseId : _mouseOperation;
+                if (activeOperation is { } tracked && _strokeBegins.ContainsKey(tracked)) _strokeLast[tracked] = message.Ticks;
                 if (activeOperation is { } op && _dirty.ContainsKey(op)) _lastDirty[op] = message.Ticks;
                 if (message.Kind == "mouseUp") { _mouseContact = false; _mouseOperation = null; }
                 return null;
             }
-            // Some tablet drivers expose drawing through the Windows mouse route.
-            // Restrict the fallback to primary presses inside the calibrated canvas.
-            if (message.Kind != "mouseDown" || _canvasArea is not { } area
-                || J.Number(message.Data, "x") is not { } x || J.Number(message.Data, "y") is not { } y
-                || !area.Contains((int)x, (int)y)) return null;
+            // Native mouse events have already passed the CSP point filter.
+            // An unavailable canvas ROI cannot discard a possibly dirty layer.
+            double? x = J.Number(message.Data, "x"), y = J.Number(message.Data, "y");
+            if (message.Kind != "mouseDown" || J.Get(message.Data, "inCsp").ValueKind == JsonValueKind.False
+                || _canvasArea is { } area && x is not null && y is not null && !area.Contains((int)x.Value, (int)y.Value)) return null;
             _mouseContact = true;
             if (NavigationHeld(message.Data)) return null;
             long operation = message.OperationId is { } id ? checked((long)id)
                 : message.EventId > 0 ? checked((long)message.EventId) : --_syntheticOperation;
             _mouseOperation = operation;
+            _strokeBegins.TryAdd(operation, message.Ticks); _strokeLast[operation] = message.Ticks;
+            _canvasStrokeOperations.Add(operation);
             if (_dirty.TryAdd(operation, message.Ticks)) Diagnostic?.Invoke($"编辑输入：mouse/left，operation={operation}，位置=({x},{y})");
             _lastDirty[operation] = message.Ticks;
             return null;
@@ -184,7 +191,11 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         var view = View.Parse(message.Data);
         CaptureRequest? Skip(string reason)
         { ViewDiagnostic(message, ticks, reason, view); return null; }
-        if (view is null) return Skip("状态未确认或画布字段不完整");
+        if (view is null)
+        {
+            _canvasArea = null; // Do not use a stale ROI to discard input while the layout is unknown.
+            return Skip("状态未确认或画布字段不完整");
+        }
         if (ticks <= _viewTicks) return Skip("观察时间早于已处理视口");
         bool first = _view is null;
         bool changed = _view is not null && view.Differs(_view);
@@ -206,6 +217,18 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         return Reserve(message, message.Ticks, _view, pending: false, force: true) is { } request
             ? request with { TimeSource = "triggerTicks", TriggerKind = "recordingEnd" } : null;
     }
+    public IReadOnlyList<CaptureRequest> ReserveRecordingEndLayers(RecorderRealtimeEvent message)
+    {
+        if (message.Kind != "recordingEndRequested" || message.AppendId == 0 || message.Ticks < 0)
+            throw new InvalidDataException("结束保存需要 Recognizer 的原生结束边界。");
+        if (_view is null || _viewTicks > message.Ticks)
+            throw new InvalidDataException("末尾画布视口未在结束边界前确认。");
+        var requests = ReserveLayerBoundary("recording-end-" + message.AppendId,
+            KnownLayersAt(message.Ticks), message.Ticks, final: true);
+        return requests.Select((request, index) => request with {
+            TriggerKind = index == 0 ? "recordingEnd" : "recordingEndLayer"
+        }).ToArray();
+    }
     public IReadOnlyList<LayerReference> KnownLayersAt(long triggerTicks)
         => _clipLayers.LastOrDefault(pair => pair.Key <= triggerTicks).Value ?? [];
 
@@ -213,6 +236,10 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         => ReserveEditBoundary(requestId, layers, _lastEditBoundaryTicks);
 
     public IReadOnlyList<CaptureRequest> ReserveEditBoundary(string requestId, IReadOnlyList<LayerReference> layers, long triggerTicks)
+        => ReserveLayerBoundary(requestId, layers, triggerTicks, final: false);
+
+    private IReadOnlyList<CaptureRequest> ReserveLayerBoundary(string requestId, IReadOnlyList<LayerReference> layers,
+        long triggerTicks, bool final)
     {
         if (string.IsNullOrWhiteSpace(requestId) || triggerTicks < 0)
             throw new InvalidDataException("编辑边界缺少 requestId 或原生 triggerTicks");
@@ -222,7 +249,17 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
             ?? throw new InvalidDataException("编辑边界当前图层未确认");
         var touched = new Dictionary<string, List<long>>(StringComparer.Ordinal);
         touched.Add(LayerMapping.Compact(current), []);
-        foreach (var stroke in _strokeBegins.Where(pair => pair.Value <= triggerTicks))
+        // Previous captures have consumed their contact tracking. They still
+        // need fresh full-layer pixels at this boundary for cross-layer selection.
+        foreach(string captured in _capturedLayers.Keys)
+        {
+            var matches=layers.Where(layer=>LayerMapping.Compact(layer.Name)==captured).ToArray();
+            if(matches.Length==1&&!string.IsNullOrWhiteSpace(matches[0].Uuid))touched.TryAdd(captured,[]);
+        }
+        var contacts = final ? _strokeBegins.Where(pair => pair.Value <= triggerTicks && _canvasStrokeOperations.Contains(pair.Key))
+            .Concat(_dirty.Where(pair => pair.Value <= triggerTicks && !_strokeBegins.ContainsKey(pair.Key)))
+            : _strokeBegins.Where(pair => pair.Value <= triggerTicks);
+        foreach (var stroke in contacts)
         {
             string name = _layers.LastOrDefault(pair => pair.Key <= stroke.Value).Value
                 ?? throw new InvalidDataException("笔接触开始时的历史图层未确认");
@@ -248,10 +285,13 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
     private CaptureRequest? Reserve(RecorderRealtimeEvent message, long ticks, View view, bool pending, bool force = false)
     {
         CaptureRequest? Skip(string reason) { ViewDiagnostic(message, ticks, reason, view); return null; }
-        var operations = _dirty.Where(p => p.Value <= ticks).Select(p => p.Key).ToArray();
         string? layer = _layers.LastOrDefault(p => p.Key <= ticks).Value;
-        if (operations.Length == 0 && !force) return Skip("切换前没有符合条件的编辑输入");
         if (string.IsNullOrWhiteSpace(layer)) return Skip("切换时图层未确认");
+        var operations = _dirty.Where(pair => pair.Value <= ticks
+            && LayerMapping.SameName(_layers.LastOrDefault(observation => observation.Key
+                <= _strokeBegins.GetValueOrDefault(pair.Key, pair.Value)).Value, layer))
+            .Select(pair => pair.Key).ToArray();
+        if (operations.Length == 0 && !force) return Skip("切换前没有符合条件的当前图层编辑输入");
         // Later layer changes do not replace the layer at triggerTicks, even
         // when the viewport recognition result arrives after those changes.
         LayerReference? identity = null;
@@ -279,7 +319,8 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
             error = J.Text(message.Data, "error")
         }, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
     public bool Valid(CaptureRequest request) => request.Generation == Generation
-        && (request.TriggerKind == "editBoundary" ? request.Layer is { } layer && _pendingBoundaryLayers.Contains(layer.Id)
+        && (request.TriggerKind == "editBoundary" || request.TriggerKind is "recordingEnd" or "recordingEndLayer" && request.BoundaryRequestId is not null
+            ? request.Layer is { } layer && _pendingBoundaryLayers.Contains(layer.Id)
             : LayerMapping.SameName(_layers.LastOrDefault(p => p.Key <= request.TriggerTicks).Value, request.LayerName));
     public void Complete(CaptureRequest request, bool success)
     {
@@ -293,14 +334,15 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
                 && _strokeLast.GetValueOrDefault(pair.Key, pair.Value) <= request.TriggerTicks
                 && LayerMapping.SameName(_layers.LastOrDefault(layer => layer.Key <= pair.Value).Value, request.LayerName))
                 .Select(pair => pair.Key).ToArray())
-            { _strokeBegins.Remove(operation); _strokeLast.Remove(operation); }
+            { _strokeBegins.Remove(operation); _strokeLast.Remove(operation); _canvasStrokeOperations.Remove(operation); }
         }
         if (success) foreach (long operation in request.Operations)
         {
             if (_lastDirty.GetValueOrDefault(operation) <= request.TriggerTicks) { _dirty.Remove(operation); _lastDirty.Remove(operation); }
             else _dirty[operation] = request.TriggerTicks + 1;
         }
-        if (request.TriggerKind == "editBoundary" && request.Layer is { } completedLayer)
+        if ((request.TriggerKind == "editBoundary" || request.TriggerKind is "recordingEnd" or "recordingEndLayer")
+            && request.Layer is { } completedLayer)
             _pendingBoundaryLayers.Remove(completedLayer.Id);
         _reserved = _pendingBoundaryLayers.Count > 0;
     }

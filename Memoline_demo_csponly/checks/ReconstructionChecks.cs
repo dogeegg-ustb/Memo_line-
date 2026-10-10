@@ -234,6 +234,7 @@ internal static class ReconstructionChecks
             Check(r.Status==ReconstructionStatus.Executed&&r.Issues.Count==0,"precise undo retains actual final discrete capture");
             Bytes(r,s.Layer,10,0,0,0,0,0,0,0);
         }
+        n += ReconstructionRequestContractChecks.Run();
         return n;
     }
 }

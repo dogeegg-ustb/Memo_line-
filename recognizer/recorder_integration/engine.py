@@ -1,8 +1,8 @@
 """Update scheduling only: emits requests, never claims recognition has completed."""
 import time
-from catalog import BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR, TOOLBAR, TOOLGROUP
+from catalog import BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR, COLOR_INPUT, TOOLBAR, TOOLGROUP
 
-STATE_MODULES = {BRUSH: "brushState", TOOLGROUP: "subtoolState", CANVAS: "canvasViewState", NAVIGATOR: "canvasViewState", LAYERS: "currentLayerState", COLOR: "colorState"}
+STATE_MODULES = {BRUSH: "brushState", TOOLGROUP: "subtoolState", CANVAS: "canvasViewState", NAVIGATOR: "canvasViewState", LAYERS: "currentLayerState", COLOR: "colorState", COLOR_INPUT: "colorInputState"}
 
 
 class UpdateEngine:
@@ -55,7 +55,8 @@ class UpdateEngine:
     def capture_targets(panels):
         targets = set()
         for panel in panels:
-            targets.update((BRUSH,TOOLGROUP) if panel in {TOOLBAR,TOOLGROUP} else (panel,))
+            targets.update((BRUSH,TOOLGROUP) if panel in {TOOLBAR,TOOLGROUP} else
+                           (COLOR,COLOR_INPUT) if panel in {COLOR,COLOR_INPUT} else (panel,))
         return targets
 
     @staticmethod
@@ -90,6 +91,11 @@ class UpdateEngine:
         return matches
 
     def set_regions(self, regions):
+        # RGB sliders occupy the already calibrated color panel. A tab switch
+        # must not require a second workspace calibration.
+        regions = dict(regions)
+        if COLOR in regions:
+            regions[COLOR_INPUT] = list(regions[COLOR])
         if self.regions != regions:
             self.hover = None
             self.pulses.clear()

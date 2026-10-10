@@ -12,6 +12,8 @@ internal interface IClipSaveControl
 internal interface IPacketStateControl
 {
     Task<IReadOnlyDictionary<string, JsonElement>> RequestAsync(string sessionId, string requestId, string[] modules, string? saveId, CancellationToken token);
+    Task<IReadOnlyDictionary<string, JsonElement>> RequestBrushPanelAsync(string sessionId,string requestId,string[] modules,string? saveId,int[] region,CancellationToken token)
+        => throw new NotSupportedException("当前识别器尚不支持截图笔刷属性选区，请更新程序并重新录制。");
 }
 internal sealed class PacketRecorderControl(int processId) : IClipSaveControl, IPacketStateControl
 {
@@ -46,6 +48,11 @@ internal sealed class PacketRecorderControl(int processId) : IClipSaveControl, I
     {
         var response = await SendAsync(new { command = "requestStates", requestId, sessionId, modules, saveId }, TimeSpan.FromSeconds(35), token);
         return ParseStates(response, sessionId, requestId, modules);
+    }
+    public async Task<IReadOnlyDictionary<string, JsonElement>> RequestBrushPanelAsync(string sessionId,string requestId,string[] modules,string? saveId,int[] region,CancellationToken token)
+    {
+        var response=await SendAsync(new {command="requestStates",requestId,sessionId,modules,saveId,brushPanelRoi=region},TimeSpan.FromSeconds(35),token);
+        return ParseStates(response,sessionId,requestId,modules);
     }
     internal static IReadOnlyDictionary<string, JsonElement> ParseStates(JsonElement response, string sessionId, string requestId, string[] modules)
     {

@@ -14,7 +14,7 @@ public sealed record BrushClassification(bool Eligible, bool Causal,
 public sealed class BrushClassifier
 {
     private static readonly HashSet<string> EligibleGroups = new(StringComparer.OrdinalIgnoreCase)
-    { "笔", "筆", "鉛筆", "铅笔", "毛笔", "毛筆", "喷枪", "噴槍", "装饰", "裝飾", "橡皮擦", "色彩混合",
+    { "笔", "筆", "沾水筆", "蘸水笔", "鉛筆", "铅笔", "毛笔", "毛筆", "喷枪", "噴槍", "装饰", "裝飾", "橡皮擦", "色彩混合",
       "Pen", "Pencil", "Brush", "Airbrush", "Decoration", "Eraser", "Blend" };
     private readonly Dictionary<string, string> _causal = new(StringComparer.Ordinal);
     private readonly HashSet<string> _guaranteed = new(StringComparer.Ordinal);

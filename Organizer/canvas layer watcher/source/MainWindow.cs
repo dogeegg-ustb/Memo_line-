@@ -5,7 +5,7 @@ namespace CanvasLayerWatcher;
 
 internal sealed record Settings(string Clip = "", string Endpoint = "");
 
-internal sealed class MainWindow : Form
+internal sealed partial class MainWindow : Form
 {
     private readonly TextBox _clip = new() { Dock = DockStyle.Fill, ReadOnly = true };
     private readonly TextBox _endpoint = new() { Dock = DockStyle.Fill, PlaceholderText = "自动发现，也可填写 .live.json 路径或管道名" };
@@ -123,6 +123,7 @@ internal sealed class MainWindow : Form
             };
         FormClosing += async (_, e) =>
         {
+            if (HideOnClose) { e.Cancel=true; Hide(); return; }
             if (_closeReady) return;
             e.Cancel = true;
             if (_closing) return;
@@ -157,9 +158,12 @@ internal sealed class MainWindow : Form
             var monitor = _monitor; var token = _stopSource.Token;
             monitor.Capture += request =>
             {
-                _captureTasks.RemoveWhere(t => t.IsCompleted);
-                _host?.CaptureQueued(request);
-                _captureTasks.Add(HandleCaptureAsync(monitor, clip, bridge, request, token));
+                lock(_captureTasks)
+                {
+                    _captureTasks.RemoveWhere(t => t.IsCompleted);
+                    _host?.CaptureQueued(request);
+                    _captureTasks.Add(HandleCaptureAsync(monitor, clip, bridge, request, token));
+                }
             };
             monitor.CaptureRequestsPaused = true;
             _monitorTask = RunMonitorAsync(monitor, _endpoint.Text.Trim(), clip, token);
@@ -192,6 +196,12 @@ internal sealed class MainWindow : Form
     {
         var history = _history ?? throw new InvalidOperationException("图层快照历史尚未建立");
         var control = new RecorderControlClient(configuration.ControlPipe, WriteLog);
+        // Configuration is published before initial state capture/analysis completes.
+        // Query the same recorder that guards prepareEditBoundary instead of treating
+        // configuration arrival as permission to start the baseline transaction.
+        Status("等待 Recognizer 初始化完成；请切回 CSP…");
+        await new RecorderControlClient(configuration.ControlPipe).WaitForRecordingReadyAsync(configuration.SessionId, token);
+        Status("Recognizer 已就绪，建立录制开始 baseline…");
         string liveFile = monitor.LiveFilePath ?? throw new InvalidDataException("Recognizer 未提供机械录制文件路径，无法核对开始 baseline 边界");
         using var reader = MemolineReader.Open(liveFile);
         bool CurrentSession() => monitor.SessionId == configuration.SessionId
@@ -261,8 +271,8 @@ internal sealed class MainWindow : Form
             Status(update.Baseline ? $"已保存「{result.LayerName}」并建立 after 基准；继续监听"
                 : $"已保存「{result.LayerName}」；生成 {update.DiffImages} 份图像差异，{update.DirtyLabels} 个影响范围标签；继续监听");
         }
-        catch (OperationCanceledException) { failure = "等待文件更新、读取超时或取消"; if (!token.IsCancellationRequested) Status("等待文件更新或读取超时；保留上次图像，下次视图变化重试"); }
-        catch (Exception ex) { failure = ex.Message; Status("本次未完成：" + ex.Message + "；下次视图变化重试"); }
+        catch (OperationCanceledException) { failure = "等待文件更新、读取超时或取消"; if (request.TriggerKind is "recordingEnd" or "recordingEndLayer") throw; if (!token.IsCancellationRequested) Status("等待文件更新或读取超时；保留上次图像，下次视图变化重试"); }
+        catch (Exception ex) { failure = ex.Message; if (request.TriggerKind is "recordingEnd" or "recordingEndLayer") throw; Status("本次未完成：" + ex.Message + "；下次视图变化重试"); }
         finally
         {
             if (!success && pendingPng is not null) SaveCapture.TryDelete(pendingPng);
@@ -284,36 +294,26 @@ internal sealed class MainWindow : Form
         var stop = _stopSource;
         try
         {
+            if(BeforeRecordingStop is { } finishEditing)await finishEditing();
             if (_host is not null)
             {
                 if (_monitor is not null) _monitor.CaptureRequestsPaused = true;
                 Status("停止接收新封包，等待已经接受的保存与差异任务…");
                 Exception? captureError = null;
-                try { await Task.WhenAll(_captureTasks); }
+                try { await Task.WhenAll(PendingCaptureTasks()); }
                 catch (Exception ex) { captureError = ex; }
                 if (_monitor is { } monitor && captureError is null)
                 {
                     Status("请求 Recognizer 结束边界，保存末尾图层并生成最后一个聚集包…");
                     try
                     {
-                        var final = await monitor.PrepareRecordingEndAsync(CancellationToken.None);
-                        if (final is not null)
-                        {
-                            Native.AllowRecorderForeground(monitor.ControlProcessId);
-                            _host.CaptureQueued(final);
-                            await HandleCaptureAsync(monitor, _clip.Text, Path.Combine(AppContext.BaseDirectory, "clip-layer-bridge.exe"),
-                                final, CancellationToken.None);
-                        }
-                        else
-                        {
-                            _host.RecordingEndFailed("recordingEndLayerOrCanvasUnconfirmed");
-                            Status("末尾图层或画布状态未确认；最后一个包将保留事件和失败原因。");
-                        }
+                        Native.AllowRecorderForeground(monitor.ControlProcessId);
+                        await RecordingEndCoordinator.RunAsync(new RecordingEndActions(this, monitor), CancellationToken.None);
                     }
                     catch (Exception ex)
                     {
                         _host.RecordingEndFailed(ex.Message);
-                        WriteLog("末尾保存未完成；以原生 footer 闭合事件包：" + ex.Message);
+                        WriteLog("末尾保存未完成；先停止原生录制，封盘完整性检查将保留可恢复文件：" + ex.Message);
                     }
                 }
                 await _host.FinishRecordingAsync(CancellationToken.None);
@@ -321,7 +321,7 @@ internal sealed class MainWindow : Form
             }
             if (stop is not null) await stop.CancelAsync();
             if (_monitorTask is not null) await _monitorTask;
-            await Task.WhenAll(_captureTasks);
+            await Task.WhenAll(PendingCaptureTasks());
             if (_host is not null)
             {
                 Status("无损压缩并校验原生事件与脏矩阵指针，封盘中…");
@@ -339,7 +339,7 @@ internal sealed class MainWindow : Form
                 if (_monitorTask is not null) await _monitorTask;
                 stop.Dispose();
             }
-            _captureTasks.Clear(); _stopSource = null; _monitor = null; _monitorTask = null;
+            lock(_captureTasks)_captureTasks.Clear(); _stopSource = null; _monitor = null; _monitorTask = null;
             _start.Enabled = true; _stop.Enabled = _host?.HasPendingSeal == true; _stopping = false;
             foreach (var control in _configurationControls) control.Enabled = true;
         }

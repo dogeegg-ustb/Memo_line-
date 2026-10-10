@@ -33,7 +33,7 @@ internal static class PreciseUndoSelector
             return Failure(layer, PlanIssueCode.NoSelection, "选区内没有画布像素。");
 
         var packets = timeline.Packets.Where(p => !p.IsRecordingBaseline && p.Layer == layer)
-            .OrderBy(p => p.TriggerTicks).ToArray();
+            .OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray();
         var covered = new PixelMask(selection.Left, selection.Top, selection.Width, selection.Height);
         var visible = new HashSet<DirtyImageKey>();
         for (int p = packets.Length - 1; p >= 0; p--)
@@ -50,25 +50,27 @@ internal static class PreciseUndoSelector
         var visibleImages = packets.SelectMany(p => p.Images).Where(i => visible.Contains(i.Key)).ToArray();
         var candidates = visibleImages.SelectMany(i => i.Events).Distinct()
             .Select(key => index.Strokes.TryGetValue(key, out var stroke) ? stroke : null)
-            .Where(s => s is not null && s.Layer == layer && s.Eligible && Intersects(s.WriteMask, selection))
-            .Select(s => s!).OrderByDescending(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToArray();
+            .Where(s => s is not null && s.Layer == layer && s.Eligible && !s.IsUndone && Intersects(s.WriteMask, selection))
+            .Select(s => s!).OrderByDescending(s => s.SessionOrder).ThenByDescending(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToArray();
         var visibleKeys = visibleImages.Select(i => i.Key).Distinct().ToArray();
         if (candidates.Length == 0)
             return new(layer, [], 0, 0, visibleKeys, [],
                 [new(PlanIssueCode.NoSelection, "选区内没有可见表层图片对应的合格笔画写入范围。")]);
 
-        var selected = candidates.Take(50).OrderBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToList();
+        var selected = candidates.Take(50).OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToList();
         int baseCount = selected.Count;
         var selectedKeys = selected.Select(s => s.Key).ToHashSet();
         var reasons = new List<PreciseUndoClosureReason>();
         var issues = new List<PlanIssue>();
         // Overlap dependencies only point to later eventIds. This ascending pass reaches the fixed
         // point: any non-base predecessor that could add a stroke has already been processed.
-        foreach (var stroke in timeline.Strokes.Where(s => s.Layer == layer).DistinctBy(s => s.Key)
-                     .OrderBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId))
+        foreach (var stroke in timeline.Strokes.Where(s => s.Layer == layer && !s.IsUndone).DistinctBy(s => s.Key)
+                     .OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId))
         {
             if (selectedKeys.Contains(stroke.Key)) continue;
-            var predecessor = selected.FirstOrDefault(s => s.BeginEventId < stroke.BeginEventId &&
+            // Only strokes drawn directly over a base selection are moved; chaining through added
+            // strokes spreads across a dense drawing and stops being a regional undo.
+            var predecessor = selected.Take(baseCount).FirstOrDefault(s => (s.SessionOrder, s.BeginEventId).CompareTo((stroke.SessionOrder, stroke.BeginEventId)) < 0 &&
                 Intersects(s.WriteMask, stroke.WriteMask));
             if (predecessor is null) continue;
             selected.Add(stroke);
@@ -79,7 +81,7 @@ internal static class PreciseUndoSelector
                 issues.Add(new(PlanIssueCode.UnreplayableEventInMatrix,
                     "叠放闭包包含无法离散重放的笔画：" + (stroke.IneligibleReason ?? "事件不合格。"), Stroke: stroke.Key));
         }
-        return new(layer, selected.OrderBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToArray(),
+        return new(layer, selected.OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToArray(),
             baseCount, candidates.Length, visibleKeys, reasons.ToArray(), issues);
     }
 

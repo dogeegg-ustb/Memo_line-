@@ -165,6 +165,10 @@ def panel_rectangles(tree: dict, client: tuple[int, int, int, int]) -> dict[str,
     color_column, color_index, color_heights = color_slots[0]
     result["色彩"] = (col_x[color_column], y + height - sum(color_heights) + sum(color_heights[:color_index]),
                       widths[color_column], color_heights[color_index])
+    # Both readers inspect the same booth; fresh pixels decide which tab is
+    # visible. The alias keeps geometry stable when the user manually changes
+    # color palettes and never treats a saved selection as live input proof.
+    result["色彩滑块"] = result["色彩"]
     if any(w < 10 or h < 10 or rx < x or ry < y or rx + w > x + width or ry + h > y + height
            for rx, ry, w, h in result.values()):
         raise ValueError("解析出的面板区域超出 CSP 客户区")

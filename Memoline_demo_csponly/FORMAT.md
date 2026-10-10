@@ -1,6 +1,6 @@
 # 集成 memoline 格式
 
-新版容器 schema 为 `memoline-csponly/v2`，继续支持 `memoline-csponly/v1`。文件扩展名为 `.memoline`，外层是 ZIP；解压后的原生机械记录仍保持 Recognizer 的原始 `MEMOLINE` 帧格式和逐字节内容。
+容器支持 `memoline-csponly/v1` 至 `v4`：v2 为无损压缩单会话，v3 增加编辑日志，v4 增加同工程历史会话。文件扩展名为 `.memoline`，外层是 ZIP；解压后的原生机械记录仍保持 Recognizer 的原始 `MEMOLINE` 帧格式和逐字节内容。
 
 ## 三部分与两份运行时流
 
@@ -20,7 +20,7 @@ index.json
 
 图像由 `asset` 记录的 base64 分块保存，不依赖额外 ZIP entry 或外部 PNG。维度升级只新增 `dimensions/<安全版本名>.jsonl`，并更新 `index.json` 的 `activeDimensionsEntry`。原始机械 entry、原始聚集 entry 和已有维度版本全部保留。
 
-v2 对完整原生流、完整聚集流和新维度版本使用 Brotli quality 11、window 24（16 MiB）无损压缩。压缩发生在封盘后处理，运行中的两份记录及其原始追加顺序保持不变。索引的 size 和 SHA256 始终针对**解压后原始字节**，fixedSha256 也不受存储编码影响；ZIP 的 `.br` entry 无需再套一层 Deflate。索引仍使用 ZIP 最大 Deflate 压缩。
+v2 对完整原生流、完整聚集流和新维度版本使用 Brotli quality 4、window 24（16 MiB）快速无损压缩，避免原 quality 11 带来的长时间封盘。旧 quality 11 文件仍可直接读取。压缩发生在封盘后处理，运行中的两份记录及其原始追加顺序保持不变。索引的 size 和 SHA256 始终针对**解压后原始字节**，fixedSha256 也不受存储编码影响；ZIP 的 `.br` entry 无需再套一层 Deflate。索引仍使用 ZIP 最大 Deflate 压缩。
 
 v1 没有 codec，直接使用原 ZIP entry；v2 允许 codec 为 null 的旧 entry 与 Brotli entry 共存，以便维度升级原样保留旧流。activeDimensionsEntry 和索引 entry 字段始终使用逻辑名。读取、校验及机械导出接口自动处理两种编码，直接解包新版 ZIP 后需要按 codec 解压 `.br`。
 
@@ -88,9 +88,11 @@ packet 至少包含：
 - `eventPointers`：这个时间窗中实际硬件事件的原生指针。
 - `dirtyMatrices`：脏矩阵、范围标签及对应图像关联。每个矩阵都有自己的 eventPointers，可以有 statePointers。
 
-正常边界是确认的画布视口变化，`boundaryKind=canvasViewportChanged`。停止录制还会生成且只生成一个 `boundaryKind=recordingEnd` 的末尾包，即使自上次封包后视口没有变化。窗口为 `(fromTicks, toTicks]`；窗前上下文另行标识。捕获任务未产生图像时仍记录固定空包，dirtyMatrices 和图像列表为空，并记录 status/reason。
+正常边界是确认的画布视口变化，`boundaryKind=canvasViewportChanged`。停止录制还会生成且只生成一个 `boundaryKind=recordingEnd` 的主末尾包，即使自上次封包后视口没有变化。窗口为 `(fromTicks, toTicks]`；窗前上下文另行标识。普通捕获任务未产生图像时记录固定空包，dirtyMatrices 和图像列表为空，并记录 status/reason。存在画布输入的正常封盘必须成功保存完整末层图像和相应脏矩阵；缺失或失败不能以空末包冒充成功。
 
-结束保存先通过 Recognizer 的 `prepareRecordingEnd` 获取原生 `recordingEndRequested` 事件。末尾图像和 manifest 使用该事件的 `triggerTicks`，`observationAppendId` 指向该原生事件。图像先完成保存和计算，末尾包等到原生 footer 写完后才追加，`toTicks` 使用原生 footer 的结束 ticks，因此正常关闭时晚到的输入或笔中断也有事件指针。没有可用接口时，仍以 footer 创建带失败原因的空末尾包；此时 `observationAppendId=0`，不能声称获得图像。
+结束保存先恢复已初始化的 CSP 目标并主动确认 CLIP、当前图层和画布视口状态，再通过 Recognizer 的 `prepareRecordingEnd` 获取原生 `recordingEndRequested` 事件。该事件在输入消费者中等待最后一个接触结束，RPC 返回前完成原生刷盘。末尾图像和 manifest 使用该事件的 `triggerTicks`，`observationAppendId` 指向该原生事件。一次保存的同一 CLIP 快照导出全部涉及图层；图像先完成保存和计算，末尾包等到原生 footer 写完后才追加，主包 `toTicks` 使用原生 footer 的结束 ticks。边界之后存在新的可能修改文档的用户输入时拒绝封盘，保留原生记录和捕获目录。没有画布输入或明确诊断用途的会话可以创建带原因的空末包；没有可用接口时不能把它当作完整绘画封盘。
+
+停止时的其他图层使用 `boundaryKind=recordingEndLayer` 副包，与主包引用同一个原生结束事件和 triggerTicks。副包的顶层机械指针全部为 `context=true`，不声明普通窗口的事件所有权；主包唯一拥有直到 footer 的尾部机械事件。每层差异起点仍是其上次独立完整快照，不能因另一个图层的普通捕获而消耗未捕获的接触。每个副包都须成功捕获并提交，才能发布包含它们的封盘。
 
 新聚集 header 的 `endPacketPolicy=nativeFooterClosure/v1` 要求包窗口从 0 连续覆盖至原生 footer，且所有硬件事件恰好属于一个包；footer 的 `lastBoundaryTicks` 必须等于原生结束 ticks。旧文件未声明该策略时继续按原规则读取，不修改其固定内容。
 
@@ -134,14 +136,22 @@ v2 的机械、聚集和维度 entry 元数据另外包含 codec；目前支持 
 
 公共核心接口为 `BundleArchive.Seal`、`Verify`、`ReadMechanical`、`ReadDimensions`、`ExtractMechanical`、`Compact` 和 `UpgradeDimensions`。ReadMechanical 通过受控临时文件调用原生 reader，逐帧返回原记录；原生 reader 自身不识别这个 ZIP 外层，独立工具请先使用 `--extract-mechanical`。
 
-## 事件编辑恢复检查点（2026-10-07）
+## 编辑记录与同工程续写（2026-10-07）
 
-容器仍为 v2，尚未实现架构中的 v3、编辑日志 entry 或编辑事务资产封装。下列新增字段属于原生帧和 watcher manifest，不表示完整编辑功能已经上线。
+v3 的可选编辑日志保存事务计划、检查点、结果与 PNG 资产；索引声明日志及每个资产的字节数和 SHA256。原生机械流和固定聚集包不因编辑而改写。
 
-原生流新增 `editBoundaryRequested`、`editTransactionBegan`、`editTransactionEnded`、`physicalInputDuringTransaction` 四种状态帧，`eventId=0`，保留实际 `appendId/ticks`。边界记录的 `data.requestId` 标识幂等请求；事务记录的 `data.transactionId` 标识事务，结束记录另含 `outcome`。物理输入告警的 `data.appendId` 指向本次输入直接写入的帧，`inputRecorded=true`；原有过滤/去重未产生输入记录时为 0，`inputRecorded=false`。`latestAppendId` 只是检测时的流追加水位，可包括解析桥同步追加的状态；与告警自身的外层 appendId 也不同。即使没有单独输入帧，物理输入仍触发告警，宿主应按 transactionId 中止执行。这些帧不会终止录制，也不写 footer。带 `extraInfo=0x4D4C5243` 的 Memoline 合成输入不进入原生流；其他外部合成键鼠保留 injected 标记。
+v4 索引新增 `projectPath`（CLIP 完整路径）和 `previousSessions[]`。根目录机械、聚集及编辑 entry 属于最新会话；先前会话保存在 `sessions/<机械流 SHA256>.memoline`，每项都是完整单会话容器，禁止再嵌套历史。顺序为会话追加顺序，校验拒绝重复原生 sessionId。所有会话各自保留原时钟和 appendId，不伪造连续的原生时间轴。
+
+宿主根据工程完整路径找到已有记录，将本次完整封盘会话原子发布到同一路径。先校验旧文件和新会话，创建并校验同目录临时容器，再检查旧文件哈希并原子替换；失败保留旧记录和本次输入。`ExtractProjectSessions` 可按顺序提取全部单会话容器，`Verify.NativeSessionCount` 给出会话数。`ReadMechanical`、机械导出、维度与编辑读取仍默认根目录的最新会话；跨会话编辑索引尚未提供。
+
+编辑边界聚集包包含 `boundaryKind="editBoundary"` 与完整画布资产；其中机械指针标为上下文，避免与普通聚集包重复声明硬件事件所有权。
+
+原生流新增 `editBoundaryRequested`、`editTransactionBegan`、`editTransactionEnded`、`physicalInputDuringTransaction` 四种控制状态帧，`eventId=0`，保留实际 `appendId/ticks`。边界记录的 `data.requestId` 标识幂等请求；事务记录的 `data.transactionId` 标识事务，结束记录另含 `outcome`。事务期间物理输入仅产生打断告警，不进入绘画历史，告警的 `data.appendId=0`、`inputRecorded=false`；`latestAppendId` 为检测时原生流追加水位。宿主收到相同 transactionId 的告警须中止执行。这些帧不会终止录制，也不写 footer。
+
+事务期间的自动输入和状态不追加到机械绘画历史；OCR 等结果仍通过诊断/实时接口供复现校验。延迟返回但采集时刻位于事务区间的状态也排除。成功结束后仅追加一次 `editingActionCompleted`，`data.editKind` 为 `eventEditing` 或 `preciseUndo`，`displayName` 为“事件编辑”或“精确撤销”，`changes[]` 保存目标会话/笔接触追加 ID、删除及参数修改。相同事务的相同记录请求幂等，不同内容拒绝。事务结束后用户 Ctrl+Z 与普通绘画输入重新正常记录。
 
 新 watcher manifest 保持 `schema=dirty-matrix-image-diff/v1`，新增 `comparison=fullResolution/v2`：搜索预测不限制像素比较范围，所有格子沿用 `Different` 判据逐像素比较；两侧都完全透明时忽略隐藏 RGB，任一侧非零则比较全部 RGBA。`images[]` 中每张图片才是编辑用的脏矩阵；`afterImage`、`nowImage/image`、`maskImage`、`bounds`、`labelIds` 共同描述它。mask 标记处整体替换 RGBA，包括 alpha=0 和隐藏 RGB。
 
-快照 descriptor 带 `sessionId`、`generation`、图层 UUID、尺寸和 `baselineSource`。可信来源为 `recordingStart`、`createdEmpty`、`reproduction`；普通首次捕获不自动获得录制起点的可信性。历史链需检查相邻 `after.id == previous.now.id`、图层身份、代次、会话和尺寸；旧的粗略比较仍可读取，但不能声明可编辑。复现来源要求显式设置，尚未接入宿主编辑事务。
+快照 descriptor 带 `sessionId`、`generation`、图层 UUID、尺寸和 `baselineSource`。可信来源为 `recordingStart`、`createdEmpty`、`reproduction`；普通首次捕获不自动获得录制起点的可信性。历史链需检查相邻 `after.id == previous.now.id`、图层身份、代次、会话和尺寸；旧的粗略比较仍可读取，但不能声明可编辑。宿主在安装并捕获最终复现层后显式注册 `reproduction` baseline。
 
-离线 `LiveSessionReader` 读取刷盘后的指定 appendId 前缀，不要求 footer；包、图像路径、mask 数量和双向标签引用有独立校验。PNG 必须有合法首个 IHDR、正确尺寸、8 位 RGBA 色彩类型及合法压缩/过滤/交错方法，拒绝灰度、RGB 和索引图被解码器隐式转换。全部状态新鲜度及编辑闭包规则仍需补齐，见 [恢复交接](docs/architecture/RECOVERY_HANDOFF.md)。
+`LiveSessionReader` 读取刷盘后的指定 appendId 前缀，不要求 footer；包、图像路径、mask 数量和双向标签引用有独立校验。PNG 必须有合法首个 IHDR、正确尺寸、8 位 RGBA 色彩类型及合法压缩/过滤/交错方法，拒绝灰度、RGB 和索引图被解码器隐式转换。最新接入状态及实机限制见 [整合说明](docs/architecture/RGB_LIVE_EDITING_CONTINUATION.md)。

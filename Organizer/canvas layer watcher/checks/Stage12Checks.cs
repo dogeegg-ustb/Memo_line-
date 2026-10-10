@@ -119,7 +119,9 @@ internal static class Stage12Checks
         }
         foreach (var request in boundary) state.Complete(request, true);
         var next = state.ReserveEditBoundary("boundary-2", available, 20);
-        check(next.Count == 1 && next[0].LayerName == "C", "Completed boundary consumes captured historical layer input");
+        check(next.Count == 3 && next.Select(r=>r.LayerName).ToHashSet().SetEquals(["A","B","C"]),
+            "A fresh edit boundary includes previously captured layers so their dirty images remain editable across layers");
+        check(next.All(r=>r.Operations.Length==0),"Repeated boundaries must not attribute already captured contacts to new packets");
         foreach (var request in next) state.Complete(request, true);
         using var coordinator = new CaptureCoordinator();
         using var first = await coordinator.EnterAsync(CancellationToken.None);

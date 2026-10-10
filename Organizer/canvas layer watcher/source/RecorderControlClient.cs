@@ -23,7 +23,7 @@ internal sealed class RecorderControlClient(string pipeName, Action<string>? dia
         diagnostic?.Invoke($"控制请求已发送：pipe={pipeName}，{line}");
         string response = await reader.ReadLineAsync(deadline.Token) ?? throw new IOException("Recognizer 控制接口未返回响应");
         diagnostic?.Invoke("控制接口响应：" + response);
-        if (response.Length > 65536) throw new InvalidDataException("Recognizer 控制响应超过大小上限");
+        if (response.Length > 4 * 1024 * 1024) throw new InvalidDataException("Recognizer 控制响应超过大小上限");
         using var document = JsonDocument.Parse(response);
         if (J.Get(document.RootElement, "success").ValueKind != JsonValueKind.True)
             throw new IOException("Recognizer 控制请求失败：" + (J.Text(document.RootElement, "error") ?? "响应未确认 success"));
@@ -31,8 +31,57 @@ internal sealed class RecorderControlClient(string pipeName, Action<string>? dia
     }
 
     public Task<JsonElement> StatusAsync(CancellationToken token) => SendAsync(new { command = "getInputControlStatus" }, token);
+    public async Task WaitForRecordingReadyAsync(string sessionId, CancellationToken token)
+    {
+        while (true)
+        {
+            var response = await SendAsync(new { command = "getRecordingStatus" }, token);
+            if (J.Text(response, "sessionId") != sessionId)
+                throw new InvalidDataException("等待初始化期间 Recognizer 录制会话已改变");
+            if (J.Get(response, "inputCaptureAvailable").ValueKind != JsonValueKind.True)
+                throw new InvalidDataException("Recognizer 当前会话缺少输入捕获接口，请重新构建程序。");
+            var ready = J.Get(response, "recordingReady").ValueKind;
+            if (ready == JsonValueKind.True) return;
+            if (ready != JsonValueKind.False)
+                throw new InvalidDataException("Recognizer 未提供有效的录制就绪状态");
+            await Task.Delay(100, token);
+        }
+    }
     public Task<JsonElement> PrepareRecordingEndAsync(CancellationToken token)
-        => SendAsync(new { command = "prepareRecordingEnd" }, token);
+        => SendAsync(new { command = "prepareRecordingEnd" }, token, TimeSpan.FromSeconds(35));
+    public async Task<IReadOnlyDictionary<string, JsonElement>> RequestStatesAsync(string sessionId,
+        string[] modules, CancellationToken token, string? saveId = null)
+    {
+        string requestId = "recording-end-state-" + Guid.NewGuid().ToString("N");
+        var response = await SendAsync(new { command = "requestStates", requestId, sessionId, modules, saveId },
+            token, TimeSpan.FromSeconds(35));
+        return ParseStates(response, sessionId, requestId, modules);
+    }
+    internal static IReadOnlyDictionary<string, JsonElement> ParseStates(JsonElement response, string sessionId,
+        string requestId, string[] modules)
+    {
+        var results = J.Get(response, "results");
+        long requestedTicks = J.Tick(response, "requestedTicks", -1);
+        if (J.Get(response, "success").ValueKind != JsonValueKind.True || J.Text(response, "sessionId") != sessionId
+            || J.Text(response, "requestId") != requestId || requestedTicks < 0 || results.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("末尾状态请求的会话或请求身份不一致。");
+        var values = results.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
+        if (values.Count != modules.Length || modules.Any(module => !values.ContainsKey(module)))
+            throw new InvalidDataException("末尾状态请求未返回全部模块。");
+        foreach (string module in modules)
+        {
+            var value = values[module];
+            long observedTicks = J.Tick(J.Get(value, "evidence"), module == "clipState" ? "observedTicks" : "capturedTicks", -1);
+            if (!J.Confirmed(value) || observedTicks < requestedTicks)
+                throw new InvalidDataException($"末尾的 {module} 未取得本次已确认状态：" + J.Text(value, "error"));
+        }
+        if (values.TryGetValue("canvasViewState", out var view) && View.Parse(view) is null)
+            throw new InvalidDataException("末尾画布视口矩阵不完整。");
+        if (values.TryGetValue("currentLayerState", out var layer)
+            && (J.Get(layer, "state").ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(J.Get(layer, "state").GetString())))
+            throw new InvalidDataException("末尾当前图层名称未确认。");
+        return values;
+    }
     public Task<JsonElement> PrepareEditBoundaryAsync(string requestId, CancellationToken token)
         => SendAsync(new { command = "prepareEditBoundary", requestId }, token, TimeSpan.FromSeconds(35));
     public Task<JsonElement> BeginEditTransactionAsync(string transactionId, CancellationToken token)

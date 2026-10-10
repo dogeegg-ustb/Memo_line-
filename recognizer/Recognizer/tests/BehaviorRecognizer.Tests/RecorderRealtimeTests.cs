@@ -289,8 +289,9 @@ public class RecorderRealtimeTests
     [Fact]
     public void TopicSelectionRejectsTyposAndExpandsCores()
     {
-        Assert.Equal(6, RecorderRealtimeTopics.Expand(["cores"]).Length);
-        Assert.Equal(13, RecorderRealtimeTopics.Expand(["all", "keyboard"]).Length);
+        Assert.Equal(7, RecorderRealtimeTopics.Expand(["cores"]).Length);
+        Assert.Equal(14, RecorderRealtimeTopics.Expand(["all", "keyboard"]).Length);
+        Assert.Contains("core.colorInputState",RecorderRealtimeTopics.Expand(["cores"]));
         Assert.Equal(new[] { "shortcuts", "layers", "layerstage" }, RecorderRealtimeTopics.Expand(["shortcuts", "layers", "layerstage", "shortcuts"]));
         Assert.Throws<ArgumentException>(() => RecorderRealtimeTopics.Expand(["core.typo"]));
         Assert.Throws<ArgumentException>(() => RecorderRealtimeTopics.Expand([]));

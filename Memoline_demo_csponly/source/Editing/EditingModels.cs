@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using PacketReplay;
 
 namespace MemolineDemo.Editing;
 
@@ -29,6 +31,8 @@ public readonly record struct DirtyImageKey(LayerKey Layer, string PacketId, str
 public sealed record EventChange(bool Delete = false, string? BrushName = null,
     IReadOnlyDictionary<string, double>? Numbers = null)
 {
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingDefault)]
+    public JsonElement ReplacementBrushState { get; init; }
     public IReadOnlyDictionary<string, double> NumberValues { get; } =
         Numbers ?? ImmutableDictionary<string, double>.Empty;
 }
@@ -72,9 +76,20 @@ public sealed class PixelMask : IEquatable<PixelMask>
 
     public IEnumerable<(int X, int Y)> Pixels()
     {
-        for (int y = 0; y < Height; y++)
-            for (int x = 0; x < Width; x++)
-                if (Contains(Left + x, Top + y)) yield return (Left + x, Top + y);
+        // Same row-major order as a per-pixel scan, but empty 64-pixel words are skipped:
+        // canvas-sized masks are mostly empty.
+        if (Count == 0) yield break;
+        for (int w = 0; w < _words.Length; w++)
+        {
+            ulong word = _words[w];
+            while (word != 0)
+            {
+                int bit = System.Numerics.BitOperations.TrailingZeroCount(word);
+                word &= word - 1;
+                long index = ((long)w << 6) + bit;
+                yield return (Left + (int)(index % Width), Top + (int)(index / Width));
+            }
+        }
     }
 
     public PixelMask Clone()
@@ -88,6 +103,24 @@ public sealed class PixelMask : IEquatable<PixelMask>
     public PixelMask Except(PixelMask other) => Combine(other, static (a, b) => a & ~b);
     public PixelMask Or(PixelMask other) => Union(other);
     public PixelMask And(PixelMask other) => Intersect(other);
+
+    public bool Intersects(PixelMask other)
+    {
+        if (IsEmpty || other.IsEmpty) return false;
+        if (Left == other.Left && Top == other.Top && Width == other.Width && Height == other.Height)
+        {
+            for (int i = 0; i < _words.Length; i++)
+                if ((_words[i] & other._words[i]) != 0) return true;
+            return false;
+        }
+        int left = Math.Max(Left, other.Left), top = Math.Max(Top, other.Top);
+        long right = Math.Min((long)Left + Width, (long)other.Left + other.Width);
+        long bottom = Math.Min((long)Top + Height, (long)other.Top + other.Height);
+        for (int y = top; y < bottom; y++)
+            for (int x = left; x < right; x++)
+                if (Contains(x, y) && other.Contains(x, y)) return true;
+        return false;
+    }
 
     public PixelMask Add(PixelMask other) => UnionInPlace(other);
     public PixelMask Subtract(PixelMask other) => ExceptInPlace(other);
@@ -164,6 +197,8 @@ public sealed record DirtyImage(
     string? OperationId = null)
 {
     public IReadOnlyList<string> LabelIds { get; init; } = [];
+    // Endpoint pixels do not prove the read or write footprint of missing operations.
+    public bool UnknownHistoryInterval { get; init; }
     public PixelMask W { get; init; } = new PixelMask(Mask.Left, Mask.Top, Mask.Width, Mask.Height);
     public PixelMask Probe { get; init; } = new PixelMask(Mask.Left, Mask.Top, Mask.Width, Mask.Height);
     public PixelMask Impact { get; init; } = new PixelMask(Mask.Left, Mask.Top, Mask.Width, Mask.Height);
@@ -183,6 +218,8 @@ public sealed record LayerPacket(string PacketId, LayerKey Layer, long TriggerTi
     string? BaselineSource = null, int CanvasWidth = 0, int CanvasHeight = 0,
     bool FullResolution = true)
 {
+    public int SessionOrder { get; init; }
+    public LayerKey? SourceLayer { get; init; }
     public IReadOnlyList<LabelEvidence> Labels { get; init; } = [];
     public JsonElement AfterDescriptor { get; init; }
     public JsonElement NowDescriptor { get; init; }
@@ -193,6 +230,9 @@ internal sealed record EditableStroke(EditableStrokeKey Key, ulong OperationId, 
     string? BrushName, LayerKey Layer, bool IsCausal, bool Eligible = true,
     string? IneligibleReason = null, IReadOnlyDictionary<string, double>? BrushNumbers = null)
 {
+    internal int SessionOrder { get; init; }
+    internal LayerKey? SourceLayer { get; init; }
+    internal bool IsUndone { get; init; }
     public ulong BeginEventId { get; init; }
     public JsonElement BrushState { get; init; }
     public BrushClassification? Classification { get; init; }
@@ -206,15 +246,26 @@ internal sealed record EditableStroke(EditableStrokeKey Key, ulong OperationId, 
     public DirtyMatrix.Core.CoverageSettings? FrozenCoverageSettings { get; init; }
 }
 
+internal sealed record UndoRedoEvidence(ulong InputAppendId,string Command,bool Ambiguous)
+{
+    internal int SessionOrder { get; init; }
+}
+internal sealed record UndoCheckpoint(string PacketId, ImageRgba Seed, ImageRgba Expected,
+    IReadOnlyList<EditableStrokeKey> Events);
 internal sealed record LayerIndex(LayerKey Layer, IReadOnlyList<LayerPacket> Packets,
     IReadOnlyList<EditableStroke> Strokes, bool ChainValid, IReadOnlyList<PlanIssue> Issues,
-    ImageRgba? Baseline = null, ImageRgba? Current = null);
+    ImageRgba? Baseline = null, ImageRgba? Current = null)
+{
+    internal IReadOnlyList<UndoRedoEvidence> UndoRedo { get; init; } = [];
+    internal IReadOnlyList<UndoCheckpoint> UndoCheckpoints { get; init; } = [];
+}
 
 internal sealed record EditIndex(IReadOnlyDictionary<LayerKey, LayerIndex> Layers,
     IReadOnlyDictionary<EditableStrokeKey, EditableStroke> Strokes,
     IReadOnlyDictionary<DirtyImageKey, DirtyImage> Images,
     IReadOnlyList<PlanIssue> Issues)
 {
+    internal NativeUndoTimelineResult? UndoTimeline { get; init; }
     public bool IsValid => Issues.Count == 0 && Layers.Values.All(l => l.ChainValid);
     public LayerIndex ForLayer(LayerKey key) => Layers.TryGetValue(key, out var layer)
         ? layer : throw new KeyNotFoundException("找不到编辑图层 " + key);
@@ -235,4 +286,16 @@ internal sealed record SessionSnapshot(string MechanicalPath, string SessionId, 
     public IReadOnlyList<PacketReplay.HistorySlot> History { get; init; } = [];
 }
 
-internal sealed record EditSession(SessionSnapshot LiveView, EditIndex Index, LayerKey? CurrentLayer);
+internal sealed record EditSession(SessionSnapshot LiveView, EditIndex Index, LayerKey? CurrentLayer)
+{
+    internal IReadOnlyDictionary<string, SessionSnapshot> Sources { get; init; } =
+        ImmutableDictionary<string, SessionSnapshot>.Empty;
+    internal SessionSnapshot Source(string sessionId) => sessionId == LiveView.SessionId ? LiveView :
+        Sources.TryGetValue(sessionId, out var source) ? source :
+        throw new InvalidDataException("历史笔画缺少对应的原生会话：" + sessionId);
+    internal JsonElement CanvasViewEvidence { get; init; }
+    internal IReadOnlyList<string> BrushChoices { get; init; } = [];
+    internal int? VerifiedUndoCapacity { get; init; }
+    internal JsonElement LiveBrushEvidence { get; init; }
+    internal ShortcutConfiguration? Shortcuts { get; init; }
+}

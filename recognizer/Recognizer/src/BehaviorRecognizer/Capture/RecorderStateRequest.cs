@@ -3,14 +3,20 @@ using System.Text.Json;
 
 namespace BehaviorRecognizer.Capture;
 
-public sealed record RecorderStateRequest(string RequestId, string SessionId, string[] Modules, string? SaveId = null);
+public sealed record RecorderStateRequest(string RequestId, string SessionId, string[] Modules, string? SaveId = null,
+    int[]? BrushPanelRoi = null)
+{
+    public bool HasValidPanelSelection() => BrushPanelRoi is null ||
+        Modules.Contains("brushState") && BrushPanelRoi is [var x, var y, >= 8 and <= 8192, >= 8 and <= 8192] &&
+        (long)x + BrushPanelRoi[2] <= int.MaxValue && (long)y + BrushPanelRoi[3] <= int.MaxValue;
+}
 public sealed record RecorderStateResponse(bool Success, string RequestId, string SessionId, long RequestedTicks,
     Dictionary<string, JsonElement> Results, string? Error = null);
 
 /// <summary>Collects only results belonging to an explicitly requested capture package.</summary>
 public sealed class RecorderStateRequests
 {
-    public static readonly string[] Modules = ["brushState", "subtoolState", "currentLayerState", "colorState", "canvasViewState",
+    public static readonly string[] Modules = ["brushState", "subtoolState", "currentLayerState", "colorState", "colorInputState", "canvasViewState",
         "clipState", "shortcuts", "initializationConfiguration"];
     private sealed class Pending(RecorderStateRequest request, long ticks)
     {

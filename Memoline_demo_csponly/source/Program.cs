@@ -26,15 +26,25 @@ internal static class Program
             }
             if (args.Length > 0 && args[0] == "--subscribe")
                 return SubscribeAsync(args).GetAwaiter().GetResult();
+            if (args.Length > 0 && args[0] == "--offline-edit")
+                return MemolineDemo.Editing.OfflineEditProbe.Run(args);
             if (args.Length > 0 && args[0] is "--verify" or "--seal" or "--extract-mechanical" or "--upgrade-dimensions" or "--compact")
                 return Command(args);
             ApplicationConfiguration.Initialize();
-            var controller = new DemoController(renderOnly: args.Length == 2 && args[0] == "--smoke");
+            var controller = new DemoController(renderOnly: args.Length == 2 && args[0] is "--smoke" or "--smoke-editing");
             try
             {
-                using var window = new MainWindow(args, controller);
-                if (args.Length == 2 && args[0] == "--smoke") window.RenderSmoke(Path.GetFullPath(args[1]));
-                else Application.Run(window);
+                if (args.Length == 2 && args[0] == "--smoke")
+                {
+                    using var window = new MainWindow(args, controller);
+                    window.RenderSmoke(Path.GetFullPath(args[1]));
+                }
+                else if(args.Length==2 && args[0]=="--smoke-editing")
+                {
+                    using var panel=new EditingPanel(new DemoEditingHost(controller));
+                    panel.RenderSmoke(Path.GetFullPath(args[1]));
+                }
+                else Application.Run(new DemoApplicationContext(args, controller));
             }
             finally { Task.Run(() => controller.DisposeAsync().AsTask()).GetAwaiter().GetResult(); }
             return 0;

@@ -76,16 +76,133 @@ public static class Footprints
         return result;
     }
 
+    // Historical projects can contain thousands of contacts on a large canvas.
+    // Keep their exact pixel footprints within the observed geometry's bounds.
+    internal static PixelMask RasterizeCoverageBounded(IEnumerable<LabelEvidence> labels, int width, int height)
+    {
+        var capsules = labels.SelectMany(l => l.Segments.Select(s =>
+            (A: (s.StartX, s.StartY), B: (s.EndX, s.EndY), Radius: l.Radius))).ToArray();
+        var result = CapsuleBounds(capsules, width, height);
+        FillCapsules(result, capsules);
+        return result;
+    }
+
+    internal static PixelMask RasterizeCenterlineBounded(IReadOnlyList<(double X, double Y)> points, int width, int height)
+    {
+        var capsules = points.Select((p,i) => (A: i == 0 ? p : points[i-1], B: p, Radius: .75)).ToArray();
+        var result = CapsuleBounds(capsules, width, height);
+        FillCapsules(result, capsules);
+        return result;
+    }
+
+    // Consecutive samples overlap almost entirely, so filling capsules one by one sets the same
+    // pixels hundreds of times. Merge every capsule's row intervals first and set each pixel once.
+    private static void FillCapsules(PixelMask result, ((double X, double Y) A, (double X, double Y) B, double Radius)[] capsules)
+    {
+        if (result.Width == 0 || result.Height == 0) return;
+        var rows = new List<(int Start, int End)>?[result.Height];
+        foreach (var (a, b, radius) in capsules)
+        {
+            if (!double.IsFinite(a.X) || !double.IsFinite(a.Y) || !double.IsFinite(b.X) || !double.IsFinite(b.Y) || !double.IsFinite(radius) || radius < 0)
+                throw new InvalidDataException("笔迹胶囊几何无效。");
+            int left = (int)Math.Clamp(Math.Floor(Math.Min(a.X, b.X) - radius), result.Left, result.Left + result.Width);
+            int top = (int)Math.Clamp(Math.Floor(Math.Min(a.Y, b.Y) - radius), result.Top, result.Top + result.Height);
+            int right = (int)Math.Clamp(Math.Ceiling(Math.Max(a.X, b.X) + radius), result.Left, result.Left + result.Width);
+            int bottom = (int)Math.Clamp(Math.Ceiling(Math.Max(a.Y, b.Y) + radius), result.Top, result.Top + result.Height);
+            var start = new PointD(a.X, a.Y); var end = new PointD(b.X, b.Y);
+            for (int y = top; y < bottom; y++)
+            {
+                if (!RowSpan(start, end, radius, y + .5, out double lo, out double hi)) continue;
+                int x0 = Math.Max(left, (int)Math.Ceiling(lo - .5) - 1), x1 = Math.Min(right - 1, (int)Math.Floor(hi - .5) + 1);
+                while (x0 <= x1 && DistanceToSegment(new(x0 + .5, y + .5), start, end) > radius) x0++;
+                while (x1 >= x0 && DistanceToSegment(new(x1 + .5, y + .5), start, end) > radius) x1--;
+                if (x0 <= x1) (rows[y - result.Top] ??= []).Add((x0, x1));
+            }
+        }
+        for (int row = 0; row < rows.Length; row++)
+        {
+            if (rows[row] is not { } spans) continue;
+            spans.Sort();
+            int y = result.Top + row, filled = int.MinValue;
+            foreach (var (s, e) in spans)
+                for (int x = Math.Max(s, filled + 1); x <= e; x++) { result.Set(x, y); filled = x; }
+        }
+    }
+
+    internal static PixelMask UnionBounded(IEnumerable<PixelMask> masks)
+    {
+        var items = masks.Where(m => !m.IsEmpty).ToArray();
+        if (items.Length == 0) return new(0,0);
+        int left=items.Min(m=>m.Left), top=items.Min(m=>m.Top);
+        var result=new PixelMask(left,top,items.Max(m=>m.Left+m.Width)-left,items.Max(m=>m.Top+m.Height)-top);
+        foreach(var mask in items) foreach(var (x,y) in mask.Pixels()) result.Set(x,y);
+        return result;
+    }
+
+    private static PixelMask CapsuleBounds(((double X,double Y) A,(double X,double Y) B,double Radius)[] capsules,int width,int height)
+    {
+        if(capsules.Length==0)return new(0,0);
+        if(capsules.Any(c=>!double.IsFinite(c.A.X)||!double.IsFinite(c.A.Y)||!double.IsFinite(c.B.X)||!double.IsFinite(c.B.Y)||!double.IsFinite(c.Radius)||c.Radius<0))
+            throw new InvalidDataException("笔迹胶囊几何无效。");
+        int left=(int)Math.Clamp(Math.Floor(capsules.Min(c=>Math.Min(c.A.X,c.B.X)-c.Radius)),0,width);
+        int top=(int)Math.Clamp(Math.Floor(capsules.Min(c=>Math.Min(c.A.Y,c.B.Y)-c.Radius)),0,height);
+        int right=(int)Math.Clamp(Math.Ceiling(capsules.Max(c=>Math.Max(c.A.X,c.B.X)+c.Radius)),0,width);
+        int bottom=(int)Math.Clamp(Math.Ceiling(capsules.Max(c=>Math.Max(c.A.Y,c.B.Y)+c.Radius)),0,height);
+        return new(left,top,right-left,bottom-top);
+    }
+
     private static void AddCapsule(PixelMask result, (double X, double Y) a, (double X, double Y) b, double radius)
     {
         if (!double.IsFinite(a.X) || !double.IsFinite(a.Y) || !double.IsFinite(b.X) || !double.IsFinite(b.Y) || !double.IsFinite(radius) || radius < 0)
             throw new InvalidDataException("笔迹胶囊几何无效。");
-        int left = (int)Math.Clamp(Math.Floor(Math.Min(a.X, b.X) - radius), 0, result.Width);
-        int top = (int)Math.Clamp(Math.Floor(Math.Min(a.Y, b.Y) - radius), 0, result.Height);
-        int right = (int)Math.Clamp(Math.Ceiling(Math.Max(a.X, b.X) + radius), 0, result.Width);
-        int bottom = (int)Math.Clamp(Math.Ceiling(Math.Max(a.Y, b.Y) + radius), 0, result.Height);
-        for (int y = top; y < bottom; y++) for (int x = left; x < right; x++)
-            if (DistanceToSegment(new(x + .5, y + .5), new(a.X, a.Y), new(b.X, b.Y)) <= radius) result.Set(x, y);
+        int left = (int)Math.Clamp(Math.Floor(Math.Min(a.X, b.X) - radius), result.Left, result.Left+result.Width);
+        int top = (int)Math.Clamp(Math.Floor(Math.Min(a.Y, b.Y) - radius), result.Top, result.Top+result.Height);
+        int right = (int)Math.Clamp(Math.Ceiling(Math.Max(a.X, b.X) + radius), result.Left, result.Left+result.Width);
+        int bottom = (int)Math.Clamp(Math.Ceiling(Math.Max(a.Y, b.Y) + radius), result.Top, result.Top+result.Height);
+        var start = new PointD(a.X, a.Y); var end = new PointD(b.X, b.Y);
+        for (int y = top; y < bottom; y++)
+        {
+            // A capsule is convex, so one row of pixel centres meets it in a single interval.
+            // Solve that interval, then confirm its edges with the exact distance test.
+            if (!RowSpan(start, end, radius, y + .5, out double lo, out double hi)) continue;
+            int x0 = Math.Max(left, (int)Math.Ceiling(lo - .5) - 1), x1 = Math.Min(right - 1, (int)Math.Floor(hi - .5) + 1);
+            while (x0 <= x1 && DistanceToSegment(new(x0 + .5, y + .5), start, end) > radius) x0++;
+            while (x1 >= x0 && DistanceToSegment(new(x1 + .5, y + .5), start, end) > radius) x1--;
+            for (int x = x0; x <= x1; x++) result.Set(x, y);
+        }
+    }
+
+    private static bool RowSpan(PointD a, PointD b, double r, double y, out double lo, out double hi)
+    {
+        double min = double.PositiveInfinity, max = double.NegativeInfinity;
+        void Disk(PointD c)
+        {
+            double dy = y - c.Y, k = r * r - dy * dy;
+            if (k < 0) return;
+            double h = Math.Sqrt(k); min = Math.Min(min, c.X - h); max = Math.Max(max, c.X + h);
+        }
+        Disk(a); Disk(b);
+        double dx = b.X - a.X, dyy = b.Y - a.Y, length = Math.Sqrt(dx * dx + dyy * dyy);
+        if (length > double.Epsilon)
+        {
+            // Band: |cross(d, p-a)| <= r*L and 0 <= dot(d, p-a) <= L², both linear in x for a fixed row.
+            double bandLo = double.NegativeInfinity, bandHi = double.PositiveInfinity;
+            bool Clip(double coefficient, double constant, double min, double max)
+            {
+                // min <= coefficient*x + constant <= max
+                if (Math.Abs(coefficient) < 1e-12) return constant >= min && constant <= max;
+                double p = (min - constant) / coefficient, q = (max - constant) / coefficient;
+                bandLo = Math.Max(bandLo, Math.Min(p, q)); bandHi = Math.Min(bandHi, Math.Max(p, q));
+                return true;
+            }
+            double ry = y - a.Y;
+            // cross = dx*ry - dyy*(x - a.X); dot = dx*(x - a.X) + dyy*ry
+            if (Clip(-dyy, dx * ry + dyy * a.X, -r * length, r * length) &&
+                Clip(dx, dyy * ry - dx * a.X, 0, length * length) && bandLo <= bandHi)
+            { min = Math.Min(min, bandLo); max = Math.Max(max, bandHi); }
+        }
+        lo = min; hi = max;
+        return lo <= hi;
     }
 
     public static (double X, double Y) ScreenToCanvas(double x, double y, CanvasViewSnapshot view)

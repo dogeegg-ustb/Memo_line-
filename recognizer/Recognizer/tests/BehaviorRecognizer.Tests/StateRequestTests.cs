@@ -8,6 +8,16 @@ namespace BehaviorRecognizer.Tests;
 
 public sealed partial class InputControlTests
 {
+    [Theory]
+    [InlineData(-300,40,240,360,true)]
+    [InlineData(0,0,0,20,false)]
+    [InlineData(0,0,8193,20,false)]
+    [InlineData(2147483647,0,20,20,false)]
+    public void BrushScreenshotSelectionChecksPhysicalRegion(int x,int y,int w,int h,bool valid)
+    {
+        Assert.Equal(valid,new RecorderStateRequest("r","s",["brushState"],BrushPanelRoi:[x,y,w,h]).HasValidPanelSelection());
+        Assert.False(new RecorderStateRequest("r","s",["colorState"],BrushPanelRoi:[x,y,w,h]).HasValidPanelSelection());
+    }
     [Fact]
     public async Task StateRequestsCollectOnlyTheRequestedPackageAndReturnFullPayloads()
     {
@@ -71,13 +81,18 @@ public sealed partial class InputControlTests
         Assert.True(valid.GetProperty("success").GetBoolean());
         Assert.Equal("request", valid.GetProperty("requestId").GetString());
         Assert.Equal(2, valid.GetProperty("results").EnumerateObject().Count());
+        var selected=await Query(new {command="requestStates",sessionId=session.Writer.SessionId,requestId="selected",
+            modules=new[]{"brushState"},brushPanelRoi=new[]{-300,40,240,360}});
+        Assert.True(selected.GetProperty("success").GetBoolean());
         foreach (var request in new object[] {
             new { command = "requestStates", sessionId = "other", requestId = "r", modules = new[] { "brushState" } },
             new { command = "requestStates", sessionId = session.Writer.SessionId, requestId = "r", modules = new[] { "invalid" } },
             new { command = "requestStates", sessionId = session.Writer.SessionId, requestId = "r", modules = new[] { "brushState", "brushState" } },
-            new { command = "requestStates", sessionId = session.Writer.SessionId, requestId = "r", modules = new[] { "clipState" }, saveId = "../outside" } })
+            new { command = "requestStates", sessionId = session.Writer.SessionId, requestId = "r", modules = new[] { "clipState" }, saveId = "../outside" },
+            new { command = "requestStates", sessionId = session.Writer.SessionId, requestId = "r", modules = new[] { "brushState" }, brushPanelRoi=new[]{0,0,0,20} },
+            new { command = "requestStates", sessionId = session.Writer.SessionId, requestId = "r", modules = new[] { "colorState" }, brushPanelRoi=new[]{0,0,20,20} } })
             Assert.False((await Query(request)).GetProperty("success").GetBoolean());
-        Assert.Equal(1, calls);
+        Assert.Equal(2, calls);
         Assert.Equal(0, session.Backend.Dispatches);
         Assert.Empty(session.Backend.Replayed);
     }

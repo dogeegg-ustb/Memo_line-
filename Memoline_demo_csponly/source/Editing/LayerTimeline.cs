@@ -8,7 +8,7 @@ public sealed class LayerTimeline
     public LayerTimeline(IReadOnlyList<LayerPacket> packets, ImageRgba current)
     {
         current.Validate();
-        _packets = packets.Where(p => !p.IsRecordingBaseline).OrderBy(p => p.TriggerTicks).ToArray();
+        _packets = packets.Where(p => !p.IsRecordingBaseline).OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray();
         _current = current;
         foreach (var packet in _packets) ImageCompositor.ValidateGroup(packet.Images, current.Width, current.Height);
     }

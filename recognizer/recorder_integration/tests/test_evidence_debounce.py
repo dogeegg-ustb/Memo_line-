@@ -14,7 +14,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "recorder_integration"),str(ROOT),str(ROOT.parent / "CSP_Shortcut_Manager")]
-from catalog import Catalog, BRUSH, COLOR, CANVAS, NAVIGATOR, LAYERS
+from catalog import Catalog, BRUSH, COLOR, COLOR_INPUT, CANVAS, NAVIGATOR, LAYERS
 from engine import UpdateEngine
 from pipeline import Pipeline, CANVAS_FRAME
 from runtime import Runtime
@@ -138,7 +138,7 @@ class EvidenceDebounceTests(unittest.TestCase):
         self.app.flush_pending_captures()
         self.submit()
         requests = self.captures()
-        self.assertEqual([r[0] for r in requests],[{COLOR}])
+        self.assertEqual([r[0] for r in requests],[{COLOR,COLOR_INPUT}])
         self.assertEqual(self.pipe._job_action(self.job(COLOR,color_token,"color")),"analyze")
         self.assertIn(BRUSH,self.app.pending_captures)
 

@@ -10,6 +10,26 @@ public sealed partial class UnifiedInputCapture
     private readonly List<PendingEditBoundary> _editBoundaries = [];
     private readonly Dictionary<string, MemolineEvent> _completedBoundaries = new(StringComparer.Ordinal);
     private readonly Dictionary<string, MemolineEvent> _completedTransactions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, MemolineEvent> _editingActions = new(StringComparer.Ordinal);
+    public Task<MemolineEvent> RecordEditingActionAsync(string transactionId,string kind,System.Text.Json.JsonElement changes,CancellationToken token)
+        => RunControlAsync(() =>
+        {
+            lock (_sync)
+            {
+                if (_editingActions.TryGetValue(transactionId,out var existing))
+                {
+                    if(existing.Data.GetProperty("editKind").GetString()!=kind || existing.Data.GetProperty("changes").GetRawText()!=changes.GetRawText())
+                        throw new InvalidOperationException("Editing action identity was already used with different content.");
+                    return Task.FromResult(existing);
+                }
+                if (_editTransactionId is not null || !_completedTransactions.TryGetValue(transactionId,out var ended) ||
+                    ended.Data.GetProperty("outcome").GetString()!="executed" || kind is not ("eventEditing" or "preciseUndo") || changes.ValueKind!=System.Text.Json.JsonValueKind.Array)
+                    throw new InvalidOperationException("Editing action requires one successfully completed native transaction.");
+                var record=_writer.AppendImmediateState("editingActionCompleted",new { transactionId,editKind=kind,
+                    displayName=kind=="preciseUndo"?"精确撤销":"事件编辑",changes=changes.Clone() });
+                _editingActions.Add(transactionId,record); return Task.FromResult(record);
+            }
+        },token);
     private string? _editTransactionId;
     private MemolineEvent? _transactionBegin;
     private RecorderInputControlStatus? _previousInterception;
@@ -121,6 +141,7 @@ public sealed partial class UnifiedInputCapture
                 lock (_sync)
                 {
                     var began = _writer.AppendImmediateState("editTransactionBegan", new { transactionId });
+                    _writer.BeginEditingSuppression();
                     _previousInterception = previous;
                     _transactionControl = control;
                     _editTransactionId = transactionId;
@@ -158,6 +179,7 @@ public sealed partial class UnifiedInputCapture
             await RestoreInterceptionAsync(control, previous, transactionId);
             lock (_sync)
             {
+                _writer.EndEditingSuppression();
                 ended = _writer.AppendImmediateState("editTransactionEnded", new { transactionId, outcome });
                 if (control is LayerSaveGuard ownedGuard) ownedGuard.ReleaseEditProtection(transactionId);
                 _editTransactionId = null;

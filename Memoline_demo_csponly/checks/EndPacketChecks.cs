@@ -54,6 +54,7 @@ internal static class EndPacketChecks
                     aggregate.ObserveViewport(new(Message(view, "stateUpdated"), view.Ticks, 1, false, true));
                 }
                 MemolineEvent? sample = begin is null ? null : Pen("penSample");
+                if (begin is not null && mode == "captured") Pen("penEnd");
                 MemolineEvent? marker = null;
                 CaptureRequest? request = null;
                 byte[]? imageBytes = null;
@@ -95,10 +96,11 @@ internal static class EndPacketChecks
                     else aggregate.CaptureFailed(request, "fixtureFinalSaveFailed");
                 }
                 else aggregate.RecordingEndFailed("fixtureControlUnavailable");
-                if (begin is not null) { Pen("penSample"); Pen("penInterrupted"); }
+                if (begin is not null && mode != "captured") { Pen("penSample"); Pen("penInterrupted"); }
                 writer.DisposeAsync().AsTask().GetAwaiter().GetResult();
                 byte[] hash = SHA256.HashData(File.ReadAllBytes(writer.FilePath));
-                aggregate.Complete(); aggregate.Complete(); aggregate.Dispose();
+                aggregate.Complete(requireFinalCapture: mode == "captured");
+                aggregate.Complete(requireFinalCapture: mode == "captured"); aggregate.Dispose();
                 var rows = File.ReadLines(aggregatePath).Select(l => JsonDocument.Parse(l).RootElement.Clone()).ToArray();
                 var packets = rows.Where(r => J.Text(r, "kind") == "packet").ToArray();
                 var final = packets.Single(r => J.Text(r, "boundaryKind") == "recordingEnd");

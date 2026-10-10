@@ -1,4 +1,5 @@
 using MemolineDemo.Editing;
+using System.Text.Json;
 
 namespace MemolineDemo;
 
@@ -65,6 +66,65 @@ internal static class ReconstructionCrossLayerChecks
                 "Runtime cross-layer bug: Y must read actual X(x4)=7 and capture output 7+30, rather than retain historical 30.");
             Check(result.Layers.TryGetValue(X, out var xActual) && xActual.Bytes.AsSpan().SequenceEqual(Pixels(0, 20, 0, 0, 7).Bytes),
                 "Runtime promotion must preserve X's exact captured deviation while removing the deleted stroke.");
+        }
+
+        // A layer first affected by exact feedback must enforce its own command
+        // interval before sending any of that layer's newly promoted contacts.
+        {
+            var scene = new Scene();
+            var a = scene.Stroke(X, 10, 10, Mask(0));
+            var b = scene.Stroke(X, 11, 20, Mask(1));
+            scene.Group(X, 10, Mask(0, 1), Pixels(10, 20), a, b);
+            var y = scene.Stroke(Y, 30, 30, Mask(2), new(X, 4, 30), Mask(4));
+            scene.Group(Y, 30, Mask(2), Pixels(0, 0, 30), y);
+            var initial = scene.Delete(a);
+            var layers = initial.Index.Layers.ToDictionary();
+            layers[Y] = layers[Y] with { UndoRedo = [new(35, "undo", false)] };
+            var plan = ReconstructionPlanner.Build(initial.Index with { Layers = layers }, initial.Request);
+            Check(plan.IsValid && plan.Layers.Single(layer => layer.Layer == Y).Untrusted.Count == 0,
+                "An unrelated layer's command evidence must not preempt an otherwise valid static plan.");
+            var fake = new ReferenceFake(scene) { AddUnexpectedXPixel = true };
+            var result = await ReconstructionEngine.RunAsync(plan, fake, CancellationToken.None);
+            Check(result.Issues.Any(issue => issue.Code == PlanIssueCode.UndoRedoInRange) && !fake.Replayed.Contains(y),
+                "Online promotion must stop before replaying a reference layer with undo inside its affected interval.");
+            Check(result.Layers.Count == 0,
+                "An online command-range failure must stop before installing any final reproduction layers.");
+        }
+
+        // Two Y reference events straddle Z's t20 update. A single replay snapshot cannot serve both.
+        foreach (bool hitUnavailableLayer in new[] { false, true })
+        {
+            var scene = new Scene();
+            var a = scene.Stroke(X, 10, 10, Mask(0));
+            var b = scene.Stroke(X, 11, 20, Mask(1));
+            scene.Strokes[b]=scene.Strokes[b] with {IsCausal=true,
+                Classification=new(true,true,[],false,[]){ReadsReferenceLayers=true},
+                BrushState=JsonSerializer.SerializeToElement(new {name="Reference fixture pen",properties=new[]{new{
+                    key="anti_overflow.do_not_cross_lines_of_reference_layer",type="checkbox",status="ok",value="unchecked"}}})};
+            scene.Group(X, 10, Mask(0, 1), Pixels(10, 20), a, b);
+            var y = scene.Stroke(Y, 30, 30, Mask(2), new(X, 4, 30), Mask(4));
+            scene.Group(Y, 30, Mask(2), Pixels(0, 0, 30), y);
+            var initial = scene.Delete(a);
+            var layers = initial.Index.Layers.ToDictionary();
+            var missing = new PlanIssue(PlanIssueCode.CaptureMismatch, "Prospective Y has no boundary capture.");
+            layers[Y] = layers[Y] with { Current = null, ChainValid = false, Issues = [missing],
+                Packets = layers[Y].Packets.Select(packet => packet with { Current = null }).ToArray() };
+            var plan = ReconstructionPlanner.Build(initial.Index with { Layers = layers, Issues = [missing] }, initial.Request);
+            Check(plan.IsValid, "A missing prospective capture is deferred until actual replay demonstrates a dependency.");
+            var fake = new ReferenceFake(scene) { AddUnexpectedXPixel = hitUnavailableLayer };
+            var result = await ReconstructionEngine.RunAsync(plan, fake, CancellationToken.None);
+            if (hitUnavailableLayer)
+            {
+                Check(result.Issues.Any(issue => issue.Code == PlanIssueCode.CaptureMismatch) && !fake.Replayed.Contains(y),
+                    "An actual hit on a layer with a missing capture must fail before its replay.");
+                Check(fake.InstallCount == 0, "An unavailable promoted layer must stop all final installation.");
+            }
+            else
+            {
+                Check(result.Issues.Count == 0 && result.Layers.ContainsKey(X) && !fake.Replayed.Contains(y),
+                    "An unrelated missing boundary must allow X's valid reconstruction to finish.");
+                Check(fake.InstallCount == 1, "Only the actually affected layer is installed.");
+            }
         }
 
         // Two Y reference events straddle Z's t20 update. A single replay snapshot cannot serve both.
@@ -171,6 +231,7 @@ internal static class ReconstructionCrossLayerChecks
         internal readonly List<EditableStrokeKey> Replayed = [];
         internal readonly List<FlushObservation> Flushes = [];
         internal bool AddUnexpectedXPixel;
+        internal int InstallCount;
 
         public Task<ImageRgba> FlushAsync(LayerKey layer, ImageRgba seed, IReadOnlyList<ReplayEvent> events,
             IReadOnlyDictionary<LayerKey, ImageRgba> referenceLayers, CancellationToken token)
@@ -191,7 +252,7 @@ internal static class ReconstructionCrossLayerChecks
         }
 
         public Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected, CancellationToken token)
-        { token.ThrowIfCancellationRequested(); return Task.FromResult(expected.Copy()); }
+        { token.ThrowIfCancellationRequested(); InstallCount++; return Task.FromResult(expected.Copy()); }
     }
 
     private static PixelMask Mask(params int[] xs)

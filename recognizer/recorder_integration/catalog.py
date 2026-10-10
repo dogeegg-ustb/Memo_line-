@@ -18,6 +18,7 @@ CANVAS = "画布视口"
 NAVIGATOR = "导航器"
 LAYERS = "图层"
 COLOR = "色彩"
+COLOR_INPUT = "色彩滑块"
 VIEW = [CANVAS, NAVIGATOR]
 
 

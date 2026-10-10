@@ -80,7 +80,7 @@ internal static class AggregateChecks
             aggregate.ObserveViewport(new(Realtime(second), secondTick, 1, false, true));
             var request = new CaptureRequest(1, secondTick, "Ink", new(10, 0, 100, 0), [77]);
             aggregate.CaptureQueued(request);
-            Invalid(aggregate.Complete, "Cannot seal without the mechanical footer");
+            Invalid(() => aggregate.Complete(), "Cannot seal without the mechanical footer");
             Check(!aggregate.IsComplete, "Rejected incomplete seal remains retryable");
 
             string packetRoot = Path.Combine(root, "packet");
@@ -292,7 +292,7 @@ internal static class AggregateChecks
                 legacyAggregate.ObserveViewport(new(Realtime(baseline, snapshot: true), 0, 0, true, false));
                 legacyAggregate.ObserveViewport(new(Realtime(second), secondTick, 1, false, true));
                 legacyAggregate.CaptureCommitted(request, new("", legacyPacket, false, 1, 2));
-                legacyAggregate.Complete();
+                legacyAggregate.Complete(requireFinalCapture: false);
             }
             var legacyPacketFrame = File.ReadLines(legacyAggregatePath).Select(line => JsonDocument.Parse(line).RootElement.Clone())
                 .Single(frame => J.Text(frame, "kind") == "packet" && J.Text(frame, "boundaryKind") != "recordingEnd");

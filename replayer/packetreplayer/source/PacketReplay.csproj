@@ -13,5 +13,13 @@
     <ProjectReference Include="../../../recognizer/core/memoline/Memoline.Core.csproj" />
     <Compile Include="../../strokereplayer/source/*.cs" Exclude="../../strokereplayer/source/Program.cs;../../strokereplayer/source/ReplayWindow.cs;../../strokereplayer/source/AssemblyInfo.cs;../../strokereplayer/source/CspPlacement.cs;../../strokereplayer/source/DriverProfile.cs;../../strokereplayer/source/StrokeBinaryReader.cs;../../strokereplayer/source/StrokeJsonReader.cs;../../strokereplayer/source/StrokeModels.cs" Link="StrokeReplay/%(Filename)%(Extension)" />
     <Compile Include="../../../Memoline_demo_csponly/source/BundleArchive.cs" Link="Memoline/BundleArchive.cs" />
+    <Compile Include="../../../Memoline_demo_csponly/source/BundleArchive.Project.cs" Link="Memoline/BundleArchive.Project.cs" />
+    <Compile Include="../../../Memoline_demo_csponly/source/BundleArchive.EditSources.cs" Link="Memoline/BundleArchive.EditSources.cs" />
+    <Compile Include="../../../Memoline_demo_csponly/source/Editing/EditJournal.cs" Link="Memoline/Editing/EditJournal.cs" />
+    <Compile Include="../../../Memoline_demo_csponly/source/Editing/EditingModels.cs" Link="Memoline/Editing/EditingModels.cs" />
+    <Compile Include="../../../Memoline_demo_csponly/source/Editing/BrushClassifier.cs" Link="Memoline/Editing/BrushClassifier.cs" />
+    <Compile Include="../../../Memoline_demo_csponly/source/Editing/ToolCatalog.cs" Link="Memoline/Editing/ToolCatalog.cs" />
+    <Compile Include="../../../Organizer/dirty matrix/source/Core/Coverage.cs" Link="DirtyMatrix/Coverage.cs" />
+    <EmbeddedResource Include="../../../Memoline_demo_csponly/source/Editing/Resources/*.json" Link="Editing/Resources/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

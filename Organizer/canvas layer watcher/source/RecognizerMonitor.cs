@@ -96,6 +96,41 @@ internal sealed class RecognizerMonitor
         }
     }
 
+    public async Task<IReadOnlyList<CaptureRequest>> PrepareRecordingEndLayersAsync(CancellationToken token)
+    {
+        string session, clip, pipe;
+        lock (_sync)
+        {
+            session = _session;
+            clip = _clipPath ?? throw new InvalidOperationException("末尾保存的 CLIP 配置尚未就绪。");
+            pipe = _controlPipe ?? throw new InvalidOperationException("末尾保存的 Recognizer 控制接口尚未就绪。");
+        }
+        var control = new RecorderControlClient(pipe, text => Diagnostic?.Invoke(text));
+        // The Stop button owns foreground. Activate the initialized CSP target
+        // through its existing save control before requesting fresh core pixels.
+        var save = await control.SaveClipAsync(clip, token, activateCsp: true);
+        var states = await control.RequestStatesAsync(session,
+            ["clipState", "currentLayerState", "canvasViewState"], token, J.Text(save, "requestId"));
+        var response = await control.PrepareRecordingEndAsync(token);
+        var observation = await _recordingEnd.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+        if (J.Text(response, "sessionId") != session || observation.Message.SessionId != session
+            || J.Tick(response, "triggerTicks", -1) != observation.TriggerTicks
+            || J.Tick(response, "appendId", -1) != checked((long)observation.Message.AppendId)
+            || states.Any(pair => J.Tick(J.Get(pair.Value, "evidence"),
+                pair.Key == "clipState" ? "observedTicks" : "capturedTicks", -1) > observation.TriggerTicks))
+            throw new InvalidDataException("末尾新状态和原生结束边界不属于同一时序；不能使用旧的结束标记重试。");
+        lock (_sync)
+        {
+            if (_session != session || _clipPath != clip || _pixelSize is not { } pixels || _controlPipe != pipe)
+                throw new InvalidDataException("末尾捕获期间录制会话已改变。");
+            // The native marker follows all requested state publications. Its
+            // realtime delivery proves this subscriber has consumed that prefix.
+            var requests = _state.ReserveRecordingEndLayers(observation.Message);
+            var evidence = _evidence.Freeze(observation.TriggerTicks);
+            return requests.Select(request => request with { Context = new(session, pixels, pipe, evidence) }).ToArray();
+        }
+    }
+
     public async Task<IReadOnlyList<CaptureRequest>> PrepareEditBoundaryAsync(string requestId, CancellationToken token)
     {
         if (string.IsNullOrWhiteSpace(requestId)) throw new ArgumentException("编辑边界 requestId 不能为空", nameof(requestId));
@@ -120,6 +155,18 @@ internal sealed class RecognizerMonitor
             var requests = _state.ReserveEditBoundary(requestId, _state.KnownLayersAt(observation.Ticks), observation.Ticks);
             var frozen = _evidence.Freeze(observation.Ticks);
             return requests.Select(request => request with { Context = new(_session, pixels, pipe, frozen) }).ToArray();
+        }
+    }
+
+    internal PreparedEditingBoundary GetPreparedEditBoundary(string requestId)
+    {
+        lock(_sync)
+        {
+            if(!_editBoundaries.TryGetValue(requestId,out var completion)||!completion.Task.IsCompletedSuccessfully)
+                throw new InvalidOperationException("编辑边界消息尚未确认。");
+            var message=completion.Task.Result;
+            if(message.SessionId!=_session)throw new InvalidDataException("编辑边界会话已改变。");
+            return new(message.SessionId,requestId,message.AppendId,message.Ticks);
         }
     }
 

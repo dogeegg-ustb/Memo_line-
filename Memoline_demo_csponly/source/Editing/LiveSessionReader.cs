@@ -24,6 +24,7 @@ internal static class LiveSessionReader
         string path = Path.GetFullPath(mechanicalPath);
         var prefix = new List<JsonElement>();
         ulong previousAppend = 0;
+        using var readFrames = EditingProfiler.Stage("  mechanical frames + replay + packets");
         foreach (var frame in MemolineReader.Read(path))
         {
             token.ThrowIfCancellationRequested();
@@ -54,11 +55,23 @@ internal static class LiveSessionReader
         if (boundaryAppendId == 0) boundaryAppendId = previousAppend;
         var frames = all.Where(f => !f.TryGetProperty("appendId", out var a) || RequiredUlong(a) <= boundaryAppendId).ToArray();
         if (!frames.Any(f => Text(f, "kind") == "header")) frames = new[] { header }.Concat(frames).ToArray();
-        var replay = MemolineReplayReader.Parse(path, frames, allowEmpty: true);
+        MemolineReplayDocument replay;
+        using (EditingProfiler.Stage("  replay parse")) replay = MemolineReplayReader.Parse(path, frames, allowEmpty: true);
         long boundaryTicks = frames.Select(f => OptionalLong(f, "ticks", -1)).Where(t => t >= 0).DefaultIfEmpty(0).Max();
-        var packets = ReadPackets(Path.GetFullPath(diffRoot), sessionId, boundaryTicks, token);
+        IReadOnlyList<LayerPacket> packets;
+        using (EditingProfiler.Stage("  read packets")) packets = ReadPackets(Path.GetFullPath(diffRoot), sessionId, boundaryTicks, token);
+        // The watcher keeps only the last two full captures per layer, so a live session's starting
+        // capture is often deleted. A complete diff chain rebuilds it exactly from the current capture.
+        if (packets.GroupBy(p => p.Layer).Any(g => g.OrderBy(p => p.TriggerTicks).First().Before is null))
+        {
+            var restored = packets.ToList();
+            ProjectSessionReader.RestoreBaselines(restored, token);
+            packets = restored;
+        }
+        IReadOnlyList<HistorySlot> history;
+        using (EditingProfiler.Stage("  state history")) history = StateHistory.Resolve(frames);
         return new(path, sessionId, frequency, frames, replay, packets, boundaryAppendId, boundaryTicks)
-        { History = StateHistory.Resolve(frames) };
+        { History = history };
     }
 
     private static IReadOnlyList<LayerPacket> ReadPackets(string root, string sessionId, long boundaryTicks, CancellationToken token)
@@ -69,6 +82,51 @@ internal static class LiveSessionReader
         foreach (string manifestPath in Directory.EnumerateFiles(packetsRoot, "manifest.json", SearchOption.AllDirectories).Order())
         {
             token.ThrowIfCancellationRequested();
+            var packet = CachedPacket(manifestPath, sessionId, token);
+            if (packet.TriggerTicks <= boundaryTicks) result.Add(packet);
+        }
+        using var snapshots = EditingProfiler.Stage("    full-canvas snapshots");
+        foreach (var group in result.GroupBy(p => p.Layer).ToArray())
+        {
+            var first = group.OrderBy(p => p.TriggerTicks).First();
+            var latest = group.OrderBy(p => p.TriggerTicks).Last();
+            // Resolve both positions before replacing either record. A one-packet
+            // layer uses the same slot for its baseline and its current snapshot.
+            int firstIndex = result.IndexOf(first);
+            int index = result.IndexOf(latest);
+            var currentDescriptor = latest.NowDescriptor.ValueKind == JsonValueKind.Object ? latest.NowDescriptor : latest.AfterDescriptor;
+            var before = Task.Run(() => LoadSnapshot(root, first.AfterDescriptor, first.CanvasWidth, first.CanvasHeight, token), token);
+            var current = LoadSnapshot(root, currentDescriptor, latest.CanvasWidth, latest.CanvasHeight, token);
+            result[firstIndex] = first with { Before = before.GetAwaiter().GetResult() };
+            result[index] = result[index] with { Current = current };
+        }
+        return result.OrderBy(p => p.Layer.Uuid, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.TriggerTicks).ToArray();
+    }
+
+    // Committed packets never change. Alt+M re-reads the same directory every time, so decoded
+    // packets are kept per manifest file identity and only new packets are decoded again.
+    private static readonly Dictionary<(string Path, string Session), (DateTime Written, long Length, LayerPacket Packet)> PacketCache = [];
+    private static readonly Dictionary<string, (DateTime Written, long Length, ImageRgba Image)> SnapshotCache = new(StringComparer.OrdinalIgnoreCase);
+    private const int SnapshotCacheLimit = 4;
+
+    private static LayerPacket CachedPacket(string manifestPath, string sessionId, CancellationToken token)
+    {
+        var info = new FileInfo(manifestPath);
+        // The identity covers the manifest and every image beside it.
+        var files = info.Directory!.GetFiles();
+        var written = files.Max(f => f.LastWriteTimeUtc);
+        long length = files.Sum(f => f.Length) ^ ((long)files.Length << 48);
+        lock (PacketCache)
+            if (PacketCache.TryGetValue((info.FullName, sessionId), out var hit) && hit.Written == written && hit.Length == length)
+                return hit.Packet;
+        var packet = ReadPacket(manifestPath, sessionId, token);
+        lock (PacketCache) PacketCache[(info.FullName, sessionId)] = (written, length, packet);
+        return packet;
+    }
+
+    private static LayerPacket ReadPacket(string manifestPath, string sessionId, CancellationToken token)
+    {
+        {
             using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
             var rootElement = document.RootElement;
             if (Text(rootElement, "schema") != "dirty-matrix-image-diff/v1")
@@ -84,7 +142,6 @@ internal static class LiveSessionReader
             long trigger = OptionalLong(now.ValueKind == JsonValueKind.Object ? now : descriptor, "triggerTicks", -1);
             if (trigger < 0) trigger = OptionalLong(descriptor, "triggerTicks", -1);
             if (trigger < 0) throw new InvalidDataException("差异包缺少 triggerTicks。");
-            if (trigger > boundaryTicks) continue;
             int width = checked((int)RequiredLong(descriptor, "width"));
             int height = checked((int)RequiredLong(descriptor, "height"));
             if (width <= 0 || height <= 0) throw new InvalidDataException("差异包尺寸无效。");
@@ -96,27 +153,27 @@ internal static class LiveSessionReader
             var images = ReadImages(rootElement, packetDir, layer, id, width, height, labels, fullResolution, token);
             string? afterId = Text(after, "id"); string? nowId = Text(now, "id");
             bool baseline = Text(rootElement, "kind") == "baseline" || now.ValueKind != JsonValueKind.Object;
-            bool boundary = Text(Get(rootElement, "capture"), "triggerKind") == "editBoundary";
-            result.Add(new(id, layer, trigger, null, null, images, boundary, baseline,
+            bool boundary = Text(Get(rootElement, "capture"), "triggerKind") is "editBoundary" or "recordingEndLayer";
+            return new(id, layer, trigger, null, null, images, boundary, baseline,
                 afterId, nowId, Text(after, "baselineSource") ?? Text(rootElement, "baselineSource"), width, height, fullResolution)
-            { Labels = labels, AfterDescriptor = after.Clone(), NowDescriptor = now.ValueKind == JsonValueKind.Object ? now.Clone() : default });
+            { Labels = labels, AfterDescriptor = after.Clone(), NowDescriptor = now.ValueKind == JsonValueKind.Object ? now.Clone() : default };
         }
-        foreach (var group in result.GroupBy(p => p.Layer).ToArray())
-        {
-            var latest = group.OrderBy(p => p.TriggerTicks).Last();
-            int index = result.IndexOf(latest);
-            result[index] = latest with { Current = LoadSnapshot(root, latest.NowDescriptor, latest.CanvasWidth, latest.CanvasHeight, token) };
-        }
-        return result.OrderBy(p => p.Layer.Uuid, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.TriggerTicks).ToArray();
     }
 
     private static IReadOnlyList<DirtyImage> ReadImages(JsonElement manifest, string packetDir, LayerKey layer,
         string packetId, int canvasWidth, int canvasHeight, IReadOnlyList<LabelEvidence> labels, bool fullResolution, CancellationToken token)
     {
         var labelsById = labels.ToDictionary(l => l.Id, StringComparer.Ordinal);
-        var result = new List<DirtyImage>();
-        if (!manifest.TryGetProperty("images", out var images) || images.ValueKind != JsonValueKind.Array) return result;
-        foreach (var image in images.EnumerateArray())
+        if (!manifest.TryGetProperty("images", out var images) || images.ValueKind != JsonValueKind.Array) return [];
+        var entries = images.EnumerateArray().ToArray();
+        var result = new DirtyImage[entries.Length];
+        // PNG decoding dominates history loading; images of one packet decode independently.
+        try { Parallel.For(0, entries.Length, new ParallelOptions { CancellationToken = token }, i => result[i] = ReadImage(entries[i])); }
+        catch (AggregateException error) when (error.InnerExceptions.Count > 0)
+        { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error.InnerExceptions[0]).Throw(); }
+        return result;
+
+        DirtyImage ReadImage(JsonElement image)
         {
             token.ThrowIfCancellationRequested();
             string imageId = RequiredText(image, "id");
@@ -145,21 +202,31 @@ internal static class LiveSessionReader
             var labelIds = image.GetProperty("labelIds").EnumerateArray().Select(x => x.GetString() ?? "").ToArray();
             if (labelIds.Length == 0 || labelIds.Any(labelId => !labelsById.TryGetValue(labelId, out var label) || !label.ImageIds.Contains(imageId)))
                 throw new InvalidDataException("图片与标签双向关联不一致。");
-            result.Add(new(key, mask, afterImage, nowImage, [], false,
+            return new(key, mask, afterImage, nowImage, [], false,
                 labelIds.Any(labelId => labelsById[labelId].Source == "low-resolution-fallback"), false, fullResolution)
-            { LabelIds = labelIds });
+            { LabelIds = labelIds };
         }
-        return result;
     }
 
-    private static ImageRgba? LoadSnapshot(string root, JsonElement descriptor, int width, int height, CancellationToken token)
+    internal static ImageRgba? LoadSnapshot(string root, JsonElement descriptor, int width, int height, CancellationToken token)
     {
         if (descriptor.ValueKind != JsonValueKind.Object) return null;
         string? id = Text(descriptor, "id"); if (string.IsNullOrWhiteSpace(id)) return null;
         string path = PackagePath(Path.Combine(root, "snapshots"), id + ".png");
-        if (!File.Exists(path)) return null;
+        var info = new FileInfo(path);
+        if (!info.Exists) return null;
         token.ThrowIfCancellationRequested();
-        return LoadRgba(path, width, height);
+        lock (SnapshotCache)
+            if (SnapshotCache.TryGetValue(info.FullName, out var hit) && hit.Written == info.LastWriteTimeUtc &&
+                hit.Length == info.Length && hit.Image.Width == width && hit.Image.Height == height)
+                return hit.Image.Copy();
+        var image = LoadRgba(path, width, height);
+        lock (SnapshotCache)
+        {
+            if (SnapshotCache.Count >= SnapshotCacheLimit) SnapshotCache.Remove(SnapshotCache.Keys.First());
+            SnapshotCache[info.FullName] = (info.LastWriteTimeUtc, info.Length, image.Copy());
+        }
+        return image;
     }
 
     private static ImageRgba LoadRgba(string path, int expectedWidth, int expectedHeight)
@@ -168,10 +235,10 @@ internal static class LiveSessionReader
         // Check the actual encoded format before GDI+ can silently convert RGB,
         // grayscale or palette PNGs into the requested RGBA LockBits format.
         var header = new byte[33];
+        using var input = File.OpenRead(path);
         try
         {
-            using var stream = File.OpenRead(path);
-            stream.ReadExactly(header);
+            input.ReadExactly(header);
         }
         catch (EndOfStreamException error)
         { throw new InvalidDataException("PNG 的 IHDR 数据不完整：" + path, error); }
@@ -186,22 +253,31 @@ internal static class LiveSessionReader
             BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(16, 4)) != (uint)expectedWidth ||
             BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(20, 4)) != (uint)expectedHeight)
             throw new InvalidDataException("PNG 的 IHDR 尺寸与 descriptor 不一致：" + path);
-        using var source = new Bitmap(path);
+        // GDI+ filename decoding observes the EXE's native MAX_PATH policy.
+        // Project-history caches exceed that limit even when managed file IO works.
+        // Keep the managed stream alive until GDI+ has finished reading the pixels.
+        input.Position = 0;
+        using var source = new Bitmap(input);
         if (source.Width != expectedWidth || source.Height != expectedHeight)
             throw new InvalidDataException($"PNG 尺寸与 descriptor 不一致：{path}");
         var bytes = new byte[checked(source.Width * source.Height * 4)];
         var locked = source.LockBits(new(0, 0, source.Width, source.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
         try
         {
-            var row = new byte[checked(source.Width * 4)];
-            for (int y = 0; y < source.Height; y++)
-            {
-                System.Runtime.InteropServices.Marshal.Copy(locked.Scan0 + y * locked.Stride, row, 0, row.Length);
-                for (int x = 0; x < source.Width; x++)
-                { int i = (y * source.Width + x) * 4, s = x * 4; bytes[i] = row[s + 2]; bytes[i + 1] = row[s + 1]; bytes[i + 2] = row[s]; bytes[i + 3] = row[s + 3]; }
-            }
+            int rowBytes = checked(source.Width * 4);
+            if (locked.Stride == rowBytes) System.Runtime.InteropServices.Marshal.Copy(locked.Scan0, bytes, 0, bytes.Length);
+            else
+                for (int y = 0; y < source.Height; y++)
+                    System.Runtime.InteropServices.Marshal.Copy(locked.Scan0 + y * locked.Stride, bytes, y * rowBytes, rowBytes);
         }
         finally { source.UnlockBits(locked); }
+        // BGRA (little-endian 0xAARRGGBB) to RGBA: swap the R and B bytes of every pixel.
+        var pixels = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(bytes.AsSpan());
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            uint v = pixels[i];
+            pixels[i] = (v & 0xFF00FF00u) | ((v >> 16) & 0xFFu) | ((v & 0xFFu) << 16);
+        }
         return new(source.Width, source.Height, bytes);
     }
 

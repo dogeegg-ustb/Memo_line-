@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MemolineDemo.Editing;
 
 namespace MemolineDemo;
@@ -99,8 +100,14 @@ internal static class EditingChecks
             Check(excluded.Strokes.Count == 0 && excluded.Images[p1.Images[0].Key].HasUnreplayableEvents,
                 "Mouse/outside contacts are excluded but prevent mandatory image replay.");
         }
-        var inTransaction = frames.Append(Json("""{"appendId":5,"ticks":99,"kind":"editTransactionBegan","data":{"transactionId":"t"}}""")).ToArray();
-        Check(EditIndexBuilder.Build(session with { Frames = inTransaction }).Strokes.Count == 0,
+        var inTransaction = frames.Select(frame =>
+        {
+            var node = JsonNode.Parse(frame.GetRawText())!.AsObject();
+            ulong append = node["appendId"]!.GetValue<ulong>();
+            if (append >= 6) node["appendId"] = append + 1;
+            return JsonSerializer.SerializeToElement(node);
+        }).Append(Json("""{"appendId":6,"ticks":99,"kind":"editTransactionBegan","data":{"transactionId":"t"}}""")).ToArray();
+        Check(EditIndexBuilder.Build(session with { Frames = inTransaction, BoundaryAppendId = 10 }).Strokes.Count == 0,
             "An unfinished edit transaction excludes contacts until the editing boundary.");
         var fillCatalog = ToolCatalog.FromJson(Json("""{"nodes":[{"id":"t","kind":"tool","name":"Fill"},{"id":"s","kind":"subtool","name":"G pen","parentId":"t","toolId":"t"}]}"""));
         Check(!classifier.Classify(disabledMixing, fillCatalog).Causal,

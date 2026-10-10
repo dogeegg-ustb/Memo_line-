@@ -36,7 +36,7 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
         try
         {
             if (!_outgoing.Writer.TryWrite(new { type = "requestStates", requestId = request.RequestId, packageId = package,
-                modules = request.Modules, saveId = request.SaveId, ticks })) throw new IOException("State capture helper has stopped.");
+                modules = request.Modules, saveId = request.SaveId, brushPanelRoi = request.BrushPanelRoi, ticks })) throw new IOException("State capture helper has stopped.");
             return await completion.WaitAsync(TimeSpan.FromSeconds(30), token);
         }
         finally { _stateRequests.Remove(package); }
@@ -288,6 +288,7 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
         "brushState" => "笔刷状态",
         "currentLayerState" => "当前图层状态",
         "colorState" => "色彩状态",
+        "colorInputState" => "色彩滑块输入状态",
         "canvasViewState" => "画布视图状态",
         "clipState" => "Clip 文档结构",
         _ => module ?? "状态模块"

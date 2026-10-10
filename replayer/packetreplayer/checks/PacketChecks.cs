@@ -20,6 +20,7 @@ internal static partial class PacketChecks
     internal static async Task RunAsync(string? sample)
     {
         NumericRegions();
+        await RgbRestoreAsync();
         CausalHistory();
         PacketBoundaries();
         await BrushAndLayerRestoreAsync();
@@ -241,7 +242,7 @@ internal static partial class PacketChecks
             writer.AppendState("coreStateUpdated", writer.NowTicks, [], unknown, "delayed");
             writer.AppendState("coreStateUpdated", writer.NowTicks, [], Layer("图层 1", writer.NowTicks), "delayed");
             await Eventually(() => feed.Layer == "图层 1");
-            Check(feed.Brush.Numbers[0].Value == 40, "Unknown intermediate observations preserve the last confirmed table.");
+            Check(feed.Brush is null, "Fresh unknown brush OCR invalidates the old numeric table instead of retaining clickable coordinates.");
             long panelRevision = feed.Revision, oldPanelTicks = writer.NowTicks;
             feed.MarkInput("subtoolState");
             var panelWaiting = feed.WaitAsync(panelRevision, "subtoolState", () => feed.Subtools is not null, default);

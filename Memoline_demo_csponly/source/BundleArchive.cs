@@ -2,28 +2,45 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using BehaviorRecognizer.Storage.Memoline;
+using MemolineDemo.Editing;
 
 namespace MemolineDemo;
 
 public sealed record BundleSealResult(string Path, string MechanicalSha256, string AggregationSha256, string FixedSha256);
 public sealed record BundleVerificationResult(string SessionId, long Frequency, string MechanicalSha256,
-    string AggregationSha256, string FixedSha256, int PacketCount, int AssetCount, int DimensionSampleCount);
+    string AggregationSha256, string FixedSha256, int PacketCount, int AssetCount, int DimensionSampleCount)
+{
+    public string? EditJournalSha256 { get; init; }
+    public int EditAssetCount { get; init; }
+    public int NativeSessionCount { get; init; } = 1;
+}
 
 /// <summary>A sealed recording preserves its two source streams byte for byte. Only the active dimensions may be revised.</summary>
-public static class BundleArchive
+public static partial class BundleArchive
 {
     public const string Schema = "memoline-csponly/v2";
     public const string LegacySchema = "memoline-csponly/v1";
+    public const string EditSchema = "memoline-csponly/v3";
     public const string MechanicalEntry = "mechanical/recording.memoline";
     public const string AggregationEntry = "aggregation/events.jsonl";
+    public const string EditJournalEntry = "edits/journal.jsonl";
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
     private static readonly UTF8Encoding Utf8 = new(false, true);
     private static readonly string[] Continuities = ["actionPatternContinuity", "toolContinuity", "layerContinuity", "regionContinuity", "timeContinuity"];
-    private sealed record EntryInfo(string Entry, string Sha256, long Size, string? Codec = null);
+    private record EntryInfo(string Entry, string Sha256, long Size, string? Codec = null);
+    private sealed record EditEntryInfo(string Entry, string Sha256, long Size, int AssetCount, string? Codec = null)
+        : EntryInfo(Entry, Sha256, Size, Codec);
     private sealed record ArchiveIndex(string Schema, string SessionId, long Frequency, long OriginTicks,
-        EntryInfo Mechanical, EntryInfo Aggregation, string FixedSha256, string ActiveDimensionsEntry, EntryInfo[] Dimensions);
+        EntryInfo Mechanical, EntryInfo Aggregation, string FixedSha256, string ActiveDimensionsEntry, EntryInfo[] Dimensions,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] EditEntryInfo? Edits = null)
+    {
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? ProjectPath { get; init; }
+        public EntryInfo[] PreviousSessions { get; init; } = [];
+        public EntryInfo[] EditSources { get; init; } = [];
+    }
     private sealed record MechanicalRecord(ulong AppendId, ulong EventId, ulong? OperationId, long Ticks, bool Hardware,
         string Kind, PenDownLocation? PenDownLocation);
     private sealed record MechanicalInfo(string SessionId, long Frequency, long OriginTicks, long EndTicks,
@@ -56,12 +73,56 @@ public static class BundleArchive
         }, token);
     }
 
+    /// <summary>Seals a stopped journal and referenced PNGs as v3; the original Seal API still writes v2.</summary>
+    public static BundleSealResult SealWithEdits(string mechanicalPath, string aggregatePath,
+        string editWorkingDirectory, string destination, CancellationToken token = default,
+        IReadOnlyList<string>? replaySourceMechanicalPaths = null)
+    {
+        mechanicalPath = ExistingPath(mechanicalPath); aggregatePath = ExistingPath(aggregatePath);
+        editWorkingDirectory = Path.GetFullPath(editWorkingDirectory);
+        string journalPath = ExistingPath(Path.Combine(editWorkingDirectory, EditJournal.JournalFileName));
+        destination = Destination(destination, mechanicalPath, aggregatePath, journalPath);
+        token.ThrowIfCancellationRequested();
+        // Refuse an active writer and prevent ledger changes throughout validation/copy.
+        using var journalLease = new FileStream(journalPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        EditJournalSnapshot edits = EditJournal.Recover(editWorkingDirectory);
+        if (edits.HasIncompleteTail) throw new InvalidDataException("Recover the incomplete journal tail before sealing.");
+        var mechanical = ValidateMechanical(mechanicalPath, token);
+        var replaySources = PrepareEditSources(replaySourceMechanicalPaths, mechanical, token);
+        destination = Destination(destination, [mechanicalPath, aggregatePath, journalPath, .. replaySources.Select(s => s.Path)]);
+        ValidateJournalSession(edits, mechanical, replaySources.ToDictionary(s => s.Mechanical.SessionId, s => s.Mechanical, StringComparer.Ordinal));
+        AggregateInfo aggregate;
+        using (var source = File.OpenRead(aggregatePath)) aggregate = ValidateAggregate(source, mechanical, false, null, token);
+        EntryInfo journal = FileEntry(journalPath, EditJournalEntry, token);
+        var index = new ArchiveIndex(EditSchema, mechanical.SessionId, mechanical.Frequency, mechanical.OriginTicks,
+            FileEntry(mechanicalPath, MechanicalEntry, token), FileEntry(aggregatePath, AggregationEntry, token),
+            aggregate.FixedSha256, AggregationEntry, [],
+            new EditEntryInfo(journal.Entry, journal.Sha256, journal.Size, edits.Assets.Count, journal.Codec)) {
+            EditSources = replaySources.Select(s => s.Entry).ToArray()
+        };
+        return WriteArchive(destination, index, archive =>
+        {
+            AddFile(archive, mechanicalPath, MechanicalEntry, token);
+            AddFile(archive, aggregatePath, AggregationEntry, token);
+            AddFile(archive, journalPath, EditJournalEntry, token);
+            foreach (var source in replaySources) AddFile(archive, source.Path, source.Entry.Entry, token);
+            foreach (EditJournalAsset asset in edits.Assets)
+            {
+                token.ThrowIfCancellationRequested();
+                using var source = File.OpenRead(Path.Combine(editWorkingDirectory, asset.RelativePath));
+                using var target = archive.CreateEntry(asset.RelativePath, CompressionLevel.NoCompression).Open();
+                Copy(source, target, token);
+            }
+        }, token);
+    }
+
     public static BundleVerificationResult Verify(string path, CancellationToken token = default)
     {
         path = ExistingPath(path);
         using var archive = ZipFile.OpenRead(path);
         var index = ReadIndex(archive);
         ValidateArchiveEntries(archive, index);
+        VerifyPreviousSessions(archive, index, token);
         CheckEntry(archive, index.Mechanical, token); CheckEntry(archive, index.Aggregation, token);
         foreach (var dimension in index.Dimensions) CheckEntry(archive, dimension, token);
         var mechanical = WithMechanical(archive, temporary => ValidateMechanical(temporary, token), token);
@@ -78,8 +139,65 @@ public static class BundleArchive
             var revised = ValidateAggregate(source, mechanical, true, RevisionVersion(revision.Entry), token);
             if (revision.Entry == index.ActiveDimensionsEntry) dimensionCount = revised.Dimensions;
         }
+        EditJournalSnapshot? edits = ReadEdits(archive, index, token);
+        var replaySources = ReadEditSources(archive, index, mechanical, token);
+        if (edits is not null) ValidateJournalSession(edits, mechanical, replaySources);
         return new(mechanical.SessionId, mechanical.Frequency, index.Mechanical.Sha256, index.Aggregation.Sha256,
-            index.FixedSha256, aggregate.Packets, aggregate.Assets, dimensionCount);
+            index.FixedSha256, aggregate.Packets, aggregate.Assets, dimensionCount)
+        { EditJournalSha256 = index.Edits?.Sha256, EditAssetCount = edits?.Assets.Count ?? 0, NativeSessionCount = index.PreviousSessions.Length + 1 };
+    }
+
+    /// <summary>Returns null for recordings without edits (including v1/v2).</summary>
+    public static EditJournalSnapshot? ReadEditJournal(string path, CancellationToken token = default)
+    {
+        Verify(path, token);
+        using var archive = ZipFile.OpenRead(path);
+        return ReadEdits(archive, ReadIndex(archive), token);
+    }
+
+    private static EditJournalSnapshot? ReadEdits(ZipArchive archive, ArchiveIndex index, CancellationToken token)
+    {
+        if (index.Edits is null) return null;
+        CheckEntry(archive, index.Edits, token);
+        using var input = OpenEntry(archive, index.Edits);
+        EditJournalSnapshot snapshot = EditJournal.Read(input, asset =>
+        {
+            token.ThrowIfCancellationRequested();
+            using var source = RequiredEntry(archive, asset.RelativePath).Open();
+            using var bytes = new MemoryStream(); Copy(source, bytes, token); return bytes.ToArray();
+        });
+        if (snapshot.HasIncompleteTail) throw new InvalidDataException("A sealed edit journal has an incomplete final row.");
+        var referenced = snapshot.Assets.Select(asset => asset.RelativePath).ToHashSet(StringComparer.Ordinal);
+        var stored = archive.Entries.Where(entry => entry.FullName.StartsWith(EditJournal.AssetEntryPrefix, StringComparison.Ordinal))
+            .Select(entry => entry.FullName).ToHashSet(StringComparer.Ordinal);
+        if (snapshot.Assets.Count != index.Edits.AssetCount || !referenced.SetEquals(stored))
+            throw new InvalidDataException("Edit PNG asset count/references do not match the archive.");
+        return snapshot;
+    }
+
+    private static void ValidateJournalSession(EditJournalSnapshot snapshot, MechanicalInfo mechanical,
+        IReadOnlyDictionary<string, MechanicalInfo>? replaySources = null)
+    {
+        foreach (EditJournalRecord record in snapshot.Records)
+        {
+            if (record.Kind == "transactionBegan")
+            {
+                IEnumerable<JsonElement> targets = record.Data.TryGetProperty("targetLayers", out JsonElement layers)
+                    ? layers.EnumerateArray().ToArray() : new[] { Property(record.Data, "targetLayer") };
+                if (targets.Any(layer => Text(layer, "sessionId") != mechanical.SessionId))
+                    throw new InvalidDataException("Edit transaction belongs to a different native session.");
+            }
+            if (record.Kind is not ("replayCompleted" or "checkpoint")) continue;
+            foreach (JsonElement key in Array(record.Data, "eventKeys").EnumerateArray())
+            {
+                string sessionId = Text(key, "sessionId");
+                var source = sessionId == mechanical.SessionId ? mechanical :
+                    replaySources is not null && replaySources.TryGetValue(sessionId, out MechanicalInfo? historical) ? historical : null;
+                if (source is null || !source.Records.TryGetValue(Unsigned(key, "beginAppendId"), out MechanicalRecord? original)
+                    || !original.Hardware || original.Kind != "penBegin")
+                    throw new InvalidDataException("Editable stroke key cannot resolve to a native penBegin.");
+            }
+        }
     }
 
     public static IEnumerable<JsonElement> ReadMechanical(string path)
@@ -128,7 +246,7 @@ public static class BundleArchive
             ValidateAggregate(source, mechanical, true, version, token);
             return true;
         }, token);
-        var updated = index with { Schema = Schema, ActiveDimensionsEntry = entry,
+        var updated = index with { Schema = index.Schema is EditSchema or ProjectSchema ? index.Schema : Schema, ActiveDimensionsEntry = entry,
             Dimensions = [.. index.Dimensions, FileEntry(dimensionJsonl, entry, token)] };
         return WriteArchive(output, updated, archive =>
         {
@@ -150,16 +268,32 @@ public static class BundleArchive
         Verify(input, token);
         using var original = ZipFile.OpenRead(input);
         var index = ReadIndex(original);
-        var updated = index with { Schema = Schema, Mechanical = index.Mechanical with { Codec = "brotli" },
+        var updated = index with { Schema = index.Schema is EditSchema or ProjectSchema ? index.Schema : Schema, Mechanical = index.Mechanical with { Codec = "brotli" },
             Aggregation = index.Aggregation with { Codec = "brotli" },
-            Dimensions = index.Dimensions.Select(e => e with { Codec = "brotli" }).ToArray() };
+            Dimensions = index.Dimensions.Select(e => e with { Codec = "brotli" }).ToArray(),
+            EditSources = index.EditSources.Select(e => e with { Codec = "brotli" }).ToArray(),
+            Edits = index.Edits is null ? null : index.Edits with { Codec = "brotli" } };
         return WriteArchive(output, updated, archive =>
         {
-            foreach (var entry in new[] { index.Mechanical, index.Aggregation }.Concat(index.Dimensions))
+            foreach (var entry in new[] { index.Mechanical, index.Aggregation }.Concat(index.Dimensions)
+                .Concat(index.Edits is null ? System.Array.Empty<EntryInfo>() : [index.Edits]).Concat(index.EditSources))
             {
                 using var source = OpenEntry(original, entry);
                 AddCompressedEntry(archive, source, entry.Entry, token);
             }
+            foreach (var previous in index.PreviousSessions)
+            {
+                using var source = RequiredEntry(original, previous.Entry).Open();
+                using var target = archive.CreateEntry(previous.Entry, CompressionLevel.NoCompression).Open();
+                Copy(source, target, token);
+            }
+            if (index.Edits is not null)
+                foreach (ZipArchiveEntry asset in original.Entries.Where(entry => entry.FullName.StartsWith(EditJournal.AssetEntryPrefix, StringComparison.Ordinal)))
+                {
+                    using var source = asset.Open();
+                    using var target = archive.CreateEntry(asset.FullName, CompressionLevel.NoCompression).Open();
+                    Copy(source, target, token);
+                }
         }, token, input);
     }
 
@@ -296,7 +430,20 @@ public static class BundleArchive
                 if (requireEndPacket)
                 {
                     bool end = row.TryGetProperty("boundaryKind", out var boundaryKind) && boundaryKind.GetString() == "recordingEnd";
-                    windows.Add((from, to, end));
+                    bool editBoundary = row.TryGetProperty("boundaryKind", out var editKind)
+                        && editKind.GetString() is "editBoundary" or "recordingEndLayer";
+                    if (editKind.ValueKind == JsonValueKind.String && editKind.GetString() == "recordingEndLayer")
+                    {
+                        long layerTrigger = Integer(row, "triggerTicks");
+                        ulong layerObservation = Unsigned(row, "observationAppendId");
+                        if (to != layerTrigger || layerObservation == 0
+                            || !mechanical.Records.TryGetValue(layerObservation, out var layerMarker)
+                            || layerMarker.Kind != "recordingEndRequested" || layerMarker.Ticks != layerTrigger
+                            || Array(row, "eventPointers").EnumerateArray().Any(pointer =>
+                                !pointer.TryGetProperty("context", out var context) || context.ValueKind != JsonValueKind.True))
+                            throw new InvalidDataException("Final layer capture is not a context packet at the native end marker.");
+                    }
+                    if (!editBoundary) windows.Add((from, to, end));
                     foreach (var pointer in Array(row, "eventPointers").EnumerateArray())
                         if ((!pointer.TryGetProperty("context", out var context) || !context.GetBoolean())
                             && !ownedHardware.Add(Unsigned(pointer, "appendId")))
@@ -317,6 +464,7 @@ public static class BundleArchive
                             throw new InvalidDataException("A footer-only end packet cannot claim a captured image.");
                     }
                 }
+                if (row.TryGetProperty("fullCanvasAssetId", out var fullCanvasAsset) && fullCanvasAsset.ValueKind!=JsonValueKind.Null) referencedAssets.Add(fullCanvasAsset.GetString() ?? throw new InvalidDataException("Missing full-canvas asset identity."));
                 if (row.TryGetProperty("penContacts", out var contacts))
                 {
                     if (contacts.ValueKind != JsonValueKind.Array) throw new InvalidDataException("penContacts must be an array.");
@@ -459,10 +607,15 @@ public static class BundleArchive
         if (entry.Length > 1024 * 1024) throw new InvalidDataException("Container index exceeds 1 MiB.");
         using var stream = entry.Open();
         var index = JsonSerializer.Deserialize<ArchiveIndex>(stream, Json) ?? throw new InvalidDataException("Missing container index.");
-        if (index.Schema is not (Schema or LegacySchema) || index.Mechanical is null || index.Aggregation is null || index.Dimensions is null
+        if (index.Schema is not (Schema or LegacySchema or EditSchema or ProjectSchema) || index.Mechanical is null || index.Aggregation is null || index.Dimensions is null || index.PreviousSessions is null || index.EditSources is null
             || index.Mechanical.Entry != MechanicalEntry || index.Aggregation.Entry != AggregationEntry)
             throw new InvalidDataException("Unsupported container schema or stream entries.");
-        foreach (var info in new[] { index.Mechanical, index.Aggregation }.Concat(index.Dimensions))
+        if (index.Edits is not null && (index.Schema is not (EditSchema or ProjectSchema) || index.Edits.Entry != EditJournalEntry || index.Edits.AssetCount < 0))
+            throw new InvalidDataException("Unsupported edit journal index metadata.");
+        if (index.EditSources.Length != 0 && (index.Edits is null || index.Schema is not (EditSchema or ProjectSchema)))
+            throw new InvalidDataException("Native edit sources require an edit journal schema.");
+        foreach (var info in new[] { index.Mechanical, index.Aggregation }.Concat(index.Dimensions)
+            .Concat(index.Edits is null ? System.Array.Empty<EntryInfo>() : [index.Edits]).Concat(index.EditSources))
             if (info is null || info.Codec is not (null or "brotli") || (index.Schema == LegacySchema && info.Codec is not null))
                 throw new InvalidDataException("Unsupported entry codec.");
         return index;
@@ -480,8 +633,25 @@ public static class BundleArchive
             if (!dimensions.Add(revision.Entry) || !expected.Add(StoredName(revision)))
                 throw new InvalidDataException("Duplicate dimensions entry metadata.");
         }
+        if (index.Edits is not null)
+        {
+            if (!expected.Add(StoredName(index.Edits))) throw new InvalidDataException("Duplicate edit journal entry.");
+            ZipArchiveEntry[] assets = archive.Entries.Where(entry => entry.FullName.StartsWith(EditJournal.AssetEntryPrefix, StringComparison.Ordinal)).ToArray();
+            if (assets.Length != index.Edits.AssetCount) throw new InvalidDataException("Edit PNG asset count mismatch.");
+            foreach (ZipArchiveEntry asset in assets)
+            {
+                if (!Regex.IsMatch(asset.FullName, "^edits/assets/[0-9a-f]{64}\\.png$", RegexOptions.CultureInvariant)
+                    || !expected.Add(asset.FullName)) throw new InvalidDataException("Unsafe or duplicate edit PNG entry.");
+            }
+        }
         if (!dimensions.Contains(index.ActiveDimensionsEntry))
             throw new InvalidDataException("Invalid active dimensions entry.");
+        foreach (var session in index.PreviousSessions)
+            if (index.Schema != ProjectSchema || !Regex.IsMatch(session.Entry, "^sessions/[0-9a-f]{64}\\.memoline$") || session.Codec is not null ||
+                !expected.Add(session.Entry)) throw new InvalidDataException("Invalid or duplicate previous session entry.");
+        foreach (var source in index.EditSources)
+            if (!IsEditSourceEntry(source.Entry) || !expected.Add(StoredName(source)))
+                throw new InvalidDataException("Invalid or duplicate native edit source entry.");
         if (archive.Entries.Count != expected.Count || archive.Entries.Any(entry => !expected.Contains(entry.FullName)))
             throw new InvalidDataException("Unexpected or missing container entries.");
     }
@@ -546,9 +716,9 @@ public static class BundleArchive
     private static void AddCompressedEntry(ZipArchive archive, Stream source, string name, CancellationToken token)
     {
         using var target = archive.CreateEntry(name + ".br", CompressionLevel.NoCompression).Open();
-        // One 16 MiB history window across the exact source byte stream. Live
-        // recording remains unchanged; expensive compression runs only at seal.
-        using var encoder = new BrotliEncoder(quality: 11, window: 24);
+        // Retain the 16 MiB history window for repeated evidence, but use a
+        // fast quality level so stopping a recording does not take minutes.
+        using var encoder = new BrotliEncoder(quality: 4, window: 24);
         byte[] input = new byte[128 * 1024], output = new byte[128 * 1024]; int count;
         while ((count = source.Read(input)) != 0)
         {

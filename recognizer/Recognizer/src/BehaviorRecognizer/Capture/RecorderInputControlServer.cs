@@ -69,13 +69,13 @@ public sealed class RecorderInputControlServer : IAsyncDisposable
                             switch (request.GetProperty("command").GetString())
                             {
                                 case "requestStates":
-                                    if (request.EnumerateObject().Any(p => p.Name is not ("command" or "requestId" or "sessionId" or "modules" or "saveId")))
+                                    if (request.EnumerateObject().Any(p => p.Name is not ("command" or "requestId" or "sessionId" or "modules" or "saveId" or "brushPanelRoi")))
                                         throw new ArgumentException("Unknown state request option.");
                                     var stateRequest = request.Deserialize<RecorderStateRequest>(Json) ?? throw new ArgumentException("Missing state request.");
                                     if (string.IsNullOrWhiteSpace(stateRequest.RequestId) || stateRequest.RequestId.Length > 128
                                         || stateRequest.Modules is null || stateRequest.Modules.Length is < 1 or > 8
                                         || stateRequest.Modules.Distinct().Count() != stateRequest.Modules.Length
-                                        || stateRequest.Modules.Any(m => !RecorderStateRequests.Modules.Contains(m))
+                                        || stateRequest.Modules.Any(m => !RecorderStateRequests.Modules.Contains(m)) || !stateRequest.HasValidPanelSelection()
                                         || stateRequest.SaveId is { } saveId && (saveId.Length is < 1 or > 128 || saveId.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_'))))
                                         throw new ArgumentException("Invalid state request identity, modules or saveId.");
                                     if (!_recordingReady() || _recording is null || _requestStates is null || stateRequest.SessionId != _recording.SessionId)
@@ -84,6 +84,11 @@ public sealed class RecorderInputControlServer : IAsyncDisposable
                                     break;
                                 case "getInputControlStatus":
                                     response = _control.GetInputControlStatus();
+                                    break;
+                                case "getRecordingStatus":
+                                    ValidateOptions(request, "command");
+                                    response = new { success = true, sessionId = _recording?.SessionId,
+                                        recordingReady = _recordingReady(), inputCaptureAvailable = _recording is not null && _capture is not null };
                                     break;
                                 case "prepareEditBoundary":
                                     RequireEditCapture();
@@ -115,21 +120,31 @@ public sealed class RecorderInputControlServer : IAsyncDisposable
                                     var ended = await _capture!.EndEditTransactionAsync(endId, ReadIdentity(request, "outcome"), _control, _stop.Token);
                                     response = new { success = true, sessionId = _recording!.SessionId, transactionId = endId, appendId = ended.AppendId };
                                     break;
+                                case "recordEditingAction":
+                                    RequireEditCapture();
+                                    ValidateOptions(request, "command", "transactionId", "editKind", "changes");
+                                    string actionId = ReadIdentity(request, "transactionId");
+                                    string editKind = ReadIdentity(request, "editKind");
+                                    if (editKind is not ("eventEditing" or "preciseUndo")) throw new ArgumentException("Unknown editing action.");
+                                    var action = await _capture!.RecordEditingActionAsync(actionId,editKind,request.GetProperty("changes"),_stop.Token);
+                                    await _recording!.FlushAsync(cancellationToken: _stop.Token);
+                                    response = new { success = true, sessionId = _recording.SessionId, transactionId = actionId, appendId = action.AppendId };
+                                    break;
                                 case "prepareRecordingEnd":
                                     if (request.EnumerateObject().Any(p => p.Name != "command"))
                                         throw new ArgumentException("prepareRecordingEnd only accepts command.");
-                                    if (!_recordingReady() || _recording is null)
+                                    if (!_recordingReady() || _recording is null || _capture is null)
                                         throw new InvalidOperationException("Recording is not ready for an end boundary.");
                                     if (_endBoundary is null)
                                     {
-                                        void Remember(MemolineEvent frame)
-                                        { if (frame.Kind == "recordingEndRequested") _endBoundary = frame; }
-                                        _recording.RecordAppended += Remember;
-                                        try { _recording.AppendState("recordingEndRequested", _recording.NowTicks, [],
-                                            new { reason = "externalControl", boundaryKind = "recordingEnd" }, "immediate"); }
-                                        finally { _recording.RecordAppended -= Remember; }
+                                        using var endTimeout = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+                                        endTimeout.CancelAfter(TimeSpan.FromSeconds(30));
+                                        try { _endBoundary = await _capture.PrepareRecordingEndAsync(endTimeout.Token); }
+                                        catch (OperationCanceledException) when (!_stop.IsCancellationRequested)
+                                        { throw new TimeoutException("Wait for the current pen or mouse contact to end (30 second timeout)."); }
                                     }
                                     var boundary = _endBoundary ?? throw new IOException("End boundary was not appended.");
+                                    await _recording.FlushAsync(cancellationToken: _stop.Token);
                                     response = new { success = true, sessionId = _recording.SessionId,
                                         triggerTicks = boundary.Ticks, appendId = boundary.AppendId };
                                     break;

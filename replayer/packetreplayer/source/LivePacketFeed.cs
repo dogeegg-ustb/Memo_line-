@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using BehaviorRecognizer.Realtime;
 using StrokeReplay;
 
@@ -13,6 +14,7 @@ internal interface IPacketStateFeed
     JsonElement LayersEvidence { get; }
     SubtoolSnapshot? Subtools { get; }
     JsonElement Color { get; }
+    JsonElement ColorInput => default;
     ShortcutConfiguration? Shortcuts { get; }
     long Revision { get; }
     void EnsureConnected();
@@ -30,23 +32,27 @@ internal sealed class LivePacketFeed : IPacketStateFeed, IAsyncDisposable
     private long _revision, _generation;
     private bool _connected;
     private BrushSnapshot? _brush;
+    private JsonElement _brushEvidence;
     private string? _layer;
-    private JsonElement _layers, _layersEvidence, _color;
+    private JsonElement _layers, _layersEvidence, _color, _colorInput;
     private SubtoolSnapshot? _subtools;
     private int? _recorderProcessId;
     private ShortcutConfiguration? _shortcuts;
     private string? _sessionId;
     private CanvasViewSnapshot? _requestedView;
+    private JsonElement _requestedCanvasView;
+    private int[]? _editingBrushPanelRoi;
     private readonly IPacketStateControl? _controlOverride;
     private readonly SemaphoreSlim _requestGate = new(1);
     internal LivePacketFeed(string? endpoint = null, IPacketStateControl? stateControl = null)
     {
-        View = new(endpoint, additionalChannels: ["shortcuts", "subtools", "layers", "layerstage", "core.brushState", "core.colorState"]);
+        View = new(endpoint, additionalChannels: ["shortcuts", "subtools", "layers", "layerstage", "core.brushState", "core.colorState", "core.colorInputState"]);
         View.MessageReceived += Apply;
         View.ConnectionReset += Reset;
         _controlOverride = stateControl;
     }
     public BrushSnapshot? Brush { get { lock (_sync) return _brush; } }
+    internal JsonElement BrushEvidence { get { lock (_sync) return _brushEvidence; } }
     public string? Layer { get { lock (_sync) return _layer; } }
     public JsonElement Layers { get { lock (_sync) return _layers; } }
     public JsonElement LayersEvidence { get { lock (_sync) return _layersEvidence; } }
@@ -54,7 +60,18 @@ internal sealed class LivePacketFeed : IPacketStateFeed, IAsyncDisposable
     internal int? RecorderProcessId { get { lock (_sync) return _recorderProcessId; } }
     internal long Generation { get { lock (_sync) return _generation; } }
     internal CanvasViewSnapshot? RequestedView { get { lock (_sync) return _requestedView; } }
+    internal JsonElement RequestedCanvasView { get { lock (_sync) return _requestedCanvasView; } }
     public async Task RequestAsync(string[] modules, CancellationToken token, string? saveId = null)
+    {
+        int[]? roi;lock(_sync)roi=modules.Contains("brushState")?_editingBrushPanelRoi?.ToArray():null;
+        await RequestCoreAsync(modules,token,saveId,roi);
+    }
+    internal async Task RequestBrushPanelAsync(System.Drawing.Rectangle region,CancellationToken token)
+    {
+        int[] roi=[region.X,region.Y,region.Width,region.Height];
+        await RequestCoreAsync(["brushState"],token,null,roi);
+    }
+    private async Task RequestCoreAsync(string[] modules,CancellationToken token,string? saveId,int[]? brushPanelRoi)
     {
         await _requestGate.WaitAsync(token);
         try
@@ -74,8 +91,10 @@ internal sealed class LivePacketFeed : IPacketStateFeed, IAsyncDisposable
                 foreach (string module in modules.Where(m => m is not ("shortcuts" or "initializationConfiguration"))) _barriers[module] = requested;
                 if (modules.Contains("subtoolState")) _subtoolCaptureBarrier = _subtools?.CaptureId;
             }
-            var results = await (_controlOverride ?? new PacketRecorderControl(pid)).RequestAsync(session,
-                "packet-state-" + Guid.NewGuid().ToString("N"), modules, saveId, token);
+            var control=_controlOverride ?? new PacketRecorderControl(pid);
+            string requestId="packet-state-"+Guid.NewGuid().ToString("N");
+            var results=brushPanelRoi is null?await control.RequestAsync(session,requestId,modules,saveId,token):
+                await control.RequestBrushPanelAsync(session,requestId,modules,saveId,brushPanelRoi,token);
             lock (_sync)
             {
                 if (!_connected || _generation != generation) throw new IOException("主动请求期间 Memoline 会话已变化。");
@@ -94,7 +113,9 @@ internal sealed class LivePacketFeed : IPacketStateFeed, IAsyncDisposable
                     {
                         case "brushState":
                             _brush = BrushSnapshot.Parse(data, live: true);
+                            _brushEvidence=data.Clone();
                             if (_brush is null) throw new InvalidOperationException("本次主动请求未确认笔刷：" + BrushFailureReason(data));
+                            if(brushPanelRoi is not null)_editingBrushPanelRoi=brushPanelRoi.ToArray();
                             break;
                         case "currentLayerState":
                             _layer = J.Confirmed(data) ? J.Get(data, "state").ValueKind == JsonValueKind.String ? J.Get(data, "state").GetString() : null : null;
@@ -114,10 +135,14 @@ internal sealed class LivePacketFeed : IPacketStateFeed, IAsyncDisposable
                             if (_color.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("本次主动请求未确认颜色：" + J.Text(data, "error"));
                             break;
                         case "shortcuts": _shortcuts = ShortcutConfiguration.Parse(data); break;
+                        case "colorInputState": _colorInput = data.Clone(); break;
                         case "initializationConfiguration":
                             if (J.Get(data, "error").ValueKind == JsonValueKind.String) throw new InvalidOperationException(J.Text(data, "error"));
                             View.ApplyRequestedConfiguration(data); break;
-                        case "canvasViewState": _requestedView = View.ApplyRequestedView(data); break;
+                        case "canvasViewState":
+                            _requestedView = View.ApplyRequestedView(data);
+                            _requestedCanvasView = BindCanvasViewToSession(data,session);
+                            break;
                         default: throw new ArgumentException("未知状态模块：" + module);
                     }
                     _revision++; _moduleRevisions[module] = _revision;
@@ -128,6 +153,15 @@ internal sealed class LivePacketFeed : IPacketStateFeed, IAsyncDisposable
         finally { _requestGate.Release(); }
     }
     public JsonElement Color { get { lock (_sync) return _color; } }
+    internal static JsonElement BindCanvasViewToSession(JsonElement data,string session)
+    {
+        var existing=J.Text(data,"sessionId");
+        if(existing is not null && existing!=session)throw new IOException("画布矩阵属于其他录制会话。");
+        var node=JsonNode.Parse(data.GetRawText()) as JsonObject ?? throw new InvalidDataException("画布状态缺少完整结果。");
+        node["sessionId"]=session;
+        return JsonSerializer.SerializeToElement(node);
+    }
+    public JsonElement ColorInput { get { lock (_sync) return _colorInput; } }
     internal static string BrushFailureReason(JsonElement data)
     {
         if (J.Text(data, "error") is { Length: > 0 } error) return error;
@@ -171,18 +205,32 @@ internal sealed class LivePacketFeed : IPacketStateFeed, IAsyncDisposable
             { _shortcuts = ShortcutConfiguration.Parse(message.Data); _revision++; Pulse(); return; }
             var module = J.Text(message.Data, "module");
             if (message.Kind is not ("stateUpdated" or "currentLayerUpdated" or "layerStructureUpdated" or "ocrUpdated") || module is null) return;
-            if (module != "subtoolState" && !J.Confirmed(message.Data)) return;
             if (_barriers.TryGetValue(module, out long barrier))
             {
                 var evidence = J.Get(message.Data, "evidence");
                 var capture = J.Get(evidence, module == "clipState" ? "observedTicks" : "capturedTicks");
                 if (capture.ValueKind != JsonValueKind.Number || !capture.TryGetInt64(out var ticks) || ticks < barrier) return;
             }
+            if (module is not ("subtoolState" or "colorInputState") && !J.Confirmed(message.Data))
+            {
+                // A fresh unknown observation invalidates earlier confirmation.
+                // Keeping the old color here could draw with the wrong RGB.
+                switch(module)
+                {
+                    case "brushState": _brush=null; _brushEvidence=default; break;
+                    case "currentLayerState": _layer=null; break;
+                    case "colorState": _color=default; break;
+                    case "clipState": _layers=default; _layersEvidence=default; break;
+                    default: return;
+                }
+                _revision++;_moduleRevisions[module]=_revision;Pulse();return;
+            }
             if (module == "brushState")
             {
                 var brush = BrushSnapshot.Parse(message.Data, live: true);
                 if (brush is null) return;
                 _brush = brush;
+                _brushEvidence=message.Data.Clone();
             }
             else if (module == "currentLayerState")
             {
@@ -204,14 +252,15 @@ internal sealed class LivePacketFeed : IPacketStateFeed, IAsyncDisposable
                 _subtools = snapshot;
             }
             else if (module == "colorState") _color = J.Get(message.Data, "state").Clone();
+            else if (module == "colorInputState") _colorInput = message.Data.Clone();
             else return;
             _revision++; _moduleRevisions[module] = _revision; Pulse();
         }
     }
     private void Reset()
     {
-        lock (_sync) { _connected = false; _brush = null; _layer = null; _layers = default; _layersEvidence = default; _color = default; _subtools = null; _recorderProcessId = null; _sessionId = null; _requestedView = null;
-            _subtoolCaptureBarrier = null; _barriers.Clear(); _moduleRevisions.Clear(); _generation++; _revision++; Pulse(); }
+        lock (_sync) { _connected = false; _brush = null; _layer = null; _layers = default; _layersEvidence = default; _color = default; _colorInput = default; _subtools = null; _recorderProcessId = null; _sessionId = null; _requestedView = null;
+            _brushEvidence=default; _requestedCanvasView=default; _editingBrushPanelRoi=null; _subtoolCaptureBarrier = null; _barriers.Clear(); _moduleRevisions.Clear(); _generation++; _revision++; Pulse(); }
     }
     public async Task WaitAsync(long after, string module, Func<bool> matches, CancellationToken token)
     {

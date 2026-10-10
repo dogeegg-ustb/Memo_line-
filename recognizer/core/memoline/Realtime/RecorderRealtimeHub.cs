@@ -10,7 +10,7 @@ public static class RecorderRealtimeTopics
     public const string Keyboard = "keyboard", Mouse = "mouse", Tablet = "tablet";
     public const string TabletMetadata = "tablet.metadata";
     public const string Shortcuts = "shortcuts", Layers = "layers", LayerStage = "layerstage", Subtools = "subtools";
-    public static readonly string[] CoreModules = ["brushState", "subtoolState", "currentLayerState", "colorState", "canvasViewState", "clipState"];
+    public static readonly string[] CoreModules = ["brushState", "subtoolState", "currentLayerState", "colorState", "colorInputState", "canvasViewState", "clipState"];
     public static IReadOnlyList<string> All { get; } = new[] { Keyboard, Mouse, Tablet, Shortcuts, Layers, LayerStage, Subtools }.Concat(CoreModules.Select(m => "core." + m)).ToArray();
     public static string[] Expand(IEnumerable<string> topics)
     {

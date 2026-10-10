@@ -14,6 +14,8 @@
 
 身份字符串非空且最长 128 字符，未知字段被拒绝。命令绑定当前已初始化录制会话，响应含 `success/sessionId/appendId` 和对应 requestId 或 transactionId。prepare 响应另含 `triggerTicks`；服务端等待当前笔接触结束，在输入单消费者队列中追加边界并刷盘后返回，最长等候 30 秒。同一成功 requestId 返回原边界，不重复追加；取消的请求可重试。边界不写 footer，录制继续。
 
+开始基线前发送 `{"command":"getRecordingStatus"}`，响应包含 `success/sessionId/recordingReady/inputCaptureAvailable`。`initializationConfiguration` 只表示校准配置已生成；`recordingReady` 在 Recognizer 接收 `initialStateReady` 后才为 true。宿主核对同一 sessionId、输入捕获接口可用及 recordingReady=true 后才请求 `prepareEditBoundary`；等待支持取消，查询不生成边界、不改变输入拦截策略。
+
 begin 接管输入拦截并保存先前策略，拒绝笔未抬起、其他活动事务或已经结束的事务身份；同一活动 transactionId 可重试。end 恢复先前的受控/自动拦截策略，再在同一消费者上结束原生区间；恢复失败会保留活动事务，允许重试。事务期间直接 configure/restore 拦截接口也被拒绝，主动状态请求和保存仍可使用。取消不能使已开始的事务命令只取消等待方而隐蔽地更改策略。
 
 实时 `system` 频道发布与原生帧一致的 `editBoundaryRequested/editTransactionBegan/editTransactionEnded/physicalInputDuringTransaction`。物理笔、键、鼠输入照常记录，告警给出 transactionId、deviceType 和对应输入 appendId；`inputRecorded=false` 时 appendId=0，不能定位输入帧，仍须按 transactionId 中止。`latestAppendId` 仅供诊断水位，不冒充输入引用。外部 injected 输入不冒充物理输入。Memoline 输入标签 `0x4D4C5243` 在入口丢弃。这些瞬时通知不参与连接快照重放。宿主订阅后取消执行的流程尚未实现。

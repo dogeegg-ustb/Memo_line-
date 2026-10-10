@@ -15,7 +15,7 @@ internal sealed class AggregateSession : IDisposable
     private const int AssetChunkBytes = 512 * 1024;
     private static readonly JsonSerializerOptions Json = new(MemolineWriter.Json);
     private sealed record NativePointer(ulong AppendId, ulong EventId, ulong? OperationId, long Ticks, bool Hardware, string? Kind,
-        PenDownLocation? PenDownLocation = null);
+        PenDownLocation? PenDownLocation = null, bool CanvasEditing = false, bool MayMutateDocument = false);
     private sealed class Boundary(ViewportObservation observation, long from, bool recordingEnd = false)
     {
         public ViewportObservation Observation { get; } = observation;
@@ -28,6 +28,8 @@ internal sealed class AggregateSession : IDisposable
         public bool Queued { get; set; }
         public bool Committed { get; set; }
         public string? Failure { get; set; }
+        public string? EditingId { get; init; }
+        public bool RecordingEndLayer { get; init; }
     }
     private readonly object _sync = new();
     private readonly StreamWriter _output;
@@ -37,6 +39,12 @@ internal sealed class AggregateSession : IDisposable
     private readonly Dictionary<ulong, NativePointer> _byEvent = [];
     private readonly Dictionary<string, string> _assetIdsByHash = new(StringComparer.Ordinal);
     private readonly SortedDictionary<long, Boundary> _boundaries = [];
+    private readonly Dictionary<string, RecorderRealtimeEvent> _editingObservations = [];
+    private readonly Dictionary<string, Boundary> _editingBoundaries = [];
+    private readonly Dictionary<long, Boundary> _recordingEndLayers = [];
+    private readonly Dictionary<ulong, bool> _canvasOperations = [];
+    private readonly HashSet<ulong> _canvasMouseOperations = [];
+    private bool _canvasMouseContact;
     private readonly long _frequency, _originTicks;
     private long _lastObservation = -1, _lastBoundary;
     private long _nativeEndTicks = -1;
@@ -128,6 +136,17 @@ internal sealed class AggregateSession : IDisposable
         }
     }
 
+    internal void ObserveEditingBoundary(RecorderRealtimeEvent message)
+    {
+        lock (_sync)
+        {
+            Active();
+            if (message.SessionId != SessionId || message.Kind != "editBoundaryRequested" || J.Text(message.Data, "requestId") is not { } id)
+                throw new InvalidDataException("编辑边界身份不匹配。");
+            _editingObservations[id] = message;
+        }
+    }
+
     public void CaptureQueued(CaptureRequest request)
     {
         lock (_sync)
@@ -147,7 +166,7 @@ internal sealed class AggregateSession : IDisposable
             Active();
             var boundary = Find(request);
             if (boundary.Committed) return;
-            if (boundary.RecordingEnd && !_committingEnd)
+            if ((boundary.RecordingEnd || boundary.RecordingEndLayer) && !_committingEnd)
             {
                 // Its pixels are fixed now. Publish only after the native footer
                 // so the packet also owns late input and interrupted contacts.
@@ -177,13 +196,15 @@ internal sealed class AggregateSession : IDisposable
                 long diffFromTicks = J.Tick(recognizer, "fromTicks", -1);
                 var matrices = labels.Select(label => Matrix(label, inputs, states, boundary, diffFromTicks)).ToArray();
                 var imageAssets = assets.Select(a => new { path = a.Relative, assetId = AppendAsset(a.Path, a.Id) }).ToArray();
+                string? fullCanvasAssetId = string.IsNullOrEmpty(update.ImagePath) ? null : AppendAsset(update.ImagePath, packetId + "/full-canvas.png");
                 Write(new { kind = "packet", SessionId, id = packetId, fromTicks = boundary.FromTicks,
                     toTicks = boundary.ToTicks, triggerTicks = boundary.TriggerTicks,
-                    boundaryKind = boundary.RecordingEnd ? "recordingEnd" : "canvasViewportChanged",
+                    boundaryKind = boundary.RecordingEndLayer ? "recordingEndLayer" : boundary.EditingId is not null ? "editBoundary" : boundary.RecordingEnd ? "recordingEnd" : "canvasViewportChanged",
                     observationAppendId = boundary.Observation.Message.AppendId,
                     status = update.Baseline ? "baseline" : "captured", reason = update.Baseline ? "firstLayerSnapshot" : (string?)null,
                     eventPointers = WindowPointers(boundary), penContacts = WindowPenContacts(boundary), dirtyMatrices = matrices,
                     imageAssets,
+                    fullCanvasAssetId,
                     manifest });
                 boundary.Committed = true;
                 _packets++;
@@ -218,7 +239,7 @@ internal sealed class AggregateSession : IDisposable
 
     // Only called after the recorder has stopped gracefully. A footer proves
     // the complete mechanical prefix exists, including late core results.
-    public void Complete()
+    public void Complete(bool requireFinalCapture = true)
     {
         lock (_sync)
         {
@@ -227,6 +248,7 @@ internal sealed class AggregateSession : IDisposable
             RefreshNative();
             if (_native is null || !_native.IsComplete || !_nativeHeader)
                 throw new InvalidDataException("Recognizer 原生机械文件尚未正常写入 footer，不能封盘");
+            ValidateFinalCapture(requireFinalCapture);
             foreach (var boundary in _boundaries.Values.Where(b => !b.Committed))
             {
                 WaitForObservation(boundary);
@@ -244,11 +266,21 @@ internal sealed class AggregateSession : IDisposable
                 _recordingEnd.Failure = _recordingEndFailure ?? "recordingEndCaptureUnavailable";
             }
             _recordingEnd.EndTicks = _nativeEndTicks;
+            foreach (var layer in _recordingEndLayers.Values)
+            {
+                if (layer.PendingCapture is { } layerCapture)
+                {
+                    _committingEnd = true;
+                    try { CaptureCommitted(layerCapture.Request, layerCapture.Update); }
+                    finally { _committingEnd = false; }
+                }
+                if (!layer.Committed)
+                    throw new InvalidDataException("末尾涉及图层的差异未提交，不能封盘：" + layer.Failure);
+            }
             if (_recordingEnd.PendingCapture is { } pending)
             {
                 _committingEnd = true;
                 try { CaptureCommitted(pending.Request, pending.Update); }
-                catch (Exception) { /* CaptureCommitted retained the concrete failure. */ }
                 finally { _committingEnd = false; }
             }
             if (!_recordingEnd.Committed)
@@ -261,6 +293,26 @@ internal sealed class AggregateSession : IDisposable
                 assetChunks = _assets, lastBoundaryTicks = _lastBoundary, nativeLastAppendId = _lastAppend });
             IsComplete = true;
         }
+    }
+
+    private void ValidateFinalCapture(bool required)
+    {
+        if (!required) return; // Explicit diagnostic archives remain readable.
+        bool canvasInput = _byAppend.Values.Any(pointer => pointer.CanvasEditing);
+        if (_recordingEnd is not { PendingCapture: not null, Failure: null } end)
+        {
+            if (!canvasInput && _recordingEnd?.PendingCapture is null) return; // Cancelled initialization or no drawing can close without pixels.
+            throw new InvalidDataException("末尾画布输入尚未保存为完整图层和脏矩阵；原生与聚集文件已保留："
+                + (_recordingEnd?.Failure ?? _recordingEndFailure ?? "recordingEndCaptureUnavailable"));
+        }
+        if (_recordingEndLayers.Values.Any(layer => layer.PendingCapture is null || layer.Failure is not null))
+            throw new InvalidDataException("末尾多层保存未全部完成；原生与聚集文件已保留。");
+        // The captured pixels belong to this native marker. Extending pointer
+        // ownership through footer must never claim a later stroke was captured.
+        var later = _byAppend.Values.FirstOrDefault(pointer => pointer.MayMutateDocument
+            && pointer.AppendId > end.Observation.Message.AppendId);
+        if (later is not null)
+            throw new InvalidDataException("结束捕获之后仍有可能改变 CSP 文档的物理输入，不能把旧截图归给后续操作；原始文件已保留。appendId=" + later.AppendId);
     }
 
     private void EmptyPacket(Boundary boundary, string reason)
@@ -318,7 +370,7 @@ internal sealed class AggregateSession : IDisposable
     }
     private object[] WindowPointers(Boundary boundary) => _byAppend.Values
         .Where(p => p.Hardware && p.Ticks > boundary.FromTicks && p.Ticks <= boundary.ToTicks)
-        .OrderBy(p => p.Ticks).ThenBy(p => p.AppendId).Select(p => Pointer(p, context: false)).ToArray();
+        .OrderBy(p => p.Ticks).ThenBy(p => p.AppendId).Select(p => Pointer(p, context: boundary.EditingId is not null)).ToArray();
     private object[] WindowPenContacts(Boundary boundary)
     {
         var operations = _byAppend.Values.Where(p => p.Hardware && p.Ticks > boundary.FromTicks && p.Ticks <= boundary.ToTicks
@@ -328,18 +380,37 @@ internal sealed class AggregateSession : IDisposable
                 && operations.Contains(p.OperationId ?? p.EventId))
             .OrderBy(p => p.Ticks).ThenBy(p => p.AppendId)
             .Select(p => (object)new { operationId = p.OperationId ?? p.EventId,
-                beginEventPointer = Pointer(p, context: p.Ticks <= boundary.FromTicks), p.PenDownLocation }).ToArray();
+                beginEventPointer = Pointer(p, context: boundary.EditingId is not null || p.Ticks <= boundary.FromTicks), p.PenDownLocation }).ToArray();
     }
     private object Pointer(NativePointer p, bool context) => new { SessionId, p.AppendId, p.EventId, p.OperationId, p.Ticks, context };
     private Boundary Find(CaptureRequest request)
     {
         if (request.Context is { } context && context.SessionId != SessionId)
             throw new InvalidDataException("保存任务属于另一个 Recognizer 会话");
+        if (request.TriggerKind == "recordingEndLayer" && request.Layer is { } finalLayer
+            && _recordingEnd is { } end && end.TriggerTicks == request.TriggerTicks)
+        {
+            if (_recordingEndLayers.TryGetValue(finalLayer.Id, out var existing)) return existing;
+            var created = new Boundary(end.Observation, 0) {
+                EditingId = "recording-end-layer-" + finalLayer.Id, RecordingEndLayer = true
+            };
+            _recordingEndLayers.Add(finalLayer.Id, created);
+            return created;
+        }
+        if (request.TriggerKind == "editBoundary" && request.BoundaryRequestId is { } editId && request.Layer is { } layer)
+        {
+            string key = editId + "/" + layer.Id;
+            if (_editingBoundaries.TryGetValue(key, out var existing)) return existing;
+            if (!_editingObservations.TryGetValue(editId, out var observed) || observed.Ticks != request.TriggerTicks)
+                throw new InvalidDataException("保存任务没有对应的原生编辑边界。");
+            var created = new Boundary(new(observed, observed.Ticks, 0, false, true), 0) { EditingId = key };
+            _editingBoundaries.Add(key, created); return created;
+        }
         return request.TriggerKind == "recordingEnd" && _recordingEnd?.TriggerTicks == request.TriggerTicks ? _recordingEnd
             : _boundaries.GetValueOrDefault(request.TriggerTicks)
             ?? throw new InvalidDataException("保存任务没有已确认的画布变化边界");
     }
-    private string PacketId(Boundary boundary) => (boundary.RecordingEnd ? "recording-end-" : "viewport-")
+    private string PacketId(Boundary boundary) => boundary.EditingId is not null ? "edit-" + boundary.EditingId.Replace('/', '-') : (boundary.RecordingEnd ? "recording-end-" : "viewport-")
         + boundary.TriggerTicks.ToString("D20", System.Globalization.CultureInfo.InvariantCulture);
 
     private void WaitForObservation(Boundary boundary)
@@ -397,15 +468,48 @@ internal sealed class AggregateSession : IDisposable
                 PenDownLocation? location = kind == "penBegin" ? PanelRegionMap.ReadLocation(data) : null;
                 if (kind == "penBegin" && location is null && _nativeRegions.HasRegions
                     && J.Number(data, "x") is { } x && J.Number(data, "y") is { } y) location = _nativeRegions.Classify(x, y);
-                var pointer = new NativePointer(appendId, eventId,
-                    op.ValueKind == JsonValueKind.Number && op.TryGetUInt64(out ulong operation) ? operation : null,
-                    ticks, J.Text(frame, "path") == "hardware", kind, location);
+                ulong? operation = op.ValueKind == JsonValueKind.Number && op.TryGetUInt64(out ulong nativeOperation) ? nativeOperation : null;
+                bool hardware = J.Text(frame, "path") == "hardware";
+                // Recorder-tagged save/replay input is filtered before native
+                // append. A recorded injected frame may be a user's driver
+                // macro or pen compatibility input and must remain significant.
+                bool physical = hardware;
+                ulong contact = operation ?? eventId;
+                bool canvas = false;
+                if (physical && kind == "penBegin") _canvasOperations[contact] = PotentialCanvas(data, location);
+                if (physical && kind is "penBegin" or "penSample")
+                    canvas = _canvasOperations.TryGetValue(contact, out bool editable) ? editable
+                        : kind == "penSample" && PotentialCanvas(data, location);
+                if (physical && kind == "mouseDown" && J.Text(data, "button") == "left")
+                {
+                    var mouseLocation = _nativeRegions.HasRegions && J.Number(data, "x") is { } mx && J.Number(data, "y") is { } my
+                        ? _nativeRegions.Classify(mx, my) : null;
+                    _canvasMouseContact = PotentialCanvas(data, mouseLocation);
+                    if (_canvasMouseContact) _canvasMouseOperations.Add(contact);
+                }
+                if (physical && kind is "mouseDown" or "mouseDrag")
+                    canvas |= _canvasMouseOperations.Contains(contact) || _canvasMouseContact;
+                if (physical && kind is "mouseUp" or "mouseInterrupted") _canvasMouseContact = false;
+                bool mayMutate = canvas || J.Get(data, "inCsp").ValueKind != JsonValueKind.False
+                    && (hardware && kind is "keyInput" or "keyDown" or "mouseDown" or "penBegin"
+                        || kind == "keyboardStateChanged" && J.Text(data, "action") is "keyDown" or "down");
+                var pointer = new NativePointer(appendId, eventId, operation, ticks, hardware, kind, location, canvas, mayMutate);
                 if (pointer.Ticks < 0 || (pointer.Hardware && eventId == 0)) throw new InvalidDataException("原生事件指针字段无效");
                 _byAppend.Add(appendId, pointer);
                 if (pointer.Hardware) _byEvent.Add(eventId, pointer);
                 // frame.Data (including screenshots) is intentionally not retained.
             }
         }
+    }
+
+    private static bool PotentialCanvas(JsonElement data, PenDownLocation? location)
+    {
+        if (J.Get(data, "inCsp").ValueKind == JsonValueKind.False) return false;
+        if (location is { Region: not "canvasViewport" } &&
+            (location.Status == "matched" && location.Region != "other" || location.Status == "outsideRegions")) return false;
+        var keys = J.Get(data, "heldKeys");
+        return keys.ValueKind != JsonValueKind.Array || !keys.EnumerateArray().Any(key => key.TryGetInt32(out int vk)
+            && vk is 32 or 17 or 18 or 0xA2 or 0xA3 or 0xA4 or 0xA5);
     }
 
     private void ValidateManifest(JsonElement manifest, long triggerTicks)

@@ -11,7 +11,7 @@ internal static class J
     internal static IEnumerable<JsonElement> Array(JsonElement e) => e.ValueKind == JsonValueKind.Array ? e.EnumerateArray() : [];
     internal static ulong U64(JsonElement e, string key) => Get(e, key).TryUnsigned();
     internal static ulong TryUnsigned(this JsonElement e) => e.ValueKind == JsonValueKind.Number && e.TryGetUInt64(out var n) ? n : 0;
-    internal static long I64(JsonElement e, string key) => Get(e, key) is { ValueKind: JsonValueKind.Number } v && v.TryGetInt64(out var n) ? n : 0;
+    internal static long I64(JsonElement e, string key, long fallback = 0) => Get(e, key) is { ValueKind: JsonValueKind.Number } v && v.TryGetInt64(out var n) ? n : fallback;
     internal static double? Number(JsonElement e) => e.ValueKind == JsonValueKind.Number && e.TryGetDouble(out var n) && double.IsFinite(n) ? n : null;
     internal static bool Confirmed(JsonElement e) => Text(e, "status") is "changed" or "unchanged";
     internal static string Name(string s) => string.Concat(s.Normalize().Where(c => !char.IsWhiteSpace(c))).Replace('筆', '笔').Replace('圖', '图').Replace('層', '层');

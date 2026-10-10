@@ -295,7 +295,8 @@ public sealed partial class InputControlTests
         await using var session = new TestSession();
         string pipeName = "memoline-input-test-" + Guid.NewGuid().ToString("N");
         bool recordingReady = false;
-        await using var server = new RecorderInputControlServer(session.Guard, () => recordingReady, pipeName, session.Writer);
+        await using var capture = new UnifiedInputCapture(session.Writer, targetProbe: new EditProbe());
+        await using var server = new RecorderInputControlServer(session.Guard, () => recordingReady, pipeName, session.Writer, capture: capture);
         await using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         await client.ConnectAsync(3000);
         using var reader = new StreamReader(client, new UTF8Encoding(false), leaveOpen: true);
@@ -324,6 +325,9 @@ public sealed partial class InputControlTests
         Assert.True(boundary.GetProperty("triggerTicks").GetInt64() >= beforeBoundary);
         Assert.True(boundary.GetProperty("triggerTicks").GetInt64() <= session.NowTicks);
         Assert.True(boundary.GetProperty("appendId").GetUInt64() > 0);
+        using (var native = MemolineReader.Open(session.Writer.LiveFilePath))
+            Assert.Contains(native.ReadAvailable(), frame => frame.GetProperty("kind").GetString() == "recordingEndRequested" &&
+                frame.GetProperty("appendId").GetUInt64() == boundary.GetProperty("appendId").GetUInt64());
         var replay = await Query("""{"command":"prepareRecordingEnd"}""");
         Assert.Equal(boundary.GetRawText(), replay.GetRawText());
         Assert.False((await Query("""{"command":"prepareRecordingEnd","extra":true}""")).GetProperty("success").GetBoolean());

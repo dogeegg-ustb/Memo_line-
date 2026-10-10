@@ -44,10 +44,8 @@ internal sealed class PacketReplayStateTable(IPacketStateFeed feed, IPacketInput
 
     private async Task RestoreColorAsync(CancellationToken token)
     {
-        if (PacketReplayRunner.ColorMatches(feed.Color, Target.Color)) return;
-        await feed.RequestAsync(["colorState"], token);
-        if (!PacketReplayRunner.ColorMatches(feed.Color, Target.Color))
-            throw new InvalidOperationException("当前颜色与文件状态表不同，请在 CSP 中准备对应颜色再重试。");
+        if (Target.Color.ValueKind == System.Text.Json.JsonValueKind.Object)
+            await new ColorRestorer(feed, input).RestoreAsync(Target.Color, token);
     }
 
     internal void AssertMatches()

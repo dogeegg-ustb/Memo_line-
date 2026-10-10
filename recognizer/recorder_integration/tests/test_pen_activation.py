@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "recorder_integration"), str(ROOT.parent / "CSP_Shortcut_Manager")]
-from catalog import Catalog, BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR
+from catalog import Catalog, BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR, COLOR_INPUT
 from engine import UpdateEngine
 
 
@@ -156,7 +156,7 @@ class PenActivationTests(unittest.TestCase):
         self.pen("penBegin",2,200,100)
         self.pen("penSample",3,300,100)
         self.pen("penEnd",4,300,100)
-        self.assertEqual(self.invalidations()[0]["data"]["panels"],[COLOR])
+        self.assertEqual(set(self.invalidations()[0]["data"]["panels"]),{COLOR,COLOR_INPUT})
         self.assertEqual(self.view_requests(),[])
 
 

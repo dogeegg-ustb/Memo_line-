@@ -64,8 +64,14 @@ internal static class LifecycleChecks
         }
         var captures = Get<HashSet<Task>>(window, "_captureTasks");
         captures.Add(AcceptedCaptureAsync());
+        var editCleanup=Completion();
+        window.BeforeRecordingStop=()=>editCleanup.Task;
         Task first = Stop(window), second = Stop(window);
         Check(ReferenceEquals(first, second), "Concurrent Stop calls must await the same task.");
+        Check(!first.IsCompleted && host.FinishCalls==0 && !monitor.CaptureRequestsPaused,
+            "Stop waits for editing protection/input cleanup before pausing captures or ending the recorder.");
+        editCleanup.TrySetResult();
+        await UntilAsync(()=>monitor.CaptureRequestsPaused);
         Check(monitor.CaptureRequestsPaused, "Stopping must pause new capture requests.");
         window.Close();
         await Task.Delay(20);

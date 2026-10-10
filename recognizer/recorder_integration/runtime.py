@@ -20,7 +20,7 @@ if (HERE / "python_libs").is_dir():
 if (HERE.parent / "csp_workspace_overlay.py").is_file():
     sys.path[:0] = [str(HERE.parent), str(HERE.parent.parent / "CSP_Shortcut_Manager")]
 
-from catalog import Catalog, BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR, TOOLGROUP
+from catalog import Catalog, BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR, COLOR_INPUT, TOOLGROUP
 from engine import UpdateEngine
 from csp_workspace_overlay import Overlay, border_strips, find_dock_file, inspect
 from csp_panel_validator.window_service import enable_per_monitor_dpi_awareness
@@ -129,8 +129,15 @@ class Runtime:
     def request_states(self, msg):
         """One explicit request captures fresh pixels; results keep its package identity."""
         package, modules, ticks = msg['packageId'], set(msg['modules']), msg['ticks']
+        brush_roi = msg.get('brushPanelRoi')
+        if brush_roi is not None and ('brushState' not in modules or not isinstance(brush_roi, list)
+                or len(brush_roi) != 4 or any(type(v) is not int for v in brush_roi)
+                or not all(8 <= v <= 8192 for v in brush_roi[2:])
+                or any(not -2147483648 <= v <= 2147483647 for v in brush_roi)
+                or brush_roi[0] + brush_roi[2] > 2147483647 or brush_roi[1] + brush_roi[3] > 2147483647):
+            raise ValueError('Invalid brush panel screenshot selection.')
         panels_by_module = {'brushState':BRUSH,'subtoolState':TOOLGROUP,'currentLayerState':LAYERS,
-                            'colorState':COLOR,'canvasViewState':CANVAS}
+                            'colorState':COLOR,'colorInputState':COLOR_INPUT,'canvasViewState':CANVAS}
         observed = modules & (set(panels_by_module) | {'clipState'})
         if observed:
             self.pipeline.timeline.expect(package, observed)
@@ -153,18 +160,28 @@ class Runtime:
             else:
                 self.pipeline.timeline.complete_if_pending(package,'clipState',None,dict(triggerTicks=ticks),'.clip path unavailable.')
         foreground = self.hwnd and self.user32.GetForegroundWindow() == self.hwnd
+        if COLOR in self.engine.regions and COLOR_INPUT not in self.engine.regions:
+            self.engine.regions = {**self.engine.regions, COLOR_INPUT:list(self.engine.regions[COLOR])}
         available = set()
         for module in observed - {'clipState'}:
             panel = panels_by_module[module]
             if foreground and not self.engine.suspended and panel in self.engine.regions:
                 available.add(panel)
             else:
-                self.pipeline.timeline.complete_if_pending(package,module,None,dict(triggerTicks=ticks),
-                    'CSP must be foreground with the requested panel visible and the initialized layout intact.')
+                if module == 'colorInputState':
+                    self.pipeline.timeline.complete_if_pending(package,module,dict(status='panelNotVisible',
+                        activeTab='unknown',activeColorSlot='unknown',panelRoi=None,captureFrameId=None,
+                        valueRegions=[],tabRegions=[]),dict(triggerTicks=ticks))
+                else:
+                    self.pipeline.timeline.complete_if_pending(package,module,None,dict(triggerTicks=ticks),
+                        'CSP must be foreground with the requested panel visible and the initialized layout intact.')
         if available:
             if CANVAS in available:
                 available.add(NAVIGATOR)
-            self.capture_panels(available,ticks,reason='externalStateRequest:'+msg['requestId'],package_id=package,final=True)
+            options = dict(reason='externalStateRequest:'+msg['requestId'],package_id=package,final=True)
+            if brush_roi is not None:
+                options['regions_override'] = {BRUSH:list(brush_roi)}
+            self.capture_panels(available,ticks,**options)
         if not observed:
             self.pipeline.timeline.not_requested(package)
 
@@ -187,6 +204,8 @@ class Runtime:
             self.pipeline.expect_package(package_id,panels)
         token,due = self.pipeline.activate(panels,ticks,refs,package_id)
         for panel in self.pipeline.analysis_panels(panels):
+            if panel == COLOR_INPUT and COLOR in panels:
+                continue # one final color capture supplies both readers
             if panel != CANVAS:
                 self.pending_captures[panel] = (due,ticks,list(refs),reason,[panel],package_id,token)
         # The canvas evidence taken at movement/release is already eligible for
@@ -199,7 +218,7 @@ class Runtime:
             self.capture_panels(other_panels,ticks,refs,reason,package_id=package_id,analysis_token=token,final=False)
 
     def capture_panels(self, panels, ticks, refs=(), reason="operation", initialize=False,package_id=None,
-                       analysis_token=None,final=True):
+                       analysis_token=None,final=True,regions_override=None):
         panels = self.engine.capture_targets(panels) & self.engine.regions.keys()
         if initialize:
             package_id = self.initial_package_id
@@ -212,6 +231,8 @@ class Runtime:
         if analysis_token is not None:
             self.pipeline.bind_activation(analysis_token,panels,package_id)
         regions = dict(self.engine.regions)
+        if regions_override:
+            regions.update(regions_override)
         if self.canvas_roi:
             regions[CANVAS] = self.canvas_roi
         self.show(set())

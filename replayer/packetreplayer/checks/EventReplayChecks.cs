@@ -32,6 +32,33 @@ internal static partial class PacketChecks
         environment.Clear();
         await EventReplayRunner.RunAsync(schedule, environment, 100000, new(), _ => { }, default);
         Check(environment.Transitions.Count(t => t == PenReplayEngine.PointerTransition.Up) == 2 && environment.Gaps.Count == 0, "Concentrated replay ends each contact with UP and no idle gap.");
+        environment.Clear();
+        int verified=0;
+        await EventReplayRunner.RunAsync(schedule with {Strokes=[first],VerifyRestoredStateAsync=(drawing,token)=>{
+            Check(environment.Transitions.Count==0&&feed.Brush!.Matches(drawing.OverrideBrush!),"Extra raw-state verification runs after numeric restoration and before pen injection.");
+            verified++;return Task.CompletedTask;
+        }},environment,100000,new(),_=>{},default);
+        Check(verified==1,"A reference-control readback callback actually executes before replay.");
+        environment.Clear();
+        try {await EventReplayRunner.RunAsync(schedule with {Strokes=[first],VerifyRestoredStateAsync=(_,_)=>
+            throw new ReplayStateException("BrushUnrestorable","Reference controls are on.")},environment,100000,new(),_=>{},default);
+            throw new Exception("Expected reference verification failure");}
+        catch(ReplayStateException error){Check(error.Code=="BrushUnrestorable","Extra raw-state verification retains its precise failure code.");}
+        Check(environment.Transitions.Count==0&&environment.Releases==1,"A failed reference-control readback never injects a pen and releases inputs.");
+        EventReplayRunner.Validate(schedule with {Strokes=[first with {OverrideBrush=new("Confirmed different pen",[new("brush_size",25),new("flow",61)],0)}]});
+        Check(true,"A confirmed different subtool carries its own complete numeric table, including target-only properties.");
+        Reject<ReplayStateException>(()=>EventReplayRunner.Validate(schedule with {Strokes=[first with {OverrideBrush=
+            historical.Brush! with {Numbers=[new("brush_size",25),new("flow",61)]}}]}));
+        environment.Clear();
+        await EventReplayRunner.RunAsync(schedule with { Strokes = [first], FollowingStrokeStartTicks = second.Stroke.StartTicks },
+            environment, 100000, new(ReplayMode.Discrete), _ => { }, default);
+        Check(environment.Gaps.SequenceEqual(new[] { TimeSpan.FromSeconds(.2) }),
+            "A one-event reference-scene batch preserves the gap to the next selected native contact.");
+        environment.Clear();
+        await EventReplayRunner.RunAsync(schedule with { Strokes = [first], FollowingStrokeStartTicks = 102 },
+            environment, 100000, new(ReplayMode.Discrete), _ => { }, default);
+        Check(environment.Gaps.SequenceEqual(new[] { TimeSpan.FromSeconds(.1) }),
+            "Reference-scene batches preserve shorter recorded gaps without expanding them to the maximum.");
         Reject<InvalidDataException>(() => EventReplayRunner.Validate(schedule with { Strokes = [second, first] }));
         Reject<InvalidDataException>(() => EventReplayRunner.Validate(schedule with { Strokes = [first, first] }));
         Reject<InvalidDataException>(() => EventReplayRunner.Validate(schedule with { Strokes = [first with { Stroke = first.Stroke with { Samples = first.Stroke.Samples.Take(2).ToArray() } }] }));
@@ -52,7 +79,7 @@ internal static partial class PacketChecks
         environment.Clear(); feed.Color = Color(9);
         try { await EventReplayRunner.RunAsync(schedule, environment, 100000, new(), _ => { }, default); throw new Exception("Expected color failure"); }
         catch (ReplayStateException ex) { Check(ex.Code == "ColorUnrestorable", "Unverified color writes fail with the defined error code."); }
-        Check(feed.Requests.Last().SequenceEqual(new[] { "colorState" }) && environment.Transitions.Count == 0, "Different colors invoke ColorRestorer before any pen injection.");
+        Check(feed.Requests.Last().SequenceEqual(new[] { "colorInputState" }) && environment.Transitions.Count == 0, "Different colors require RGB panel evidence before any pen injection.");
         feed.Color = Color(1); environment.Clear();
         feed.Layers = J.Get(Structure("工作层"), "state");
         var packet = new PacketInfo(1, "legacy", 0, 1002, "captured", new HashSet<ulong>(), default);

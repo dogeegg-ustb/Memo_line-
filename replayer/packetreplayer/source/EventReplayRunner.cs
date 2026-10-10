@@ -6,7 +6,13 @@ namespace PacketReplay;
 internal sealed record ScheduledStroke((string SessionId, ulong BeginAppendId) EditableKey,
     MemolineReplayStroke Stroke, HistoricalState State, BrushSnapshot? OverrideBrush = null);
 internal sealed record EventReplaySchedule(long Frequency, IReadOnlyList<ScheduledStroke> Strokes,
-    string WorkLayerName, string WorkLayerUuid);
+    string WorkLayerName, string WorkLayerUuid)
+{
+    // Per-event historical reference scenes may split a selected sequence into
+    // separate calls. Preserve the recorded idle period across that boundary.
+    internal long? FollowingStrokeStartTicks { get; init; }
+    internal Func<ScheduledStroke,CancellationToken,Task>? VerifyRestoredStateAsync { get; init; }
+}
 internal sealed record EventReplayResult(int CompletedStrokes, IReadOnlyList<(string SessionId, ulong BeginAppendId)> CompletedEvents);
 
 internal interface IReplayEnvironment
@@ -83,12 +89,16 @@ internal static class EventReplayRunner
                 throw new ReplayStateException("ColorUnrestorable", "事件缺少已确认的历史颜色。");
             if (drawing.OverrideBrush is { } replacement)
             {
-                if (replacement.Numbers.Select(n => n.Key).Distinct().Count() != replacement.Numbers.Count ||
+                if (string.IsNullOrWhiteSpace(replacement.Name)||replacement.Name is "unknown" or "ambiguous"||
+                    replacement.Numbers.Select(n => n.Key).Distinct().Count() != replacement.Numbers.Count ||
                     replacement.Numbers.Any(n => !double.IsFinite(n.Value)) ||
-                    !replacement.Numbers.Select(n => n.Key).ToHashSet().SetEquals(drawing.State.Brush.Numbers.Select(n => n.Key)))
-                    throw new ReplayStateException("UnsupportedOverride", "参数覆盖必须包含完整历史数值表，不能新增未确认属性。");
+                    BrushSnapshot.SameName(replacement.Name,drawing.State.Brush.Name)&&
+                        !replacement.Numbers.Select(n => n.Key).ToHashSet().SetEquals(drawing.State.Brush.Numbers.Select(n => n.Key)))
+                    throw new ReplayStateException("UnsupportedOverride", "参数覆盖必须包含已确认子工具的完整数值表；同一子工具不能新增或删除历史属性。");
             }
         }
+        if (schedule.FollowingStrokeStartTicks is { } next && (schedule.Strokes.Count == 0 || next < schedule.Strokes[^1].Stroke.EndTicks))
+            throw new InvalidDataException("批次后的笔开始时间不能早于本批次最后一笔的结束时间。");
     }
 
     internal static async Task<EventReplayResult> RunAsync(EventReplaySchedule schedule, IReplayEnvironment env,
@@ -100,7 +110,7 @@ internal static class EventReplayRunner
         var completed = new List<(string, ulong)>();
         var states = new PacketStateRestorer(env.Feed, env.Input, status);
         var views = new ViewRestorer(env.ViewFeed, env.ViewInput, status);
-        var colors = new ColorRestorer(env.Feed);
+        var colors = new ColorRestorer(env.Feed, env.Input);
         void WorkLayer()
         {
             env.Feed.EnsureConnected(); env.Input.EnsureTarget();
@@ -120,13 +130,18 @@ internal static class EventReplayRunner
                 try { await views.RestoreAsync(drawing.Stroke.View, token); }
                 catch (InvalidOperationException ex) { throw new ReplayStateException("ViewUnrestorable", ex.Message, ex); }
                 WorkLayer();
+                if(schedule.VerifyRestoredStateAsync is { } verify)
+                {
+                    await verify(drawing,token);
+                    token.ThrowIfCancellationRequested(); WorkLayer();
+                }
                 var viewport = env.CurrentView?.Viewport ?? throw new ReplayStateException("ViewUnrestorable", "当前画布视口不可用。");
                 foreach (var sample in drawing.Stroke.Samples.Where(s => s.InContact))
                     if (!viewport.Contains(checked((int)Math.Round(sample.X)), checked((int)Math.Round(sample.Y))))
                         throw new ReplayStateException("ViewUnrestorable", "完整笔画有采样点位于当前画布视口之外。");
                 status($"重放事件 {index + 1}/{schedule.Strokes.Count}，历史图层：{drawing.State.Layer}");
                 var gap = options.GapBetween(drawing.Stroke.EndTicks,
-                    index + 1 < schedule.Strokes.Count ? schedule.Strokes[index + 1].Stroke.StartTicks : null, schedule.Frequency);
+                    index + 1 < schedule.Strokes.Count ? schedule.Strokes[index + 1].Stroke.StartTicks : schedule.FollowingStrokeStartTicks, schedule.Frequency);
                 await PenReplayEngine.ReplayStrokeCoreAsync(drawing.Stroke, schedule.Frequency, speed, sample =>
                 {
                     token.ThrowIfCancellationRequested(); WorkLayer();

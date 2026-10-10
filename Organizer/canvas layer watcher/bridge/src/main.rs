@@ -18,9 +18,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let document = clip.read_document()?;
     let database = clip.open_database()?;
     if mode == "inspect" && args.len() == 2 {
+        let mut ordered = Vec::new();
+        for tree in document.layer_trees() {
+            collect_stack(tree, tree.root_layer_id(), None, &mut ordered);
+        }
         let layers = document.layers().iter().map(|l| Ok(json!({
             "id":l.id(), "name":l.name(), "folder":l.is_folder(), "is_folder":l.is_folder(), "kind":l.kind().raw(),
-            "uuid":layer_uuid(&database, l.id())?, "canvasId":l.canvas_id(), "opacity_raw":l.opacity(), "visible":l.is_visible()
+            "uuid":layer_uuid(&database, l.id())?, "canvasId":l.canvas_id(), "opacity_raw":l.opacity(), "visible":l.is_visible(),
+            "isRaster":l.kind().is_pixel() && !l.is_folder(), "isRoot":l.kind().is_root_folder(),
+            "stackOrder":ordered.iter().position(|(id,_)| *id == l.id()),
+            "parentUuid":match ordered.iter().find(|(id,_)| *id == l.id()).and_then(|(_,parent)| *parent) {
+                Some(parent) => layer_uuid(&database,parent)?, None => None
+            }
         }))).collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
         println!("{}", json!({"layers": layers}));
         return Ok(());
@@ -70,6 +79,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         "pixelFormat":format,"dataState":data_state,"canvasId":canvas.id(),"fullCanvas":true,
         "rasterWidth":raster_width,"rasterHeight":raster_height,"offsetX":offset_x,"offsetY":offset_y}));
     Ok(())
+}
+
+fn collect_stack(tree: &clipfile::LayerTree, parent: i64, parent_layer: Option<i64>, output: &mut Vec<(i64, Option<i64>)>) {
+    if let Some(children) = tree.children_of(parent) {
+        for id in children.iter().rev() {
+            output.push((*id,parent_layer));
+            collect_stack(tree,*id,Some(*id),output);
+        }
+    }
 }
 
 fn layer_uuid(database: &clipfile::Database, id: i64) -> Result<Option<String>, Box<dyn std::error::Error>> {

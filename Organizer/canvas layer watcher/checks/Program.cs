@@ -7,6 +7,12 @@ using CanvasLayerWatcher;
 
 int checks = 0;
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); checks++; }
+if (args.Length == 1 && args[0] == "--readiness-checks")
+{
+    await RecordingReadinessChecks.RunAsync(Check);
+    Console.WriteLine($"READINESS CHECKS: {checks} passed; no CSP input was injected.");
+    return;
+}
 if (args.Length == 1 && args[0] == "--affine-checks")
 {
     AffineMatrixChecks.Run(Check);
@@ -564,6 +570,7 @@ async Task ControlReply(bool dispatched, bool matchingId, bool success)
     await receiving;
     Check(accepted == (dispatched && matchingId && success), "Only matching successful save dispatch accepted");
 }
+await RecordingReadinessChecks.RunAsync(Check);
 await ControlReply(true, true, true);
 await ControlReply(false, true, true);
 await ControlReply(true, false, true);

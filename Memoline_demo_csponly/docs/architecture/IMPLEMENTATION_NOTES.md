@@ -288,8 +288,13 @@ feature. No real CSP input, clipboard write or user configuration edit occurred.
   arrays reject attribution instead of falling back. Fifteen actual-structure
   checks cover a fixed negative-origin, 90-degree, non-square-canvas point and
   invalid contracts. The final full watcher suite passes 212 checks.
-- `colorInputState`, confirmed RGB slider write locations and tab-switch
-  freshness remain absent. Stage 3 is not complete.
+- `colorInputState` now has an independent RGB slider observation module,
+  same-frame ROI/value-region evidence, initial/fresh-request capture and
+  realtime publication. Main/sub/transparent capsule roles and selected-slot
+  markers have no real-frame calibration, so `activeColorSlot` remains
+  `unknown`, RGB observations remain `ambiguous`, and no confirmed write
+  locations are exposed. Manual tab selection and real visual acceptance are
+  pending. Stage 3 is not complete; see `validation/stage3-color-input.md`.
 
 ### Stages 4–5: partial offline editing core
 
@@ -401,3 +406,195 @@ pending until the corresponding product controls exist.
   No clipboard or CSP action is invoked. Root reran the combined host suite
   after this check was connected (`host-full.log`); targeted success alone is not claimed
   as completion of all stage-5 acceptance or all ten architecture stages.
+
+### Stage 3 follow-up: partial RGB input observation
+
+- Added `recognizer_core/color_input_state` alongside the unchanged read-only
+  color-wheel core. It accepts caller-supplied pixels only. Vertical
+  RGB/HSV/CMYK tab OCR, unique channel rows and observed closed numeric editor
+  borders locate RGB values and their screen boxes. Duplicate/out-of-range
+  numbers, missing editor pixels or uncertain layouts stay unresolved.
+  The color-wheel footer is not exported as an input; visible HSV/CMYK report
+  `tabNotRgb`, and absent slider evidence reports `panelNotVisible`.
+- The saved color booth ROI supplies a stable `色彩滑块` alias. It does not prove
+  the visible palette or selected tab. Color activation and initial capture
+  include the independent `colorInputState` module; explicit requests capture
+  its registered ROI under the request package identity. No code changes the
+  selected tab, sends a color hotkey or writes CSP configuration.
+- Slider OCR, border checks, ROI projection and `captureFrameId` use one image.
+  Duplicate color-booth ROIs share one actual acquisition. Persisted jobs use
+  the slider ROI's own capture start/end, and the color-wheel job carries its
+  slider companion so visible slider pixels do not become a color-wheel
+  observation. Timeline validation rejects mismatched frame/ROI, bad capture
+  span, malformed value regions, invalid RGB values and out-of-ROI locations.
+  Unconfirmed observations keep `observedState`/`rawResult` diagnostics while
+  publishing empty confirmed `valueRegions`/`tabRegions`/`colorSlotRegions`.
+- `activeColorSlot` is deliberately always `unknown`: no actual CSP frame
+  verifies main/sub/transparent capsule roles or the selection marker. A
+  decorative label, position, bright border or sampled color is insufficient.
+  Valid RGB values can therefore appear in the partial raw observation, but
+  `status=ambiguous` prevents semantic confirmation and automated writing.
+  The tests that exercise a future confirmed semantic path explicitly
+  construct a synthetic verified state; they do not establish UI acceptance.
+- Manual acceptance still requires evidence of the RGB tab, each editor and
+  spin-button exclusion at the user's DPI/theme, active capsule roles and
+  selection, text commit behavior, fresh readback, and visual color equality.
+  No automatic real UI test was performed. `ColorRestorer` still verifies color
+  state; it does not write these sliders. No main/sub/transparent hotkey has
+  been inferred or added.
+- Red evidence includes 11 original missing-module/behavior checks, an
+  unverified selected-slot guess and malformed-region crash, and five
+  production persist/companion failures. Final green: 19 targeted Python
+  tests, all 152 recorder integration tests (the original 133 retained), and
+  two native mock request/topic tests. The sandbox native testhost connection
+  timeout is retained separately; the same compiled two tests passed under
+  scoped execution outside the sandbox. See `validation/stage3-color-input.md`
+  for exact commands and logs. These checks do not complete Stage 3.
+
+### Continued stage 8 slice: durable EditJournal and v3 editing entries
+
+- This continuation supersedes the earlier checkpoint statement that the
+  journal/v3 components are absent. It does not claim that product startup,
+  recording-stop integration, live CSP acceptance or every stage is complete.
+- `source/Editing/EditJournal.cs` owns only `edit-journal.jsonl` and
+  `edits/assets/<sha256>.png` under its working directory. A process holds one
+  exclusive writer; concurrent producers serialize through its lock. Each
+  JSONL append ends in LF and calls `FileStream.Flush(true)`. Records bind a
+  contiguous sequence, previous record hash and canonical payload hash.
+- APIs explicitly record `Start`, `FreezePlan`, `StartSegment`, `Compose`,
+  `Replay`, `Capture`, `CheckpointFlushed`, `LayerHidden`, `WorkLayerDeleted`,
+  `ReproductionInstalled`, `Fail` and `Finish`. Start accepts all involved
+  `LayerKey`s and retains its old single-layer overload; recovery accepts both
+  earlier `targetLayer` rows and new `targetLayers` rows. Every participating
+  original UUID is protected from being used as a work/reproduction UUID.
+- PNGs are stored as exact original bytes: temporary file, flush, rename,
+  hash/length/dimensions/PNG validity readback, then the referencing record.
+  Identical PNG bytes reuse one asset. Existing corrupt assets are rejected;
+  they are not replaced. Path traversal and reparse paths are rejected.
+- `CheckpointFlushed` returns a receipt only after append/flush and full
+  ledger/asset readback. Deletion records require the latest receipt and its
+  exact work UUID/hash/sequence. Failure records bind the last checkpoint and
+  prohibit subsequent replay, hiding, installation and deletion records.
+  Escaped multiline failure details remain one physical JSONL row.
+- `Recover` is read-only and reports an active transaction and any final
+  unterminated row. `Open` truncates only that uncommitted final row; committed
+  invalid JSON/UTF-8, blank rows, unknown outer fields, bad hashes, reordered
+  records and missing/tampered PNGs fail closed. No recovery automatically
+  cleans CSP layers or redraws unfinished strokes. Outcomes are only
+  `Executed`, `Failed` and `Cancelled`; the journal never claims PixelVerified.
+- `BundleArchive.SealWithEdits(mechanical, aggregate, workDirectory,
+  destination)` adds v3 while the existing `Seal` remains v2. The optional
+  `edits` index describes `edits/journal.jsonl(.br)` with decoded SHA-256,
+  decoded size, codec and deduplicated asset count. Exact PNG entries retain
+  their `edits/assets/<sha256>.png` names. An active writer or residual journal
+  tail cannot be sealed; missing/tampered/orphan assets and unsupported codecs
+  are rejected. All target sessions and replay/checkpoint keys resolve against
+  the native recording; editable keys must point to native hardware penBegin.
+- `ReadEditJournal` returns null for v1/v2 without edits and uses the same
+  `EditJournal.Read(Stream, assetReader)` validator for v3. `Compact` and
+  `UpgradeDimensions` preserve the editing ledger, every referenced PNG,
+  original mechanical/aggregation bytes and immutable digests. Packet replay
+  shares these sources/resources through explicit project references.
+- Red evidence: `validation/edit-journal-red.log` contains 53 missing-journal
+  API compiler errors; `edit-journal-multilayer-red.log` contains three missing
+  multilayer-overload errors. `edit-journal-multiline-failure-red.log` records
+  the actual runtime rejection of newline-containing failure details, corrected
+  by accepting JSON string messages. `bundle-edits-red.log` contains 24 missing
+  v3 API errors plus one fixture EventStamp.AppendId error; that fixture was
+  corrected to AppendHardwareRecord. These API reds are not claims that older
+  production byte composition was incorrect.
+- Final targeted evidence: `validation/edit-journal-green.log` reports **57**
+  checks; `bundle-edits-green.log` reports the existing **65** bundle checks
+  plus **38** new v3 checks. Builds use `-m:1` and report zero warnings/errors.
+  `bundle-edits-replay-green.log` reports **166** fake replay assertions after
+  the shared-source project change. Its scoped fake-pipe run required execution
+  outside the filesystem sandbox; the earlier access-denied log is retained as
+  `bundle-edits-replay-sandbox-denied.log`, not green evidence. No CSP input,
+  system clipboard write or real user shortcut configuration change was made.
+- Shortcut publication still lacks a verified embedded Python executable or
+  completed C# winsqlite writer path. Root owns the later recording-stop/UI
+  integration and combined full-suite evidence; this component slice alone
+  does not claim those remaining acceptance items.
+
+### Continued stage 9 slice: host UI and live editing boundary wiring
+
+- `DemoApplicationContext` now owns the recorder window, tray menu, editing
+  panel and system `Alt+M` registration. Closing the recorder window hides it
+  while recording continues; `ExitThreadCore` releases the hotkey, tray and
+  panel, and `Program` performs the single controller disposal in its outer+  `finally`.
+- `DemoEditingHost.BeginEditSessionAsync` requires an active recording, asks+  `MainWindow.CaptureEditingBoundaryAsync` to freeze and capture the boundary,
+  then reads the mechanical prefix and dirty-matrix packets into `EditIndex`.
+  Planning is available only after that boundary exists.
+- `ExecuteEditAsync` currently returns `ShortcutsMissing` before constructing
+  or invoking a CSP transaction because no verified CSP layer/shortcut action
+  adapter is connected. It sends no input and does not claim execution or
+  pixel verification. `EditingPanel` exposes the boundary result and index+  issues without creating a simulated success path.
+- Host build evidence: `dotnet build source/MemolineDemo.csproj -c Release
+  --no-restore -m:1 -p:UseSharedCompilation=false -nr:false` completed with
+  zero warnings and zero errors. The three runtime check suites also build+  cleanly; their named-pipe integration runs remain environment-limited by+  `UnauthorizedAccessException` and are retained as non-green evidence.
+
+### 2026-10-07: RGB, active editing and project continuation
+
+The later implementation supersedes the UI adapter limitation above. The host
+now runs guarded CSP transactions using shared replay, clipboard and capture
+components. RGB OCR reuses the calibrated color ROI, including borderless
+digits and selected capsule evidence. The supplied RGB screenshot was read by
+the packaged RapidOCR engine; all three values and the main slot were confirmed.
+
+Replay inputs and observations are excluded from mechanical history during the
+native transaction, while realtime diagnostics remain available. Successful
+transactions record one semantic editing action with changes. Physical user
+Ctrl+Z after the transaction is recorded normally. Stop and exit wait for editing
+cleanup before ending or sealing the recorder.
+
+Project continuation uses a v4 container at the same project path, keeping all
+prior native sessions and their original bytes/clocks as flat session entries.
+Current editing indexes only the active session. Historical reference-layer
+replay is guarded and is not yet connected to the real adapter.
+
+Final offline runs passed: host integration (including 13 continuation, 5 replay
+persistence, 9 boundary, 69 transaction and 15 lifecycle checks), 181 replay
+assertions, 212 watcher checks, 123 native tests, 153 Python integration tests,
+11 shortcut tests, 24 Node backend tests and 2 Rust bridge tests. Host builds
+reported zero warnings/errors. Packaged transform restore reported NU1900 because
+the advisory feed could not be reached; compilation and publication succeeded.
+Root Memoline.exe and its private OCR/native/bridge package were rebuilt and
+hash matched against current source/staging. Published editor rendering was
+checked at its minimum size without recording or sending CSP input.
+
+No real CSP acceptance run was performed. See RGB_LIVE_EDITING_CONTINUATION.md
+and LIVE_CHECKLIST.md for the current scope and remaining acceptance work.
+
+### 2026-10-07：当前架构一致性审查与阻塞
+
+本轮用户说明尚未开始实机复现，要求主要检查实现是否符合主架构，
+并明确交互应冻结 CSP 画面后直接在画布位置选择范围。详细结论见
+[一致性审查](2026-10-07-architecture-consistency-audit.md)。本轮没有修改产品源码、
+重新发布程序或向真实 CSP 输入。
+
+阶段 10 不能视为完成：当前使用独立 PictureBox 预览和当前层笔画复选列表，
+未实现架构 §7.2 的原生矩阵屏幕选区、跨层单张图片、附近白线和矢量橡皮扫选。
+Alt+M 未自动建立边界，计划详情不足，执行时取消入口随面板隐藏。
+上一轮 26 项选择检查验证的是这一偏离设计的预览流程，不能作为阶段 10 合规证据。
+
+本次核实的其他阻塞/差距包括：无关层问题被全局提升导致有效请求被拒绝，
+undo/redo 拒绝窗口过宽，更换子工具被计划器拒绝，撤销容量没有按选笔总数+5校验，
+真实参考层复现仍预先拒绝，边界到事务开始间隙没有输入连续性证明，
+日志 planFrozen 只包含修改请求而非完整调度计划。逐项源码位置和验证范围见审查报告。
+事务物理输入排除及滑块生成 colorState 与主架构文字不同。后续整合说明已公开前者，
+仍需要统一设计与实现的契约，不能凭已有离线绿测声称符合主架构。
+
+用户最新指定隐藏原图层由其独立开发模块接入。原层隐藏、眼睛定位和隐藏快捷键相关
+实现不列入本轮整改范围；接入该模块与画布交互、索引及重放调度应保持独立职责。
+集中/离散重放、最终层保留、实际捕获入库后删除中间层的路径已接通；
+实机像素和真实撤销栈仍未验收，不将本轮代码审查写成实机通过。
+
+### 2026-10-08：按用户最新流程整改
+
+Alt+M 现在先显示精确撤销和事件编辑入口，选功能后再冻结 CSP。精确撤销直接在当前层选区并显示路径、基础/闭包笔数；事件编辑经过跨层脏矩阵图片、单张图片和整笔扫选。笔刷修改通过用户框选的属性面板截图取得实时完整快照，保留所选笔画，使用现有 packetreplayer 路由及数字读回。最小窗口的控件重叠已修复并检查。
+
+计划器现在保留图层局部问题，命令拒绝区间从闭包的最早受影响接触开始。新边界捕获之前已记录的层；在线新增依赖仍校验链和 undo/redo。撤销容量统一要求实际所选笔数＋5。完整选区和计划调度写入 planFrozen。
+
+最新宿主完整检查、packetreplayer 193 断言、watcher 219 检查、原生 128 测试、Python 155 测试通过；原先已通过的快捷键 11 和 Node 24 项仍有效。新面板选择检查为 32 项，取代偏离设计的旧复选 UI 检查。保留实际失败和环境失败日志，详见 [整改说明](2026-10-08-canvas-editing-corrections.md)。这些都是离线证据，没有真实 CSP 输入或用户配置修改。
+
+活动历史参考层重放仍未完成。历史像素和逐笔场景已接到事务，但指定参考层角色、读回和不污染撤销栈的清理尚无可靠实现；真实适配器提前拒绝。明确关闭的参考复选框可用普通场景，落笔前再次读回，因果分类不降级。隐藏原图层仍等待用户模块，本轮未改其实现。

@@ -15,7 +15,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-from catalog import BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR, TOOLGROUP
+from catalog import BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR, COLOR_INPUT, TOOLGROUP
 from state_timeline import StateTimeline, MODULES
 
 CANVAS_FRAME = "__canvas_frame__"
@@ -35,7 +35,7 @@ class Pipeline:
         self.capture_queue = queue.Queue()
         self.evidence_queue = queue.Queue(maxsize=4)
         self.stop = threading.Event()
-        self.cores, self.locks = {}, {name: threading.Lock() for name in (BRUSH, TOOLGROUP, LAYERS, COLOR, CANVAS)}
+        self.cores, self.locks = {}, {name: threading.Lock() for name in (BRUSH, TOOLGROUP, LAYERS, COLOR, COLOR_INPUT, CANVAS)}
         self.tool_catalog = {}
         self.transform = None
         self.transform_ready = False
@@ -74,6 +74,11 @@ class Pipeline:
         evidence.setdefault("completedTicks",completed)
         ticks = evidence.get("capturedTicks",evidence.get("observedTicks",completed))
         value_fields = {}
+        if update.get('module') == 'colorInputState':
+            # Clickable regions appear only alongside confirmed same-frame
+            # semantics. Raw/observed diagnostics remain available when invalid.
+            state = update.get('state') or {}
+            value_fields = {key:state.get(key,[]) for key in ('valueRegions','tabRegions','colorSlotRegions')}
         if update.get("module") == "brushState":
             panel_roi = evidence.get("panelRoi")
             regions = raw_result.get("value_regions", []) if isinstance(raw_result, dict) else []
@@ -344,8 +349,12 @@ class Pipeline:
                         stabilityChecked=False,settleWaitMs=0,policy="immediateEvidenceThenQuietAnalysis")
                     capture_backend = "MSS_FRAME_ROI"
                 else:
+                    acquired_rois = {}
                     for panel in selected:
-                        raw_frames[panel],capture_times[panel] = acquire(panel)
+                        roi = selected[panel]
+                        if roi not in acquired_rois:
+                            acquired_rois[roi] = acquire(panel)
+                        raw_frames[panel],capture_times[panel] = acquired_rois[roi]
                     capture_end = now_ticks()
                 for panel,pixels in raw_frames.items():
                     frames[panel] = Image.frombytes("RGB",pixels.size,pixels.bgra,"raw","BGRX")
@@ -431,14 +440,16 @@ class Pipeline:
                     group = {p: crops[p] for p in (CANVAS, NAVIGATOR, "导航器数字",CANVAS_FRAME)} if module == CANVAS else {module: crops[module]}
                     if module == BRUSH and TOOLGROUP in crops:
                         group[TOOLGROUP] = crops[TOOLGROUP]
+                    if module == COLOR and COLOR_INPUT in crops:
+                        group[COLOR_INPUT] = crops[COLOR_INPUT]
                     self.sequence += 1
-                    sample_start, sample_end = capture_times[module] if module == TOOLGROUP else (capture_end,capture_end)
+                    sample_start, sample_end = capture_times[module] if module in (TOOLGROUP,COLOR_INPUT) else (capture_end,capture_end)
                     job = dict(module=module, crops=group, ticks=sample_start, triggerTicks=ticks,
                                refs=refs, reason=reason, initialize=initialize, captureId=capture_id,
                                packageId=package_id,causalAmbiguous=ambiguous,observedAfterEventId=watermark,dpi=dpi,captureBackend=capture_backend,
                                captureEndTicks=sample_end,
-                               captureLatencyMs=(sample_end-ticks)*1000/frequency.value if module == TOOLGROUP else latency_ms,
-                               captureDurationMs=(sample_end-sample_start)*1000/frequency.value if module == TOOLGROUP else duration_ms,
+                               captureLatencyMs=(sample_end-ticks)*1000/frequency.value if module in (TOOLGROUP,COLOR_INPUT) else latency_ms,
+                               captureDurationMs=(sample_end-sample_start)*1000/frequency.value if module in (TOOLGROUP,COLOR_INPUT) else duration_ms,
                                captureBudgetMs=budget_ms,captureBudgetExceeded=(sample_end-ticks)*1000/frequency.value>budget_ms,
                                canvasCaptureValidation=canvas_validation if module == CANVAS else None,**analysis)
                     target = self.directory / f"{self.sequence:012d}_{uuid.uuid4().hex}.job"
@@ -561,10 +572,11 @@ class Pipeline:
                     elif module == TOOLGROUP:
                         from recognizer_core.subtool_state import SubtoolPanelCore
                         core = SubtoolPanelCore(ocr_engine=ocr)
-                    else:
+                    elif module != COLOR_INPUT:
                         from recognizer_core.color_state import ColorStateCore
                         core = ColorStateCore()
-                    self.cores[module] = core
+                    if module != COLOR_INPUT:
+                        self.cores[module] = core
                 pixels = cv2.imdecode(np.fromfile(crops[module]["path"], dtype=np.uint8), cv2.IMREAD_COLOR)
                 if module == TOOLGROUP:
                     result = self.cores[module].process(pixels,catalog=self.tool_catalog)
@@ -579,6 +591,16 @@ class Pipeline:
                 elif module == LAYERS:
                     result = self.cores[module].process_with_locator(pixels,
                         panel_roi=list(crops[module]['roi']), capture_frame_id=job['captureId'])
+                elif module == COLOR_INPUT:
+                    result = self._process_color_input(pixels, list(crops[module]['roi']), job['captureId'])
+                elif module == COLOR and COLOR_INPUT in crops:
+                    visible = self._process_color_input(pixels, list(crops[module]['roi']), job['captureId'])
+                    if visible.get('status') == 'ok' and visible.get('activeColorSlot') != 'transparent':
+                        rgb = [next(r['value'] for r in visible['valueRegions'] if r['channel']==c) for c in 'rgb']
+                        result = dict(kind='rgb',rgb=rgb,hex='#'+''.join(f'{v:02X}' for v in rgb),source='rgbSlider')
+                    else:
+                        result = (dict(kind='unknown',rgb=None,hex=None,detail='colorWheelNotVisible')
+                                  if visible.get('status') != 'panelNotVisible' else self.cores[module].process(pixels))
                 else:
                     result = self.cores[module].process(pixels)
             self._complete_analysis(job,result,analysis_started)
@@ -602,7 +624,19 @@ class Pipeline:
                     self.timeline.complete_if_pending(job["packageId"],MODULES[module],None,dict(
                         triggerTicks=job["triggerTicks"],relatedEventIds=job["refs"],completedTicks=now_ticks(),
                         **(dict(captureId=job['captureId'],capturedTicks=job['ticks'],captureEndTicks=job['captureEndTicks'],
-                                panelRoi=list(crops[module]['roi'])) if module in (BRUSH,TOOLGROUP,LAYERS) else {})),str(ex))
+                                panelRoi=list(crops[module]['roi'])) if module in (BRUSH,TOOLGROUP,LAYERS,COLOR_INPUT) else {})),str(ex))
+
+    def _process_color_input(self, pixels, roi, frame_id):
+        # The color-wheel and slider readers may be scheduled concurrently for
+        # one shared booth. Keep the OCR core resident and serialize its calls.
+        with self.locks[COLOR_INPUT]:
+            if COLOR_INPUT not in self.cores:
+                from rapidocr import RapidOCR
+                from recognizer_core.color_input_state import ColorInputStateCore
+                ocr = RapidOCR(params={"EngineConfig.onnxruntime.intra_op_num_threads":2,
+                    "EngineConfig.onnxruntime.inter_op_num_threads":1,"Global.log_level":"warning"})
+                self.cores[COLOR_INPUT] = ColorInputStateCore(ocr_engine=ocr)
+            return self.cores[COLOR_INPUT].process(pixels,panel_roi=roi,capture_frame_id=frame_id)
 
     def _complete_analysis(self, job, result, analysis_started):
         # Activation and publication share a lock: an older in-flight analysis
@@ -634,8 +668,8 @@ class Pipeline:
                 self.timeline.complete_if_pending(job["packageId"],MODULES[module],result,dict(
                     screenshotIds=[c["screenshotId"] for c in crops.values()],capturedTicks=job["ticks"],
                     captureId=job["captureId"],
-                    **(dict(captureEndTicks=job['captureEndTicks']) if module in (TOOLGROUP,LAYERS) else {}),
-                    **(dict(panelRoi=list(crops[module]["roi"])) if module in (BRUSH,TOOLGROUP,LAYERS) else {}),
+                    **(dict(captureEndTicks=job['captureEndTicks']) if module in (TOOLGROUP,LAYERS,COLOR_INPUT) else {}),
+                    **(dict(panelRoi=list(crops[module]["roi"])) if module in (BRUSH,TOOLGROUP,LAYERS,COLOR_INPUT) else {}),
                     triggerTicks=job["triggerTicks"],causalAmbiguous=job["causalAmbiguous"],
                     relatedEventIds=job["refs"],completedTicks=now_ticks(),analysisStartedTicks=analysis_started,
                     analysisQuietMs=self.analysis_quiet_ms(module),

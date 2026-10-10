@@ -35,16 +35,13 @@ internal static class PreciseUndoChecks
         Check(selection.IsValid, "Scenario 17: selecting sixty eligible candidates must succeed.");
         Check(selection.CandidateCount == 60 && selection.BaseCount == 50,
             "Scenario 17: take the latest fifty candidates, not the oldest fifty or appendId order.");
-        Check(selection.Selected.Select(s => s.BeginEventId).SequenceEqual(Enumerable.Range(11, 53).Select(n => (ulong)n)),
-            "Scenario 17: transitive later overlap closure must replay 11..63 in original penBegin eventId order.");
-        Check(selection.ClosureCount == 3 && selection.CountDisplay == "50 + 3",
+        Check(selection.Selected.Select(s => s.BeginEventId).SequenceEqual(Enumerable.Range(11, 51).Select(n => (ulong)n)),
+            "Scenario 17: only a later stroke drawn directly over a base selection joins, in original penBegin eventId order.");
+        Check(selection.ClosureCount == 1 && selection.CountDisplay == "50 + 1",
             "Scenario 17: report the base fifty and the actual additional closure count.");
-        Check(selection.Reasons.Select(r => r.Stroke).SequenceEqual(new[] { firstAdded.Key, secondAdded.Key, thirdAdded.Key }),
-            "Each added stroke must have a distinct closure reason in replay order.");
-        Check(selection.Reasons[0].OverlappingEarlierStroke == candidates[10].Key &&
-              selection.Reasons[1].OverlappingEarlierStroke == firstAdded.Key &&
-              selection.Reasons[2].OverlappingEarlierStroke == secondAdded.Key,
-            "Closure reasons must identify the earlier selected stroke, including transitive additions.");
+        Check(selection.Reasons.Select(r => r.Stroke).SequenceEqual(new[] { firstAdded.Key }) &&
+              selection.Reasons[0].OverlappingEarlierStroke == candidates[10].Key,
+            "The closure is not transitive: strokes overlapping only an added stroke stay in place.");
         Check(selection.Reasons.All(r => !string.IsNullOrWhiteSpace(r.Message)),
             "Closure additions expose an explanation for the control panel.");
         Check(!selection.Selected.Any(s => s.Key == earlierOverlap.Key || s.Key == disjoint.Key || s.Key == foreign.Key),

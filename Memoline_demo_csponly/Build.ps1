@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$RecognizerPackage,
     [switch]$SkipChecks,
     [switch]$RebuildBridge
@@ -62,6 +62,11 @@ Copy-Item -LiteralPath $bridge -Destination $output -Force
 foreach ($name in @('README.md', 'FORMAT.md', 'INTERFACES.md')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $output -Force
 }
+$architectureOutput=Join-Path $output 'docs/architecture'
+New-Item -ItemType Directory -Path $architectureOutput -Force | Out-Null
+foreach($name in @('RGB_LIVE_EDITING_CONTINUATION.md','LIVE_CHECKLIST.md','2026-10-08-canvas-editing-corrections.md')) {
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "docs/architecture/$name") -Destination $architectureOutput -Force
+}
 foreach ($name in @('NOTICE.md', 'DIFF_FORMAT.md')) {
     Copy-Item -LiteralPath (Join-Path $watcher $name) -Destination $output -Force
 }
@@ -71,10 +76,17 @@ if (Test-Path -LiteralPath $licenses) {
 }
 # Bundle a private Recognizer without copying historical recordings. On a
 # rebuild, keep this demo's calibrated settings and device configuration.
+# Windows PowerShell 5.1 runs on .NET Framework, which has no Path.GetRelativePath.
+function Get-RelativePath([string]$Root, [string]$Path) {
+    $base = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/') + '\'
+    $full = [System.IO.Path]::GetFullPath($Path)
+    if (-not $full.StartsWith($base, [System.StringComparison]::OrdinalIgnoreCase)) { throw "Path is outside root: $full" }
+    return $full.Substring($base.Length)
+}
 $recognizerOutput = Join-Path $output 'Recognizer'
 New-Item -ItemType Directory -Path $recognizerOutput -Force | Out-Null
 foreach ($file in Get-ChildItem -LiteralPath $RecognizerPackage -File -Recurse) {
-    $relative = [System.IO.Path]::GetRelativePath($RecognizerPackage, $file.FullName)
+    $relative = Get-RelativePath $RecognizerPackage $file.FullName
     if ($relative -match '^(procedure[\\/])|([\\/]__pycache__[\\/])' -or $file.Extension -eq '.log') { continue }
     $destination = Join-Path $recognizerOutput $relative
     if ((Test-Path -LiteralPath $destination) -and
@@ -82,13 +94,31 @@ foreach ($file in Get-ChildItem -LiteralPath $RecognizerPackage -File -Recurse) 
     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
     Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
 }
+# Publish the current integration/OCR source beside the packaged Python runtime.
+# Preserve private calibration settings; the package can predate these modules.
+$integrationOutput = Join-Path $recognizerOutput 'integration'
+foreach ($file in Get-ChildItem -LiteralPath (Join-Path $repository 'recognizer/recorder_integration') -File -Filter '*.py') {
+    Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $integrationOutput $file.Name) -Force
+}
+Copy-Item -LiteralPath (Join-Path $repository 'recognizer/csp_workspace_overlay.py') -Destination (Join-Path $integrationOutput 'csp_workspace_overlay.py') -Force
+foreach ($module in @('color_input_state','panel_state','layer_state','color_state')) {
+    $moduleRoot = Join-Path $repository "recognizer/recognizer_core/$module"
+    $moduleOutput = Join-Path $integrationOutput "recognizer_core/$module"
+    New-Item -ItemType Directory -Path $moduleOutput -Force | Out-Null
+    foreach ($file in Get-ChildItem -LiteralPath $moduleRoot -File -Recurse -Filter '*.py') {
+        $relative = Get-RelativePath $moduleRoot $file.FullName
+        $destination = Join-Path $moduleOutput $relative
+        New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+        Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+    }
+}
 # Compile the native recorder as well. The package supplies Python/native
 # dependencies; source changes must never silently run an older recorder DLL.
 $recorderStage = Join-Path $PSScriptRoot '.stage/recognizer'
 dotnet publish (Join-Path $repository 'recognizer/Recognizer/src/BehaviorRecognizer/BehaviorRecognizer.csproj') -c Release -r win-x64 --self-contained true -o $recorderStage -m:1 -p:UseSharedCompilation=false -nr:false
 if ($LASTEXITCODE -ne 0) { throw 'Integrated Recognizer publish failed' }
 foreach ($file in Get-ChildItem -LiteralPath $recorderStage -File -Recurse) {
-    $relative = [System.IO.Path]::GetRelativePath($recorderStage, $file.FullName)
+    $relative = Get-RelativePath $recorderStage $file.FullName
     if ($relative -eq 'integration\settings.json' -or $relative -eq 'integration/settings.json' -or $relative -match '^config[\\/]') { continue }
     $destination = Join-Path $recognizerOutput $relative
     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
@@ -102,7 +132,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Transform host publish failed' }
 $transformOutput = Join-Path $recognizerOutput 'integration/transform_host'
 New-Item -ItemType Directory -Path $transformOutput -Force | Out-Null
 foreach ($file in Get-ChildItem -LiteralPath $transformStage -File -Recurse) {
-    $relative = [System.IO.Path]::GetRelativePath($transformStage, $file.FullName)
+    $relative = Get-RelativePath $transformStage $file.FullName
     $destination = Join-Path $transformOutput $relative
     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
     Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
@@ -116,7 +146,11 @@ foreach ($entryTarget in @($entryPath, $entryStage, $entryBackup)) {
 }
 Copy-Item -LiteralPath (Join-Path $output 'MemolineDemo.exe') -Destination $entryStage -ErrorAction Stop
 try {
-    try { [System.IO.File]::Move($entryStage, $entryPath, $true) }
+    # File.Move(src, dst, overwrite) needs .NET Core; File.Replace is the 5.1-compatible atomic overwrite.
+    try {
+        if (Test-Path -LiteralPath $entryPath) { [System.IO.File]::Replace($entryStage, $entryPath, [NullString]::Value) }
+        else { [System.IO.File]::Move($entryStage, $entryPath) }
+    }
     catch [System.IO.IOException], [System.UnauthorizedAccessException] {
         # A running entry cannot be overwritten on Windows, but can be renamed.
         # Keep that loaded image, and atomically install the already complete new one.

@@ -49,7 +49,9 @@ internal static class SaveCapture
             throw new InvalidDataException("编辑边界缺少图层或完整画布尺寸");
         long ticks = requests[0].TriggerTicks;
         string? requestId = requests[0].BoundaryRequestId;
-        if (ticks < 0 || string.IsNullOrWhiteSpace(requestId) || requests.Any(request => request.TriggerKind != "editBoundary"
+        bool final = requests[0].TriggerKind == "recordingEnd";
+        if (ticks < 0 || string.IsNullOrWhiteSpace(requestId) || requests.Any(request =>
+            (final ? request.TriggerKind is not ("recordingEnd" or "recordingEndLayer") : request.TriggerKind != "editBoundary")
             || request.TriggerTicks != ticks || request.BoundaryRequestId != requestId || request.Generation != requests[0].Generation
             || request.Layer is null || string.IsNullOrWhiteSpace(request.Layer.Uuid))
             || requests.Select(request => request.Layer!.Uuid).Distinct(StringComparer.OrdinalIgnoreCase).Count() != requests.Count)
@@ -64,7 +66,7 @@ internal static class SaveCapture
         bool success = false;
         try
         {
-            status("编辑边界，保存一次并捕获全部涉及图层…");
+            status(final ? "录制结束，保存并捕获全部涉及图层的末尾像素…" : "编辑边界，保存一次并捕获全部涉及图层…");
             document = await backend.SaveSnapshotAsync(ticks, ct);
             if (document.SaveDispatchedTicks < 0) throw new InvalidDataException("Recognizer 未确认保存时间");
             var savedLayers = await backend.InspectAsync(document, ct);

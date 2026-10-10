@@ -31,6 +31,13 @@ internal static class EditIndexHardeningChecks
             var index = EditIndexBuilder.Build(fixture.Snapshot());
             Check(index.Strokes.Count == 0 && index.Images.Values.All(i => i.HasUnreplayableEvents), reason);
         }
+        ReconstructionPlan ContactPlan(SessionSnapshot snapshot)
+        {
+            var index = EditIndexBuilder.Build(snapshot);
+            var selected = index.Strokes.Values.Single();
+            return ReconstructionPlanner.Build(index, EditRequest.Event(selected.Layer, selected.WriteMask,
+                new Dictionary<EditableStrokeKey, EventChange> { [selected.Key] = new(Delete: true) }));
+        }
         var basic = new Fixture();
         var baseIndex = EditIndexBuilder.Build(basic.Snapshot());
         Check(baseIndex.Strokes.Count == 1 && baseIndex.IsValid,
@@ -115,40 +122,45 @@ internal static class EditIndexHardeningChecks
             undo.Before("editBoundaryRequested", Hardware("keyInput", 5, 140));
             undo.Before("editBoundaryRequested", Shortcut(command, 5, 140));
             var index = EditIndexBuilder.Build(undo.Snapshot());
-            Check(index.Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange) && !index.IsValid,
+            Check(ContactPlan(undo.Snapshot()).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
                 "Actual shortcutResolved.matches " + command + " within the layer range blocks reconstruction.");
+            Check(index.IsValid, "A recorded " + command + " remains request-scoped evidence rather than invalidating the layer index.");
         }
         var earlierUndo = new Fixture();
         earlierUndo.Before("penBegin", Shortcut("undo", 1, 95));
-        Check(!EditIndexBuilder.Build(earlierUndo.Snapshot()).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
+        Check(!ContactPlan(earlierUndo.Snapshot()).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
             "Undo before the first layer contact does not poison its later range.");
         var delayedEarlierUndo = new Fixture();
         delayedEarlierUndo.Before("editBoundaryRequested", Shortcut("undo", 1, 95));
-        Check(!EditIndexBuilder.Build(delayedEarlierUndo.Snapshot()).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
+        Check(!ContactPlan(delayedEarlierUndo.Snapshot()).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
             "A delayed shortcut result uses the related hardware event, not its publication appendId.");
         var otherLayerUndo = new Fixture();
         otherLayerUndo.Before("editBoundaryRequested", Hardware("keyInput", 5, 140));
-        otherLayerUndo.Before("editBoundaryRequested", Update("currentLayerState", "Other", anchor: 4));
+        // Recognition is published after the shortcut, but captured before its hardware input.
+        var otherLayerObservation = JsonNode.Parse(Update("currentLayerState", "Other", anchor: 4).GetRawText())!.AsObject();
+        otherLayerObservation["ticks"] = 139;
+        otherLayerObservation["data"]!["evidence"]!["capturedTicks"] = 139;
+        otherLayerUndo.Before("editBoundaryRequested", JsonSerializer.SerializeToElement(otherLayerObservation));
         otherLayerUndo.Before("editBoundaryRequested", Shortcut("undo", 5, 140));
-        Check(!EditIndexBuilder.Build(otherLayerUndo.Snapshot()).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
+        Check(!ContactPlan(otherLayerUndo.Snapshot()).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
             "A confirmed other-layer undo is not attributed to the recorded Ink layer.");
         var unknownLayerUndo = new Fixture();
         unknownLayerUndo.Before("editBoundaryRequested", Hardware("keyInput", 5, 140));
         unknownLayerUndo.Before("editBoundaryRequested", Update("currentLayerState", "Ink", "unknown", anchor: 4));
         unknownLayerUndo.Before("editBoundaryRequested", Shortcut("undo", 5, 140));
-        Check(EditIndexBuilder.Build(unknownLayerUndo.Snapshot()).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
+        Check(ContactPlan(unknownLayerUndo.Snapshot()).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
             "Undo with unconfirmed target layer must conservatively block the overlapping range.");
         var orphanUndo = new Fixture();
         orphanUndo.Before("editBoundaryRequested", Frame("shortcutResolved", 140,
             new { matches = new[] { new { command = "undo" } } }));
-        Check(EditIndexBuilder.Build(orphanUndo.Snapshot()).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
+        Check(ContactPlan(orphanUndo.Snapshot()).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
             "Undo without a native hardware reference cannot be assumed harmless.");
         var futureUndo = new Fixture();
         var futureSnapshot = futureUndo.Snapshot();
         var boundaryAppend = futureSnapshot.BoundaryAppendId;
         var futureFrames = futureSnapshot.Frames.Append(WithAppend(Hardware("keyInput", 5, 210), boundaryAppend + 1))
             .Append(WithAppend(Shortcut("undo", 5, 210), boundaryAppend + 2)).ToArray();
-        Check(!EditIndexBuilder.Build(futureSnapshot with { Frames = futureFrames }).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
+        Check(!ContactPlan(futureSnapshot with { Frames = futureFrames }).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
             "Commands after the durable editing boundary cannot change this fixed index prefix.");
 
         var probe = baseIndex.Strokes.Values.Single().ProbeMask;
@@ -194,6 +206,43 @@ internal static class EditIndexHardeningChecks
         Check(mixedIndex.Strokes.Count == 1 && mixedIndex.Images.Values.Single().HasUnreplayableEvents,
             "An unknown-layer contact keeps a mixed image unreplayable even when another linked contact is eligible.");
 
+        // A command earlier than the selected matrix must not poison all later
+        // editing on the layer. Keep two independent capture groups so closure
+        // does not pull the first contact into the second request's interval.
+        var laterSelection = new Fixture();
+        laterSelection.Before("editBoundaryRequested", Hardware("keyInput", 5, 130));
+        laterSelection.Before("editBoundaryRequested", Shortcut("undo", 5, 130));
+        laterSelection.Before("editBoundaryRequested", WithOperation(Fixture.PenFrame("penBegin", 6, 150, 5.5, 5.5, true), 6));
+        laterSelection.Before("editBoundaryRequested", WithOperation(Fixture.PenFrame("penSample", 7, 155, 6.5, 5.5, true), 6));
+        laterSelection.Before("editBoundaryRequested", WithOperation(Fixture.PenFrame("penEnd", 8, 160, 6.5, 5.5, false), 6));
+        var laterSnapshot = laterSelection.Snapshot();
+        var firstPacket = laterSnapshot.Packets.Single() with { TriggerTicks = 125, IsBoundary = false, NowSnapshotId = "first-now" };
+        var laterLabel = firstPacket.Labels.Single() with { Id = "later-label", OperationId = 6, FromTicks = 150, ToTicks = 160,
+            Segments = [new(5.5, 5.5, 6.5, 5.5)] };
+        var laterImage = firstPacket.Images.Single() with { Key = new(firstPacket.Layer, "later-packet", "i"), LabelIds = [laterLabel.Id] };
+        var laterPacket = firstPacket with { PacketId = "later-packet", TriggerTicks = 200, IsBoundary = true,
+            AfterSnapshotId = "first-now", NowSnapshotId = "later-now", BaselineSource = null,
+            Labels = [laterLabel], Images = [laterImage] };
+        var laterSamples = laterSnapshot.Frames.Where(f => J.U64(f, "operationId") == 6 &&
+            J.Text(f, "kind") is "penBegin" or "penSample" or "penEnd").Select(f =>
+        {
+            var data = J.Get(f, "data"); bool contact = J.Text(f, "kind") != "penEnd";
+            return new MemolineReplaySample(J.I64(f, "ticks"), J.Number(J.Get(data, "x")) ?? 0,
+                J.Number(J.Get(data, "y")) ?? 0, contact ? 1 : 0, 0, 0, contact, J.U64(f, "appendId"), J.U64(f, "eventId"));
+        }).ToArray();
+        laterSnapshot = laterSnapshot with { Packets = [firstPacket, laterPacket], Replay = laterSnapshot.Replay with
+            { Strokes = laterSnapshot.Replay.Strokes.Concat([new MemolineReplayStroke(6, 150, 160, new(150, 0, 0, 0), laterSamples)]).ToArray() } };
+        var laterIndex = EditIndexBuilder.Build(laterSnapshot);
+        var selectedLater = laterIndex.Strokes.Values.Single(s => s.OperationId == 6);
+        var laterRequest = EditRequest.Event(firstPacket.Layer, selectedLater.WriteMask,
+            new Dictionary<EditableStrokeKey, EventChange> { [selectedLater.Key] = new(Delete: true) });
+        Check(ReconstructionPlanner.Build(laterIndex, laterRequest).IsValid,
+            "A confirmed undo before the selected later matrix does not block that request.");
+        var selectedFirst = laterIndex.Strokes.Values.Single(s => s.OperationId == 2);
+        var firstRequest = laterRequest with { Changes = new Dictionary<EditableStrokeKey, EventChange> { [selectedFirst.Key] = new(Delete: true) } };
+        Check(ReconstructionPlanner.Build(laterIndex, firstRequest).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
+            "The same undo still blocks a request beginning at the earlier affected contact.");
+
         if (failures.Count > 0) throw new InvalidOperationException(
             $"Edit index hardening checks: {count - failures.Count}/{count} passed.\n" + string.Join("\n", failures));
         Console.WriteLine($"Edit index hardening checks passed: {count}.");
@@ -219,6 +268,11 @@ internal static class EditIndexHardeningChecks
     private static JsonElement WithAppend(JsonElement frame, ulong append)
     {
         var node = JsonNode.Parse(frame.GetRawText())!.AsObject(); node["appendId"] = append;
+        return JsonSerializer.SerializeToElement(node);
+    }
+    private static JsonElement WithOperation(JsonElement frame, ulong operation)
+    {
+        var node = JsonNode.Parse(frame.GetRawText())!.AsObject(); node["operationId"] = operation;
         return JsonSerializer.SerializeToElement(node);
     }
 

@@ -12,6 +12,9 @@ internal static partial class PacketChecks
     {
         internal int Calls;
         internal bool Old, Unknown;
+        internal int[]? SelectedRegion;
+        public async Task<IReadOnlyDictionary<string,JsonElement>> RequestBrushPanelAsync(string sessionId,string requestId,string[] modules,string? saveId,int[] region,CancellationToken token)
+        {SelectedRegion=region.ToArray();return await RequestAsync(sessionId,requestId,modules,saveId,token);}
         public Task<IReadOnlyDictionary<string, JsonElement>> RequestAsync(string sessionId, string requestId, string[] modules, string? saveId, CancellationToken token)
         {
             token.ThrowIfCancellationRequested(); Calls++;
@@ -71,6 +74,14 @@ internal static partial class PacketChecks
             control.Old = false; control.Unknown = true;
             await RejectAsync<InvalidOperationException>(() => feed.RequestAsync(["brushState"], default));
             Check(feed.Brush is null, "An unknown requested result cannot silently reuse the previous confirmed brush.");
+            control.Unknown=false;
+            await feed.RequestBrushPanelAsync(new(-300,40,240,360),default);
+            Check(control.SelectedRegion!.SequenceEqual(new[]{-300,40,240,360})&&feed.Brush is not null,
+                "A selected screenshot rectangle is sent in physical screen coordinates.");
+            control.SelectedRegion=null;
+            await feed.RequestAsync(["brushState","currentLayerState"],default);
+            Check(control.SelectedRegion!.SequenceEqual(new[]{-300,40,240,360})&&feed.Layer=="图层 2",
+                "The selected property panel remains the live readback region during later brush restoration.");
             using var canceled = new CancellationTokenSource(); canceled.Cancel();
             await RejectAsync<OperationCanceledException>(() => feed.RequestAsync(["brushState"], canceled.Token));
         }

@@ -2,7 +2,7 @@
 import json
 import threading
 
-MODULES = {"笔刷属性":"brushState", "工具组":"subtoolState", "图层":"currentLayerState", "色彩":"colorState", "画布视口":"canvasViewState"}
+MODULES = {"笔刷属性":"brushState", "工具组":"subtoolState", "图层":"currentLayerState", "色彩":"colorState", "色彩滑块":"colorInputState", "画布视口":"canvasViewState"}
 
 def synchronized(method):
     def call(self,*args,**kwargs):
@@ -12,6 +12,8 @@ def synchronized(method):
 
 
 def semantic_state(module, result):
+    if module == 'colorInputState':
+        return dict(result) if isinstance(result,dict) and result.get('status') == 'ok' else None
     if module == 'currentLayerState' and isinstance(result, dict) and 'selectedName' in result:
         return result['selectedName']
     if module == 'subtoolState':
@@ -116,6 +118,8 @@ class StateTimeline:
 
     def _update(self,module,result,evidence,error,initial):
         state = semantic_state(module,result)
+        if module == 'colorInputState' and state is not None and not color_input_evidence_valid(state,evidence):
+            state = None
         canonical = json.dumps(state,sort_keys=True,ensure_ascii=False,separators=(",",":"))
         if error:
             status = "error"
@@ -135,3 +139,31 @@ class StateTimeline:
             # Preserve partial observations without promoting them to a confirmed state.
             update["observedState"] = result
         return update
+
+
+def color_input_evidence_valid(state,evidence):
+    """Locations are usable only with the pixels and identity that produced them."""
+    if not isinstance(state,dict) or not isinstance(evidence,dict):
+        return False
+    roi = state.get('panelRoi')
+    if (not state.get('captureFrameId') or state['captureFrameId'] != evidence.get('captureId')
+            or roi != evidence.get('panelRoi') or not isinstance(roi,list) or len(roi) != 4
+            or any(not isinstance(v,int) or isinstance(v,bool) for v in roi) or min(roi[2:]) <= 0
+            or state.get('activeTab') != 'rgb' or state.get('activeColorSlot') not in {'main','sub','transparent'}):
+        return False
+    start,end = evidence.get('capturedTicks'),evidence.get('captureEndTicks')
+    if (not isinstance(start,int) or isinstance(start,bool) or not isinstance(end,int)
+            or isinstance(end,bool) or start < 0 or end < start):
+        return False
+    regions = state.get('valueRegions')
+    if (not isinstance(regions,list) or len(regions) != 3 or any(not isinstance(r,dict) for r in regions)
+            or {r.get('channel') for r in regions} != {'r','g','b'}):
+        return False
+    for region in regions:
+        value,box = region.get('value'),region.get('screenBbox')
+        if (region.get('status') != 'ok' or not isinstance(value,int) or isinstance(value,bool) or not 0 <= value <= 255
+                or not isinstance(box,list) or len(box) != 4 or any(not isinstance(v,int) or isinstance(v,bool) for v in box)
+                or min(box[2:]) <= 0 or box[0] < roi[0] or box[1] < roi[1]
+                or box[0]+box[2] > roi[0]+roi[2] or box[1]+box[3] > roi[1]+roi[3]):
+            return False
+    return True

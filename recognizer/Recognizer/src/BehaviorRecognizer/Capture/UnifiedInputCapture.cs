@@ -38,6 +38,56 @@ public sealed partial class UnifiedInputCapture : IAsyncDisposable
     private readonly CancellationTokenSource _pollCancellation = new();
     private readonly Task _worker;
     private readonly Task _cursorPoller;
+    private sealed record PendingRecordingEnd(CancellationToken Cancellation, TaskCompletionSource<MemolineEvent> Completion);
+    private readonly List<PendingRecordingEnd> _recordingEndWaiters = [];
+    private MemolineEvent? _completedRecordingEnd;
+
+    // End capture must observe a complete native contact, rather than racing the
+    // hook/OTD consumer. Later input remains recordable and invalidates a stale final PNG.
+    public Task<MemolineEvent> PrepareRecordingEndAsync(CancellationToken cancellation = default)
+    {
+        var completion = new TaskCompletionSource<MemolineEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        EnqueueControl(() =>
+        {
+            lock (_sync)
+            {
+                if (cancellation.IsCancellationRequested) completion.TrySetCanceled(cancellation);
+                else if (_editTransactionId is not null)
+                    completion.TrySetException(new InvalidOperationException("An edit transaction is active."));
+                else if (_completedRecordingEnd is { } previous) completion.TrySetResult(previous);
+                else _recordingEndWaiters.Add(new(cancellation, completion));
+            }
+            return Task.CompletedTask;
+        });
+        return completion.Task.WaitAsync(cancellation);
+    }
+
+    private void CompleteRecordingEndBoundaries()
+    {
+        lock (_sync)
+        {
+            foreach (var pending in _recordingEndWaiters.Where(p => p.Cancellation.IsCancellationRequested).ToArray())
+            {
+                pending.Completion.TrySetCanceled(pending.Cancellation);
+                _recordingEndWaiters.Remove(pending);
+            }
+            if (_recordingEndWaiters.Count == 0 || _penOperation is not null || _penPhysicalDown || _mouse.Count > 0) return;
+            _completedRecordingEnd ??= _writer.AppendImmediateState("recordingEndRequested",
+                new { reason = "externalControl", boundaryKind = "recordingEnd" });
+            foreach (var pending in _recordingEndWaiters) pending.Completion.TrySetResult(_completedRecordingEnd);
+            _recordingEndWaiters.Clear();
+        }
+    }
+
+    private void CancelRecordingEndBoundaries()
+    {
+        lock (_sync)
+        {
+            foreach (var pending in _recordingEndWaiters)
+                pending.Completion.TrySetException(new ObjectDisposedException(nameof(UnifiedInputCapture)));
+            _recordingEndWaiters.Clear();
+        }
+    }
 
     public UnifiedInputCapture(MemolineWriter writer, UpdateActivatorBridge? updates = null,
         IInputTargetProbe? targetProbe = null, Func<int, int, PenDownLocation>? locatePenDown = null)
@@ -67,13 +117,14 @@ public sealed partial class UnifiedInputCapture : IAsyncDisposable
                 if (work.Control is { } control) { await control(); continue; }
                 if (_updates is not null && !_updates.RecordingReady) continue;
                 if (work.ExtraInfo == WindowsInputHooks.RecorderInputTag) continue;
+                if (EditTransactionActive && work.Injected) continue;
                 if (work.Pen is not null) OnPen(work.Pen);
                 else if (work.PassivePen) OnPassivePenMouse(work.MouseMessage, work.X, work.Y, work.Injected);
                 else if (work.MouseMessage != 0) OnMouse(work.MouseMessage, work.X, work.Y, work.MouseData, work.Injected);
                 else OnKey(work.VirtualKey, work.ScanCode, work.Extended, work.Pressed, work.Injected, work.ExtraInfo, work.GuardIntercepted, work.NextHookResult);
             }
             catch (Exception ex) { Console.Error.WriteLine($"[InputCapture] {ex.Message}"); }
-            finally { CompleteEditBoundaries(); }
+            finally { CompleteEditBoundaries(); CompleteRecordingEndBoundaries(); }
         }
     }
 
@@ -100,6 +151,7 @@ public sealed partial class UnifiedInputCapture : IAsyncDisposable
             _pending.Writer.TryComplete();
             await _worker;
             CancelEditBoundaries();
+            CancelRecordingEndBoundaries();
         }
     }
 
@@ -145,6 +197,7 @@ public sealed partial class UnifiedInputCapture : IAsyncDisposable
     {
         lock (_sync)
         {
+            if (_editTransactionId is not null) { _inputAppendId=0; ReportPhysicalInput("pen",false); return; }
             _inputAppendId = 0;
             try { RecordPen(evt); }
             finally
@@ -269,6 +322,7 @@ public sealed partial class UnifiedInputCapture : IAsyncDisposable
     {
         lock (_sync)
         {
+            if (_editTransactionId is not null) { _inputAppendId=0; ReportPhysicalInput("pen",injected); return; }
             _inputAppendId = 0;
             try { RecordPassivePenMouse(message, x, y, injected); }
             finally { ReportPhysicalInput("pen", injected); }
@@ -331,6 +385,7 @@ public sealed partial class UnifiedInputCapture : IAsyncDisposable
     {
         lock (_sync)
         {
+            if (_editTransactionId is not null) { _inputAppendId=0; ReportPhysicalInput("mouse",injected); return; }
             _inputAppendId = 0;
             try { RecordMouse(message, x, y, mouseData, injected); }
             finally { ReportPhysicalInput("mouse", injected); }
@@ -393,6 +448,7 @@ public sealed partial class UnifiedInputCapture : IAsyncDisposable
         if (extraInfo == WindowsInputHooks.RecorderInputTag) return;
         lock (_sync)
         {
+            if (_editTransactionId is not null) { _inputAppendId=0; ReportPhysicalInput("keyboard",injected); return; }
             _inputAppendId = 0;
             try { RecordKey(vk, scanCode, extended, pressed, injected, extraInfo, guardIntercepted, nextHookResult); }
             finally { ReportPhysicalInput("keyboard", injected); }

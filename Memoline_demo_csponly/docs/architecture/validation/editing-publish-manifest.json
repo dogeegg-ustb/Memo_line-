@@ -1,0 +1,9 @@
+{
+  "hostSha256": "75D4D98D2C667DB7E544E1002BA2654BCA6827C958322BB434422A1F71C70F42",
+  "publishedHostMatches": true,
+  "stagedHostMatches": true,
+  "nativeMatches": true,
+  "brushCaptureRuntimeMatches": true,
+  "calibrationFileCount": 2,
+  "calibrationUnchanged": true
+}

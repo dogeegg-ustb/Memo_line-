@@ -16,7 +16,9 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
     private Task _stdout = Task.CompletedTask, _stderr = Task.CompletedTask;
     private TaskCompletionSource _sessionEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private AggregateSession? _aggregate;
-    private string? _mechanicalPath, _sessionId, _lastSealed, _clipPath;
+    private string? _mechanicalPath, _sessionId, _lastSealed, _clipPath, _projectRecording;
+    internal string? LiveEndpoint { get; private set; }
+    private FileStream? _projectLease;
     private string _workRoot;
     private bool _completed;
     private DateTime _recorderStartedUtc;
@@ -27,6 +29,12 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
     public string SettingsPath => Path.Combine(_base, "demo-settings.json");
     public string OutputDirectory => Path.Combine(_base, "recordings");
     public string DiffRoot => Path.Combine(_workRoot, "layer-diffs");
+    internal string WorkRoot => _workRoot;
+    internal string? ProjectRecording => _projectRecording;
+    internal string? ClipPath => _clipPath;
+    private IReadOnlyList<string> _editReplaySources = [];
+    internal void RegisterEditReplaySources(IEnumerable<string> paths) =>
+        _editReplaySources = paths.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     public bool HasPendingSeal => _recorder is not null || _mechanicalPath is not null;
     public event Action<string>? Status;
 
@@ -55,6 +63,11 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
         _workRoot = Path.Combine(_base, ".work", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_workRoot); Directory.CreateDirectory(OutputDirectory);
         _completed = false; _lastSealed = null; _clipPath = Path.GetFullPath(clipPath);
+        _editReplaySources = [];
+        _projectRecording = ProjectRecordingStore.Resolve(OutputDirectory, _clipPath);
+        _projectLease?.Dispose();
+        _projectLease = new FileStream(_projectRecording + ".recording.lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        if (File.Exists(_projectRecording)) Status?.Invoke("检测到同一 CLIP 工程，将接续原记录：" + _projectRecording);
         _sessionEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
         // Only the demo's private copy is configured. The original Recognizer
         // recorder implementation and native records are kept intact.
@@ -92,7 +105,7 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
                         RequireUnder(recording, directory);
                         _mechanicalPath = Path.GetFullPath(recording);
                         _sessionId = J.Text(data, "sessionId") ?? throw new InvalidDataException("Recognizer 描述文件缺少 sessionId。");
-                        return manifest;
+                        LiveEndpoint = manifest; return manifest;
                     }
                     catch (Exception ex) when (ex is IOException or JsonException) { }
             await Task.Delay(100, token);
@@ -127,6 +140,8 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
                 }
             }
             if (message.Channel == "system" && message.Kind == "sessionEnded") _sessionEnded.TrySetResult();
+            if (message.Channel == "system" && message.Kind == "editBoundaryRequested")
+                lock (_sync) _aggregate?.ObserveEditingBoundary(message);
         };
         monitor.ViewportObserved += observation =>
         {
@@ -218,21 +233,36 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
             if (_recorder is not null) throw new InvalidOperationException("Recognizer 尚未正常停止，不能封盘。");
             var aggregate = _aggregate ?? throw new InvalidOperationException("没有可封盘的会话。");
             string native = _mechanicalPath ?? throw new InvalidOperationException("原生记录路径缺失。");
-            if (!_completed) { aggregate.Complete(); aggregate.Dispose(); _completed = true; }
-            string name = Path.GetFileNameWithoutExtension(_clipPath
-                ?? throw new InvalidOperationException("本次录制的 CLIP 文件路径缺失。"));
-            string output = Path.Combine(OutputDirectory, name + ".memoline");
-            for (int index = 2; File.Exists(output) || Directory.Exists(output); index++)
-                output = Path.Combine(OutputDirectory, $"{name} ({index}).memoline");
+            if (!_completed)
+            {
+                try { aggregate.Complete(); }
+                catch (Exception ex)
+                {
+                    Status?.Invoke("末尾封盘校验失败。原生文件保留在：" + native + "；聚集与差异 PNG 工作目录：" + _workRoot);
+                    throw new IOException("末尾聚集事件与图层资产未闭合，未发布新封盘：" + ex.Message
+                        + " 原生文件：" + native + "；恢复工作目录：" + _workRoot, ex);
+                }
+                aggregate.Dispose(); _completed = true;
+            }
+            string clip = _clipPath ?? throw new InvalidOperationException("本次录制的 CLIP 文件路径缺失。");
+            string output = _projectRecording ?? throw new InvalidOperationException("工程记录路径缺失。");
             RequireUnder(native, Path.Combine(RecorderRoot, "procedure", "stroke"));
             RequireUnder(aggregate.FilePath, _workRoot);
-            BundleArchive.Seal(native, aggregate.FilePath, output, token);
+            string currentBundle = Path.Combine(_workRoot, "session-sealed.memoline");
+            if (!File.Exists(currentBundle))
+            {
+                if (File.Exists(Path.Combine(_workRoot, Editing.EditJournal.JournalFileName)))
+                    BundleArchive.SealWithEdits(native, aggregate.FilePath, _workRoot, currentBundle, token, _editReplaySources);
+                else BundleArchive.Seal(native, aggregate.FilePath, currentBundle, token);
+            }
+            BundleArchive.AppendProjectSession(output, currentBundle, clip, token);
             // Publishing is the commit. Cleanup failures must not make a valid
             // sealed archive look unfinished or prevent the next recording.
             _lastSealed = output; _mechanicalPath = null; _sessionId = null; _aggregate = null; _clipPath = null;
+            _projectLease?.Dispose(); _projectLease = null;
             // Seal verifies byte hashes and references before publishing. Remove
             // only this owned session's two primary intermediate data files.
-            foreach (string temporary in new[] { native, aggregate.FilePath })
+            foreach (string temporary in new[] { native, aggregate.FilePath, currentBundle })
                 try { File.Delete(temporary); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 { Status?.Invoke("已成功封盘，中间文件清理未完成：" + temporary + "；" + ex.Message); }
@@ -253,5 +283,6 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
             try { await FinishRecordingAsync(CancellationToken.None).ConfigureAwait(false); }
             catch (Exception ex) { Status?.Invoke("原生记录仍保留：" + ex.Message); }
         _aggregate?.Dispose();
+        _projectLease?.Dispose();
     }
 }
