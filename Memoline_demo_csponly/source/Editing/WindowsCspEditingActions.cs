@@ -103,7 +103,10 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
             .OrderBy(r=>CanvasLayerWatcher.J.Tick(r,"stackOrder",long.MaxValue)).ToArray();
         _layers=rows.ToDictionary(r=>CanvasLayerWatcher.J.Text(r,"uuid") ?? throw new InvalidDataException("图层 UUID 缺失。"),
             r=>new LayerReference(CanvasLayerWatcher.J.Tick(r,"id",0),CanvasLayerWatcher.J.Text(r,"name") ?? "",CanvasLayerWatcher.J.Text(r,"uuid")));
-        await _feed.RequestAsync(["clipState","currentLayerState"],token);
+        await _feed.RequestAsync(["clipState"],token);
+        // The OCR layer name is only a fallback (see ReadCurrentLayerAsync); a hidden or unreadable
+        // selected row must not stop the structural confirmation.
+        try{await _feed.RequestAsync(["currentLayerState"],token);}catch(InvalidOperationException){}
         return new(_monitor.SessionId,_monitor.Generation,true,rows.Select(r=>new CspLayerEvidence(
             CanvasLayerWatcher.J.Text(r,"uuid")!,CanvasLayerWatcher.J.Text(r,"name") ?? "",
             CanvasLayerWatcher.J.Get(r,"isRaster").ValueKind==JsonValueKind.True,
@@ -114,6 +117,11 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
     public Task NavigateToLayerAsync(string name,CancellationToken token)=>new PacketStateRestorer(_feed,new PacketWindowsInput(_input),_status).RestoreLayerAsync(name,token);
     public async Task<CspCurrentLayerEvidence> ReadCurrentLayerAsync(CancellationToken token)
     {
+        // Every confirmation follows a save. The saved document records the selected layer ID,
+        // which does not depend on how the layer row looks (hidden, highlighted, scrolled).
+        if(PacketReplay.J.Get(PacketReplay.J.Get(_feed.Layers,"canvas"),"current_layer_id") is {ValueKind:JsonValueKind.Number} id &&
+           _saved is not null && _layers.Values.Where(l=>l.Id==id.GetInt64()).ToArray() is [var saved])
+            return new(saved.Name,true,saved.Uuid);
         await _feed.RequestAsync(["currentLayerState"],token);
         string name=_feed.Layer!; var matches=_layers.Values.Where(l=>LayerMapping.SameName(l.Name,name)).ToArray();
         return new(name,matches.Length==1,matches.Length==1?matches[0].Uuid:null);
