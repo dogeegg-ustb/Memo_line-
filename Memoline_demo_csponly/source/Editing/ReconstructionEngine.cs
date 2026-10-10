@@ -63,6 +63,7 @@ internal static class ReconstructionEngine
         bool hasReplayed = false;
         ReconstructionResult Fail(params PlanIssue[] issues) => new(ReconstructionStatus.Failed,layers,issues,promoted);
         if (!plan.IsValid) return Fail(plan.Issues.ToArray());
+        if (plan.Request.Kind == EditKind.PreciseUndo) return await RunPreciseUndoAsync(plan, executor, token);
         var cursors = new Dictionary<LayerKey, Cursor>();
         var validatedUndo = new HashSet<(LayerKey Layer, string Packet)>();
         try
@@ -260,6 +261,78 @@ internal static class ReconstructionEngine
         {return new(ReconstructionStatus.Cancelled,layers,[],promoted);}
         catch(ReconstructionFailure failure){return Fail(failure.Issue);}
     }
+    /// <summary>
+    /// Precise undo works on its region. The selected contacts are the newest ones there, so the layer
+    /// outside their footprint keeps its current pixels, and inside it takes the full-layer snapshot from
+    /// before the earliest selected contact. No replay happens before installation; afterwards the
+    /// selected contacts (plus unselected contacts of the same captures that the snapshot reverted) are
+    /// replayed once, discretely, in original order.
+    /// </summary>
+    private static async Task<ReconstructionResult> RunPreciseUndoAsync(ReconstructionPlan plan,
+        ICspReconstructionExecutor executor, CancellationToken token)
+    {
+        var layers = new Dictionary<LayerKey, ImageRgba>();
+        ReconstructionResult Fail(PlanIssue issue) => new(ReconstructionStatus.Failed, layers, [issue], new HashSet<DirtyImageKey>());
+        try
+        {
+            token.ThrowIfCancellationRequested();
+            var index = plan.Index;
+            if (plan.Request.CurrentLayer is not { } layerKey || !index.Layers.TryGetValue(layerKey, out var layer) || layer.Current is not { } current)
+                return Fail(new(PlanIssueCode.LayerIdentityUnconfirmed, "精确撤销需要已确认的当前图层及其边界整层捕获。"));
+            var selected = plan.Request.Changes.Keys.Where(index.Strokes.ContainsKey).Select(k => index.Strokes[k]).ToArray();
+            if (selected.Length == 0) return Fail(new(PlanIssueCode.NoSelection, "没有可撤销的笔画。"));
+            var selectedImages = selected.SelectMany(s => s.Images).ToHashSet();
+            var packets = layer.Packets.Where(p => !p.IsRecordingBaseline).OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray();
+            var first = packets.FirstOrDefault(p => p.Images.Any(i => selectedImages.Contains(i.Key)));
+            if (first is null) return Fail(new(PlanIssueCode.NoSelection, "被选笔画没有对应的脏矩阵。"));
+            var snapshot = new LayerTimeline(layer.Packets, current).BeforePacket(first.PacketId);
+
+            // The region to roll back: where the selected contacts wrote.
+            var region = new PixelMask(current.Width, current.Height);
+            foreach (var stroke in selected)
+                foreach (var (x, y) in stroke.WriteMask.Pixels())
+                    if (x >= 0 && y >= 0 && x < current.Width && y < current.Height) region.Set(x, y);
+            var target = current.Copy();
+            foreach (var (x, y) in region.Pixels())
+            {
+                int offset = (y * current.Width + x) * 4;
+                snapshot.Bytes.AsSpan(offset, 4).CopyTo(target.Bytes.AsSpan(offset, 4));
+            }
+
+            // Unselected contacts reverted by the snapshot: from the rolled-back captures onward, any
+            // other contact that wrote inside the region is redrawn too, in its original position.
+            var selectedKeys = selected.Select(s => s.Key).ToHashSet();
+            var firstOrder = (first.SessionOrder, first.TriggerTicks);
+            var reverted = packets.Where(p => (p.SessionOrder, p.TriggerTicks).CompareTo(firstOrder) >= 0)
+                .SelectMany(p => p.Images).SelectMany(i => i.Events).Distinct()
+                .Where(k => !selectedKeys.Contains(k) && index.Strokes.TryGetValue(k, out var s) && s.Eligible && !s.IsUndone &&
+                    s.WriteMask.Intersects(CanvasRegion(region, s.WriteMask)))
+                .Select(k => new ReplayEvent(index.Strokes[k], null))
+                .OrderBy(e => e.Stroke.SessionOrder).ThenBy(e => e.Stroke.BeginEventId).ThenBy(e => e.Stroke.Key.BeginAppendId)
+                .Select(e => e with { Stroke = e.Stroke with { Samples = e.Stroke.Samples.OrderBy(s => s.AppendId).ToArray() } })
+                .ToArray();
+            var observed = reverted.Length == 0
+                ? await executor.InstallReproductionLayerAsync(layerKey, target, token)
+                : await executor.InstallReproductionLayerAsync(layerKey, target, reverted, token);
+            if (observed.Width != current.Width || observed.Height != current.Height)
+                return Fail(new(PlanIssueCode.CaptureMismatch, "复现层读回尺寸与期望不一致。"));
+            layers.Add(layerKey, observed);
+            return new(ReconstructionStatus.Executed, layers, [], new HashSet<DirtyImageKey>());
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        { return new(ReconstructionStatus.Cancelled, layers, [], new HashSet<DirtyImageKey>()); }
+    }
+
+    // The part of a canvas-sized region inside another mask's bounds, so the two can be intersected.
+    private static PixelMask CanvasRegion(PixelMask region, PixelMask bounds)
+    {
+        var result = new PixelMask(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+        for (int y = Math.Max(bounds.Top, 0); y < Math.Min(bounds.Top + bounds.Height, region.Height); y++)
+            for (int x = Math.Max(bounds.Left, 0); x < Math.Min(bounds.Left + bounds.Width, region.Width); x++)
+                if (region.Contains(x, y)) result.Set(x, y);
+        return result;
+    }
+
     private sealed class ReconstructionFailure(PlanIssue issue):Exception(issue.Message)
     {internal PlanIssue Issue=issue;}
 }

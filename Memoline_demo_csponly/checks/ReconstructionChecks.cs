@@ -239,17 +239,27 @@ internal static class ReconstructionChecks
             Check(r.Status==ReconstructionStatus.Executed&&r.Issues.Count==0,"precise undo retains actual final discrete capture");
             Bytes(r,s.Layer,10,0,0,0,0,0,0,0);
         }
-        // Precise undo: event replay is the last step. Other contacts of a mixed image are not
-        // flushed into a work layer first; they are handed to the final discrete replay.
+        // Precise undo works on its region: outside the selected footprint the current pixels stay,
+        // inside it the snapshot from before the earliest selected contact; replay only comes last.
         {
             var s=new Scene();var a=s.Stroke(10,10,Mask(0));var b=s.Stroke(20,30,Mask(1));
             s.Group(s.Image("ab",Mask(0,1),Pixels(10,30,0,0,0,0,0,0),a,b));
             var precise=s.Plan(a);precise=precise with{Request=precise.Request with{Kind=EditKind.PreciseUndo}};
             var f=new Fake(s);var r=await ReconstructionEngine.RunAsync(precise,f,CancellationToken.None);
-            Check(r.Status==ReconstructionStatus.Executed&&f.Calls.SequenceEqual(new[]{"install"}),
-                "precise undo installs the composed state without any earlier replay");
-            Check(f.Deferred.SequenceEqual(new[]{b}),"the mixed image's other contact joins the final replay");
-            Bytes(r,s.Layer,0,0,0,0,0,0,0,0);
+            Check(r.Status==ReconstructionStatus.Executed&&f.Calls.SequenceEqual(new[]{"install"})&&f.Deferred.Count==0,
+                "precise undo installs region-rolled-back pixels without any replay before it");
+            Bytes(r,s.Layer,0,30,0,0,0,0,0,0);
+        }
+        {
+            // c is an earlier unselected contact under a in the same capture: the rollback removes it,
+            // so it is redrawn in the final replay (before a, by original order).
+            var s=new Scene();var c=s.Stroke(5,50,Mask(0,1));var a=s.Stroke(10,10,Mask(0));
+            s.Group(s.Image("ca",Mask(0,1),Pixels(10,50,0,0,0,0,0,0),c,a));
+            var precise=s.Plan(a);precise=precise with{Request=precise.Request with{Kind=EditKind.PreciseUndo}};
+            var f=new Fake(s);var r=await ReconstructionEngine.RunAsync(precise,f,CancellationToken.None);
+            Check(r.Status==ReconstructionStatus.Executed&&f.Deferred.SequenceEqual(new[]{c}),
+                "an unselected contact reverted by the snapshot joins the final replay");
+            Bytes(r,s.Layer,0,50,0,0,0,0,0,0);
         }
         n += ReconstructionRequestContractChecks.Run();
         return n;
