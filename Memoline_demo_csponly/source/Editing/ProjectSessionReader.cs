@@ -8,6 +8,55 @@ namespace MemolineDemo.Editing;
 /// <summary>Restores immutable native sessions and their embedded image assets into an owned cache.</summary>
 internal static class ProjectSessionReader
 {
+    private const string CacheSchema = "memoline-project-cache/v1";
+    private const string CacheManifest = "cache.json";
+
+    /// <summary>
+    /// The verified, extracted history of a project recording, kept beside it in "&lt;project&gt;.memoline.cache".
+    /// It is keyed by the project file's size and write time: sealing a new session rewrites the file and
+    /// the next read rebuilds the cache once. Only a complete build (cache.json written last) is reused.
+    /// </summary>
+    internal static Task<IReadOnlyList<SessionSnapshot>> ReadProjectCachedAsync(string projectPath, CancellationToken token = default)
+        => Task.Run(() => ReadProjectCached(projectPath, token), token);
+
+    internal static IReadOnlyList<SessionSnapshot> ReadProjectCached(string projectPath, CancellationToken token = default)
+    {
+        projectPath = Path.GetFullPath(projectPath);
+        string root = CacheRoot(projectPath);
+        string directory = Path.Combine(root, CacheStamp(projectPath));
+        if (TryReadCache(directory, token) is { } cached) return cached;
+        // Stale stamps and interrupted builds are never read again.
+        if (Directory.Exists(root))
+            foreach (string old in Directory.EnumerateDirectories(root))
+                try { Directory.Delete(old, recursive: true); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        return ReadProject(projectPath, directory, token);
+    }
+
+    internal static string CacheRoot(string projectPath) => Path.GetFullPath(projectPath) + ".cache";
+    internal static string CacheStamp(string projectPath)
+    {
+        var info = new FileInfo(projectPath);
+        return info.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) + "-" +
+            info.LastWriteTimeUtc.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static IReadOnlyList<SessionSnapshot>? TryReadCache(string directory, CancellationToken token)
+    {
+        string manifest = Path.Combine(directory, CacheManifest);
+        if (!File.Exists(manifest)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(manifest));
+            if (Text(document.RootElement, "schema") != CacheSchema) return null;
+            using (EditingProfiler.Stage("read cached project"))
+                return Array(document.RootElement, "sessions").Select(session => LoadSession(
+                    PackagePath(directory, RequiredText(session, "directory")),
+                    Array(session, "terminal").Select(t => t.GetString() ?? "").ToHashSet(StringComparer.Ordinal), token)).ToArray();
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or JsonException or UnauthorizedAccessException or KeyNotFoundException)
+        { return null; }
+    }
+
     internal static Task<IReadOnlyList<SessionSnapshot>> ReadProjectAsync(string projectPath, string ownedDirectory,
         CancellationToken token = default)
         => Task.Run(() => ReadProject(projectPath, ownedDirectory, token), token);
@@ -26,15 +75,38 @@ internal static class ProjectSessionReader
         using (EditingProfiler.Stage("verify + split project"))
             bundles = BundleArchive.ProjectSessionSources(projectPath, Path.Combine(directory, "sessions"), token);
         var result = new List<SessionSnapshot>(bundles.Count);
+        var entries = new List<object>(bundles.Count);
         foreach (string bundle in bundles)
         {
             token.ThrowIfCancellationRequested();
-            result.Add(ReadVerifiedSession(bundle, Path.Combine(directory, "session-" + result.Count), token));
+            string name = "session-" + result.Count;
+            var (snapshot, terminal) = ReadVerifiedSession(bundle, Path.Combine(directory, name), token);
+            result.Add(snapshot);
+            entries.Add(new { directory = name, terminal = terminal.Order(StringComparer.Ordinal).ToArray() });
         }
+        // The split containers are only needed for verification; the extracted sessions are the cache.
+        try { Directory.Delete(Path.Combine(directory, "sessions"), recursive: true); } catch (IOException) { }
+        File.WriteAllText(Path.Combine(directory, CacheManifest),
+            JsonSerializer.Serialize(new { schema = CacheSchema, sessions = entries }), new UTF8Encoding(false));
         return result;
     }
 
-    private static SessionSnapshot ReadVerifiedSession(string bundle, string directory, CancellationToken token)
+    private static SessionSnapshot LoadSession(string directory, IReadOnlySet<string> terminalPackets, CancellationToken token)
+    {
+        SessionSnapshot snapshot;
+        using (EditingProfiler.Stage("read session"))
+            snapshot = LiveSessionReader.Read(Path.Combine(directory, "recording.memoline"), Path.Combine(directory, "diff"), 0, token);
+        var packets = snapshot.Packets.Select(packet => packet with
+        {
+            // A validated successful recording-end capture is as usable as an edit
+            // capture. Empty recording-end rows never turn an older snapshot into one.
+            IsBoundary = packet.IsBoundary || terminalPackets.Contains(packet.PacketId)
+        }).ToList();
+        using (EditingProfiler.Stage("restore baselines")) RestoreBaselines(packets, token);
+        return snapshot with { Packets = packets };
+    }
+
+    private static (SessionSnapshot Snapshot, HashSet<string> Terminal) ReadVerifiedSession(string bundle, string directory, CancellationToken token)
     {
         Directory.CreateDirectory(directory);
         using var zip = ZipFile.OpenRead(bundle);
@@ -53,17 +125,7 @@ internal static class ProjectSessionReader
         HashSet<string> terminalPackets;
         using (EditingProfiler.Stage("restore packet assets"))
             terminalPackets = RestorePackets(aggregation, diffRoot, session, frequency, token);
-        SessionSnapshot snapshot;
-        using (EditingProfiler.Stage("read session"))
-            snapshot = LiveSessionReader.Read(mechanical, diffRoot, 0, token);
-        var packets = snapshot.Packets.Select(packet => packet with
-        {
-            // A validated successful recording-end capture is as usable as an edit
-            // capture. Empty recording-end rows never turn an older snapshot into one.
-            IsBoundary = packet.IsBoundary || terminalPackets.Contains(packet.PacketId)
-        }).ToList();
-        using (EditingProfiler.Stage("restore baselines")) RestoreBaselines(packets, token);
-        return snapshot with { Packets = packets };
+        return (LoadSession(directory, terminalPackets, token), terminalPackets);
     }
 
     private sealed class Asset(string path, int count, string? totalHash, long? length) : IDisposable

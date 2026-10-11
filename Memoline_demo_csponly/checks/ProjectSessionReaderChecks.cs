@@ -111,6 +111,30 @@ internal static class ProjectSessionReaderChecks
         Check(restored.All(session => session.Packets[^1].NowDescriptor.GetProperty("sessionId").GetString() == session.SessionId),
             "Snapshot descriptors preserve source session identity.");
         Check(File.ReadAllBytes(project).SequenceEqual(originalProject), "Reading history leaves the sealed source unchanged.");
+        {
+            // The cache beside the project is built once, reused while the file is unchanged, and rebuilt after a
+            // seal rewrites it. A build without its cache.json marker is never reused.
+            string cacheRoot = ProjectSessionReader.CacheRoot(project);
+            var built = ProjectSessionReader.ReadProjectCached(project);
+            string stamp = Path.Combine(cacheRoot, ProjectSessionReader.CacheStamp(project));
+            Check(built.Select(s => s.SessionId).SequenceEqual(restored.Select(s => s.SessionId)) && File.Exists(Path.Combine(stamp, "cache.json")) &&
+                  built.All(s => s.MechanicalPath.StartsWith(stamp, StringComparison.OrdinalIgnoreCase)),
+                "The first cached read builds the same history beside the project.");
+            File.WriteAllText(Path.Combine(stamp, "session-0", "probe.txt"), "kept");
+            var reused = ProjectSessionReader.ReadProjectCached(project);
+            Check(File.Exists(Path.Combine(stamp, "session-0", "probe.txt")) && reused.Select(s => s.Packets.Count).SequenceEqual(built.Select(s => s.Packets.Count)) &&
+                  reused[^1].Packets[^1].IsBoundary && reused[0].Packets[0].Before is not null,
+                "An unchanged project reuses its cache, including boundary marks and restored baselines.");
+            File.Delete(Path.Combine(stamp, "cache.json"));
+            ProjectSessionReader.ReadProjectCached(project);
+            Check(!File.Exists(Path.Combine(stamp, "session-0", "probe.txt")) && File.Exists(Path.Combine(stamp, "cache.json")),
+                "A cache without its completion marker is rebuilt.");
+            File.SetLastWriteTimeUtc(project, File.GetLastWriteTimeUtc(project).AddMinutes(1));
+            ProjectSessionReader.ReadProjectCached(project);
+            Check(!Directory.Exists(stamp) && Directory.GetDirectories(cacheRoot).Length == 1,
+                "A rewritten project replaces its stale cache.");
+            Check(File.ReadAllBytes(project).SequenceEqual(originalProject), "Caching history leaves the sealed source unchanged.");
+        }
 
         string Changed(string name, Action<List<JsonObject>> change)
         {

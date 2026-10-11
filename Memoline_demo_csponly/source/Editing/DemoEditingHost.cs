@@ -84,14 +84,11 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
     {
         string? project=_controller.ProjectRecording;
         if(project is null||!File.Exists(project))return [];
-        string hash;
-        using(var stream=new FileStream(project,FileMode.Open,FileAccess.Read,FileShare.Read))
-            hash=Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(stream,token));
-        string fingerprint=Path.GetFullPath(project)+"/"+hash;
+        // Sealing rewrites the project file, so its size and write time identify its content.
+        string fingerprint=Path.GetFullPath(project)+"/"+ProjectSessionReader.CacheStamp(project);
         if(_historyFingerprint==fingerprint)return _historySessions;
         _progress?.Invoke("正在读取工程中以前录制的笔画和图层图片…");
-        var directory=Path.Combine(_controller.WorkRoot,"project-history",hash.ToLowerInvariant()+"-"+Guid.NewGuid().ToString("N"));
-        var sources=await ProjectSessionReader.ReadProjectAsync(project,directory,token);
+        var sources=await ProjectSessionReader.ReadProjectCachedAsync(project,token);
         _historyIndexes=await Task.Run(()=>sources.ToDictionary(s=>s.SessionId,s=>
         {
             token.ThrowIfCancellationRequested();

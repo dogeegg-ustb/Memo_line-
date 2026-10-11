@@ -105,7 +105,8 @@ internal static class OfflineEditProbe
         void Log(string text) => Console.WriteLine($"[{clock.Elapsed.TotalSeconds,7:0.0}s] {text}");
 
         Log("读取工程：" + project);
-        var sessions = ProjectSessionReader.ReadProject(project, work);
+        // --use-cache：与 Alt+M 相同，读写工程旁的 .memoline.cache（忽略工作目录）。
+        var sessions = args.Contains("--use-cache") ? ProjectSessionReader.ReadProjectCached(project) : ProjectSessionReader.ReadProject(project, work);
         Log($"会话数 {sessions.Count}：" + string.Join("，", sessions.Select(s =>
             $"{s.SessionId[..8]}（帧 {s.Frames.Count}，包 {s.Packets.Count}，笔画 {s.Replay.Strokes.Count}）")));
         if (sessions.Count == 0) throw new InvalidDataException("工程中没有会话。");
