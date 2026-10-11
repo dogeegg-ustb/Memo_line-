@@ -239,27 +239,41 @@ internal static class ReconstructionChecks
             Check(r.Status==ReconstructionStatus.Executed&&r.Issues.Count==0,"precise undo retains actual final discrete capture");
             Bytes(r,s.Layer,10,0,0,0,0,0,0,0);
         }
-        // Precise undo works on its region: outside the selected footprint the current pixels stay,
-        // inside it the snapshot from before the earliest selected contact; replay only comes last.
+        // Precise undo order: snapshot before the earliest replayed image, composite every later image outside
+        // the replayed range, paste, and replay only after that. The selected image's other contact is reverted
+        // by the snapshot, so it is redrawn in the final replay.
         {
             var s=new Scene();var a=s.Stroke(10,10,Mask(0));var b=s.Stroke(20,30,Mask(1));
             s.Group(s.Image("ab",Mask(0,1),Pixels(10,30,0,0,0,0,0,0),a,b));
             var precise=s.Plan(a);precise=precise with{Request=precise.Request with{Kind=EditKind.PreciseUndo}};
             var f=new Fake(s);var r=await ReconstructionEngine.RunAsync(precise,f,CancellationToken.None);
-            Check(r.Status==ReconstructionStatus.Executed&&f.Calls.SequenceEqual(new[]{"install"})&&f.Deferred.Count==0,
-                "precise undo installs region-rolled-back pixels without any replay before it");
-            Bytes(r,s.Layer,0,30,0,0,0,0,0,0);
+            Check(r.Status==ReconstructionStatus.Executed&&f.Calls.SequenceEqual(new[]{"install"})&&f.Deferred.SequenceEqual(new[]{b}),
+                "precise undo pastes the snapshot without any replay before it; the reverted contact replays afterwards");
+            Bytes(r,s.Layer,0,0,0,0,0,0,0,0);
         }
         {
-            // c is an earlier unselected contact under a in the same capture: the rollback removes it,
-            // so it is redrawn in the final replay (before a, by original order).
-            var s=new Scene();var c=s.Stroke(5,50,Mask(0,1));var a=s.Stroke(10,10,Mask(0));
-            s.Group(s.Image("ca",Mask(0,1),Pixels(10,50,0,0,0,0,0,0),c,a));
+            // c precedes the snapshot; d is outside the range and composited; e comes after b and covers where b
+            // wrote, so composited first it would end up under b's replay: e is replayed, after b.
+            var s=new Scene();var c=s.Stroke(5,70,Mask(5));s.Group(s.Image("c",Mask(5),Pixels(0,0,0,0,0,70,0,0),c));
+            var a=s.Stroke(10,10,Mask(0));var b=s.Stroke(20,20,Mask(1));
+            s.Group(s.Image("ab",Mask(0,1),Pixels(10,20,0,0,0,70,0,0),a,b));
+            var d=s.Stroke(30,40,Mask(3));s.Group(s.Image("d",Mask(3),Pixels(10,20,0,40,0,70,0,0),d));
+            var e=s.Stroke(40,60,Mask(1));s.Group(s.Image("e",Mask(1),Pixels(10,60,0,40,0,70,0,0),e));
             var precise=s.Plan(a);precise=precise with{Request=precise.Request with{Kind=EditKind.PreciseUndo}};
             var f=new Fake(s);var r=await ReconstructionEngine.RunAsync(precise,f,CancellationToken.None);
-            Check(r.Status==ReconstructionStatus.Executed&&f.Deferred.SequenceEqual(new[]{c}),
-                "an unselected contact reverted by the snapshot joins the final replay");
-            Bytes(r,s.Layer,0,50,0,0,0,0,0,0);
+            Check(r.Status==ReconstructionStatus.Executed&&f.Calls.SequenceEqual(new[]{"install"})&&f.Deferred.SequenceEqual(new[]{b,e}),
+                "a later image over a reverted contact is replayed after it; unrelated later images are not");
+            Bytes(r,s.Layer,0,0,0,40,0,70,0,0);
+        }
+        {
+            // Pixel 2 of the selected image has no replayable contact (mouse input, unrecorded change): its
+            // recorded result is kept in the pasted layer.
+            var s=new Scene();var a=s.Stroke(10,10,Mask(0));
+            s.Group(s.Image("a",Mask(0,2),Pixels(10,0,90,0,0,0,0,0),a));
+            var precise=s.Plan(a);precise=precise with{Request=precise.Request with{Kind=EditKind.PreciseUndo}};
+            var f=new Fake(s);var r=await ReconstructionEngine.RunAsync(precise,f,CancellationToken.None);
+            Check(r.Status==ReconstructionStatus.Executed&&f.Deferred.Count==0,"no other contact to revert");
+            Bytes(r,s.Layer,0,0,90,0,0,0,0,0);
         }
         n += ReconstructionRequestContractChecks.Run();
         return n;

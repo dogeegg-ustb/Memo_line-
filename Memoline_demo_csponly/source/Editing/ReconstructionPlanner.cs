@@ -58,6 +58,7 @@ internal static class ReconstructionPlanner
                 issues.Add(new(PlanIssueCode.UnsupportedOverride, "改笔刷尺寸需要录制时冻结的 CoverageSettings。", Stroke: key));
         }
         if (issues.Count > 0) return Invalid();
+        if (request.Kind == EditKind.PreciseUndo) return PreciseUndo(index, request, issues);
         var ordered = index.Layers.Values.SelectMany(l => l.Packets.Where(p => !p.IsRecordingBaseline))
             .OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray();
         var forced = new HashSet<DirtyImageKey>();
@@ -126,6 +127,33 @@ internal static class ReconstructionPlanner
         var affectedLayers = plans.Where(plan => plan.Untrusted.Count > 0).Select(plan => plan.Layer).ToHashSet();
         issues.AddRange(globalIssues.Where(issue => IssueLayer(issue) is { } layer && affectedLayers.Contains(layer)));
         return new(index, request, plans, issues.Distinct().ToArray());
+    }
+
+    // Precise undo only touches the current layer: issues of other layers cannot block it. The layout is
+    // the one the engine executes (see ReconstructionEngine.LayoutPreciseUndo).
+    private static ReconstructionPlan PreciseUndo(EditIndex index, EditRequest request, List<PlanIssue> issues)
+    {
+        var layer = index.Layers[request.CurrentLayer!.Value];
+        var selected = request.Changes.Keys.Select(k => index.Strokes[k]).ToArray();
+        issues.AddRange(layer.Issues);
+        if (!layer.ChainValid && layer.Issues.Count == 0) issues.Add(new(PlanIssueCode.ChainBroken, "当前图层的差异链无效。"));
+        if (layer.Current is null) issues.Add(new(PlanIssueCode.CaptureMismatch, "编辑边界没有整层捕获。"));
+        if (ReconstructionEngine.LayoutPreciseUndo(index, layer, selected) is not { } layout)
+        {
+            issues.Add(new(PlanIssueCode.NoSelection, "被选笔画没有对应的脏矩阵。"));
+            return new(index, request, [], issues.Distinct().ToArray());
+        }
+        var groups = layer.Packets.Where(p => !p.IsRecordingBaseline).OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks)
+            .SkipWhile(p => p.PacketId != layout.SeedPacketId).ToArray();
+        foreach (var image in groups.SelectMany(g => g.Images).Where(i => !i.FullResolution))
+            issues.Add(new(PlanIssueCode.ChainLossy, "差异图片不是全分辨率。", image.Key));
+        var replayedEvents = groups.SelectMany(g => g.Images).Where(i => layout.Replayed.Contains(i.Key)).SelectMany(i => i.Events);
+        if (UndoRedoIssue(index, layer, replayedEvents) is { } undoIssue) issues.Add(undoIssue);
+        var reasons = layout.Replayed.ToDictionary(key => key, key => new TrustReason(
+            index.Images.TryGetValue(key, out var image) && image.Events.Any(request.Changes.ContainsKey) ? "modifiedEvent" : "revertedContact", []));
+        var untrusted = layout.Replayed.ToHashSet();
+        return new(index, request, [new(layer.Layer, groups, layout.SeedPacketId, untrusted, reasons,
+            Segments(index, request, groups, untrusted, reasons))], issues.Distinct().ToArray());
     }
 
     internal static TrustReason? Assess(EditIndex index, EditRequest request, DirtyImage image,

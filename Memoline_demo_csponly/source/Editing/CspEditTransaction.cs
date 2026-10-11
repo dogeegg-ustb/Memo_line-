@@ -161,13 +161,14 @@ internal sealed class CspEditTransaction : IEditingTransaction
         if (_installed.Contains(layer)) throw Error(PlanIssueCode.LayerIdentityUnconfirmed, "同一原图层不能重复安装复现层。");
         var (original, before) = await OriginalAsync(layer, hide: true, ct);
         var final = await PasteAsync(layer, original, before, expected, ct);
-        // The undone strokes plus any contacts the reconstruction deferred, in original order:
-        // one discrete replay, after the pasted state, as the last step.
-        var undone = _discrete.TryGetValue(layer, out var discrete) ? discrete.Select(e => e with { Change = null }) : [];
-        var all = undone.Concat(finalReplay).DistinctBy(e => e.Stroke.Key).ToArray();
-        if (all.Length > 0)
+        // Event replay is the last step, after the pasted state, discrete. The contacts the snapshot reverted
+        // come first; the undone strokes come last, so CSP's own undo steps back through exactly them.
+        var undone = _discrete.TryGetValue(layer, out var discrete) ? discrete.Select(e => e with { Change = null }).ToArray() : [];
+        var undoneKeys = undone.Select(e => e.Stroke.Key).ToHashSet();
+        var restored = finalReplay.Where(e => !undoneKeys.Contains(e.Stroke.Key)).DistinctBy(e => e.Stroke.Key).ToArray();
+        foreach (var batch in new[] { restored, undone }.Where(b => b.Length > 0))
         {
-            var ordered = Ordered(all, layer);
+            var ordered = Ordered(batch, layer);
             if (ordered.Any(ReadsReferences))
                 foreach (var drawing in ordered)
                     await ReplayAsync(final, [drawing], ReplayMode.Discrete,

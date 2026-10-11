@@ -119,6 +119,18 @@ internal static class CspEditTransactionChecks
             Check(final.Bytes[0] == 90 && f.Actions.Calls.All(c => c != "delete") && f.Actions.Baselines.Single().Png.SequenceEqual(f.Actions.LastExport!.Png),
                 "Discrete final capture, not the pre-replay seed, is retained and registered.");
         }
+        await using (var f = Create("discrete-reverted-first", discrete: true))
+        {
+            // The reverted contact is newer than the undone stroke, yet it replays first: the undone strokes
+            // must be the last replay so CSP's own undo steps back through exactly them.
+            var reverted = Stroke() with { Stroke = Stroke().Stroke with { Key = new(Original.SessionId, 30), BeginEventId = 5 } };
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), [reverted], CancellationToken.None);
+            await f.Transaction.CompleteAsync(CancellationToken.None);
+            Check(f.Actions.Replays.Count == 2 && f.Actions.Replays.All(r => r.Mode == ReplayMode.Discrete) &&
+                  f.Actions.Replays[0].Events.Single().Stroke.BeginEventId == 5 && f.Actions.Replays[1].Events.Single().Stroke.BeginEventId == 2,
+                "Precise undo replays reverted contacts first and the undone strokes last, as separate discrete replays.");
+        }
         await using(var f=Create("discrete-reference-off"))
         {
             await using var transaction=new CspEditTransaction(f.Actions,f.Journal,"tx",f.Dimensions,

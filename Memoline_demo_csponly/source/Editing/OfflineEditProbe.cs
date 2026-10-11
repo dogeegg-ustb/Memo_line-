@@ -281,13 +281,16 @@ internal static class OfflineEditProbe
             log($"    安装复现层 {layer.Uuid[..8]}" + (undoCount + finalReplay.Count > 0
                 ? $"，随后离散重放 {undoCount} 笔撤销笔画 + {finalReplay.Count} 笔推迟笔画" : ""));
             if (undoCount + finalReplay.Count == 0) return Task.FromResult(expected);
-            var discrete = request.Changes.Keys.Where(_ => undoCount > 0).Select(k => new ReplayEvent(index.Strokes[k], null))
-                .Concat(finalReplay).DistinctBy(e => e.Stroke.Key)
-                .OrderBy(e => e.Stroke.SessionOrder).ThenBy(e => e.Stroke.BeginEventId).ToArray();
+            // Same order as the CSP transaction: reverted contacts first, the undone strokes last.
+            var undone = request.Changes.Keys.Where(_ => undoCount > 0).Select(k => new ReplayEvent(index.Strokes[k], null)).ToArray();
+            var restored = finalReplay.Where(e => !request.Changes.ContainsKey(e.Stroke.Key)).DistinctBy(e => e.Stroke.Key).ToArray();
             int flushes = Flushes, replayed = Replayed;
-            var result = FlushAsync(layer, expected.Copy(), discrete, new Dictionary<LayerKey, ImageRgba>(), token);
+            var result = expected.Copy();
+            foreach (var batch in new[] { restored, undone }.Where(b => b.Length > 0))
+                result = FlushAsync(layer, result, batch.OrderBy(e => e.Stroke.SessionOrder).ThenBy(e => e.Stroke.BeginEventId).ToArray(),
+                    new Dictionary<LayerKey, ImageRgba>(), token).GetAwaiter().GetResult();
             Flushes = flushes; Replayed = replayed;
-            return result;
+            return Task.FromResult(result);
         }
     }
 
