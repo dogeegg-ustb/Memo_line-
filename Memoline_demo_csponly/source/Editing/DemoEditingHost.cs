@@ -192,15 +192,20 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
     {
         var shown=_session ?? throw new InvalidOperationException("请先建立编辑边界。");
         // A changed boundary must be reviewed again; never silently execute a different plan. The canvas stayed
-        // frozen since the boundary, so only physical input recorded in CSP can have changed it: checking the
-        // mechanical stream replaces building a whole second boundary (save, captures, index).
+        // frozen since the boundary, so without physical input recorded in CSP nothing can have changed and the
+        // whole second boundary (save, captures, index) is skipped. With input (choosing a replacement brush in CSP
+        // does that) the boundary is rebuilt and compared as before.
         var monitor=_window?.EditingMonitor ?? throw new InvalidOperationException("Recognizer 监听尚未就绪。");
         string mechanical=monitor.LiveFilePath ?? throw new InvalidDataException("没有可读取的机械流路径。");
-        bool changed=monitor.SessionId!=shown.LiveView.SessionId||!IsRecording||await Task.Run(()=>
-            EditingBoundaryCoordinator.HasPhysicalInput(BehaviorRecognizer.Storage.Memoline.MemolineReader.Read(mechanical),shown.LiveView.BoundaryAppendId,ulong.MaxValue),token);
-        if(changed)
-            return new(ReconstructionStatus.Failed,new Dictionary<LayerKey,ImageRgba>(),
-                [new(PlanIssueCode.CaptureMismatch,"选择期间录制或画布内容发生变化，请重新选区并预览方案。")],new HashSet<DirtyImageKey>());
+        bool sameSession=monitor.SessionId==shown.LiveView.SessionId&&IsRecording;
+        if(!sameSession||await Task.Run(()=>EditingBoundaryCoordinator.HasPhysicalInput(
+               BehaviorRecognizer.Storage.Memoline.MemolineReader.Read(mechanical),shown.LiveView.BoundaryAppendId,ulong.MaxValue),token))
+        {
+            if(sameSession)await BeginEditSessionCoreAsync(token);
+            if(!sameSession||!EditingBoundaryMatches(shown,_session!))
+                return new(ReconstructionStatus.Failed,new Dictionary<LayerKey,ImageRgba>(),
+                    [new(PlanIssueCode.CaptureMismatch,"选择期间录制或画布内容发生变化，请重新选区并预览方案。")],new HashSet<DirtyImageKey>());
+        }
         var plan = await PlanEditAsync(request, token);
         if (!plan.IsValid)
             return new(ReconstructionStatus.Failed, new Dictionary<LayerKey, ImageRgba>(), plan.Issues, new HashSet<DirtyImageKey>());

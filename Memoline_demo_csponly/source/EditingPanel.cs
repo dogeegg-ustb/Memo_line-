@@ -236,7 +236,8 @@ internal sealed class EditingPanel : Form
             if(!selectEarly){_overlay!.Show();Owner=_overlay;BeginRegion();}
             BindSession(session);
             try{model.Attach(session);}catch{_shown=null;throw;}
-            if(model.RegionSelection is null)_status.Text="编辑边界已建立。在冻结画布上选范围。";
+            _status.Text=model.RegionSelection is null?"编辑边界已建立。在冻结画布上选范围。":
+                _mode==EditKind.PreciseUndo?"编辑边界已建立，选区已计算。可以预览精确撤销方案。":"编辑边界已建立。从跨层图片列表选择一张脏矩阵。";
         }
         catch(OperationCanceledException){if(attempt==_beginAttempt){_status.Text="建立编辑边界已取消。";CloseOverlay();_interaction=null;}}
         catch(Exception error)

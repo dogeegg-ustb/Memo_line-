@@ -50,11 +50,11 @@ internal sealed class CanvasAffineTransform
         Viewport = StrokeReplay.CanvasViewSnapshot.ParseRectangle(Get(raw, "canvasWindowRoiScreenPx"));
     }
 
-    /// <summary>Same session, canvas and on-screen placement (within a quarter pixel at the canvas corners).</summary>
-    internal bool SameView(CanvasAffineTransform other)
+    /// <summary>Same session, canvas and on-screen placement, within <paramref name="tolerance"/> screen pixels at the canvas corners.</summary>
+    internal bool SameView(CanvasAffineTransform other, double tolerance = .25)
         => SessionId == other.SessionId && CanvasSize == other.CanvasSize &&
            new PointF[] { new(0, 0), new(CanvasSize.Width, 0), new(0, CanvasSize.Height) }.All(point =>
-           { var a = CanvasToScreen(point); var b = other.CanvasToScreen(point); return Math.Abs(a.X - b.X) <= .25 && Math.Abs(a.Y - b.Y) <= .25; });
+           { var a = CanvasToScreen(point); var b = other.CanvasToScreen(point); return Math.Abs(a.X - b.X) <= tolerance && Math.Abs(a.Y - b.Y) <= tolerance; });
 
     internal PointF ScreenToCanvas(PointF point) => Map(_screenToCanvas, point, CanvasSize.Width, CanvasSize.Height);
     internal PointF CanvasToScreen(PointF point) => Map(_canvasToScreen,
@@ -147,7 +147,8 @@ internal sealed class CanvasInteraction
     internal void Attach(EditSession session)
     {
         if (_session is not null) throw new InvalidOperationException("编辑会话已经建立。");
-        if (!TransformFor(session).SameView(Transform))
+        // Two recognitions of one still view may differ by rounding; a scroll or zoom moves the corners far more.
+        if (!TransformFor(session).SameView(Transform, tolerance: 2))
             throw new InvalidDataException("冻结之后画布视图或录制会话发生了变化，请重新冻结画布。");
         _session = session;
         if (_polygon is not null) SetRegion(_polygon);
