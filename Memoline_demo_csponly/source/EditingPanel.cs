@@ -24,7 +24,7 @@ internal interface IDemoEditingHost
 
 internal sealed class EditingPanel : Form
 {
-    private const int WmMouseActivate=0x0021,MaNoActivate=3,WsExNoActivate=0x08000000,WsExToolWindow=0x80;
+    private const int WmMouseActivate=0x0021,MaNoActivate=3,WsExNoActivate=0x08000000,WsExToolWindow=0x80,WsExLayered=0x80000,WsExTransparent=0x20;
     private readonly IDemoEditingHost _host;
     private readonly Func<CanvasInteraction,EventSelectionOverlay> _overlayFactory;
     private EventSelectionOverlay? _overlay;
@@ -163,6 +163,9 @@ internal sealed class EditingPanel : Form
         {
             var parameters=base.CreateParams;parameters.ExStyle|=WsExToolWindow;
             if(KeepCspForeground)parameters.ExStyle|=WsExNoActivate;
+            // While executing, CSP receives injected pen strokes and panel clicks, each checked with WindowFromPoint:
+            // the progress panel must not occlude any of them, so it is layered and click-through (cancel: Alt+M).
+            if(_busy)parameters.ExStyle|=WsExLayered|WsExTransparent;
             return parameters;
         }
     }
@@ -180,7 +183,7 @@ internal sealed class EditingPanel : Form
     }
     private void ShowWelcome()
     {
-        _mode=null;UpdateStyles();MinimumSize=new(420,360);Size=new(470,420);
+        _mode=null;ApplyStyles();MinimumSize=new(420,360);Size=new(470,420);
         _help.Text="选择本次要使用的功能。\r\n精确撤销：在当前图层选区，按历史路径恢复。\r\n事件编辑：选脏矩阵图片，再扫选整笔修改。";
         _tabs.Visible=_tools.Visible=_summary.Visible=false;_modeBar.Visible=true;
         _refresh.Visible=_eventPlan.Visible=_undoPlan.Visible=_execute.Visible=false;
@@ -245,11 +248,17 @@ internal sealed class EditingPanel : Form
     }
     private void Preparing(bool preparing)
     {
-        _preparing=preparing;if(_overlay is not null)_overlay.KeepTargetForeground=preparing;UpdateStyles();UpdateCaptureExclusion();
+        _preparing=preparing;if(_overlay is not null)_overlay.KeepTargetForeground=preparing;ApplyStyles();UpdateCaptureExclusion();
         _eventPlan.Enabled=_undoPlan.Enabled=_images.Enabled=!_busy&&!preparing;UpdateOptions();UpdateExecutionAvailability();
     }
     /// <summary>While Memoline waits on the Recognizer (boundary, execution) its windows are hidden from screen
     /// capture; otherwise visible, so the user's own screenshots still show them. False if Windows refused.</summary>
+    private void ApplyStyles()
+    {
+        UpdateStyles();
+        // A layered window without attributes is not drawn at all.
+        if(_busy&&IsHandleCreated)CspSnapshotNative.SetLayeredWindowAttributes(Handle,0,235,2);
+    }
     private bool UpdateCaptureExclusion()
     {
         bool exclude=_busy||_preparing;
@@ -377,12 +386,12 @@ internal sealed class EditingPanel : Form
         MinimumSize=new(420,280);Size=new(620,350);_help.Height=110;
         _help.Text="所选笔画已保留。\r\n在 CSP 中选择目标笔刷，并调整需要的属性。\r\n准备好后点击「截取并框选属性面板」，在冻结截图中框住完整笔刷属性面板。";
         _status.Text="仅切换笔刷和属性，完成截图选择前请保持画布和图层不变。";
-        UpdateStyles();
+        ApplyStyles();
     }
     private void FinishBrushChoice()
     {
         _choosingBrush=false;_brushCaptureBar.Visible=false;_modeBar.Visible=true;ConfigureWorkflow();Bounds=_selectionBounds;
-        if(_overlay is not null){_overlay.Show();Owner=_overlay;}UpdateStyles();UpdateOptions();Show();if(!KeepCspForeground)Activate();
+        if(_overlay is not null){_overlay.Show();Owner=_overlay;}ApplyStyles();UpdateOptions();Show();if(!KeepCspForeground)Activate();
     }
     private async Task ConfirmBrushAsync()
     {
@@ -425,9 +434,10 @@ internal sealed class EditingPanel : Form
         (request.Kind!=EditKind.PreciseUndo||UndoCapacityPolicy.Check(request.Changes.Count,_shown?.VerifiedUndoCapacity,_undoCapacity.Checked).Allowed);
     private void Busy(bool busy)
     {
-        _busy=busy;UpdateStyles();UpdateCaptureExclusion();_refresh.Enabled=_tools.Enabled=_delete.Enabled=!busy;_eventPlan.Enabled=_undoPlan.Enabled=_images.Enabled=!busy&&!_preparing;
+        _busy=busy;ApplyStyles();UpdateCaptureExclusion();_refresh.Enabled=_tools.Enabled=_delete.Enabled=!busy;_eventPlan.Enabled=_undoPlan.Enabled=_images.Enabled=!busy&&!_preparing;
         _chooseEdit.Enabled=_chooseUndo.Enabled=_captureBrush.Enabled=_cancelBrush.Enabled=!busy;
-        _cancel.Enabled=_cancel.Visible=busy;_close.Enabled=!busy;if(_overlay is not null)_overlay.InteractionEnabled=!busy;
+        // A busy panel is click-through (see CreateParams): Alt+M cancels, a button could not be pressed.
+        _cancel.Enabled=_cancel.Visible=false;_close.Enabled=!busy;if(_overlay is not null)_overlay.InteractionEnabled=!busy;
         UpdateOptions();UpdateExecutionAvailability();
     }
     private async Task PlanAsync(bool preciseUndo)
@@ -511,7 +521,7 @@ internal sealed class EditingPanel : Form
             Owner=null;_overlay?.Hide();_tabs.Visible=_tools.Visible=_summary.Visible=_options.Visible=false;
             _modeBar.Visible=false;_help.Height=42;_help.Text="正在复现所选事件。";
             MinimumSize=new(340,140);Size=new(620,230);var area=Screen.FromPoint(Cursor.Position).WorkingArea;Location=new(area.Left,area.Bottom-Height);Show();BringToFront();
-            _status.Text="正在复现。可随时点击「取消复现」。";
+            _status.Text="正在复现。再次按 Alt+M 可取消；此时面板不接收点击，以免挡住 CSP。";
             var result=await _host.ExecuteEditAsync(request,capacityConfirmed,_operation.Token);
             _status.Text=result.Status is ReconstructionStatus.Executed or ReconstructionStatus.PixelVerified?
                 "已完成，正常录制已恢复。下一次编辑请重新冻结画布。":"复现已停止："+string.Join("；",result.Issues.Select(i=>i.Message));
@@ -524,7 +534,7 @@ internal sealed class EditingPanel : Form
             if(!IsDisposed){MinimumSize=minimum;ConfigureWorkflow();Bounds=bounds;_options.Visible=true;Busy(false);Show();if(!KeepCspForeground)Activate();}
         }
     }
-    private void CloseOverlay(){Owner=null;_overlay?.Dispose();_overlay=null;UpdateStyles();}
+    private void CloseOverlay(){Owner=null;_overlay?.Dispose();_overlay=null;ApplyStyles();}
     private void CloseSelection(){if(_preparing)_operation?.Cancel();CloseOverlay();_shown=null;_interaction=null;InvalidatePlan();Hide();}
     internal void RenderSmoke(string directory)
     {

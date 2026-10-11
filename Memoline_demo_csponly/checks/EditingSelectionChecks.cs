@@ -181,6 +181,8 @@ internal static class EditingSelectionChecks
                 createParams=(CreateParams)typeof(EditingPanel).GetProperty("CreateParams",Private)!.GetValue(panel)!;
                 Check(finalLineY>=0&&finalLineY<status.ClientSize.Height&&(createParams.ExStyle&0x08000000)!=0,
                     "Compact progress diagnostics remain scrollable while the busy panel preserves CSP focus.");
+                Check((createParams.ExStyle&0x80020)==0x80020&&!Get<Button>(panel,"_cancel").Visible,
+                    "While executing, the progress panel is click-through, so injected pen points and CSP panel clicks are never occluded.");
             }
             catch(Exception caught){error=caught;}
         }){IsBackground=true};

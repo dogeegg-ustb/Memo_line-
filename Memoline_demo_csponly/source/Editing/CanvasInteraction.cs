@@ -236,9 +236,16 @@ internal sealed class CanvasInteraction
         return new(stroke.Key, lines);
     }
     internal IReadOnlyList<CanvasStrokePath> HoverPaths(PointF screen) => _paths.Values.Where(p => DistanceToPath(screen, p) <= 48).ToArray();
+    /// <summary>White lines for display only: a stroke whose path cannot be drawn is left out instead of
+    /// failing the selection it belongs to.</summary>
     internal IReadOnlyList<CanvasStrokePath> PathsForEvents(IEnumerable<EditableStrokeKey> keys)
-        => keys.Distinct().Select(k => Session.Index.Strokes.TryGetValue(k, out var stroke) && stroke.Eligible && !stroke.IsUndone
-            ? BuildPath(stroke) : throw new InvalidDataException("无法显示不合格或其他会话的笔画。")).ToArray();
+    {
+        var paths = new List<CanvasStrokePath>();
+        foreach (var key in keys.Distinct())
+            if (Session.Index.Strokes.TryGetValue(key, out var stroke) && stroke.Eligible && !stroke.IsUndone)
+                try { paths.Add(BuildPath(stroke)); } catch (InvalidDataException) { }
+        return paths;
+    }
     internal void SetSelectedEvents(IEnumerable<EditableStrokeKey> keys)
     {
         var selected = keys.Distinct().ToArray();
