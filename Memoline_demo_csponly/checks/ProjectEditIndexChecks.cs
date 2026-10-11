@@ -91,15 +91,15 @@ internal static class ProjectEditIndexChecks
             "An unchanged earlier scene does not require replay of an unknown interval.");
         var gapMask = new PixelMask(8, 8); gapMask.Set(0, 0);
         var gapSelection = PreciseUndoSelector.Select(gapIndex, route, gapMask);
-        Check(!gapSelection.IsValid && gapSelection.VisibleImages.Any(key => bridges.Any(i => i.Key == key)) &&
-            gapSelection.Selected.Count == 0, "Unknown observed change pixels are visible history and cannot become selectable fake strokes.");
+        Check(!gapSelection.IsValid && gapSelection.Selected.Count == 0,
+            "Unknown observed change pixels cannot become selectable fake strokes.");
         var touchedPixels = first.Packets[0].Current!.Copy(); touchedPixels.Bytes[(1 + 8) * 4] = 99;
         var touching = Session("touch-gap", 17, 1000, 30, touchedPixels);
         var touchedIndex = ProjectEditIndex.Build([first, touching, second], current);
         Check(ReconstructionPlanner.Build(touchedIndex, request).IsValid,
             "Editing whose difference reaches an observed bridge pastes the bridge pixels instead of refusing.");
-        Check(PreciseUndoSelector.Select(touchedIndex, route, selected).Selected.Count == 0,
-            "A later unknown bridge covers earlier recorded strokes in visible-surface selection.");
+        Check(PreciseUndoSelector.Select(touchedIndex, route, selected).Selected.Count > 0,
+            "A later unknown bridge does not stop the undo depth: precise undo is never refused for it.");
         var gapTimeline = new LayerTimeline(gapIndex.Layers[route].Packets, gapIndex.Layers[route].Current!);
         Check(gapTimeline.BeforePacket(gapIndex.Layers[route].Packets[0].PacketId).Bytes.AsSpan().SequenceEqual(blank.Bytes) && gapTimeline.VerifyRoundTrip(),
             "Exact gap before/now pixels participate in reverse and forward timeline reconstruction.");

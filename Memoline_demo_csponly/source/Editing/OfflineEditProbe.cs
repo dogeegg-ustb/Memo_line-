@@ -183,7 +183,7 @@ internal static class OfflineEditProbe
         }
         // 1. 精确撤销
         var undo = PreciseUndoSelector.Select(index, target.Layer, selection);
-        Log($"精确撤销选择：{undo.CountDisplay} 笔（候选 {undo.CandidateCount}，可见图片 {undo.VisibleImages.Count}），问题 {undo.Issues.Count}");
+        Log($"精确撤销选择：{undo.CountDisplay} 笔（候选 {undo.CandidateCount}，涉及图片 {undo.Images.Count}），问题 {undo.Issues.Count}");
         foreach (var issue in undo.Issues) Log($"  {issue.Code}：{issue.Message}");
         if (undo.IsValid)
             ok &= Execute("精确撤销", index, new EditRequest(EditKind.PreciseUndo, target.Layer, selection,

@@ -46,8 +46,8 @@ internal static class PreciseUndoChecks
             "Closure additions expose an explanation for the control panel.");
         Check(!selection.Selected.Any(s => s.Key == earlierOverlap.Key || s.Key == disjoint.Key || s.Key == foreign.Key),
             "Earlier overlap, disconnected strokes and another layer must not enter the closure.");
-        Check(selection.VisibleImages.SequenceEqual(new[] { candidateImage.Key }),
-            "Only current-layer images with selected pixels are visible candidates; later other-layer masks do not cover them.");
+        Check(selection.Images.OrderBy(k => k.ImageId).SequenceEqual(new[] { candidateImage.Key, p1.Images[0].Key }),
+            "The images are those of the selected strokes on the current layer; another layer's masks do not matter.");
         Check(region.Count == 1 && candidateImage.Mask.Count == 1 && firstAdded.WriteMask.Count == 2,
             "Selection must not mutate the input region, image masks or write footprints.");
 
@@ -66,12 +66,10 @@ internal static class PreciseUndoChecks
         var coverImage = Image(layer, "cover", "cover-image", Mask(0), [coveringStroke]);
         var visibilityIndex = Index([Packet(layer, "cover", 20, coverImage), Packet(layer, "old", 10, oldImage)], [coveringStroke, oldStroke]);
         var covered = PreciseUndoSelector.Select(visibilityIndex, layer, region);
-        Check(covered.IsValid && covered.Selected.Select(s => s.Key).SequenceEqual(new[] { coveringStroke.Key }),
-            "An older image covered at every selected pixel contributes no candidates, even if its W intersects the region.");
-        Check(covered.VisibleImages.SequenceEqual(new[] { coverImage.Key }),
-            "Visibility follows image masks and capture time, rather than input packet order or image alpha.");
+        Check(covered.IsValid && covered.Selected.Select(s => s.Key).SequenceEqual(new[] { oldStroke.Key, coveringStroke.Key }),
+            "A stroke hidden under a later image is still within the undo depth: the rewind removes it, so it is replayed.");
         var partlyVisible = PreciseUndoSelector.Select(visibilityIndex, layer, Mask(0, 1));
-        Check(partlyVisible.IsValid && partlyVisible.BaseCount == 2 && partlyVisible.VisibleImages.Count == 2,
+        Check(partlyVisible.IsValid && partlyVisible.BaseCount == 2 && partlyVisible.Images.Count == 2,
             "One uncovered selected pixel is sufficient for an older image to remain a visible surface image.");
 
         var notWritingRegion = Stroke(layer, 3, Mask(5));
@@ -91,7 +89,7 @@ internal static class PreciseUndoChecks
         var d0 = Image(layer, "d0", "d0-image", Mask(0), [duplicateStroke]);
         var d1 = Image(layer, "d1", "d1-image", Mask(1), [duplicateStroke]);
         var deduplicated = PreciseUndoSelector.Select(Index([Packet(layer, "d1", 20, d1), Packet(layer, "d0", 10, d0)], [duplicateStroke]), layer, Mask(0, 1));
-        Check(deduplicated.IsValid && deduplicated.VisibleImages.Count == 2 && deduplicated.BaseCount == 1 && deduplicated.Selected.Count == 1,
+        Check(deduplicated.IsValid && deduplicated.Images.Count == 2 && deduplicated.BaseCount == 1 && deduplicated.Selected.Count == 1,
             "One complete contact linked to multiple visible images is selected and replayed only once.");
 
         var earlierBad = Stroke(layer, 9, Mask(0)) with { Eligible = false, IneligibleReason = "Unconfirmed brush" };
@@ -166,6 +164,9 @@ internal static class PreciseUndoChecks
 
     private static EditIndex Index(IReadOnlyList<LayerPacket> packets, IReadOnlyList<EditableStroke> strokes)
     {
+        // As the index builder does: a stroke knows the images its ink landed in.
+        var all = packets.SelectMany(p => p.Images).ToArray();
+        strokes = strokes.Select(s => s with { Images = all.Where(i => i.Events.Contains(s.Key)).Select(i => i.Key).ToArray() }).ToArray();
         var layers = packets.GroupBy(p => p.Layer).ToDictionary(g => g.Key,
             g => new LayerIndex(g.Key, g.ToArray(), strokes.Where(s => s.Layer == g.Key).ToArray(), true, []));
         return new(layers, strokes.ToDictionary(s => s.Key), packets.SelectMany(p => p.Images).ToDictionary(i => i.Key), []);

@@ -138,7 +138,7 @@ internal static class ReconstructionPlanner
         issues.AddRange(layer.Issues);
         if (!layer.ChainValid && layer.Issues.Count == 0) issues.Add(new(PlanIssueCode.ChainBroken, "当前图层的差异链无效。"));
         if (layer.Current is null) issues.Add(new(PlanIssueCode.CaptureMismatch, "编辑边界没有整层捕获。"));
-        if (ReconstructionEngine.LayoutPreciseUndo(index, layer, selected) is not { } layout)
+        if (ReconstructionEngine.LayoutPreciseUndo(layer, selected) is not { } layout)
         {
             issues.Add(new(PlanIssueCode.NoSelection, "被选笔画没有对应的脏矩阵。"));
             return new(index, request, [], issues.Distinct().ToArray());
@@ -147,13 +147,17 @@ internal static class ReconstructionPlanner
             .SkipWhile(p => p.PacketId != layout.SeedPacketId).ToArray();
         foreach (var image in groups.SelectMany(g => g.Images).Where(i => !i.FullResolution))
             issues.Add(new(PlanIssueCode.ChainLossy, "差异图片不是全分辨率。", image.Key));
-        var replayedEvents = groups.SelectMany(g => g.Images).Where(i => layout.Replayed.Contains(i.Key)).SelectMany(i => i.Events);
-        if (UndoRedoIssue(index, layer, replayedEvents) is { } undoIssue) issues.Add(undoIssue);
-        var reasons = layout.Replayed.ToDictionary(key => key, key => new TrustReason(
-            index.Images.TryGetValue(key, out var image) && image.Events.Any(request.Changes.ContainsKey) ? "modifiedEvent" : "revertedContact", []));
+        if (UndoRedoIssue(index, layer, selected.Select(s => s.Key)) is { } undoIssue) issues.Add(undoIssue);
+        var reasons = layout.Replayed.ToDictionary(key => key, _ => new TrustReason("modifiedEvent", []));
         var untrusted = layout.Replayed.ToHashSet();
-        return new(index, request, [new(layer.Layer, groups, layout.SeedPacketId, untrusted, reasons,
-            Segments(index, request, groups, untrusted, reasons))], issues.Distinct().ToArray());
+        var events = selected.OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).Select(s => s.Key).ToArray();
+        // Every matrix from the seed on is composited (the selected ink rewound); only the selection is replayed.
+        ReconstructionSegment[] segments =
+        [
+            new(ReconstructionSegmentKind.Compose, groups.SelectMany(g => g.Images).Select(i => i.Key).ToArray(), [], []),
+            new(ReconstructionSegmentKind.Replay, layout.Replayed.ToArray(), events, layout.Replayed.Select(k => reasons[k]).ToArray()),
+        ];
+        return new(index, request, [new(layer.Layer, groups, layout.SeedPacketId, untrusted, reasons, segments)], issues.Distinct().ToArray());
     }
 
     internal static TrustReason? Assess(EditIndex index, EditRequest request, DirtyImage image,
