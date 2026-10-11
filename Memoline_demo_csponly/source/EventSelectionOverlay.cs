@@ -321,6 +321,14 @@ internal class EventSelectionOverlay : Form
 
 internal static class CspSnapshotNative
 {
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowDisplayAffinity(nint window, uint affinity);
+    /// <summary>
+    /// WDA_EXCLUDEFROMCAPTURE: the window stays on the monitor but is absent from screen captures (BitBlt,
+    /// duplication, window capture). The Recognizer reads CSP's panels from the screen, so Memoline's own
+    /// windows must not cover them while it is asked for state. False when Windows refuses (before 10 2004).
+    /// </summary>
+    internal static bool ExcludeFromCapture(Control window, bool excluded)
+        => SetWindowDisplayAffinity(window.Handle, excluded ? 0x11u : 0u);
     internal delegate bool EnumWindowsCallback(nint window, nint state);
     [StructLayout(LayoutKind.Sequential)] internal struct Rect { internal int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] internal struct NativePoint { internal int X, Y; }

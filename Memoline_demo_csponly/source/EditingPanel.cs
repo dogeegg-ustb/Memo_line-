@@ -219,12 +219,18 @@ internal sealed class EditingPanel : Form
             if(IsDisposed||attempt!=_beginAttempt)return;
             var model=new CanvasInteraction(new CanvasAffineTransform(view));
             BindOverlay(_overlayFactory(model));
-            _overlay!.Show();Owner=_overlay;
             var area=Screen.FromPoint(Cursor.Position).WorkingArea;Bounds=new(area.Right-Width,area.Top,Width,Math.Min(850,area.Height));
-            BeginRegion();Show();
-            _status.Text="画布已冻结，可以直接选范围。后台正在建立编辑边界（保存并读取历史）…再次按 Alt+M 可取消。";UpdateSummary();
+            // The boundary asks the Recognizer for state it reads from the screen: the panel and the frozen overlay
+            // may only be shown over CSP while they are invisible to screen capture. Otherwise wait, as before.
+            bool selectEarly=UpdateCaptureExclusion();
+            if(selectEarly)
+            {
+                _overlay!.Show();Owner=_overlay;BeginRegion();Show();
+                _status.Text="画布已冻结，可以直接选范围。后台正在建立编辑边界（保存并读取历史）…再次按 Alt+M 可取消。";UpdateSummary();
+            }
             var session=await _host.BeginEditSessionAsync(token);
             if(IsDisposed||attempt!=_beginAttempt)return;
+            if(!selectEarly){_overlay!.Show();Owner=_overlay;BeginRegion();}
             BindSession(session);
             try{model.Attach(session);}catch{_shown=null;throw;}
             if(model.RegionSelection is null)_status.Text="编辑边界已建立。在冻结画布上选范围。";
@@ -239,8 +245,17 @@ internal sealed class EditingPanel : Form
     }
     private void Preparing(bool preparing)
     {
-        _preparing=preparing;if(_overlay is not null)_overlay.KeepTargetForeground=preparing;UpdateStyles();
+        _preparing=preparing;if(_overlay is not null)_overlay.KeepTargetForeground=preparing;UpdateStyles();UpdateCaptureExclusion();
         _eventPlan.Enabled=_undoPlan.Enabled=_images.Enabled=!_busy&&!preparing;UpdateOptions();UpdateExecutionAvailability();
+    }
+    /// <summary>While Memoline waits on the Recognizer (boundary, execution) its windows are hidden from screen
+    /// capture; otherwise visible, so the user's own screenshots still show them. False if Windows refused.</summary>
+    private bool UpdateCaptureExclusion()
+    {
+        bool exclude=_busy||_preparing;
+        bool done=CspSnapshotNative.ExcludeFromCapture(this,exclude);
+        if(_overlay is { IsDisposed: false } overlay)done&=CspSnapshotNative.ExcludeFromCapture(overlay,exclude);
+        return done;
     }
     private void BindOverlay(EventSelectionOverlay overlay)
     {
@@ -410,7 +425,7 @@ internal sealed class EditingPanel : Form
         (request.Kind!=EditKind.PreciseUndo||UndoCapacityPolicy.Check(request.Changes.Count,_shown?.VerifiedUndoCapacity,_undoCapacity.Checked).Allowed);
     private void Busy(bool busy)
     {
-        _busy=busy;UpdateStyles();_refresh.Enabled=_tools.Enabled=_delete.Enabled=!busy;_eventPlan.Enabled=_undoPlan.Enabled=_images.Enabled=!busy&&!_preparing;
+        _busy=busy;UpdateStyles();UpdateCaptureExclusion();_refresh.Enabled=_tools.Enabled=_delete.Enabled=!busy;_eventPlan.Enabled=_undoPlan.Enabled=_images.Enabled=!busy&&!_preparing;
         _chooseEdit.Enabled=_chooseUndo.Enabled=_captureBrush.Enabled=_cancelBrush.Enabled=!busy;
         _cancel.Enabled=_cancel.Visible=busy;_close.Enabled=!busy;if(_overlay is not null)_overlay.InteractionEnabled=!busy;
         UpdateOptions();UpdateExecutionAvailability();

@@ -50,12 +50,19 @@ internal static class EditingSelectionChecks
                     (bool)typeof(EditingPanel).GetProperty("ShowWithoutActivation",Private)!.GetValue(panel)!;
                 // The canvas is frozen before the boundary; the boundary saves through CSP's own shortcut, so neither the
                 // panel nor the overlay may take the foreground while it is built.
-                host.BeforeBegin=()=>Check(Passive()&&Get<EventSelectionOverlay?>(panel,"_overlay") is { KeepTargetForeground: true },
-                    "The canvas is frozen and selectable before the boundary, which is built without activating Memoline.");
+                host.BeforeBegin=()=>
+                {
+                    Check(Passive()&&Get<EventSelectionOverlay?>(panel,"_overlay") is { KeepTargetForeground: true },
+                        "The canvas is frozen and selectable before the boundary, which is built without activating Memoline.");
+                    Check(Affinity(panel)==0x11&&Affinity(Get<EventSelectionOverlay>(panel,"_overlay"))==0x11,
+                        "While the Recognizer reads CSP from the screen, the panel and frozen overlay are excluded from capture.");
+                };
                 Invoke(panel,"SelectModeAsync",EditKind.EventEditing);
                 var model=Get<CanvasInteraction>(panel,"_interaction");
                 Check(host.Begins==1&&Get<TabControl>(panel,"_tabs").TabPages.Count==4,
                     "Choosing event editing establishes its boundary and opens the image-first workflow.");
+                Check(Affinity(panel)==0&&Affinity(Get<EventSelectionOverlay>(panel,"_overlay"))==0,
+                    "Once the boundary is ready the windows are capturable again, so the user's screenshots show them.");
                 createParams=(CreateParams)typeof(EditingPanel).GetProperty("CreateParams",Private)!.GetValue(panel)!;
                 Check((createParams.ExStyle&0x08000000)==0,
                     "The frozen editor must allow keyboard input after the passive entry has finished capturing.");
@@ -182,6 +189,8 @@ internal static class EditingSelectionChecks
         if(error is not null)throw new InvalidOperationException("Canvas panel checks failed.",error);
         return checks;
     }
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetWindowDisplayAffinity(nint window,out uint affinity);
+    private static uint Affinity(Control window)=>GetWindowDisplayAffinity(window.Handle,out uint affinity)?affinity:uint.MaxValue;
     private static T Get<T>(object target,string field)=>(T)target.GetType().GetField(field,Private)!.GetValue(target)!;
     private static void Invoke(object target,string method,params object[] args)=>((Task?)target.GetType().GetMethod(method,Private)!.Invoke(target,args))?.GetAwaiter().GetResult();
     private sealed class FakeHost : IDemoEditingHost
