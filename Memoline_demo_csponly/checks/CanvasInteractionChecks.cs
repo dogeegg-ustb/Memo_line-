@@ -51,6 +51,17 @@ internal static class CanvasInteractionChecks
         model.ClearSelection();
         Check(model.RegionSelection is null && model.Candidates.Count == 0 && model.ChosenImage is null && model.SelectedEvents.Count == 0,
             "Clearing a region must reset the image and event selection.");
+        // Frozen first, session later: a region drawn before the boundary is evaluated once the session attaches.
+        var early = new CanvasInteraction(new CanvasAffineTransform(session.CanvasViewEvidence));
+        int regionEvents = 0; early.RegionChanged += (_, _) => regionEvents++;
+        early.SetRegion([transform.CanvasToScreen(new(2, 2)), transform.CanvasToScreen(new(20, 2)),
+            transform.CanvasToScreen(new(20, 20)), transform.CanvasToScreen(new(2, 20))]);
+        Check(!early.IsReady && early.RegionSelection?.Count == 324 && early.Candidates.Count == 0,
+            "Before the boundary, the frozen view accepts a region but has no history to list.");
+        early.Attach(session);
+        Check(early.IsReady && early.Candidates.Count == 2 && regionEvents == 2, "Attaching the session evaluates the waiting region.");
+        Reject(() => new CanvasInteraction(new CanvasAffineTransform(Evidence("other"))).Attach(session),
+            "A session whose view differs from the frozen one cannot be attached.");
         var blocked = new CanvasInteraction(Session(chainValid: false));
         blocked.SetRegion([transform.CanvasToScreen(new(2, 2)), transform.CanvasToScreen(new(20, 2)),
             transform.CanvasToScreen(new(20, 20)), transform.CanvasToScreen(new(2, 20))]);

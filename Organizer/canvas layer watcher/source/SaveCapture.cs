@@ -56,9 +56,11 @@ internal static class SaveCapture
             || request.Layer is null || string.IsNullOrWhiteSpace(request.Layer.Uuid))
             || requests.Select(request => request.Layer!.Uuid).Distinct(StringComparer.OrdinalIgnoreCase).Count() != requests.Count)
             throw new InvalidDataException("多层捕获请求不属于同一已确认的编辑边界");
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(60));
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(90));
         var ct = deadline.Token;
-        for (int attempt = 0; attempt < 100 && (!backend.InputIdle || inContact()); attempt++) await Task.Delay(50, ct);
+        // The editing panel freezes the canvas first and builds the boundary behind it, so the user may be
+        // dragging a selection on the overlay right now: wait for the button to be released, not just a moment.
+        for (int attempt = 0; attempt < 600 && (!backend.InputIdle || inContact()); attempt++) await Task.Delay(50, ct);
         if (!backend.InputIdle || inContact()) throw new InvalidOperationException("用户仍在输入中；编辑边界捕获暂停");
         if (!stillValid()) throw new InvalidOperationException("编辑边界会话已改变");
         SavedLayerDocument? document = null;

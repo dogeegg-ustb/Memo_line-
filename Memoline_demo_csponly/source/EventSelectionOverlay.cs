@@ -167,6 +167,13 @@ internal class EventSelectionOverlay : Form
             return parameters;
         }
     }
+    /// <summary>
+    /// While the editing boundary is still being built in the background, CSP must stay the foreground window:
+    /// the boundary saves through CSP's own shortcut. The overlay then takes mouse and pen input without activation.
+    /// </summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    internal bool KeepTargetForeground { get; set; }
+    protected override bool ShowWithoutActivation => KeepTargetForeground;
     protected override void OnHandleCreated(EventArgs e)
     { base.OnHandleCreated(e); CspSnapshotNative.SetLayeredWindowAttributes(Handle, 0, 255, 2); }
     protected override void OnShown(EventArgs e) { base.OnShown(e); _targetWatch.Start(); }
@@ -239,6 +246,8 @@ internal class EventSelectionOverlay : Form
     }
     protected override void WndProc(ref Message message)
     {
+        // WM_MOUSEACTIVATE → MA_NOACTIVATE, WM_POINTERACTIVATE → PA_NOACTIVATE.
+        if (KeepTargetForeground && message.Msg is 0x21 or 0x24B) { message.Result = 3; return; }
         if (message.Msg is 0x245 or 0x246 or 0x247 && InteractionEnabled)
         {
             uint id = (uint)(message.WParam.ToInt64() & 0xffff);

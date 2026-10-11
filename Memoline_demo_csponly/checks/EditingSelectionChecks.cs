@@ -46,7 +46,12 @@ internal static class EditingSelectionChecks
                 typeof(EditingPanel).GetMethod("WndProc",Private)!.Invoke(panel,mouseActivate);
                 Check(((Message)mouseActivate[0]).Result==new nint(3),
                     "Clicking a floating entry button must keep CSP active without discarding the click.");
-                host.BeforeBegin=()=>Check(!panel.Visible,"The editing panel must be hidden before core capture and the native editing boundary.");
+                bool Passive()=>(((CreateParams)typeof(EditingPanel).GetProperty("CreateParams",Private)!.GetValue(panel)!).ExStyle&0x08000000)!=0&&
+                    (bool)typeof(EditingPanel).GetProperty("ShowWithoutActivation",Private)!.GetValue(panel)!;
+                // The canvas is frozen before the boundary; the boundary saves through CSP's own shortcut, so neither the
+                // panel nor the overlay may take the foreground while it is built.
+                host.BeforeBegin=()=>Check(Passive()&&Get<EventSelectionOverlay?>(panel,"_overlay") is { KeepTargetForeground: true },
+                    "The canvas is frozen and selectable before the boundary, which is built without activating Memoline.");
                 Invoke(panel,"SelectModeAsync",EditKind.EventEditing);
                 var model=Get<CanvasInteraction>(panel,"_interaction");
                 Check(host.Begins==1&&Get<TabControl>(panel,"_tabs").TabPages.Count==4,
@@ -139,7 +144,8 @@ internal static class EditingSelectionChecks
                 pending.GetAwaiter().GetResult();Check(!execute.Enabled,"A delayed preview cannot revive a superseded canvas selection.");
                 host.DelayedBegin=new(TaskCreationOptions.RunContinuationsAsynchronously);
                 var capture=(Task)panel.GetType().GetMethod("SelectModeAsync",Private)!.Invoke(panel,[EditKind.EventEditing])!;
-                Check(!panel.Visible&&!capture.IsCompleted,"An asynchronous core capture must keep the floating panel hidden.");
+                Check(Passive()&&!capture.IsCompleted&&Get<CanvasInteraction?>(panel,"_interaction") is { IsReady: false },
+                    "While the boundary is still being built, the frozen selection is open and CSP keeps the foreground.");
                 panel.OpenAsync().GetAwaiter().GetResult();
                 while(!capture.IsCompleted){Application.DoEvents();Thread.Yield();}
                 capture.GetAwaiter().GetResult();

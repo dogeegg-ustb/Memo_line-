@@ -11,10 +11,13 @@ internal sealed class CanvasAffineTransform
     internal Rectangle? Viewport { get; }
     internal string SessionId { get; }
 
-    internal CanvasAffineTransform(JsonElement evidence, string expectedSession, Size expectedCanvas)
+    /// <summary>The view as it is now, before an editing boundary has confirmed the session and canvas size.</summary>
+    internal CanvasAffineTransform(JsonElement evidence) : this(evidence, null, null) { }
+
+    internal CanvasAffineTransform(JsonElement evidence, string? expectedSession, Size? expectedCanvas)
     {
         SessionId = Text(evidence, "sessionId") ?? throw new InvalidDataException("画布矩阵缺少会话身份。");
-        if (SessionId != expectedSession) throw new InvalidDataException("画布矩阵不属于当前录制会话。");
+        if (expectedSession is not null && SessionId != expectedSession) throw new InvalidDataException("画布矩阵不属于当前录制会话。");
         if (Get(evidence, "data").ValueKind == JsonValueKind.Object) evidence = Get(evidence, "data");
         // Both callers consume the same-session, fresh active-request result.
         // causalAmbiguous describes attribution to historical input, not the validity
@@ -30,9 +33,9 @@ internal sealed class CanvasAffineTransform
             Get(transform, "canvasPixelHeight").ValueKind != JsonValueKind.Number ||
             !Get(transform, "canvasPixelWidth").TryGetInt32(out int width) ||
             !Get(transform, "canvasPixelHeight").TryGetInt32(out int height) ||
-            width <= 0 || height <= 0 || new Size(width, height) != expectedCanvas)
+            width <= 0 || height <= 0 || expectedCanvas is { } canvas && new Size(width, height) != canvas)
             throw new InvalidDataException("画布矩阵尺寸与当前编辑会话不一致。");
-        CanvasSize = expectedCanvas;
+        CanvasSize = new(width, height);
         _screenToCanvas = ReadMatrix(matrices, "screenToCanvas");
         _canvasToScreen = ReadMatrix(matrices, "canvasToScreen");
         if (!Invertible(_screenToCanvas) || !Invertible(_canvasToScreen) ||
@@ -46,6 +49,12 @@ internal sealed class CanvasAffineTransform
         if (Get(raw, "success").ValueKind == JsonValueKind.False) throw new InvalidDataException("画布矩阵识别失败。");
         Viewport = StrokeReplay.CanvasViewSnapshot.ParseRectangle(Get(raw, "canvasWindowRoiScreenPx"));
     }
+
+    /// <summary>Same session, canvas and on-screen placement (within a quarter pixel at the canvas corners).</summary>
+    internal bool SameView(CanvasAffineTransform other)
+        => SessionId == other.SessionId && CanvasSize == other.CanvasSize &&
+           new PointF[] { new(0, 0), new(CanvasSize.Width, 0), new(0, CanvasSize.Height) }.All(point =>
+           { var a = CanvasToScreen(point); var b = other.CanvasToScreen(point); return Math.Abs(a.X - b.X) <= .25 && Math.Abs(a.Y - b.Y) <= .25; });
 
     internal PointF ScreenToCanvas(PointF point) => Map(_screenToCanvas, point, CanvasSize.Width, CanvasSize.Height);
     internal PointF CanvasToScreen(PointF point) => Map(_canvasToScreen,
@@ -111,7 +120,8 @@ internal sealed record CanvasStrokePath(EditableStrokeKey Key, IReadOnlyList<Poi
 /// <summary>Pure selection state. No CSP actions, files, clipboard, or injected input.</summary>
 internal sealed class CanvasInteraction
 {
-    private readonly EditSession _session;
+    private EditSession? _session;
+    private IReadOnlyList<PointF>? _polygon;
     private readonly Dictionary<EditableStrokeKey, CanvasStrokePath> _paths = [];
     private readonly HashSet<EditableStrokeKey> _selected = [], _touched = [];
     private PointF? _sweepPrevious;
@@ -125,15 +135,33 @@ internal sealed class CanvasInteraction
     internal event EventHandler? RegionChanged;
     internal event EventHandler? SelectionChanged;
 
-    internal CanvasInteraction(EditSession session)
+    internal CanvasInteraction(EditSession session) : this(TransformFor(session)) => _session = session;
+
+    /// <summary>A frozen view the user can already select on; the editing session is attached once it is ready.</summary>
+    internal CanvasInteraction(CanvasAffineTransform transform) => Transform = transform;
+
+    internal bool IsReady => _session is not null;
+    private EditSession Session => _session ?? throw new InvalidOperationException("编辑边界尚未建立，请稍候。");
+
+    /// <summary>Attaches the session built in the background; a region chosen meanwhile is evaluated now.</summary>
+    internal void Attach(EditSession session)
     {
-        _session = session ?? throw new ArgumentNullException(nameof(session));
+        if (_session is not null) throw new InvalidOperationException("编辑会话已经建立。");
+        if (!TransformFor(session).SameView(Transform))
+            throw new InvalidDataException("冻结之后画布视图或录制会话发生了变化，请重新冻结画布。");
+        _session = session;
+        if (_polygon is not null) SetRegion(_polygon);
+    }
+
+    private static CanvasAffineTransform TransformFor(EditSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
         var current = session.CurrentLayer is { } layer && session.Index.Layers.TryGetValue(layer, out var found) ? found.Current : null;
         current ??= session.Index.Layers.Values.Select(l => l.Current).FirstOrDefault(i => i is not null);
         if (current is null) throw new InvalidDataException("编辑会话没有已确认的整层画布捕获。");
         if (session.CurrentLayer is { } target && target.SessionId != session.LiveView.SessionId)
             throw new InvalidDataException("当前编辑图层不属于活跃录制会话。");
-        Transform = new(session.CanvasViewEvidence, session.LiveView.SessionId, new(current.Width, current.Height));
+        return new(session.CanvasViewEvidence, session.LiveView.SessionId, new Size(current.Width, current.Height));
     }
 
     internal void SetRegion(IReadOnlyList<PointF> screenPolygon)
@@ -141,8 +169,8 @@ internal sealed class CanvasInteraction
         if (screenPolygon.Any(p => !float.IsFinite(p.X) || !float.IsFinite(p.Y))) throw new InvalidDataException("选区含无效屏幕坐标。");
         var mask = CanvasSelectionGeometry.Polygon(Transform.CanvasSize, screenPolygon.Select(Transform.ScreenToCanvas).ToArray());
         if (mask.IsEmpty) throw new InvalidDataException("请选择至少包含一个画布像素的区域。");
-        RegionSelection = mask;
-        Candidates = _session.Index.Layers.Values.SelectMany(layer => layer.Packets.OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks)
+        RegionSelection = mask; _polygon = screenPolygon.ToArray();
+        Candidates = _session is null ? [] : _session.Index.Layers.Values.SelectMany(layer => layer.Packets.OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks)
             .SelectMany(packet => packet.Images.Where(image => !image.IsBaseline && image.Mask.Intersects(mask))
                 .Select(image => Candidate(layer, packet, image))))
             .OrderBy(c => c.LayerName, StringComparer.Ordinal).ThenBy(c => c.SessionOrder).ThenBy(c => c.TriggerTicks).ThenBy(c => c.Image.Key.ImageId, StringComparer.Ordinal).ToArray();
@@ -150,7 +178,7 @@ internal sealed class CanvasInteraction
     }
     internal void ClearSelection()
     {
-        RegionSelection = null; Candidates = []; ResetEvents();
+        RegionSelection = null; _polygon = null; Candidates = []; ResetEvents();
         RegionChanged?.Invoke(this, EventArgs.Empty); SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
     private void ResetEvents()
@@ -166,7 +194,7 @@ internal sealed class CanvasInteraction
             reason = Join(reason, "历史图片的画布尺寸与当前画布不一致。");
         if (!image.FullResolution) reason = Join(reason, "ChainLossy: 图片不是全分辨率捕获。");
         if (image.HasUnreplayableEvents) reason = Join(reason, "UnreplayableEventInMatrix: 图片含不可重放事件。");
-        if (!image.Events.Any(k => _session.Index.Strokes.TryGetValue(k, out var s) && s.Eligible && !s.IsUndone && s.Layer == image.Key.Layer))
+        if (!image.Events.Any(k => Session.Index.Strokes.TryGetValue(k, out var s) && s.Eligible && !s.IsUndone && s.Layer == image.Key.Layer))
             reason = Join(reason, "图片中没有可选择的完整笔画。");
         return new(image, name, packet.TriggerTicks, reason.Length == 0, reason)
         { SourceSessionId = packet.SourceLayer?.SessionId ?? packet.Layer.SessionId, SessionOrder = packet.SessionOrder };
@@ -177,7 +205,7 @@ internal sealed class CanvasInteraction
     {
         var candidate = Candidates.FirstOrDefault(c => c.Image.Key == image) ?? throw new InvalidDataException("请选择与当前选区相交的单张脏矩阵。");
         if (!candidate.CanSelect) throw new InvalidDataException(candidate.Reason);
-        var eligible = candidate.Image.Events.Distinct().Select(k => _session.Index.Strokes.GetValueOrDefault(k))
+        var eligible = candidate.Image.Events.Distinct().Select(k => Session.Index.Strokes.GetValueOrDefault(k))
             .Where(s => s is { Eligible: true, IsUndone: false } && s.Layer == image.Layer).Select(s => s!).OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ToArray();
         var paths = eligible.Select(BuildPath).ToArray();
         ResetEvents(); ChosenImage = image; EligibleStrokes = eligible;
@@ -200,7 +228,7 @@ internal sealed class CanvasInteraction
         Flush();
         if (lines.Count == 0)
         {
-            var view = _session.Source(stroke.Key.SessionId).History.LastOrDefault(h => h.Module == "canvasViewState" && h.Anchor < stroke.BeginEventId)?.Data ?? default;
+            var view = Session.Source(stroke.Key.SessionId).History.LastOrDefault(h => h.Module == "canvasViewState" && h.Anchor < stroke.BeginEventId)?.Data ?? default;
             if (!Footprints.TryMapContactSamples(stroke.Samples, view, Transform.CanvasSize.Width, Transform.CanvasSize.Height, out var mapped))
                 throw new InvalidDataException($"笔画 {stroke.BeginEventId} 缺少完整画布折线。");
             lines.Add(mapped.Select(p => Transform.CanvasToScreen(new((float)p.X, (float)p.Y))).ToArray());
@@ -209,7 +237,7 @@ internal sealed class CanvasInteraction
     }
     internal IReadOnlyList<CanvasStrokePath> HoverPaths(PointF screen) => _paths.Values.Where(p => DistanceToPath(screen, p) <= 48).ToArray();
     internal IReadOnlyList<CanvasStrokePath> PathsForEvents(IEnumerable<EditableStrokeKey> keys)
-        => keys.Distinct().Select(k => _session.Index.Strokes.TryGetValue(k, out var stroke) && stroke.Eligible && !stroke.IsUndone
+        => keys.Distinct().Select(k => Session.Index.Strokes.TryGetValue(k, out var stroke) && stroke.Eligible && !stroke.IsUndone
             ? BuildPath(stroke) : throw new InvalidDataException("无法显示不合格或其他会话的笔画。")).ToArray();
     internal void SetSelectedEvents(IEnumerable<EditableStrokeKey> keys)
     {

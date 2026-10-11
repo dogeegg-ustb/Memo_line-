@@ -36,6 +36,9 @@ internal sealed class EditingPanel : Form
     private bool _layingOut;
     private EditKind? _mode;
     private bool _choosingBrush;
+    // The overlay is frozen and selectable while the editing boundary is still being built behind it.
+    private bool _preparing;
+    private int _beginAttempt;
     private Rectangle _selectionBounds;
     private JsonElement _liveBrushEvidence;
     private BrushParameterAvailability? _parameterAvailability;
@@ -82,7 +85,8 @@ internal sealed class EditingPanel : Form
     internal EditingPanel(IDemoEditingHost host,Func<CanvasInteraction,EventSelectionOverlay>? overlayFactory=null)
     {
         _host=host;_overlayFactory=overlayFactory??(model=>new EventSelectionOverlay(model));
-        _host.SetProgressObserver(text=>{if(!IsDisposed&&IsHandleCreated)BeginInvoke(()=>{if(_busy)_status.Text=text;});});
+        _host.SetProgressObserver(text=>{if(!IsDisposed&&IsHandleCreated)BeginInvoke(()=>
+        {if(_busy)_status.Text=text;else if(_preparing)_status.Text="画布已冻结，可以直接选范围。后台："+text+"（再次按 Alt+M 可取消）";});});
         Text="Memoline · 画布事件编辑";Size=new(470,850);MinimumSize=new(420,720);
         StartPosition=FormStartPosition.Manual;TopMost=true;KeyPreview=true;ShowInTaskbar=false;
         KeyDown+=(_,e)=>{if(e.KeyCode==Keys.Escape){if(_busy)_operation?.Cancel();else if(_choosingBrush)FinishBrushChoice();else CloseSelection();e.Handled=true;}};
@@ -150,7 +154,7 @@ internal sealed class EditingPanel : Form
     }
     // Keyboard focus belongs to the editor only while a frozen selection exists.
     // Failure/cancellation leaves the selected mode set, but no frozen surface.
-    private bool KeepCspForeground=>_overlay is null||_busy||_choosingBrush;
+    private bool KeepCspForeground=>_overlay is null||_busy||_choosingBrush||_preparing;
     protected override bool ShowWithoutActivation=>KeepCspForeground;
     protected override CreateParams CreateParams
     {
@@ -169,7 +173,7 @@ internal sealed class EditingPanel : Form
     }
     internal Task OpenAsync()
     {
-        if(_busy){_operation?.Cancel();return Task.CompletedTask;}
+        if(_busy||_preparing){_operation?.Cancel();return Task.CompletedTask;}
         if(_overlay is null&&!_choosingBrush)ShowWelcome();
         if(!_choosingBrush)_overlay?.Show();Show();return Task.CompletedTask;
     }
@@ -198,39 +202,57 @@ internal sealed class EditingPanel : Form
     private async Task BeginAsync()
     {
         if(!_host.IsRecording){_status.Text="当前没有正在录制的会话。";Show();return;}
-        CloseOverlay();Hide();Busy(true);_operation?.Dispose();_operation=new();
-        var originalMinimum=MinimumSize;var originalBounds=Bounds;
-        MinimumSize=new(340,140);Size=new(620,230);_tabs.Visible=_tools.Visible=_summary.Visible=_options.Visible=false;
-        _modeBar.Visible=false;_help.Height=42;_help.Text="正在建立编辑边界，等待画布捕获完成…";
-        _status.Text="正在建立编辑边界…再次按 Alt+M 可取消。";
+        CloseOverlay();Hide();_operation?.Cancel();_operation?.Dispose();_operation=new();var token=_operation.Token;int attempt=++_beginAttempt;
+        _shown=null;_interaction=null;InvalidatePlan();_images.Items.Clear();_events.Items.Clear();_thumbnails.Images.Clear();
+        Preparing(true);
         try
         {
-            _shown=null;InvalidatePlan();_images.Items.Clear();_events.Items.Clear();_thumbnails.Images.Clear();
-            var session=await _host.BeginEditSessionAsync(_operation.Token);
-            if(IsDisposed)return;
-            Hide();MinimumSize=originalMinimum;Bounds=originalBounds;
-            _tabs.Visible=_tools.Visible=_summary.Visible=_options.Visible=true;
-            var model=new CanvasInteraction(session);BindSelection(session,_overlayFactory(model));
+            // Freeze at once so the user can select; the boundary (save, layer captures, history) follows in the
+            // background and the selection is evaluated as soon as it is ready.
+            var view=await _host.ReadCurrentCanvasViewAsync(token);
+            if(IsDisposed||attempt!=_beginAttempt)return;
+            var model=new CanvasInteraction(new CanvasAffineTransform(view));
+            BindOverlay(_overlayFactory(model));
             _overlay!.Show();Owner=_overlay;
             var area=Screen.FromPoint(Cursor.Position).WorkingArea;Bounds=new(area.Right-Width,area.Top,Width,Math.Min(850,area.Height));
-            _status.Text="画布已冻结。先在 CSP 原画面上拖动选区。";BeginRegion();UpdateSummary();
+            BeginRegion();Show();
+            _status.Text="画布已冻结，可以直接选范围。后台正在建立编辑边界（保存并读取历史）…再次按 Alt+M 可取消。";UpdateSummary();
+            var session=await _host.BeginEditSessionAsync(token);
+            if(IsDisposed||attempt!=_beginAttempt)return;
+            BindSession(session);
+            try{model.Attach(session);}catch{_shown=null;throw;}
+            if(model.RegionSelection is null)_status.Text="编辑边界已建立。在冻结画布上选范围。";
         }
-        catch(OperationCanceledException){_status.Text="建立编辑边界已取消。";CloseOverlay();}
-        catch(Exception error){_host.ReportEditingError("无法进入画布选择",error);_status.Text="无法进入画布选择："+error.Message;CloseOverlay();}
-        finally{if(!IsDisposed){var selectionBounds=_overlay is not null?Bounds:originalBounds;MinimumSize=originalMinimum;ConfigureWorkflow();Bounds=selectionBounds;_options.Visible=true;Busy(false);Show();if(!KeepCspForeground)Activate();}}
+        catch(OperationCanceledException){if(attempt==_beginAttempt){_status.Text="建立编辑边界已取消。";CloseOverlay();_interaction=null;}}
+        catch(Exception error)
+        {
+            if(attempt!=_beginAttempt)return;
+            _host.ReportEditingError("无法进入画布选择",error);_status.Text="无法进入画布选择："+error.Message;CloseOverlay();_interaction=null;_shown=null;
+        }
+        finally{if(!IsDisposed&&attempt==_beginAttempt){Preparing(false);UpdateSummary();Show();if(!KeepCspForeground)Activate();}}
     }
-    internal void BindSelection(EditSession session,EventSelectionOverlay overlay)
+    private void Preparing(bool preparing)
+    {
+        _preparing=preparing;if(_overlay is not null)_overlay.KeepTargetForeground=preparing;UpdateStyles();
+        _eventPlan.Enabled=_undoPlan.Enabled=_images.Enabled=!_busy&&!preparing;UpdateOptions();UpdateExecutionAvailability();
+    }
+    private void BindOverlay(EventSelectionOverlay overlay)
     {
         _mode??=EditKind.EventEditing;ConfigureWorkflow();
-        _shown=session;_interaction=overlay.Model;_overlay=overlay;_liveBrushEvidence=session.LiveBrushEvidence;
+        _interaction=overlay.Model;_overlay=overlay;overlay.KeepTargetForeground=_preparing;_preciseSummary=null;
+        _interaction.RegionChanged+=(_,_)=>RefreshCandidates();_interaction.SelectionChanged+=(_,_)=>SelectionChanged();
+        _overlay.TargetInvalidated+=(_,_)=>{if(_preparing)_operation?.Cancel();InvalidatePlan();CloseOverlay();_interaction=null;_shown=null;_status.Text="CSP 窗口已移动或关闭，请重新冻结画布后选择。";};
+        _overlay.EscapeRequested+=(_,_)=>CloseSelection();
+    }
+    private void BindSession(EditSession session)
+    {
+        _shown=session;_liveBrushEvidence=session.LiveBrushEvidence;
         _preciseSummary=null;_delete.Checked=true;_changeBrush.Checked=false;
         _brushPreview.Image?.Dispose();_brushPreview.Image=null;_brushPreview.Visible=false;
-        _interaction.RegionChanged+=(_,_)=>RefreshCandidates();_interaction.SelectionChanged+=(_,_)=>SelectionChanged();
-        _overlay.TargetInvalidated+=(_,_)=>{InvalidatePlan();CloseOverlay();_interaction=null;_shown=null;_status.Text="CSP 窗口已移动或关闭，请重新冻结画布后选择。";};
-        _overlay.EscapeRequested+=(_,_)=>CloseSelection();
         _brush.Items.Clear();foreach(string name in session.BrushChoices)_brush.Items.Add(name);
         if(_brush.Items.Count>0)_brush.SelectedIndex=0;
     }
+    internal void BindSelection(EditSession session,EventSelectionOverlay overlay){BindOverlay(overlay);BindSession(session);}
     private void BeginRegion()
     {
         if(_overlay is null)return;
@@ -297,6 +319,7 @@ internal sealed class EditingPanel : Form
         UpdateSummary();
     }
     private void UpdateSummary()=>_summary.Text=_interaction?.RegionSelection is null?"等待画布选区。":
+        !_interaction.IsReady?"已记录选区。编辑边界建立后立即计算。":
         _mode==EditKind.PreciseUndo?_preciseSummary??"已选画布范围。精确撤销只作用于当前图层，可直接预览方案。":
         _interaction.ChosenImage is null?$"范围内共 {_interaction.Candidates.Count} 张脏矩阵图片。请选择一张。":
         $"已选择单张脏矩阵，扫选 {_interaction.SelectedEvents.Count} 笔。";
@@ -307,7 +330,7 @@ internal sealed class EditingPanel : Form
         _numberEnabled.Enabled=_changeBrush.Enabled=!_busy&&!_delete.Checked;
         _property.Enabled=_value.Enabled=!_busy&&!_delete.Checked&&_numberEnabled.Checked;
         _brush.Enabled=false;
-        _confirmBrush.Enabled=!_busy&&_interaction?.SelectedEvents.Count>0;
+        _confirmBrush.Enabled=!_busy&&!_preparing&&_interaction?.SelectedEvents.Count>0;
     }
     private void UpdateParameters()
     {
@@ -377,11 +400,11 @@ internal sealed class EditingPanel : Form
         catch(Exception error){_status.Text="无法采用笔刷属性："+error.Message;}
         finally{if(!IsDisposed){Busy(false);if(_choosingBrush)FinishBrushChoice();else{if(_overlay is not null){_overlay.Show();Owner=_overlay;}Show();if(!KeepCspForeground)Activate();}}}
     }
-    private void UpdateExecutionAvailability()=>_execute.Enabled=!_busy&&_pending is { } request &&
+    private void UpdateExecutionAvailability()=>_execute.Enabled=!_busy&&!_preparing&&_pending is { } request &&
         (request.Kind!=EditKind.PreciseUndo||UndoCapacityPolicy.Check(request.Changes.Count,_shown?.VerifiedUndoCapacity,_undoCapacity.Checked).Allowed);
     private void Busy(bool busy)
     {
-        _busy=busy;UpdateStyles();_refresh.Enabled=_eventPlan.Enabled=_undoPlan.Enabled=_images.Enabled=_tools.Enabled=_delete.Enabled=!busy;
+        _busy=busy;UpdateStyles();_refresh.Enabled=_tools.Enabled=_delete.Enabled=!busy;_eventPlan.Enabled=_undoPlan.Enabled=_images.Enabled=!busy&&!_preparing;
         _chooseEdit.Enabled=_chooseUndo.Enabled=_captureBrush.Enabled=_cancelBrush.Enabled=!busy;
         _cancel.Enabled=_cancel.Visible=busy;_close.Enabled=!busy;if(_overlay is not null)_overlay.InteractionEnabled=!busy;
         UpdateOptions();UpdateExecutionAvailability();
@@ -391,6 +414,7 @@ internal sealed class EditingPanel : Form
         try
         {
             InvalidatePlan();long version=_requestVersion;
+            if(_preparing)throw new InvalidOperationException("后台仍在建立编辑边界，请稍候。");
             var session=_shown??throw new InvalidOperationException("请重新冻结画布。");
             if(_mode!=(preciseUndo?EditKind.PreciseUndo:EditKind.EventEditing))throw new InvalidOperationException("请先在面板选择对应功能。");
             var model=_interaction??throw new InvalidOperationException("画布选择尚未就绪。");
@@ -480,7 +504,7 @@ internal sealed class EditingPanel : Form
         }
     }
     private void CloseOverlay(){Owner=null;_overlay?.Dispose();_overlay=null;UpdateStyles();}
-    private void CloseSelection(){CloseOverlay();_shown=null;_interaction=null;InvalidatePlan();Hide();}
+    private void CloseSelection(){if(_preparing)_operation?.Cancel();CloseOverlay();_shown=null;_interaction=null;InvalidatePlan();Hide();}
     internal void RenderSmoke(string directory)
     {
         Directory.CreateDirectory(directory);ShowInTaskbar=false;Opacity=0;Show();
