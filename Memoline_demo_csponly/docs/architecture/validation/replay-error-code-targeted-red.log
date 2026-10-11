@@ -1,0 +1,8 @@
+Unhandled exception. System.InvalidOperationException: Failure code: PlanIssue { Code = CaptureMismatch, Message = CSP 编辑事务失败：Replacement brush OCR did not confirm., Image = , Stroke =  }
+   at MemolineDemo.CspEditTransactionChecks.<>c__DisplayClass3_0.<RunAsync>g__Check|0(Boolean ok, String label) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs:line 21
+   at MemolineDemo.CspEditTransactionChecks.<>c__DisplayClass3_0.<<RunAsync>g__Fails|3>d.MoveNext() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs:line 39
+--- End of stack trace from previous location ---
+   at MemolineDemo.CspEditTransactionChecks.RunAsync(String root) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs:line 146
+   at MemolineDemo.CspEditTransactionChecks.RunAsync(String root) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs:line 148
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\csp-transaction-runner\Entry.cs:line 3
+   at Program.<Main>(String[] args)

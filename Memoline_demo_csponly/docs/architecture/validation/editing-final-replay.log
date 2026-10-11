@@ -1,0 +1,3 @@
+Event replay checks passed: 185 assertions. No CSP input was injected.
+Clipboard codec checks passed: 193 assertions. The system clipboard was not modified.
+PacketReplay checks passed: 193 assertions. No CSP input was injected.

@@ -1,0 +1,18 @@
+{
+  "installedAt": "2026-10-09T15:07:45.5440974+08:00",
+  "source": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\.stage\\recording-end-recognizer",
+  "files": [
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\Recognizer\\BehaviorRecognizer.dll",
+      "beforeSha256": "AD7ACF0C8ACCA1E68CD72C0E4A37012DA90C9CEEB17D879DEF41A81424F0CF0A",
+      "sha256": "8C953C39AD295F5864B7297F68F4D6175C48130667926B44268672C4969FD0E8",
+      "backup": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\.stage\\recording-end-runtime-backup-6a2d5785cbc64f87a047ac5c33178c41\\before\\BehaviorRecognizer.dll"
+    },
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\Recognizer\\BehaviorRecognizer.pdb",
+      "beforeSha256": "AB12204F27CD34AF1B8609C014CEF77E356D7467617B5F51D9CCAE8CEF3926B4",
+      "sha256": "F7B328B03D2EB00D1D7E2C9731E1F5E996CAAA704F4B4A1152F728939DAB92D7",
+      "backup": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\.stage\\recording-end-runtime-backup-6a2d5785cbc64f87a047ac5c33178c41\\before\\BehaviorRecognizer.pdb"
+    }
+  ]
+}

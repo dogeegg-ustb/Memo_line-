@@ -1,0 +1,512 @@
+{
+  "strokes": [
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 19587 }",
+      "beginAppendId": 19587,
+      "beginEventId": 15353,
+      "operationId": 15353,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002330126347-53fba1a2, ImageId = image-0001 }"
+      ],
+      "write": {
+        "left": 1193,
+        "top": 1969,
+        "width": 250,
+        "height": 369,
+        "count": 58402
+      }
+    },
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 19688 }",
+      "beginAppendId": 19688,
+      "beginEventId": 15444,
+      "operationId": 15444,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002330126347-53fba1a2, ImageId = image-0001 }"
+      ],
+      "write": {
+        "left": 1204,
+        "top": 1942,
+        "width": 309,
+        "height": 739,
+        "count": 115221
+      }
+    },
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 19803 }",
+      "beginAppendId": 19803,
+      "beginEventId": 15549,
+      "operationId": 15549,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002330126347-53fba1a2, ImageId = image-0001 }"
+      ],
+      "write": {
+        "left": 1242,
+        "top": 2116,
+        "width": 250,
+        "height": 659,
+        "count": 107934
+      }
+    },
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 20135 }",
+      "beginAppendId": 20135,
+      "beginEventId": 15842,
+      "operationId": 15842,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002330126347-53fba1a2, ImageId = image-0001 }"
+      ],
+      "write": {
+        "left": 1333,
+        "top": 2686,
+        "width": 215,
+        "height": 324,
+        "count": 52097
+      }
+    },
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 20447 }",
+      "beginAppendId": 20447,
+      "beginEventId": 16136,
+      "operationId": 16136,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002330126347-53fba1a2, ImageId = image-0001 }"
+      ],
+      "write": {
+        "left": 1368,
+        "top": 2798,
+        "width": 205,
+        "height": 310,
+        "count": 48256
+      }
+    },
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 20726 }",
+      "beginAppendId": 20726,
+      "beginEventId": 16403,
+      "operationId": 16403,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002330126347-53fba1a2, ImageId = image-0001 }"
+      ],
+      "write": {
+        "left": 1365,
+        "top": 2875,
+        "width": 159,
+        "height": 166,
+        "count": 20714
+      }
+    },
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 33441 }",
+      "beginAppendId": 33441,
+      "beginEventId": 26479,
+      "operationId": 26479,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004104531355-62113dcd, ImageId = image-0001 }"
+      ],
+      "write": {
+        "left": 1243,
+        "top": 2351,
+        "width": 207,
+        "height": 268,
+        "count": 34697
+      }
+    },
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 33528 }",
+      "beginAppendId": 33528,
+      "beginEventId": 26559,
+      "operationId": 26559,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004104531355-62113dcd, ImageId = image-0001 }"
+      ],
+      "write": {
+        "left": 1246,
+        "top": 2354,
+        "width": 204,
+        "height": 241,
+        "count": 31432
+      }
+    },
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 33612 }",
+      "beginAppendId": 33612,
+      "beginEventId": 26634,
+      "operationId": 26634,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004104531355-62113dcd, ImageId = image-0001 }"
+      ],
+      "write": {
+        "left": 1252,
+        "top": 2366,
+        "width": 201,
+        "height": 220,
+        "count": 28887
+      }
+    },
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 33686 }",
+      "beginAppendId": 33686,
+      "beginEventId": 26699,
+      "operationId": 26699,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004104531355-62113dcd, ImageId = image-0001 }"
+      ],
+      "write": {
+        "left": 1255,
+        "top": 2342,
+        "width": 198,
+        "height": 232,
+        "count": 31770
+      }
+    },
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 42500 }",
+      "beginAppendId": 42500,
+      "beginEventId": 33786,
+      "operationId": 33786,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004104531355-62113dcd, ImageId = image-0001 }"
+      ],
+      "write": {
+        "left": 939,
+        "top": 1059,
+        "width": 376,
+        "height": 466,
+        "count": 86839
+      }
+    },
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 43198 }",
+      "beginAppendId": 43198,
+      "beginEventId": 34442,
+      "operationId": 34442,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004104531355-62113dcd, ImageId = image-0001 }"
+      ],
+      "write": {
+        "left": 942,
+        "top": 1357,
+        "width": 189,
+        "height": 183,
+        "count": 24211
+      }
+    },
+    {
+      "key": "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 47322 }",
+      "beginAppendId": 47322,
+      "beginEventId": 37566,
+      "operationId": 37566,
+      "brush": "較硬",
+      "images": [
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004634870226-6634d945, ImageId = image-0001 }",
+        "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004634870226-6634d945, ImageId = image-0002 }"
+      ],
+      "write": {
+        "left": 1134,
+        "top": 737,
+        "width": 666,
+        "height": 1042,
+        "count": 240143
+      }
+    }
+  ],
+  "images": [
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000001341317073-914afd32, ImageId = image-0001 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 1223,
+        "top": 1986,
+        "width": 1450,
+        "height": 2471,
+        "count": 215180
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000001632485890-642c0c8d, ImageId = image-0001 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 891,
+        "top": 3170,
+        "width": 719,
+        "height": 1106,
+        "count": 32532
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000001632485890-642c0c8d, ImageId = image-0002 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 1119,
+        "top": 3577,
+        "width": 262,
+        "height": 844,
+        "count": 20731
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002049197457-8c5f3da5, ImageId = image-0001 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 1301,
+        "top": 2088,
+        "width": 425,
+        "height": 371,
+        "count": 25829
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002049197457-8c5f3da5, ImageId = image-0002 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 1780,
+        "top": 2543,
+        "width": 75,
+        "height": 63,
+        "count": 1592
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002049197457-8c5f3da5, ImageId = image-0003 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 1810,
+        "top": 2815,
+        "width": 225,
+        "height": 80,
+        "count": 4186
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002330126347-53fba1a2, ImageId = image-0001 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 6,
+      "events": [
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 19587 }",
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 19688 }",
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 19803 }",
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 20135 }",
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 20447 }",
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 20726 }"
+      ],
+      "mask": {
+        "left": 1223,
+        "top": 1863,
+        "width": 288,
+        "height": 975,
+        "count": 31567
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002911343006-30c0c5ec, ImageId = image-0001 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 1929,
+        "top": 1998,
+        "width": 600,
+        "height": 422,
+        "count": 38266
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002911343006-30c0c5ec, ImageId = image-0002 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 1470,
+        "top": 2193,
+        "width": 300,
+        "height": 109,
+        "count": 5444
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000002911343006-30c0c5ec, ImageId = image-0003 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 1684,
+        "top": 3027,
+        "width": 276,
+        "height": 178,
+        "count": 9375
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004104531355-62113dcd, ImageId = image-0001 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 6,
+      "events": [
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 42500 }",
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 43198 }",
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 33441 }",
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 33528 }",
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 33612 }",
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 33686 }"
+      ],
+      "mask": {
+        "left": 928,
+        "top": 1091,
+        "width": 1579,
+        "height": 1856,
+        "count": 171876
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004104531355-62113dcd, ImageId = image-0002 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 2005,
+        "top": 1668,
+        "width": 12,
+        "height": 45,
+        "count": 111
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004634870226-6634d945, ImageId = image-0001 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 1,
+      "events": [
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 47322 }"
+      ],
+      "mask": {
+        "left": 1729,
+        "top": 821,
+        "width": 45,
+        "height": 24,
+        "count": 348
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004634870226-6634d945, ImageId = image-0002 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 1,
+      "events": [
+        "EditableStrokeKey { SessionId = 4cd6b862a09449beaac155f15c3b308d, BeginAppendId = 47322 }"
+      ],
+      "mask": {
+        "left": 980,
+        "top": 990,
+        "width": 604,
+        "height": 735,
+        "count": 32637
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004634870226-6634d945, ImageId = image-0003 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 1895,
+        "top": 1511,
+        "width": 615,
+        "height": 1105,
+        "count": 44392
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004715214286-01b99093, ImageId = image-0001 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 2377,
+        "top": 2552,
+        "width": 127,
+        "height": 746,
+        "count": 10382
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004860471025-f45e5f19, ImageId = image-0001 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 1543,
+        "top": 2558,
+        "width": 163,
+        "height": 54,
+        "count": 1952
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004860471025-f45e5f19, ImageId = image-0002 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 2175,
+        "top": 2542,
+        "width": 259,
+        "height": 62,
+        "count": 1899
+      }
+    },
+    {
+      "key": "DirtyImageKey { Layer = 4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b, PacketId = trigger-00000000004860471025-f45e5f19, ImageId = image-0003 }",
+      "isCausal": false,
+      "unreplayable": true,
+      "eventCount": 0,
+      "events": [],
+      "mask": {
+        "left": 1753,
+        "top": 3109,
+        "width": 38,
+        "height": 39,
+        "count": 710
+      }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+Sealing tail checks passed: 64; no recorder process or CSP input started.
+Sealing tail checks: 64.
+Recorded brush group checks passed: 10.
+Recorded brush group checks: 10.
+State invalidation recovery checks passed: 54.
+State invalidation recovery checks: 54.
+Project session reader checks passed: 17.
+Project session reader checks: 17.
+Project edit index checks passed: 38.
+Project edit index checks: 38.
+Cross session replay checks: 20.
+Cross session journal checks: 21.
+Project continuation checks: 13.
+Replay persistence checks: 5.
+Editing coordinator checks: 7.
+Editing boundary checks: 9.
+CSP edit transaction checks passed: 91.
+CSP transaction checks: 91.
+End packet checks: 46.
+Passed 15 lifecycle checks; no Recognizer or CSP input was started.
+Input selection checks: 6.
+Layer and pen region checks: 21.
+Public interface checks: 37.
+Live session reader checks passed: 21.
+Editing core checks passed: 42.
+Editing core checks: 42.
+Editing selection checks: 41.
+Undo capacity checks: 7.
+Editing host contract checks: 6.
+Canvas interaction checks: 25.
+Recorded canvas view checks: 16.
+Brush parameter contract checks: 16.
+C#/Node production compositor parity passed: 54 assertions across 7 scenarios. No CSP or clipboard input.
+Compositor parity checks: 54.
+Reconstruction request contract checks passed: 21.
+Reconstruction checks: 96.
+Precise undo checks passed: 30.
+Precise undo checks: 30.
+Cross-layer reconstruction checks passed: 23.
+Cross-layer reconstruction checks: 23.
+Edit index hardening checks passed: 49.
+Edit index hardening checks: 49.
+Footprint contract checks passed: 19.
+Footprint contract checks: 19.
+PASS 57 edit-journal checks (D:\Memo_Line\Memo_Line\Memoline_demo_csponly\.stage\foreground-checks-temp\memoline-demo-checks-2fcfed00c1df4b2a8f5084c4048341a8\checks\artifacts\edit-journal\80937fbdb7b74fdbb31247ba5316737a)
+Edit journal checks: 57.
+PASS 38 bundle edit checks (D:\Memo_Line\Memo_Line\Memoline_demo_csponly\.stage\foreground-checks-temp\memoline-demo-checks-2fcfed00c1df4b2a8f5084c4048341a8\bundle-edits-edac963a6d704b29816cc72eb7c3e0b7)
+Bundle edit checks: 38.
+Bundle checks: 65; aggregate checks: 47; lifecycle checks: 15.
+Memoline integration checks passed.

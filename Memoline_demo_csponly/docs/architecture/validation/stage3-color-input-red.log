@@ -1,0 +1,172 @@
+test_digits_without_editor_pixels_are_not_guessed_to_be_inputs (test_color_input_state.ColorInputStateTests.test_digits_without_editor_pixels_are_not_guessed_to_be_inputs) ... ERROR
+test_duplicate_values_and_out_of_range_values_cannot_become_targets (test_color_input_state.ColorInputStateTests.test_duplicate_values_and_out_of_range_values_cannot_become_targets) ... ERROR
+test_explicit_hidden_request_resolves_panel_not_visible_without_switching_tabs (test_color_input_state.ColorInputStateTests.test_explicit_hidden_request_resolves_panel_not_visible_without_switching_tabs) ... FAIL
+test_hidden_slider_or_read_only_color_wheel_has_no_click_targets (test_color_input_state.ColorInputStateTests.test_hidden_slider_or_read_only_color_wheel_has_no_click_targets) ... ERROR
+test_hsv_tab_is_reported_without_rgb_click_targets (test_color_input_state.ColorInputStateTests.test_hsv_tab_is_reported_without_rgb_click_targets) ... ERROR
+test_native_request_and_realtime_lists_include_the_new_module (test_color_input_state.ColorInputStateTests.test_native_request_and_realtime_lists_include_the_new_module) ... FAIL
+test_rgb_numbers_are_editor_value_boxes_from_the_same_frame (test_color_input_state.ColorInputStateTests.test_rgb_numbers_are_editor_value_boxes_from_the_same_frame) ... ERROR
+test_roi_and_capture_identity_are_required (test_color_input_state.ColorInputStateTests.test_roi_and_capture_identity_are_required) ... ERROR
+test_semantic_state_and_live_publication_reject_a_different_capture_frame (test_color_input_state.ColorInputStateTests.test_semantic_state_and_live_publication_reject_a_different_capture_frame) ... ERROR
+test_timeline_keeps_nonvisible_and_nonrgb_status_without_confirming_them (test_color_input_state.ColorInputStateTests.test_timeline_keeps_nonvisible_and_nonrgb_status_without_confirming_them) ... FAIL
+test_unverified_capsule_roles_are_explicitly_unknown (test_color_input_state.ColorInputStateTests.test_unverified_capsule_roles_are_explicitly_unknown) ... ERROR
+
+======================================================================
+ERROR: test_digits_without_editor_pixels_are_not_guessed_to_be_inputs (test_color_input_state.ColorInputStateTests.test_digits_without_editor_pixels_are_not_guessed_to_be_inputs)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 78, in test_digits_without_editor_pixels_are_not_guessed_to_be_inputs
+    result = self.read(*self.fixture(editors=False, roles=True))
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 42, in read
+    cls = import_module('recognizer_core.color_input_state').ColorInputStateCore
+          ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dogeegg\AppData\Local\Python\pythoncore-3.14-64\Lib\importlib\__init__.py", line 88, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1335, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'recognizer_core.color_input_state'
+
+======================================================================
+ERROR: test_duplicate_values_and_out_of_range_values_cannot_become_targets (test_color_input_state.ColorInputStateTests.test_duplicate_values_and_out_of_range_values_cannot_become_targets)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 87, in test_duplicate_values_and_out_of_range_values_cannot_become_targets
+    result = self.read(image,items)
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 42, in read
+    cls = import_module('recognizer_core.color_input_state').ColorInputStateCore
+          ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dogeegg\AppData\Local\Python\pythoncore-3.14-64\Lib\importlib\__init__.py", line 88, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1335, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'recognizer_core.color_input_state'
+
+======================================================================
+ERROR: test_hidden_slider_or_read_only_color_wheel_has_no_click_targets (test_color_input_state.ColorInputStateTests.test_hidden_slider_or_read_only_color_wheel_has_no_click_targets)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 67, in test_hidden_slider_or_read_only_color_wheel_has_no_click_targets
+    result = self.read(image, [word('R0 G0 B0',70,190,150)])
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 42, in read
+    cls = import_module('recognizer_core.color_input_state').ColorInputStateCore
+          ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dogeegg\AppData\Local\Python\pythoncore-3.14-64\Lib\importlib\__init__.py", line 88, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1335, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'recognizer_core.color_input_state'
+
+======================================================================
+ERROR: test_hsv_tab_is_reported_without_rgb_click_targets (test_color_input_state.ColorInputStateTests.test_hsv_tab_is_reported_without_rgb_click_targets)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 72, in test_hsv_tab_is_reported_without_rgb_click_targets
+    result = self.read(*self.fixture('HSV'))
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 42, in read
+    cls = import_module('recognizer_core.color_input_state').ColorInputStateCore
+          ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dogeegg\AppData\Local\Python\pythoncore-3.14-64\Lib\importlib\__init__.py", line 88, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1335, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'recognizer_core.color_input_state'
+
+======================================================================
+ERROR: test_rgb_numbers_are_editor_value_boxes_from_the_same_frame (test_color_input_state.ColorInputStateTests.test_rgb_numbers_are_editor_value_boxes_from_the_same_frame)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 48, in test_rgb_numbers_are_editor_value_boxes_from_the_same_frame
+    result = self.read(image, items)
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 42, in read
+    cls = import_module('recognizer_core.color_input_state').ColorInputStateCore
+          ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dogeegg\AppData\Local\Python\pythoncore-3.14-64\Lib\importlib\__init__.py", line 88, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1335, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'recognizer_core.color_input_state'
+
+======================================================================
+ERROR: test_roi_and_capture_identity_are_required (test_color_input_state.ColorInputStateTests.test_roi_and_capture_identity_are_required)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 92, in test_roi_and_capture_identity_are_required
+    cls = import_module('recognizer_core.color_input_state').ColorInputStateCore
+          ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dogeegg\AppData\Local\Python\pythoncore-3.14-64\Lib\importlib\__init__.py", line 88, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1335, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'recognizer_core.color_input_state'
+
+======================================================================
+ERROR: test_semantic_state_and_live_publication_reject_a_different_capture_frame (test_color_input_state.ColorInputStateTests.test_semantic_state_and_live_publication_reject_a_different_capture_frame)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 124, in test_semantic_state_and_live_publication_reject_a_different_capture_frame
+    self.assertEqual(records[0]['data']['valueRegions'],raw['valueRegions'])
+                     ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+KeyError: 'valueRegions'
+
+======================================================================
+ERROR: test_unverified_capsule_roles_are_explicitly_unknown (test_color_input_state.ColorInputStateTests.test_unverified_capsule_roles_are_explicitly_unknown)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 60, in test_unverified_capsule_roles_are_explicitly_unknown
+    result = self.read(*self.fixture())
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 42, in read
+    cls = import_module('recognizer_core.color_input_state').ColorInputStateCore
+          ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dogeegg\AppData\Local\Python\pythoncore-3.14-64\Lib\importlib\__init__.py", line 88, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1335, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'recognizer_core.color_input_state'
+
+======================================================================
+FAIL: test_explicit_hidden_request_resolves_panel_not_visible_without_switching_tabs (test_color_input_state.ColorInputStateTests.test_explicit_hidden_request_resolves_panel_not_visible_without_switching_tabs)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 138, in test_explicit_hidden_request_resolves_panel_not_visible_without_switching_tabs
+    self.assertEqual(len(updates),1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+AssertionError: 0 != 1
+
+======================================================================
+FAIL: test_native_request_and_realtime_lists_include_the_new_module (test_color_input_state.ColorInputStateTests.test_native_request_and_realtime_lists_include_the_new_module)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 144, in test_native_request_and_realtime_lists_include_the_new_module
+    self.assertIn('"colorInputState"',source)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '"colorInputState"' not found in 'using System.Collections.Concurrent;\nusing System.Text.Json;\n\nnamespace BehaviorRecognizer.Capture;\n\npublic sealed record RecorderStateRequest(string RequestId, string SessionId, string[] Modules, string? SaveId = null);\npublic sealed record RecorderStateResponse(bool Success, string RequestId, string SessionId, long RequestedTicks,\n    Dictionary<string, JsonElement> Results, string? Error = null);\n\n/// <summary>Collects only results belonging to an explicitly requested capture package.</summary>\npublic sealed class RecorderStateRequests\n{\n    public static readonly string[] Modules = ["brushState", "subtoolState", "currentLayerState", "colorState", "canvasViewState",\n        "clipState", "shortcuts", "initializationConfiguration"];\n    private sealed class Pending(RecorderStateRequest request, long ticks)\n    {\n        internal readonly RecorderStateRequest Request = request;\n        internal readonly long Ticks = ticks;\n        internal readonly Dictionary<string, JsonElement> Results = [];\n        internal readonly TaskCompletionSource<RecorderStateResponse> Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);\n    }\n    private readonly ConcurrentDictionary<string, Pending> _pending = new();\n    public Task<RecorderStateResponse> Add(string packageId, RecorderStateRequest request, long ticks)\n    {\n        var pending = new Pending(request, ticks);\n        if (!_pending.TryAdd(packageId, pending)) throw new InvalidOperationException("Duplicate request package.");\n        return pending.Completion.Task;\n    }\n    public void Part(string packageId, string module, JsonElement data)\n    {\n        if (!_pending.TryGetValue(packageId, out var pending)) return;\n        lock (pending)\n        {\n            if (!pending.Request.Modules.Contains(module) || pending.Results.ContainsKey(module)) return;\n            pending.Results[module] = data.Clone();\n            if (pending.Results.Count == pending.Request.Modules.Length)\n                pending.Completion.TrySetResult(new(true, pending.Request.RequestId, pending.Request.SessionId, pending.Ticks, new(pending.Results)));\n        }\n    }\n    public void Remove(string packageId) => _pending.TryRemove(packageId, out _);\n    public void FailAll(string error)\n    {\n        foreach (var (package, pending) in _pending)\n        {\n            pending.Completion.TrySetException(new IOException(error));\n            Remove(package);\n        }\n    }\n}\n'
+
+======================================================================
+FAIL: test_timeline_keeps_nonvisible_and_nonrgb_status_without_confirming_them (test_color_input_state.ColorInputStateTests.test_timeline_keeps_nonvisible_and_nonrgb_status_without_confirming_them)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 109, in test_timeline_keeps_nonvisible_and_nonrgb_status_without_confirming_them
+    self.assertEqual(updates[0]['status'],'unknown')
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'changed' != 'unknown'
+- changed
++ unknown
+
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.017s
+
+FAILED (failures=3, errors=8)

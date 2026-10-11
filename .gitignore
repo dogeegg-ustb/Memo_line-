@@ -45,3 +45,11 @@ run_log.txt
 debug_runtime*.log
 **/build_*.log
 **/build_*.err.log
+
+# Memoline local leftovers: exe replacement copies, root build logs,
+# raw recording dumps and caches inside investigation reports
+Memoline_demo_csponly/Memoline.exe~*.TMP
+/*.log
+Memoline_demo_csponly/reports/**/*cache-*/
+Memoline_demo_csponly/reports/**/*.memoline
+Memoline_demo_csponly/reports/**/*.jsonl

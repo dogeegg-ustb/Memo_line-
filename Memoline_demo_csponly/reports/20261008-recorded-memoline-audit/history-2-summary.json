@@ -1,0 +1,113 @@
+{
+  "ordinal": 2,
+  "entry": "sessions/647fb97cd19e2ab9fb21c2799a9ba90954e8cd907a6b52fb95c82e40d777411b.memoline",
+  "sessionId": "edb612a65c4c4462b80079f12448a4aa",
+  "createdAt": "2026-10-07T21:33:11.4219582+08:00",
+  "frequency": 10000000,
+  "durationSeconds": 2077.706578,
+  "statePersistence": "successfulOnly",
+  "mechanicalSha256": "647fb97cd19e2ab9fb21c2799a9ba90954e8cd907a6b52fb95c82e40d777411b",
+  "indexHashesMatch": true,
+  "nativeFramesCrcValidated": true,
+  "kindCounts": {
+    "workspaceStatus": 2,
+    "mouseDown": 3,
+    "tabletDeviceChanged": 1,
+    "initializationStatus": 1,
+    "statePackageReserved": 1,
+    "keyInput": 31,
+    "mouseDrag": 56,
+    "statePackageResult": 1,
+    "mouseCursorChanged": 539,
+    "panelUpdateRequested": 24,
+    "saveGuardResult": 2,
+    "recordingEndRequested": 1,
+    "driverConfiguration": 1,
+    "coreStateUpdated": 7,
+    "shortcutResolved": 31,
+    "panelActivationEnded": 6,
+    "screenshotBlob": 15,
+    "footer": 1,
+    "editBoundaryRequested": 3,
+    "keyboardStateChanged": 65,
+    "clipSaveRequest": 2,
+    "mouseUp": 3,
+    "clipParseResult": 1,
+    "header": 1,
+    "saveGuardUnavailable": 1,
+    "initializationConfiguration": 1,
+    "shortcutConfiguration": 3
+  },
+  "coreCounts": {
+    "brushState/changed": 1,
+    "currentLayerState/changed": 1,
+    "canvasViewState/changed": 1,
+    "colorInputState/changed": 1,
+    "subtoolState/changed": 1,
+    "colorState/changed": 1,
+    "clipState/changed": 1
+  },
+  "canvasUpdates": [
+    {
+      "appendId": 145,
+      "ticks": 90459705,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 851.0000000000001,
+          "y": 176
+        },
+        "ocrScalePercent": 17.5,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 17.5,
+          "cumulativeRelativeScale": 1,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 17.516867,
+          "matrices": {
+            "screenToCanvas": [
+              0.0011507479861910242,
+              0,
+              -0.9792865362485617,
+              0,
+              0.0008136696501220504,
+              -0.14320585842148087
+            ],
+            "canvasToScreen": [
+              869,
+              0,
+              851.0000000000001,
+              0,
+              1229,
+              176
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "5337a75afdff4564b18bcaeff83e9990",
+          "c79252c2ae444f2f8dfa5716fef9e710",
+          "b929126d98ae43b19ba2faa00474bf78",
+          "fa500caa439249b7ab89501e31969852"
+        ],
+        "capturedTicks": 90459705,
+        "captureId": "04ff24d2b6f44c43ae51e45bcb5706c6",
+        "triggerTicks": 89560434,
+        "causalAmbiguous": false,
+        "relatedEventIds": [],
+        "completedTicks": 167224983,
+        "analysisStartedTicks": 136014508,
+        "analysisQuietMs": 150,
+        "analysisToken": null,
+        "finalEvidence": true,
+        "observedAfterEventId": 0
+      }
+    }
+  ]
+}

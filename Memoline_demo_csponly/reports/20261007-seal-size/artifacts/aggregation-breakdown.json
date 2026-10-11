@@ -1,0 +1,152 @@
+[
+  {
+    "field": "packet.manifest",
+    "bytes": 67052714,
+    "type": "NoneType"
+  },
+  {
+    "field": "packet.manifest.recognizer",
+    "bytes": 60382353,
+    "type": "dict:8"
+  },
+  {
+    "field": "packet.manifest.recognizer.inputs",
+    "bytes": 59012869,
+    "type": "list:757"
+  },
+  {
+    "field": "packet.dirtyMatrices",
+    "bytes": 12026983,
+    "type": "list:0"
+  },
+  {
+    "field": "packet.eventPointers",
+    "bytes": 6552577,
+    "type": "list:5827"
+  },
+  {
+    "field": "packet.manifest.labels",
+    "bytes": 5670837,
+    "type": "list:8"
+  },
+  {
+    "field": "packet.manifest.recognizer.states",
+    "bytes": 1362005,
+    "type": "list:75"
+  },
+  {
+    "field": "packet.manifest.now",
+    "bytes": 506609,
+    "type": "dict:12"
+  },
+  {
+    "field": "packet.manifest.now.recognizerStates",
+    "bytes": 501002,
+    "type": "list:17"
+  },
+  {
+    "field": "packet.manifest.after",
+    "bytes": 450684,
+    "type": "dict:12"
+  },
+  {
+    "field": "packet.manifest.after.recognizerStates",
+    "bytes": 445077,
+    "type": "list:17"
+  },
+  {
+    "field": "packet.penContacts",
+    "bytes": 262783,
+    "type": "list:84"
+  },
+  {
+    "field": "packet.manifest.predictedMatrix",
+    "bytes": 14746,
+    "type": "dict:6"
+  },
+  {
+    "field": "packet.manifest.predictedMatrix.rowRuns",
+    "bytes": 13945,
+    "type": "list:11"
+  },
+  {
+    "field": "packet.manifest.images",
+    "bytes": 11256,
+    "type": "list:3"
+  },
+  {
+    "field": "packet.manifest.capture",
+    "bytes": 9548,
+    "type": "dict:15"
+  },
+  {
+    "field": "packet.imageAssets",
+    "bytes": 8134,
+    "type": "list:0"
+  },
+  {
+    "field": "packet.manifest.recognizer.captureStateIds",
+    "bytes": 5968,
+    "type": "list:17"
+  },
+  {
+    "field": "packet.manifest.capture.operations",
+    "bytes": 2777,
+    "type": "list:8"
+  },
+  {
+    "field": "packet.manifest.after.rasterMetadata",
+    "bytes": 2268,
+    "type": "dict:13"
+  },
+  {
+    "field": "packet.manifest.now.rasterMetadata",
+    "bytes": 2268,
+    "type": "dict:13"
+  },
+  {
+    "field": "packet.manifest.search",
+    "bytes": 2044,
+    "type": "dict:9"
+  },
+  {
+    "field": "packet.manifest.capture.controlResponse",
+    "bytes": 1872,
+    "type": "dict:7"
+  },
+  {
+    "field": "packet.manifest.imageConvention",
+    "bytes": 1773,
+    "type": "str:195"
+  },
+  {
+    "field": "packet.manifest.after.layer",
+    "bytes": 648,
+    "type": "dict:3"
+  },
+  {
+    "field": "packet.manifest.now.layer",
+    "bytes": 648,
+    "type": "dict:3"
+  },
+  {
+    "field": "packet.manifest.capture.layer",
+    "bytes": 648,
+    "type": "dict:3"
+  },
+  {
+    "field": "packet.manifest.capture.initialLayerHint",
+    "bytes": 648,
+    "type": "dict:3"
+  },
+  {
+    "field": "packet.manifest.capture.view",
+    "bytes": 561,
+    "type": "dict:4"
+  },
+  {
+    "field": "packet.sessionId",
+    "bytes": 476,
+    "type": "str:32"
+  }
+]

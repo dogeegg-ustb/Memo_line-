@@ -1,0 +1,3 @@
+Reading real sealed sessions for native undo-history validation...
+Session 6cc4c0f638084afcabdbab95dcaf5a6b: commands 6, barriers 0, checkpoints 1.
+Actual-file selection: legal precise undo True; legal single-event delete True.

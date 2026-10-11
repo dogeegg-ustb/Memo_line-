@@ -1,0 +1,900 @@
+{
+  "source": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\recordings\\\u8BB0\u827A\u7EBF\u6D4B\u8BD5.memoline",
+  "sourceHash": "83F2D1DFE9B3727CFD7299B66AE83B89F9CFB19858FF47455177EB9D9957A0B7",
+  "sourceUnchanged": true,
+  "sessionCount": 7,
+  "rawPenBegin": 590,
+  "indexedStrokes": 512,
+  "images": 20,
+  "layers": [
+    {
+      "Layer": {
+        "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+        "Generation": 1,
+        "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+      },
+      "ChainValid": true,
+      "issues": []
+    }
+  ],
+  "attempts": [
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000004634870226-6634d945",
+        "ImageId": "image-0001"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 1748,
+        "Y": 801,
+        "right": 1789,
+        "bottom": 842
+      },
+      "undoCandidates": 3,
+      "undoSelected": 19,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000004634870226-6634d945",
+        "ImageId": "image-0001"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 1729,
+        "Y": 821,
+        "right": 1774,
+        "bottom": 845
+      },
+      "undoCandidates": 3,
+      "undoSelected": 19,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000004634870226-6634d945",
+        "ImageId": "image-0002"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 1558,
+        "Y": 971,
+        "right": 1599,
+        "bottom": 1012
+      },
+      "undoCandidates": 7,
+      "undoSelected": 20,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 2,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000004634870226-6634d945",
+        "ImageId": "image-0002"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 980,
+        "Y": 990,
+        "right": 1584,
+        "bottom": 1725
+      },
+      "undoCandidates": 72,
+      "undoSelected": 87,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 3,
+      "selectableImages": 2,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000004634870226-6634d945",
+        "ImageId": "image-0003"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 2123,
+        "Y": 1491,
+        "right": 2164,
+        "bottom": 1532
+      },
+      "undoCandidates": 2,
+      "undoSelected": 10,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000004634870226-6634d945",
+        "ImageId": "image-0003"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 1895,
+        "Y": 1511,
+        "right": 2510,
+        "bottom": 2616
+      },
+      "undoCandidates": 110,
+      "undoSelected": 52,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 7,
+      "selectableImages": 3,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000004104531355-62113dcd",
+        "ImageId": "image-0001"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 1246,
+        "Y": 1126,
+        "right": 1287,
+        "bottom": 1167
+      },
+      "undoCandidates": 16,
+      "undoSelected": 47,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 2,
+      "selectableImages": 2,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000004104531355-62113dcd",
+        "ImageId": "image-0001"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 928,
+        "Y": 1091,
+        "right": 2507,
+        "bottom": 2947
+      },
+      "undoCandidates": 332,
+      "undoSelected": 53,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 15,
+      "selectableImages": 9,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000004104531355-62113dcd",
+        "ImageId": "image-0002"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 1986,
+        "Y": 1648,
+        "right": 2027,
+        "bottom": 1689
+      },
+      "undoCandidates": 1,
+      "undoSelected": 22,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000004104531355-62113dcd",
+        "ImageId": "image-0002"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 2005,
+        "Y": 1668,
+        "right": 2017,
+        "bottom": 1713
+      },
+      "undoCandidates": 1,
+      "undoSelected": 22,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002911343006-30c0c5ec",
+        "ImageId": "image-0001"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 2247,
+        "Y": 1978,
+        "right": 2288,
+        "bottom": 2019
+      },
+      "undoCandidates": 7,
+      "undoSelected": 33,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 2,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002911343006-30c0c5ec",
+        "ImageId": "image-0001"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 1929,
+        "Y": 1998,
+        "right": 2529,
+        "bottom": 2420
+      },
+      "undoCandidates": 99,
+      "undoSelected": 60,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 4,
+      "selectableImages": 2,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002911343006-30c0c5ec",
+        "ImageId": "image-0002"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 1595,
+        "Y": 2173,
+        "right": 1636,
+        "bottom": 2214
+      },
+      "undoCandidates": 5,
+      "undoSelected": 57,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002911343006-30c0c5ec",
+        "ImageId": "image-0002"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 1470,
+        "Y": 2193,
+        "right": 1770,
+        "bottom": 2302
+      },
+      "undoCandidates": 27,
+      "undoSelected": 263,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002"
+      ],
+      "images": 3,
+      "selectableImages": 2,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002911343006-30c0c5ec",
+        "ImageId": "image-0003"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 1667,
+        "Y": 3007,
+        "right": 1708,
+        "bottom": 3048
+      },
+      "undoCandidates": 12,
+      "undoSelected": 311,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002"
+      ],
+      "images": 2,
+      "selectableImages": 2,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002911343006-30c0c5ec",
+        "ImageId": "image-0003"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 1684,
+        "Y": 3027,
+        "right": 1960,
+        "bottom": 3205
+      },
+      "undoCandidates": 32,
+      "undoSelected": 311,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002"
+      ],
+      "images": 3,
+      "selectableImages": 2,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002330126347-53fba1a2",
+        "ImageId": "image-0001"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 1228,
+        "Y": 1866,
+        "right": 1269,
+        "bottom": 1907
+      },
+      "undoCandidates": 7,
+      "undoSelected": 227,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002"
+      ],
+      "images": 2,
+      "selectableImages": 1,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002330126347-53fba1a2",
+        "ImageId": "image-0001"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 1223,
+        "Y": 1863,
+        "right": 1511,
+        "bottom": 2838
+      },
+      "undoCandidates": 112,
+      "undoSelected": 174,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 5,
+      "selectableImages": 4,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002049197457-8c5f3da5",
+        "ImageId": "image-0001"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 1635,
+        "Y": 2068,
+        "right": 1676,
+        "bottom": 2109
+      },
+      "undoCandidates": 3,
+      "undoSelected": 257,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002049197457-8c5f3da5",
+        "ImageId": "image-0001"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 1301,
+        "Y": 2088,
+        "right": 1726,
+        "bottom": 2459
+      },
+      "undoCandidates": 81,
+      "undoSelected": 235,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002"
+      ],
+      "images": 5,
+      "selectableImages": 4,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002049197457-8c5f3da5",
+        "ImageId": "image-0002"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 1776,
+        "Y": 2523,
+        "right": 1817,
+        "bottom": 2564
+      },
+      "undoCandidates": 4,
+      "undoSelected": 4,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 2,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002049197457-8c5f3da5",
+        "ImageId": "image-0002"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 1780,
+        "Y": 2543,
+        "right": 1855,
+        "bottom": 2606
+      },
+      "undoCandidates": 4,
+      "undoSelected": 4,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 2,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002049197457-8c5f3da5",
+        "ImageId": "image-0003"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 1874,
+        "Y": 2795,
+        "right": 1915,
+        "bottom": 2836
+      },
+      "undoCandidates": 5,
+      "undoSelected": 6,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000002049197457-8c5f3da5",
+        "ImageId": "image-0003"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 1810,
+        "Y": 2815,
+        "right": 2035,
+        "bottom": 2895
+      },
+      "undoCandidates": 6,
+      "undoSelected": 6,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000001341317073-914afd32",
+        "ImageId": "image-0001"
+      },
+      "completeImage": false,
+      "canvasRectangle": {
+        "X": 1220,
+        "Y": 1987,
+        "right": 1261,
+        "bottom": 2028
+      },
+      "undoCandidates": 7,
+      "undoSelected": 344,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002",
+        "\u9009\u4E2D\u4E8B\u4EF6\u4E0D\u662F\u76EE\u6807\u56FE\u5C42\u7684\u5B8C\u6574\u5408\u683C\u7B14\u63A5\u89E6\u3002"
+      ],
+      "images": 2,
+      "selectableImages": 1,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    },
+    {
+      "image": {
+        "Layer": {
+          "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+          "Generation": 1,
+          "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+        },
+        "PacketId": "4cd6b862a09449beaac155f15c3b308d/trigger-00000000001341317073-914afd32",
+        "ImageId": "image-0001"
+      },
+      "completeImage": true,
+      "canvasRectangle": {
+        "X": 1223,
+        "Y": 1986,
+        "right": 2673,
+        "bottom": 4457
+      },
+      "undoCandidates": 326,
+      "undoSelected": 60,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 17,
+      "selectableImages": 8,
+      "eventPlanValid": false,
+      "eventPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ]
+    }
+  ],
+  "preciseUndo": null,
+  "eventEditing": null,
+  "scope": "Original file, native states, selection, planner and pixel reconstruction. No real CSP input or undo stack."
+}

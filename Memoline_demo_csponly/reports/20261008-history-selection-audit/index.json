@@ -1,0 +1,60 @@
+{
+  "schema": "memoline-csponly/v4",
+  "sessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+  "frequency": 10000000,
+  "originTicks": 31322001613,
+  "mechanical": {
+    "entry": "mechanical/recording.memoline",
+    "sha256": "40487b31968d041382616e917c359c9d5ca964862fec4f19466b7d8110cc6bf0",
+    "size": 1852033,
+    "codec": "brotli"
+  },
+  "aggregation": {
+    "entry": "aggregation/events.jsonl",
+    "sha256": "bf8da46accc0cb236b4879080341474ff5b905092b89ff197f6ee34428e80465",
+    "size": 1850041,
+    "codec": "brotli"
+  },
+  "fixedSha256": "ee6b960c059ea83484b0d5a8a0b01b5067795d2304eee90fc534d51aceb295eb",
+  "activeDimensionsEntry": "aggregation/events.jsonl",
+  "dimensions": [],
+  "projectPath": "D:\\感官解冻原画及参考\\记艺线测试.clip",
+  "previousSessions": [
+    {
+      "entry": "sessions/6ab524c8ddd808211dddf03ce9d8452dd07b4231018e71ffff7eba79aabae2d0.memoline",
+      "sha256": "ea95ad1c3d345d1281c000684d2a91b2b31025ea33bf00343aeba4658988d639",
+      "size": 582584,
+      "codec": null
+    },
+    {
+      "entry": "sessions/08c260d33c4871d7257c9570540718cdd2443632c079f8e85f99c66790abd292.memoline",
+      "sha256": "880145c63282328ae8aea0009b2282a77ac958c2db2106b46a4dc008334c82af",
+      "size": 113991268,
+      "codec": null
+    },
+    {
+      "entry": "sessions/647fb97cd19e2ab9fb21c2799a9ba90954e8cd907a6b52fb95c82e40d777411b.memoline",
+      "sha256": "998f4e9c48cc8b563c89031f273a3caafb0f1b0f806f2b1f6614ffe79a241335",
+      "size": 1235484,
+      "codec": null
+    },
+    {
+      "entry": "sessions/98052ad4a9cc20a9647fefdfaa683adb44100476bfc10edf2c2b4679c632d41a.memoline",
+      "sha256": "140f7fd7d35c2ed837c23eaa56bdb1af1dfdf125717cc0e2891411134564b362",
+      "size": 1228617,
+      "codec": null
+    },
+    {
+      "entry": "sessions/6813bf3126fd6823163d7e4e571067f8abca0b0847897e09fedd1eee12a901ad.memoline",
+      "sha256": "1dd2406d9d5cbd4f3884aa92430fb41fdcbb546f301b29fe99bf171c9917423f",
+      "size": 1051925,
+      "codec": null
+    },
+    {
+      "entry": "sessions/744407e5df7611f91a6df95105ebf6b66ef78e4caba3a0ec4f1f4cd906831929.memoline",
+      "sha256": "3d45332692c9acaa7c1a762abbd376e04579567882fee3b6afe5680535dce3f2",
+      "size": 4261156,
+      "codec": null
+    }
+  ]
+}

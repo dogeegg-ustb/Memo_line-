@@ -1,0 +1,18 @@
+  正在确定要还原的项目…
+  已还原 D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\edit-boundary\Runner.csproj (用时 85 毫秒)。
+  2 个项目(共 3 个)是最新的，无法还原。
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+  MemolineDemo -> D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\bin\Release\net10.0-windows\MemolineDemo.dll
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingBoundaryChecks.cs(7,33): error CS0246: 未能找到类型或命名空间名“IEditingBoundaryActions”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\edit-boundary\Runner.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingBoundaryChecks.cs(15,21): error CS0246: 未能找到类型或命名空间名“PreparedEditingBoundary”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\edit-boundary\Runner.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingBoundaryChecks.cs(17,43): error CS0246: 未能找到类型或命名空间名“PreparedEditingBoundary”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\edit-boundary\Runner.csproj]
+
+生成失败。
+
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingBoundaryChecks.cs(7,33): error CS0246: 未能找到类型或命名空间名“IEditingBoundaryActions”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\edit-boundary\Runner.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingBoundaryChecks.cs(15,21): error CS0246: 未能找到类型或命名空间名“PreparedEditingBoundary”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\edit-boundary\Runner.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingBoundaryChecks.cs(17,43): error CS0246: 未能找到类型或命名空间名“PreparedEditingBoundary”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\edit-boundary\Runner.csproj]
+    0 个警告
+    3 个错误
+
+已用时间 00:00:02.39

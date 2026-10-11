@@ -1,0 +1,30 @@
+{
+  "verifiedAt": "2026-10-09T15:11:01.6723280+08:00",
+  "host": [
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\Memoline.exe",
+      "sha256": "397E61ECFE01D8268E53FBAF4E30B1048CE3328E7D4C0E24D6EADA55424A30F3"
+    },
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\MemolineDemo.exe",
+      "sha256": "397E61ECFE01D8268E53FBAF4E30B1048CE3328E7D4C0E24D6EADA55424A30F3"
+    }
+  ],
+  "recorder": [
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\Recognizer\\BehaviorRecognizer.dll",
+      "sha256": "8C953C39AD295F5864B7297F68F4D6175C48130667926B44268672C4969FD0E8"
+    },
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\Recognizer\\BehaviorRecognizer.pdb",
+      "sha256": "F7B328B03D2EB00D1D7E2C9731E1F5E996CAAA704F4B4A1152F728939DAB92D7"
+    }
+  ],
+  "applicationPythonFilesVerified": 39,
+  "readOnlyCatalogsVerified": 2,
+  "settingsUnchanged": true,
+  "settingsSha256": "048396EC1A3654B4C1E0CA9DF34BFC47D0F4769C30297A1967BC6AB0894515CC",
+  "originalProjectUnchanged": true,
+  "originalProjectSha256": "83F2D1DFE9B3727CFD7299B66AE83B89F9CFB19858FF47455177EB9D9957A0B7",
+  "realCspInputsInjected": false
+}

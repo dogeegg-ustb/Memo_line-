@@ -1,0 +1,9 @@
+D:\Memo_Line\Memo_Line\recognizer\Recognizer\tests\BehaviorRecognizer.Tests\BehaviorRecognizer.Tests.csproj : warning NU1900: 获取包漏洞数据时出错: 无法加载源 https://api.nuget.org/v3/index.json 的服务索引。
+  DriverReader.Core -> D:\Memo_Line\Memo_Line\recognizer\recognizer_core\driver_reader\bin\Release\net8.0\DriverReader.Core.dll
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+  BehaviorRecognizer -> D:\Memo_Line\Memo_Line\recognizer\Recognizer\src\BehaviorRecognizer\bin\Release\net10.0\BehaviorRecognizer.dll
+  BehaviorRecognizer.Tests -> D:\Memo_Line\Memo_Line\recognizer\Recognizer\tests\BehaviorRecognizer.Tests\bin\Release\net10.0\BehaviorRecognizer.Tests.dll
+D:\Memo_Line\Memo_Line\recognizer\Recognizer\tests\BehaviorRecognizer.Tests\bin\Release\net10.0\BehaviorRecognizer.Tests.dll (.NETCoreApp,Version=v10.0)的测试运行
+总共 1 个测试文件与指定模式相匹配。
+
+已通过! - 失败:     0，通过:    45，已跳过:     0，总计:    45，持续时间: 804 ms - BehaviorRecognizer.Tests.dll (net10.0)

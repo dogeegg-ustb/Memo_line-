@@ -1,0 +1,17 @@
+FAIL: An unrelated layer's NoBaseline does not block the selected matrix.
+FAIL: An unrelated layer's CaptureMismatch does not block the selected matrix.
+FAIL: An unrelated layer's ChainLossy does not block the selected matrix.
+FAIL: Event editing reconstructs a selected image's layer even when CSP currently selects another layer.
+FAIL: A replacement subtool is not rejected merely because its name differs.
+FAIL: Unknown replacement subtool geometry conservatively invalidates later causal reads anywhere on the canvas.
+Unhandled exception. System.InvalidOperationException: Request contract checks: 5/11 passed.
+An unrelated layer's NoBaseline does not block the selected matrix.
+An unrelated layer's CaptureMismatch does not block the selected matrix.
+An unrelated layer's ChainLossy does not block the selected matrix.
+Event editing reconstructs a selected image's layer even when CSP currently selects another layer.
+A replacement subtool is not rejected merely because its name differs.
+Unknown replacement subtool geometry conservatively invalidates later causal reads anywhere on the canvas.
+   at MemolineDemo.ReconstructionRequestContractChecks.Run() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionRequestContractChecks.cs:line 84
+   at MemolineDemo.ReconstructionChecks.RunAsync() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionChecks.cs:line 237
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\planner-contract-runner\Run.cs:line 3
+   at Program.<Main>(String[] args)

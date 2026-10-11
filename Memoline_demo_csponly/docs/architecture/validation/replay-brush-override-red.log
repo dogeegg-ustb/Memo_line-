@@ -1,0 +1,15 @@
+D:\Memo_Line\Memo_Line\recognizer\core\memoline\Memoline.Core.csproj : warning NU1900: 获取包漏洞数据时出错: 无法加载源 https://api.nuget.org/v3/index.json 的服务索引。
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+  MemolineDemo -> D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\bin\Release\net10.0-windows\MemolineDemo.dll
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs(23,53): error CS0117: “WindowsCspEditingActions”未包含“BuildOverride”的定义 [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs(29,40): error CS0117: “WindowsCspEditingActions”未包含“BuildOverride”的定义 [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+
+生成失败。
+
+D:\Memo_Line\Memo_Line\recognizer\core\memoline\Memoline.Core.csproj : warning NU1900: 获取包漏洞数据时出错: 无法加载源 https://api.nuget.org/v3/index.json 的服务索引。
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs(23,53): error CS0117: “WindowsCspEditingActions”未包含“BuildOverride”的定义 [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs(29,40): error CS0117: “WindowsCspEditingActions”未包含“BuildOverride”的定义 [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+    1 个警告
+    2 个错误
+
+已用时间 00:00:05.86

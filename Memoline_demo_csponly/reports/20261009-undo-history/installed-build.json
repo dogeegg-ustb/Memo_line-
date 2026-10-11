@@ -1,0 +1,19 @@
+{
+  "installedAt": "2026-10-09T22:32:46.3845863+09:00",
+  "build": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\.stage\\project-history-fix-publish\\MemolineDemo.exe",
+  "sha256": "9320B94579165126EF082B1A81C7900FC412D810B35844D12E7A39461E8EE973",
+  "files": [
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\Memoline.exe",
+      "beforeSha256": "397E61ECFE01D8268E53FBAF4E30B1048CE3328E7D4C0E24D6EADA55424A30F3",
+      "sha256": "9320B94579165126EF082B1A81C7900FC412D810B35844D12E7A39461E8EE973",
+      "backup": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\.stage\\undo-history-fix-backup-118ca204bf9c45419a716e825c3a9bf8\\before-Memoline.exe"
+    },
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\MemolineDemo.exe",
+      "beforeSha256": "397E61ECFE01D8268E53FBAF4E30B1048CE3328E7D4C0E24D6EADA55424A30F3",
+      "sha256": "9320B94579165126EF082B1A81C7900FC412D810B35844D12E7A39461E8EE973",
+      "backup": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\.stage\\undo-history-fix-backup-118ca204bf9c45419a716e825c3a9bf8\\before-MemolineDemo.exe"
+    }
+  ]
+}

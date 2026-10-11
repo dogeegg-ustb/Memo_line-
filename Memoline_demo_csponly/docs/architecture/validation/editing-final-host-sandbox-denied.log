@@ -1,0 +1,6 @@
+Unhandled exception. System.UnauthorizedAccessException: Access to the path is denied.
+   at System.IO.FileSystem.MoveFile(String sourceFullPath, String destFullPath, Boolean overwrite)
+   at BehaviorRecognizer.Storage.Memoline.MemolineWriter.DisposeAsync() in D:\Memo_Line\Memo_Line\recognizer\core\memoline\MemolineWriter.cs:line 323
+   at MemolineDemo.BundleChecks.Run(String tempDir) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\BundleChecks.cs:line 40
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\Program.cs:line 61
+   at Program.<Main>(String[] args)

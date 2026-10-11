@@ -1,0 +1,362 @@
+{
+  "source": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\recordings\\\u8BB0\u827A\u7EBF\u6D4B\u8BD5.memoline",
+  "sourceHash": "83F2D1DFE9B3727CFD7299B66AE83B89F9CFB19858FF47455177EB9D9957A0B7",
+  "sourceUnchanged": true,
+  "sessionCount": 7,
+  "rawPenBegin": 590,
+  "indexedStrokes": 13,
+  "images": 20,
+  "layers": [
+    {
+      "Layer": {
+        "SessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+        "Generation": 1,
+        "Uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+      },
+      "ChainValid": true,
+      "issues": []
+    }
+  ],
+  "attempts": [
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 47322
+      },
+      "canvasRectangle": {
+        "X": 1685,
+        "Y": 718,
+        "right": 1726,
+        "bottom": 759
+      },
+      "undoCandidates": 0,
+      "undoSelected": 0,
+      "undoValid": false,
+      "undoIssues": [
+        "\u9009\u533A\u5185\u6CA1\u6709\u53EF\u89C1\u8868\u5C42\u56FE\u7247\u5BF9\u5E94\u7684\u5408\u683C\u7B14\u753B\u5199\u5165\u8303\u56F4\u3002"
+      ],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u6CA1\u6709\u9009\u4E2D\u53EF\u4FEE\u6539\u7684\u7B14\u63A5\u89E6\u3002"
+      ],
+      "images": 0,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 43198
+      },
+      "canvasRectangle": {
+        "X": 1038,
+        "Y": 1337,
+        "right": 1079,
+        "bottom": 1378
+      },
+      "undoCandidates": 0,
+      "undoSelected": 0,
+      "undoValid": false,
+      "undoIssues": [
+        "\u9009\u533A\u5185\u6CA1\u6709\u53EF\u89C1\u8868\u5C42\u56FE\u7247\u5BF9\u5E94\u7684\u5408\u683C\u7B14\u753B\u5199\u5165\u8303\u56F4\u3002"
+      ],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u6CA1\u6709\u9009\u4E2D\u53EF\u4FEE\u6539\u7684\u7B14\u63A5\u89E6\u3002"
+      ],
+      "images": 0,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 42500
+      },
+      "canvasRectangle": {
+        "X": 1160,
+        "Y": 1040,
+        "right": 1201,
+        "bottom": 1081
+      },
+      "undoCandidates": 0,
+      "undoSelected": 0,
+      "undoValid": false,
+      "undoIssues": [
+        "\u9009\u533A\u5185\u6CA1\u6709\u53EF\u89C1\u8868\u5C42\u56FE\u7247\u5BF9\u5E94\u7684\u5408\u683C\u7B14\u753B\u5199\u5165\u8303\u56F4\u3002"
+      ],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u6CA1\u6709\u9009\u4E2D\u53EF\u4FEE\u6539\u7684\u7B14\u63A5\u89E6\u3002"
+      ],
+      "images": 0,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 33686
+      },
+      "canvasRectangle": {
+        "X": 1293,
+        "Y": 2323,
+        "right": 1334,
+        "bottom": 2364
+      },
+      "undoCandidates": 6,
+      "undoSelected": 10,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 3,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 33612
+      },
+      "canvasRectangle": {
+        "X": 1290,
+        "Y": 2347,
+        "right": 1331,
+        "bottom": 2388
+      },
+      "undoCandidates": 6,
+      "undoSelected": 9,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 3,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 33528
+      },
+      "canvasRectangle": {
+        "X": 1284,
+        "Y": 2335,
+        "right": 1325,
+        "bottom": 2376
+      },
+      "undoCandidates": 6,
+      "undoSelected": 9,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 3,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 33441
+      },
+      "canvasRectangle": {
+        "X": 1281,
+        "Y": 2332,
+        "right": 1322,
+        "bottom": 2373
+      },
+      "undoCandidates": 6,
+      "undoSelected": 9,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 3,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 20726
+      },
+      "canvasRectangle": {
+        "X": 1412,
+        "Y": 2856,
+        "right": 1453,
+        "bottom": 2897
+      },
+      "undoCandidates": 0,
+      "undoSelected": 0,
+      "undoValid": false,
+      "undoIssues": [
+        "\u9009\u533A\u5185\u6CA1\u6709\u53EF\u89C1\u8868\u5C42\u56FE\u7247\u5BF9\u5E94\u7684\u5408\u683C\u7B14\u753B\u5199\u5165\u8303\u56F4\u3002"
+      ],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u6CA1\u6709\u9009\u4E2D\u53EF\u4FEE\u6539\u7684\u7B14\u63A5\u89E6\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 20447
+      },
+      "canvasRectangle": {
+        "X": 1437,
+        "Y": 2779,
+        "right": 1478,
+        "bottom": 2820
+      },
+      "undoCandidates": 2,
+      "undoSelected": 3,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 2,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 20135
+      },
+      "canvasRectangle": {
+        "X": 1382,
+        "Y": 2667,
+        "right": 1423,
+        "bottom": 2708
+      },
+      "undoCandidates": 3,
+      "undoSelected": 9,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 19803
+      },
+      "canvasRectangle": {
+        "X": 1292,
+        "Y": 2097,
+        "right": 1333,
+        "bottom": 2138
+      },
+      "undoCandidates": 0,
+      "undoSelected": 0,
+      "undoValid": false,
+      "undoIssues": [
+        "\u9009\u533A\u5185\u6CA1\u6709\u53EF\u89C1\u8868\u5C42\u56FE\u7247\u5BF9\u5E94\u7684\u5408\u683C\u7B14\u753B\u5199\u5165\u8303\u56F4\u3002"
+      ],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u6CA1\u6709\u9009\u4E2D\u53EF\u4FEE\u6539\u7684\u7B14\u63A5\u89E6\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 19688
+      },
+      "canvasRectangle": {
+        "X": 1254,
+        "Y": 1922,
+        "right": 1295,
+        "bottom": 1963
+      },
+      "undoCandidates": 1,
+      "undoSelected": 9,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    },
+    {
+      "Key": {
+        "SessionId": "4cd6b862a09449beaac155f15c3b308d",
+        "BeginAppendId": 19587
+      },
+      "canvasRectangle": {
+        "X": 1244,
+        "Y": 1950,
+        "right": 1285,
+        "bottom": 1991
+      },
+      "undoCandidates": 2,
+      "undoSelected": 10,
+      "undoValid": true,
+      "undoIssues": [],
+      "undoPlanValid": false,
+      "undoPlanIssues": [
+        "\u56FE\u5C42 a6afd90e4a-7b45-c1aa-1b1e-835423813b \u4ECE\u6700\u65E9\u53D7\u5F71\u54CD\u63A5\u89E6\u5230\u7F16\u8F91\u8FB9\u754C\u4E4B\u95F4\u5B58\u5728 undo\uFF0C\u65E0\u6CD5\u786E\u8BA4\u5386\u53F2\u7B14\u753B\u662F\u5426\u4ECD\u751F\u6548\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002",
+        "\u5FC5\u987B\u91CD\u653E\u7684\u77E9\u9635\u542B\u6709\u65E0\u6CD5\u91CD\u653E\u7684\u4FEE\u6539\u3002"
+      ],
+      "images": 1,
+      "selectableImages": 0,
+      "eventPlanValid": null,
+      "eventPlanIssues": null
+    }
+  ],
+  "preciseUndo": null,
+  "eventEditing": null,
+  "scope": "Original file, native states, selection, planner and pixel reconstruction. No real CSP input or undo stack."
+}

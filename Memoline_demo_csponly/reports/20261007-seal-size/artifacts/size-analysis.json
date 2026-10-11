@@ -1,0 +1,535 @@
+{
+  "source": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\recordings\\\u8BB0\u827A\u7EBF\u6D4B\u8BD5.memoline",
+  "originalProjectBytes": 114574208,
+  "nativeBytes": 157602276,
+  "aggregationBytes": 102952255,
+  "originalVerifySeconds": 4.4241275,
+  "fastSealSeconds": 5.8597506,
+  "fastSessionBytes": 129845776,
+  "originalActiveEntries": [
+    {
+      "FullName": "mechanical/recording.memoline.br",
+      "Length": 108327594,
+      "CompressedLength": 108327594
+    },
+    {
+      "FullName": "aggregation/events.jsonl.br",
+      "Length": 5662810,
+      "CompressedLength": 5662810
+    }
+  ],
+  "native": [
+    {
+      "kind": "screenshotBlob",
+      "Count": 907,
+      "StoredBytes": 120689660,
+      "JsonBytes": 200874126
+    },
+    {
+      "kind": "penSample",
+      "Count": 46837,
+      "StoredBytes": 32619123,
+      "JsonBytes": 54663225
+    },
+    {
+      "kind": "mouseCursorChanged",
+      "Count": 10033,
+      "StoredBytes": 2486592,
+      "JsonBytes": 3116252
+    },
+    {
+      "kind": "tabletStateChanged",
+      "Count": 1042,
+      "StoredBytes": 549224,
+      "JsonBytes": 855462
+    },
+    {
+      "kind": "penEnd",
+      "Count": 590,
+      "StoredBytes": 414040,
+      "JsonBytes": 687862
+    },
+    {
+      "kind": "penBegin",
+      "Count": 590,
+      "StoredBytes": 409407,
+      "JsonBytes": 689441
+    },
+    {
+      "kind": "panelUpdateRequested",
+      "Count": 195,
+      "StoredBytes": 92256,
+      "JsonBytes": 189904
+    },
+    {
+      "kind": "shortcutConfiguration",
+      "Count": 3,
+      "StoredBytes": 71488,
+      "JsonBytes": 1186790
+    },
+    {
+      "kind": "coreStateUpdated/brushState",
+      "Count": 13,
+      "StoredBytes": 58511,
+      "JsonBytes": 287187
+    },
+    {
+      "kind": "keyboardStateChanged",
+      "Count": 124,
+      "StoredBytes": 47660,
+      "JsonBytes": 67845
+    },
+    {
+      "kind": "shortcutResolved",
+      "Count": 68,
+      "StoredBytes": 35293,
+      "JsonBytes": 96621
+    },
+    {
+      "kind": "coreStateUpdated/canvasViewState",
+      "Count": 14,
+      "StoredBytes": 27387,
+      "JsonBytes": 74211
+    },
+    {
+      "kind": "coreStateUpdated/subtoolState",
+      "Count": 13,
+      "StoredBytes": 26704,
+      "JsonBytes": 151242
+    },
+    {
+      "kind": "statePackageResult",
+      "Count": 26,
+      "StoredBytes": 25737,
+      "JsonBytes": 58027
+    },
+    {
+      "kind": "keyInput",
+      "Count": 60,
+      "StoredBytes": 22610,
+      "JsonBytes": 30831
+    },
+    {
+      "kind": "statePackageReserved",
+      "Count": 26,
+      "StoredBytes": 7352,
+      "JsonBytes": 9438
+    },
+    {
+      "kind": "clipSaveRequest",
+      "Count": 11,
+      "StoredBytes": 4144,
+      "JsonBytes": 5834
+    },
+    {
+      "kind": "saveGuardResult",
+      "Count": 11,
+      "StoredBytes": 3482,
+      "JsonBytes": 5221
+    },
+    {
+      "kind": "mouseWheel",
+      "Count": 8,
+      "StoredBytes": 2417,
+      "JsonBytes": 3061
+    },
+    {
+      "kind": "driverConfiguration",
+      "Count": 1,
+      "StoredBytes": 1783,
+      "JsonBytes": 6834
+    },
+    {
+      "kind": "clipParseResult",
+      "Count": 1,
+      "StoredBytes": 876,
+      "JsonBytes": 1936
+    },
+    {
+      "kind": "coreStateUpdated/clipState",
+      "Count": 1,
+      "StoredBytes": 828,
+      "JsonBytes": 2783
+    },
+    {
+      "kind": "editBoundaryRequested",
+      "Count": 3,
+      "StoredBytes": 800,
+      "JsonBytes": 752
+    },
+    {
+      "kind": "initializationConfiguration",
+      "Count": 1,
+      "StoredBytes": 744,
+      "JsonBytes": 1214
+    },
+    {
+      "kind": "coreStateUpdated/colorInputState",
+      "Count": 1,
+      "StoredBytes": 691,
+      "JsonBytes": 2076
+    },
+    {
+      "kind": "coreStateUpdated/currentLayerState",
+      "Count": 1,
+      "StoredBytes": 634,
+      "JsonBytes": 1128
+    },
+    {
+      "kind": "coreStateUpdated/colorState",
+      "Count": 1,
+      "StoredBytes": 537,
+      "JsonBytes": 822
+    },
+    {
+      "kind": "workspaceStatus",
+      "Count": 1,
+      "StoredBytes": 527,
+      "JsonBytes": 753
+    },
+    {
+      "kind": "header",
+      "Count": 1,
+      "StoredBytes": 350,
+      "JsonBytes": 424
+    },
+    {
+      "kind": "tabletDeviceChanged",
+      "Count": 1,
+      "StoredBytes": 287,
+      "JsonBytes": 354
+    },
+    {
+      "kind": "recordingEndRequested",
+      "Count": 1,
+      "StoredBytes": 268,
+      "JsonBytes": 252
+    },
+    {
+      "kind": "panelActivationEnded",
+      "Count": 1,
+      "StoredBytes": 257,
+      "JsonBytes": 241
+    },
+    {
+      "kind": "saveGuardUnavailable",
+      "Count": 1,
+      "StoredBytes": 255,
+      "JsonBytes": 291
+    },
+    {
+      "kind": "initializationStatus",
+      "Count": 1,
+      "StoredBytes": 241,
+      "JsonBytes": 287
+    },
+    {
+      "kind": "footer",
+      "Count": 1,
+      "StoredBytes": 99,
+      "JsonBytes": 83
+    }
+  ],
+  "aggregation": [
+    {
+      "kind": "packet",
+      "Count": 14,
+      "JsonBytes": 88664732
+    },
+    {
+      "kind": "asset",
+      "Count": 104,
+      "JsonBytes": 14281660
+    },
+    {
+      "kind": "dimensionSample",
+      "Count": 14,
+      "JsonBytes": 4948
+    },
+    {
+      "kind": "header",
+      "Count": 1,
+      "JsonBytes": 605
+    },
+    {
+      "kind": "footer",
+      "Count": 1,
+      "JsonBytes": 176
+    }
+  ],
+  "dataFields": [
+    {
+      "field": "screenshotBlob.data.image",
+      "bytes": 199849681
+    },
+    {
+      "field": "penSample.data.penDownLocation",
+      "bytes": 13030987
+    },
+    {
+      "field": "penSample.data.driverSnapshotId",
+      "bytes": 1592458
+    },
+    {
+      "field": "penSample.data.deviceId",
+      "bytes": 983577
+    },
+    {
+      "field": "penSample.data.penButtons",
+      "bytes": 889901
+    },
+    {
+      "field": "penSample.data.screenX",
+      "bytes": 814088
+    },
+    {
+      "field": "penSample.data.screenY",
+      "bytes": 813035
+    },
+    {
+      "field": "penSample.data.mappedPressure",
+      "bytes": 718812
+    },
+    {
+      "field": "penSample.data.interactionCoordinateSource",
+      "bytes": 702555
+    },
+    {
+      "field": "penSample.data.screenCoordinateSource",
+      "bytes": 702555
+    },
+    {
+      "field": "tabletStateChanged.data.sample",
+      "bytes": 618171
+    },
+    {
+      "field": "shortcutConfiguration.data.bindings",
+      "bytes": 446721
+    },
+    {
+      "field": "penSample.data.contactState",
+      "bytes": 421533
+    },
+    {
+      "field": "penSample.data.normalizedPressure",
+      "bytes": 388326
+    },
+    {
+      "field": "shortcutConfiguration.data.toolCatalog",
+      "bytes": 362301
+    },
+    {
+      "field": "penSample.data.pressureMappingStatus",
+      "bytes": 327859
+    },
+    {
+      "field": "penSample.data.coordinateMappingStatus",
+      "bytes": 327859
+    },
+    {
+      "field": "shortcutConfiguration.data.brushPackages",
+      "bytes": 297867
+    },
+    {
+      "field": "coreStateUpdated/brushState.data.rawResult",
+      "bytes": 257571
+    },
+    {
+      "field": "penSample.data.tabletX",
+      "bytes": 234185
+    }
+  ],
+  "screenshots": [
+    {
+      "panel": "__canvas_frame__",
+      "count": 180,
+      "unique": 168,
+      "pngBytes": 100622884,
+      "duplicatePngBytes": 6385557
+    },
+    {
+      "panel": "\u753B\u5E03\u89C6\u53E3",
+      "count": 180,
+      "unique": 167,
+      "pngBytes": 31493924,
+      "duplicatePngBytes": 1923912
+    },
+    {
+      "panel": "\u5BFC\u822A\u5668",
+      "count": 180,
+      "unique": 26,
+      "pngBytes": 3013723,
+      "duplicatePngBytes": 2583045
+    },
+    {
+      "panel": "\u5DE5\u5177\u7EC4",
+      "count": 49,
+      "unique": 2,
+      "pngBytes": 1808030,
+      "duplicatePngBytes": 1730365
+    },
+    {
+      "panel": "\u7B14\u5237\u5C5E\u6027",
+      "count": 49,
+      "unique": 6,
+      "pngBytes": 1666914,
+      "duplicatePngBytes": 1461864
+    },
+    {
+      "panel": "\u5BFC\u822A\u5668\u6570\u5B57",
+      "count": 180,
+      "unique": 5,
+      "pngBytes": 209212,
+      "duplicatePngBytes": 203177
+    },
+    {
+      "panel": "\u56FE\u5C42",
+      "count": 1,
+      "unique": 1,
+      "pngBytes": 22835,
+      "duplicatePngBytes": 0
+    },
+    {
+      "panel": "\u8272\u5F69\u6ED1\u5757",
+      "count": 1,
+      "unique": 1,
+      "pngBytes": 15524,
+      "duplicatePngBytes": 0
+    },
+    {
+      "panel": "\u8272\u5F69",
+      "count": 1,
+      "unique": 1,
+      "pngBytes": 15524,
+      "duplicatePngBytes": 0
+    }
+  ],
+  "repeatedLargeStrings": [
+    {
+      "Count": 4,
+      "Bytes": 672100,
+      "redundantJsonBytes": 2016300,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 37,
+      "Bytes": 46724,
+      "redundantJsonBytes": 1682064,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 3,
+      "Bytes": 699052,
+      "redundantJsonBytes": 1398104,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 3,
+      "Bytes": 692196,
+      "redundantJsonBytes": 1384392,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 3,
+      "Bytes": 673228,
+      "redundantJsonBytes": 1346456,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 3,
+      "Bytes": 670700,
+      "redundantJsonBytes": 1341400,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 19,
+      "Bytes": 46052,
+      "redundantJsonBytes": 828936,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 3,
+      "Bytes": 355320,
+      "redundantJsonBytes": 710640,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 2,
+      "Bytes": 669356,
+      "redundantJsonBytes": 669356,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 12,
+      "Bytes": 56832,
+      "redundantJsonBytes": 625152,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 19,
+      "Bytes": 31528,
+      "redundantJsonBytes": 567504,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 4,
+      "Bytes": 182540,
+      "redundantJsonBytes": 547620,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 13,
+      "Bytes": 43260,
+      "redundantJsonBytes": 519120,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 4,
+      "Bytes": 163380,
+      "redundantJsonBytes": 490140,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    },
+    {
+      "Count": 15,
+      "Bytes": 30796,
+      "redundantJsonBytes": 431144,
+      "locations": [
+        "native.screenshotBlob.data.image"
+      ]
+    }
+  ],
+  "repeatedLargeStringsTotalBytes": 18800732,
+  "preservedHashes": {
+    "MechanicalSha256": "08c260d33c4871d7257c9570540718cdd2443632c079f8e85f99c66790abd292",
+    "AggregationSha256": "5d6925cfd4ac978457456fa3a52a8bb8197cc0fee27773d6aa0a573afe91c630",
+    "FixedSha256": "aed328e6a2892e4a3865ad39901cf23084034df7aeab615ffad89dd710d5f060"
+  }
+}

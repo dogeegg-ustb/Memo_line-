@@ -1,0 +1,20 @@
+Reading original sealed sessions and image assets for the bounded range probe...
+Recovered 512 eligible contacts; testing up to 80 recent contacts.
+Probe ranges: 10; undo legal False; event legal False.
+Probe ranges: 20; undo legal False; event legal False.
+Probe ranges: 30; undo legal False; event legal False.
+Probe ranges: 40; undo legal False; event legal False.
+Probe ranges: 50; undo legal False; event legal False.
+Probe ranges: 60; undo legal False; event legal False.
+Probe ranges: 70; undo legal False; event legal False.
+Probe ranges: 80; undo legal False; event legal False.
+Probe ranges: 90; undo legal False; event legal False.
+Probe ranges: 100; undo legal False; event legal False.
+Probe ranges: 110; undo legal False; event legal False.
+Probe ranges: 120; undo legal False; event legal False.
+Probe ranges: 130; undo legal False; event legal False.
+Probe ranges: 140; undo legal False; event legal False.
+Probe ranges: 150; undo legal False; event legal False.
+Probe ranges: 160; undo legal False; event legal False.
+Probe report: D:\Memo_Line\Memo_Line\Memoline_demo_csponly\reports\20261009-recording-tail\actual-range-probe\actual-project-probe-results.json
+Legal precise undo: False; legal event editing: False; source unchanged: True.

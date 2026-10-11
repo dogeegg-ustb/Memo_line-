@@ -1,0 +1,9 @@
+Unhandled exception. System.IO.InvalidDataException: Required journal identifier/text is invalid
+   at MemolineDemo.Editing.EditJournal.Require(Boolean condition, String message) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\Editing\EditJournal.cs:line 503
+   at MemolineDemo.Editing.EditJournal.Text(String value) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\Editing\EditJournal.cs:line 502
+   at MemolineDemo.Editing.EditJournal.GetText(JsonElement data, String name) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\Editing\EditJournal.cs:line 501
+   at MemolineDemo.Editing.EditJournal.Apply(State state, EditJournalRecord record, Action`1 verify) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\Editing\EditJournal.cs:line 337
+   at MemolineDemo.Editing.EditJournal.Append(String kind, Object data, String transactionId) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\Editing\EditJournal.cs:line 221
+   at MemolineDemo.Editing.EditJournal.Fail(String code, String message) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\Editing\EditJournal.cs:line 206
+   at MemolineDemo.EditJournalChecks.Run(String root) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditJournalChecks.cs:line 152
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\edit-journal-runner\Program.cs:line 3

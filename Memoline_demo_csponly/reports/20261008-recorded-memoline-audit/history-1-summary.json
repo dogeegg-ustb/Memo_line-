@@ -1,0 +1,949 @@
+{
+  "ordinal": 1,
+  "entry": "sessions/08c260d33c4871d7257c9570540718cdd2443632c079f8e85f99c66790abd292.memoline",
+  "sessionId": "4cd6b862a09449beaac155f15c3b308d",
+  "createdAt": "2026-10-07T20:38:10.5763494+08:00",
+  "frequency": 10000000,
+  "durationSeconds": 580.3532929,
+  "statePersistence": "successfulOnly",
+  "mechanicalSha256": "08c260d33c4871d7257c9570540718cdd2443632c079f8e85f99c66790abd292",
+  "indexHashesMatch": true,
+  "nativeFramesCrcValidated": true,
+  "kindCounts": {
+    "workspaceStatus": 1,
+    "penSample": 46837,
+    "tabletDeviceChanged": 1,
+    "initializationStatus": 1,
+    "statePackageReserved": 26,
+    "keyInput": 60,
+    "statePackageResult": 26,
+    "mouseCursorChanged": 10033,
+    "panelUpdateRequested": 195,
+    "saveGuardResult": 11,
+    "recordingEndRequested": 1,
+    "driverConfiguration": 1,
+    "coreStateUpdated": 44,
+    "shortcutResolved": 68,
+    "panelActivationEnded": 1,
+    "penBegin": 590,
+    "screenshotBlob": 907,
+    "mouseWheel": 8,
+    "footer": 1,
+    "editBoundaryRequested": 3,
+    "keyboardStateChanged": 124,
+    "clipSaveRequest": 11,
+    "clipParseResult": 1,
+    "tabletStateChanged": 1042,
+    "header": 1,
+    "penEnd": 590,
+    "saveGuardUnavailable": 1,
+    "initializationConfiguration": 1,
+    "shortcutConfiguration": 3
+  },
+  "coreCounts": {
+    "canvasViewState/changed": 14,
+    "currentLayerState/changed": 1,
+    "brushState/changed": 12,
+    "subtoolState/unchanged": 2,
+    "colorInputState/changed": 1,
+    "brushState/unchanged": 1,
+    "subtoolState/changed": 11,
+    "colorState/changed": 1,
+    "clipState/changed": 1
+  },
+  "canvasUpdates": [
+    {
+      "appendId": 31,
+      "ticks": 55557053,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 880.9999999999999,
+          "y": 248
+        },
+        "ocrScalePercent": 16.1,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 1,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 16.088629,
+          "matrices": {
+            "screenToCanvas": [
+              0.0012531328320802004,
+              0,
+              -1.1040100250626566,
+              0,
+              0.0008857395925597874,
+              -0.21966341895482727
+            ],
+            "canvasToScreen": [
+              798,
+              0,
+              880.9999999999999,
+              0,
+              1129,
+              248
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "5257e2090fdd440ab5d8cb837270012b",
+          "6911869a74f6499e81be037e973e7368",
+          "d4dc409cc0d64b6e8ecfdd969179edd1",
+          "f0f7f4edab6745c4b8781682da403cac"
+        ],
+        "capturedTicks": 55557053,
+        "captureId": "0910987be2be453f9519bbab3488a80b",
+        "triggerTicks": 54896296,
+        "causalAmbiguous": false,
+        "relatedEventIds": [],
+        "completedTicks": 109281558,
+        "analysisStartedTicks": 57831532,
+        "analysisQuietMs": 150,
+        "analysisToken": null,
+        "finalEvidence": true,
+        "observedAfterEventId": 0
+      }
+    },
+    {
+      "appendId": 100,
+      "ticks": 163368358,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 833.9999999999998,
+          "y": 33.8362856232814
+        },
+        "ocrScalePercent": 21.4,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 1.3291925,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 21.406975,
+          "matrices": {
+            "screenToCanvas": [
+              0.0009416195856873824,
+              0,
+              -0.7853107344632768,
+              0,
+              0.0006658173837792337,
+              -0.022528787170500122
+            ],
+            "canvasToScreen": [
+              1061.9999999999998,
+              0,
+              833.9999999999998,
+              0,
+              1501.9133239266275,
+              33.8362856232814
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "88879b44116f4216984b32239722d3bb",
+          "33826560a0c44952a9399efc8b02ff7c",
+          "e64db878e1334ae686248be2116f6e4e",
+          "d55adba066ec44d7a402078e3fcf94dc"
+        ],
+        "capturedTicks": 163368358,
+        "captureId": "6d327875e13b4841a02961180c279cab",
+        "triggerTicks": 158850038,
+        "causalAmbiguous": false,
+        "relatedEventIds": [
+          3
+        ],
+        "completedTicks": 166806024,
+        "analysisStartedTicks": 165144341,
+        "analysisQuietMs": 150,
+        "analysisToken": 4,
+        "finalEvidence": true,
+        "observedAfterEventId": 3
+      }
+    },
+    {
+      "appendId": 815,
+      "ticks": 224344313,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 823.9999999999999,
+          "y": 252.99999999999997
+        },
+        "ocrScalePercent": 23.5,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 1.4596273,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 23.563797,
+          "matrices": {
+            "screenToCanvas": [
+              0.0008554319931565441,
+              0,
+              -0.7048759623609924,
+              0,
+              0.0006048743041689875,
+              -0.1530331989547538
+            ],
+            "canvasToScreen": [
+              1168.9999999999998,
+              0,
+              823.9999999999999,
+              0,
+              1653.2360411207414,
+              252.99999999999997
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "089de36a6871436a9cfffac841605080",
+          "17ae2bd4a1ce480e977d942c16e32ba9",
+          "3eb848667b8744ec9691277e90d83bea",
+          "6872bc63d32c47b7835f608be7d53553"
+        ],
+        "capturedTicks": 224344313,
+        "captureId": "50d581833bfb4059b9494ee01149587f",
+        "triggerTicks": 206920296,
+        "causalAmbiguous": false,
+        "relatedEventIds": [
+          407
+        ],
+        "completedTicks": 233329208,
+        "analysisStartedTicks": 231918879,
+        "analysisQuietMs": 150,
+        "analysisToken": 35,
+        "finalEvidence": true,
+        "observedAfterEventId": 407
+      }
+    },
+    {
+      "appendId": 11245,
+      "ticks": 1349235917,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 947.9999999999999,
+          "y": 365
+        },
+        "ocrScalePercent": 23.5,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 1.4596273,
+          "rotationDegrees": -3.474222E-05,
+          "scaleGeometryEstimate": 23.563797,
+          "matrices": {
+            "screenToCanvas": [
+              0.0008554319931565441,
+              0,
+              -0.8109495295124038,
+              0,
+              0.0006048743041689875,
+              -0.2207791210216804
+            ],
+            "canvasToScreen": [
+              1168.9999999999998,
+              0,
+              947.9999999999999,
+              0,
+              1653.2360411207414,
+              365
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "fdc8cf99bfea4dfeaef03e0d9bc260de",
+          "fac72a33572147f7bb0dd4bf37883c1a",
+          "7f5bcc7030954de89cf754bfde14b624",
+          "30a2e1c618264d1aae62b7142dc2d64f"
+        ],
+        "capturedTicks": 1349235917,
+        "captureId": "923143b980714267afb5bddeac076dc2",
+        "triggerTicks": 1341317073,
+        "causalAmbiguous": true,
+        "relatedEventIds": [
+          8533,
+          8534,
+          8629
+        ],
+        "completedTicks": 1358973271,
+        "analysisStartedTicks": 1357649426,
+        "analysisQuietMs": 150,
+        "analysisToken": 54,
+        "finalEvidence": true,
+        "observedAfterEventId": 8630
+      }
+    },
+    {
+      "appendId": 15764,
+      "ticks": 1638493606,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 910,
+          "y": 516
+        },
+        "ocrScalePercent": 23.5,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 1.4596273,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 23.563797,
+          "matrices": {
+            "screenToCanvas": [
+              0.0008554319931565441,
+              0,
+              -0.7784431137724552,
+              0,
+              0.0006048743041689875,
+              -0.3121151409511975
+            ],
+            "canvasToScreen": [
+              1168.9999999999998,
+              0,
+              910,
+              0,
+              1653.2360411207414,
+              516
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "489da2ff6ea54e089106386f95159924",
+          "2327f81c868c4044b069e89ac5902b6c",
+          "c95cb4dee3334eb4b74d3281159c5936",
+          "cc2e1965db0e4d26bf8c9b023e7f65ba"
+        ],
+        "capturedTicks": 1638493606,
+        "captureId": "1bbf030edeec4eaba7d0fd313f3e669b",
+        "triggerTicks": 1632485890,
+        "causalAmbiguous": false,
+        "relatedEventIds": [
+          12405,
+          12450
+        ],
+        "completedTicks": 1647286970,
+        "analysisStartedTicks": 1646296176,
+        "analysisQuietMs": 150,
+        "analysisToken": 67,
+        "finalEvidence": true,
+        "observedAfterEventId": 12450
+      }
+    },
+    {
+      "appendId": 19496,
+      "ticks": 2049959793,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 916.2339136473081,
+          "y": 519.4674809160306
+        },
+        "ocrScalePercent": 23.5,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 1.4596273,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 23.5,
+          "matrices": {
+            "screenToCanvas": [
+              0.0008577543134320037,
+              0,
+              -0.7859035915436645,
+              0,
+              0.0006065164123341178,
+              -0.31506555284943266
+            ],
+            "canvasToScreen": [
+              1165.835,
+              0,
+              916.2339136473081,
+              0,
+              1648.76,
+              519.4674809160306
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "c251ca186ce9449ab69e9db45af2df3e",
+          "e5f41ce5e83845a9a6b4302c8dd98aef",
+          "5748bd210f0a40f9aec885bc37d14058",
+          "15574ce251e94932b2d9f8cefc4bd856"
+        ],
+        "capturedTicks": 2049959793,
+        "captureId": "2b2c2508106a4a76be182473341a0588",
+        "triggerTicks": 2049197457,
+        "causalAmbiguous": false,
+        "relatedEventIds": [
+          15348
+        ],
+        "completedTicks": 2052320470,
+        "analysisStartedTicks": 2051388719,
+        "analysisQuietMs": 150,
+        "analysisToken": 68,
+        "finalEvidence": true,
+        "observedAfterEventId": 15348
+      }
+    },
+    {
+      "appendId": 19540,
+      "ticks": 2057044468,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 824,
+          "y": 353
+        },
+        "ocrScalePercent": 25,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 1.552795,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 28.599531,
+          "matrices": {
+            "screenToCanvas": [
+              0.0007048096848422125,
+              0,
+              -0.5807631803099831,
+              0,
+              0.0004983695619301904,
+              -0.17592445536135723
+            ],
+            "canvasToScreen": [
+              1418.8227283282472,
+              0,
+              824,
+              0,
+              2006.5430884803432,
+              353
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "183cc623370c40c9a4c74ce9a4259ad4",
+          "a13a3b0905814953b6359c112a44bd1e",
+          "1c69cb62c58746bc93bf6d1919aadd25",
+          "ba87ed4e2569409bb7db03dfb2262296"
+        ],
+        "capturedTicks": 2057044468,
+        "captureId": "c140513659ed4857a5f29089a53dd722",
+        "triggerTicks": 2056257519,
+        "causalAmbiguous": false,
+        "relatedEventIds": [
+          15351
+        ],
+        "completedTicks": 2063088283,
+        "analysisStartedTicks": 2060999114,
+        "analysisQuietMs": 150,
+        "analysisToken": 71,
+        "finalEvidence": true,
+        "observedAfterEventId": 15351
+      }
+    },
+    {
+      "appendId": 23400,
+      "ticks": 2338382611,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 648,
+          "y": 292
+        },
+        "ocrScalePercent": 33.3,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 2.068323,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 33.3,
+          "matrices": {
+            "screenToCanvas": [
+              0.0006053221269512379,
+              0,
+              -0.3922487382644021,
+              0,
+              0.00042802210259479634,
+              -0.12498245395768053
+            ],
+            "canvasToScreen": [
+              1652.0129621505737,
+              0,
+              648,
+              0,
+              2336.3279464721677,
+              292
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "95e457a967d6431dbf74a0b0e3fb2f0b",
+          "bc5be5caf8c540409cf110f90e35e211",
+          "f6c959c84328447391ddda1c95479ac0",
+          "e133090ced014d07b3daf545bf15ac13"
+        ],
+        "capturedTicks": 2338382611,
+        "captureId": "b42b6bb8f9154f6e9d002329285d6d6f",
+        "triggerTicks": 2330126347,
+        "causalAmbiguous": false,
+        "relatedEventIds": [
+          18510,
+          18511,
+          18514
+        ],
+        "completedTicks": 2348110238,
+        "analysisStartedTicks": 2346578040,
+        "analysisQuietMs": 150,
+        "analysisToken": 87,
+        "finalEvidence": true,
+        "observedAfterEventId": 18514
+      }
+    },
+    {
+      "appendId": 31170,
+      "ticks": 2922367379,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 488.9999999999999,
+          "y": 284
+        },
+        "ocrScalePercent": 33.3,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 2.068323,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 33.27958,
+          "matrices": {
+            "screenToCanvas": [
+              0.0006056935190793458,
+              0,
+              -0.2961841308298001,
+              0,
+              0.0004282847132486651,
+              -0.12163285856262089
+            ],
+            "canvasToScreen": [
+              1650.9999999999998,
+              0,
+              488.9999999999999,
+              0,
+              2334.8953839951623,
+              284
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "1b60c0db72904ef483e346529cc12a9b",
+          "6cbd92c6a2aa4d7895b6fe001722444f",
+          "f9618bdce7e6496db7d8fc247db548e2",
+          "9ffa1b831e324346a5166ff530817354"
+        ],
+        "capturedTicks": 2922367379,
+        "captureId": "b1d18e3f2b01423e90ec17779cadaa9d",
+        "triggerTicks": 2911343006,
+        "causalAmbiguous": false,
+        "relatedEventIds": [
+          24836,
+          24908
+        ],
+        "completedTicks": 2932872875,
+        "analysisStartedTicks": 2931447718,
+        "analysisQuietMs": 150,
+        "analysisToken": 103,
+        "finalEvidence": true,
+        "observedAfterEventId": 24908
+      }
+    },
+    {
+      "appendId": 43627,
+      "ticks": 4113934254,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 384.9870378494263,
+          "y": 358.00000000000006
+        },
+        "ocrScalePercent": 33.3,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 2.068323,
+          "rotationDegrees": -5.925589E-06,
+          "scaleGeometryEstimate": 33.3,
+          "matrices": {
+            "screenToCanvas": [
+              0.0006053221269512379,
+              0,
+              -0.23304117259967144,
+              0,
+              0.00042802210259479634,
+              -0.1532319127289371
+            ],
+            "canvasToScreen": [
+              1652.0129621505737,
+              0,
+              384.9870378494263,
+              0,
+              2336.3279464721677,
+              358.00000000000006
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "27aafa04403d417aafc006a372d4a5c7",
+          "3ab803c945174c82a810cd156f10d3ab",
+          "5bdd48b9f51a493e8d16ae59371e3a08",
+          "48d0249374dc499482d3e688201ba51f"
+        ],
+        "capturedTicks": 4113934254,
+        "captureId": "da17fcb2463246d5a634dadec6b8133e",
+        "triggerTicks": 4104531355,
+        "causalAmbiguous": false,
+        "relatedEventIds": [
+          34600,
+          34601,
+          34643
+        ],
+        "completedTicks": 4126338381,
+        "analysisStartedTicks": 4125219080,
+        "analysisQuietMs": 150,
+        "analysisToken": 118,
+        "finalEvidence": true,
+        "observedAfterEventId": 34643
+      }
+    },
+    {
+      "appendId": 51350,
+      "ticks": 4662094048,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 306.9870378494263,
+          "y": 11.430812246502198
+        },
+        "ocrScalePercent": 33.3,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 2.068323,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 33.3,
+          "matrices": {
+            "screenToCanvas": [
+              0.0006053221269512379,
+              0,
+              -0.18582604669747488,
+              0,
+              0.00042802210259479634,
+              -0.004892640292114218
+            ],
+            "canvasToScreen": [
+              1652.0129621505737,
+              0,
+              306.9870378494263,
+              0,
+              2336.3279464721677,
+              11.430812246502198
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "cef95ac94f984b8c9edc01b594c1e403",
+          "7739d100137245b1b31190a3f0549de6",
+          "c41b2004007448df97dd81fa1bd8b718",
+          "5c70494020fc4f509d7e7624c8726f33"
+        ],
+        "capturedTicks": 4662094048,
+        "captureId": "5e955d987f844845927c0600c0362086",
+        "triggerTicks": 4634870226,
+        "causalAmbiguous": true,
+        "relatedEventIds": [
+          40676,
+          40775
+        ],
+        "completedTicks": 4674086128,
+        "analysisStartedTicks": 4672923420,
+        "analysisQuietMs": 150,
+        "analysisToken": 150,
+        "finalEvidence": true,
+        "observedAfterEventId": 40776
+      }
+    },
+    {
+      "appendId": 52176,
+      "ticks": 4737140547,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 431.99999999999994,
+          "y": -145.52005259343494
+        },
+        "ocrScalePercent": 33.3,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 2.068323,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 33.27958,
+          "matrices": {
+            "screenToCanvas": [
+              0.0006056935190793458,
+              0,
+              -0.2616596002422774,
+              0,
+              0.0004282847132486651,
+              0.062324013996909955
+            ],
+            "canvasToScreen": [
+              1650.9999999999998,
+              0,
+              431.99999999999994,
+              0,
+              2334.8953839951623,
+              -145.52005259343494
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "5f67bb95973b4b2eb3d401a4c3cc6352",
+          "000772cce7864fa0909612d9ae52231e",
+          "d264b99ff9314d45b90414931b1d4352",
+          "464a36409c9949679ed6c6fe1dc34e22"
+        ],
+        "capturedTicks": 4737140547,
+        "captureId": "62ee5fda2dba4f4489d1708238a245ac",
+        "triggerTicks": 4715214286,
+        "causalAmbiguous": true,
+        "relatedEventIds": [
+          41456,
+          41495
+        ],
+        "completedTicks": 4747940877,
+        "analysisStartedTicks": 4746618046,
+        "analysisQuietMs": 150,
+        "analysisToken": 170,
+        "finalEvidence": true,
+        "observedAfterEventId": 41496
+      }
+    },
+    {
+      "appendId": 52734,
+      "ticks": 4790697722,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 393.9870378494263,
+          "y": 11.430812246502198
+        },
+        "ocrScalePercent": 33.3,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 2.068323,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 33.3,
+          "matrices": {
+            "screenToCanvas": [
+              0.0006053221269512379,
+              0,
+              -0.23848907174223258,
+              0,
+              0.00042802210259479634,
+              -0.004892640292114218
+            ],
+            "canvasToScreen": [
+              1652.0129621505737,
+              0,
+              393.9870378494263,
+              0,
+              2336.3279464721677,
+              11.430812246502198
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "1d919126b1ff4ab385df54362809177b",
+          "dc80eec14fd34dc0b9f9bf6df9f001d2",
+          "788554b9068c4d59b93e00040b1fb428",
+          "37882813288c4f57992134308e7f0385"
+        ],
+        "capturedTicks": 4790697722,
+        "captureId": "35fc8bb0e3754712839cd8d07f4bfe09",
+        "triggerTicks": 4767252927,
+        "causalAmbiguous": true,
+        "relatedEventIds": [
+          41680,
+          41690
+        ],
+        "completedTicks": 4801911610,
+        "analysisStartedTicks": 4800955008,
+        "analysisQuietMs": 150,
+        "analysisToken": 186,
+        "finalEvidence": true,
+        "observedAfterEventId": 41846
+      }
+    },
+    {
+      "appendId": 53364,
+      "ticks": 4862564114,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 354.9870378494264,
+          "y": 11.430812246502198
+        },
+        "ocrScalePercent": 33.3,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.1,
+          "cumulativeRelativeScale": 2.068323,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 33.3,
+          "matrices": {
+            "screenToCanvas": [
+              0.0006053221269512379,
+              0,
+              -0.21488150879113432,
+              0,
+              0.00042802210259479634,
+              -0.004892640292114218
+            ],
+            "canvasToScreen": [
+              1652.0129621505737,
+              0,
+              354.9870378494264,
+              0,
+              2336.3279464721677,
+              11.430812246502198
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "720da8134ce640e9a5867d2b7b39c3bb",
+          "351d28b0d9824decb62b692d3b676bed",
+          "d575b6b1f8334503ba9be23075238821",
+          "8057441b94d143f28160d59baceea0ae"
+        ],
+        "capturedTicks": 4862564114,
+        "captureId": "d406754f1d8b48be942a7cd0a9550664",
+        "triggerTicks": 4860471025,
+        "causalAmbiguous": false,
+        "relatedEventIds": [
+          42231,
+          42232,
+          42258
+        ],
+        "completedTicks": 4873706322,
+        "analysisStartedTicks": 4872330010,
+        "analysisQuietMs": 150,
+        "analysisToken": 195,
+        "finalEvidence": true,
+        "observedAfterEventId": 42258
+      }
+    }
+  ]
+}

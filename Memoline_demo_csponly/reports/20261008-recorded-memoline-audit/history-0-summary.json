@@ -1,0 +1,102 @@
+{
+  "ordinal": 0,
+  "entry": "sessions/6ab524c8ddd808211dddf03ce9d8452dd07b4231018e71ffff7eba79aabae2d0.memoline",
+  "sessionId": "86218026f357443aa9505328db9d40be",
+  "createdAt": "2026-10-07T20:18:23.8732474+08:00",
+  "frequency": 10000000,
+  "durationSeconds": 17.6681578,
+  "statePersistence": "successfulOnly",
+  "mechanicalSha256": "6ab524c8ddd808211dddf03ce9d8452dd07b4231018e71ffff7eba79aabae2d0",
+  "indexHashesMatch": true,
+  "nativeFramesCrcValidated": true,
+  "kindCounts": {
+    "panelActivationEnded": 1,
+    "tabletDeviceChanged": 1,
+    "driverConfiguration": 1,
+    "screenshotBlob": 9,
+    "saveGuardUnavailable": 1,
+    "initializationConfiguration": 1,
+    "footer": 1,
+    "clipParseResult": 1,
+    "panelUpdateRequested": 2,
+    "header": 1,
+    "coreStateUpdated": 7,
+    "statePackageReserved": 1,
+    "workspaceStatus": 1,
+    "statePackageResult": 1,
+    "shortcutConfiguration": 1,
+    "mouseCursorChanged": 38
+  },
+  "coreCounts": {
+    "brushState/changed": 1,
+    "currentLayerState/changed": 1,
+    "canvasViewState/changed": 1,
+    "colorInputState/changed": 1,
+    "subtoolState/changed": 1,
+    "colorState/changed": 1,
+    "clipState/changed": 1
+  },
+  "canvasUpdates": [
+    {
+      "appendId": 64,
+      "ticks": 82378661,
+      "status": "changed",
+      "state": {
+        "canvasOriginScreenPx": {
+          "x": 953,
+          "y": 222
+        },
+        "ocrScalePercent": 16.7,
+        "ocrRotationDegrees": 0,
+        "transform": {
+          "canvasPixelWidth": 4961,
+          "canvasPixelHeight": 7016,
+          "scaleReference": 16.7,
+          "cumulativeRelativeScale": 1,
+          "rotationDegrees": 0,
+          "scaleGeometryEstimate": 16.749044,
+          "matrices": {
+            "screenToCanvas": [
+              0.0012033694344163659,
+              0,
+              -1.1468110709987966,
+              0,
+              0.000851063829787234,
+              -0.18893617021276596
+            ],
+            "canvasToScreen": [
+              831,
+              0,
+              953,
+              0,
+              1175,
+              222
+            ],
+            "convention": "sct-affine-row-major/v1",
+            "canvasSpace": "normalized"
+          }
+        }
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "90d3d43a558849d988d338786faf536a",
+          "a8bb4dca7f7149c6804f41fdcdddc39a",
+          "1ed8bc2bf1d94aa78072c7267ad9ea62",
+          "0404cf262e5c4525975d3f53756d867c"
+        ],
+        "capturedTicks": 82378661,
+        "captureId": "af5041c451f04d3fac3ae0adc8962786",
+        "triggerTicks": 81778813,
+        "causalAmbiguous": false,
+        "relatedEventIds": [],
+        "completedTicks": 173370395,
+        "analysisStartedTicks": 126723581,
+        "analysisQuietMs": 150,
+        "analysisToken": null,
+        "finalEvidence": true,
+        "observedAfterEventId": 0
+      }
+    }
+  ]
+}

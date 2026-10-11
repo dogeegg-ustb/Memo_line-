@@ -1,0 +1,7 @@
+FAIL: A confirmed replacement accepts target-only numeric properties.
+Unhandled exception. System.InvalidOperationException: Request contract checks: 20/21 passed.
+A confirmed replacement accepts target-only numeric properties.
+   at MemolineDemo.ReconstructionRequestContractChecks.Run() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionRequestContractChecks.cs:line 137
+   at MemolineDemo.ReconstructionChecks.RunAsync() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionChecks.cs:line 237
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\Program.cs:line 44
+   at Program.<Main>(String[] args)

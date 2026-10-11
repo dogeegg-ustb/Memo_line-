@@ -1,0 +1,10 @@
+Reconstruction request contract checks passed: 18.
+Reconstruction checks: 93.
+Precise undo checks passed: 30.
+Precise undo checks: 30.
+FAIL: Online promotion must stop before replaying a reference layer with undo inside its affected interval.
+FAIL: An online command-range failure must stop before installing any final reproduction layers.
+Unhandled exception. System.InvalidOperationException: Cross-layer reconstruction checks failed: 2 of 17.
+   at MemolineDemo.ReconstructionCrossLayerChecks.RunAsync() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ReconstructionCrossLayerChecks.cs:line 125
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\Program.cs:line 40
+   at Program.<Main>(String[] args)

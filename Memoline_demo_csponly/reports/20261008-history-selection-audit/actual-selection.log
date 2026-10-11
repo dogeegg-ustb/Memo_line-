@@ -1,0 +1,8 @@
+Reading the supplied sealed project and its original image assets...
+Building independently clocked historical indexes...
+Original sessions: 7; recorded contacts: 590; indexed strokes: 13; images: 20.
+Precise undo execution: False; event editing execution: False; input unchanged: True.
+Unhandled exception. System.InvalidOperationException: The supplied recording did not provide an executable selection for both modes. See actual-selection-results.json for the exact blockers.
+   at MemolineDemo.ActualProjectEditingChecks.RunAsync(String path, String reportRoot) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ActualProjectEditingChecks.cs:line 79
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\Program.cs:line 9
+   at Program.<Main>(String[] args)

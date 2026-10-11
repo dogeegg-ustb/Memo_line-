@@ -1,0 +1,11 @@
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+  MemolineDemo -> D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\bin\Release\net10.0-windows\MemolineDemo.dll
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs(100,47): error CS1729: “CspEditTransaction”不包含采用 8 个参数的构造函数 [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\csp-transaction-runner\TransactionChecks.csproj]
+
+生成失败。
+
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs(100,47): error CS1729: “CspEditTransaction”不包含采用 8 个参数的构造函数 [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\csp-transaction-runner\TransactionChecks.csproj]
+    0 个警告
+    1 个错误
+
+已用时间 00:00:03.21

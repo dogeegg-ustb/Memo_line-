@@ -1,0 +1,5 @@
+System.ArgumentException: Object of type 'System.Management.Automation.PSObject' cannot be converted to type 'System.String'.
+   at System.RuntimeType.CheckValue(Object& value, Binder binder, CultureInfo culture, BindingFlags invokeAttr)
+   at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+   at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+   at CallSite.Target(Closure, CallSite, Object, Object, Object[])

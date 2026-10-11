@@ -1,0 +1,12 @@
+  Memoline.Core -> D:\Memo_Line\Memo_Line\Memoline_demo_csponly\.stage\history-checks-build\Release\net10.0\Memoline.Core.dll
+  MemolineDemo -> D:\Memo_Line\Memo_Line\Memoline_demo_csponly\.stage\history-checks-build\Release\net10.0-windows\MemolineDemo.dll
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ActualProjectEditingChecks.cs(145,58): warning CS9113: 参数“index”未读。 [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+  MemolineDemo.Checks -> D:\Memo_Line\Memo_Line\Memoline_demo_csponly\.stage\history-checks-build\Release\net10.0-windows\MemolineDemo.Checks.dll
+
+已成功生成。
+
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\ActualProjectEditingChecks.cs(145,58): warning CS9113: 参数“index”未读。 [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\MemolineDemo.Checks.csproj]
+    1 个警告
+    0 个错误
+
+已用时间 00:00:03.10

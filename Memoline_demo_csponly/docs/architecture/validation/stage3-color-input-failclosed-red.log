@@ -1,0 +1,37 @@
+test_decorative_role_text_and_border_are_not_proof_of_the_active_color_slot (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_decorative_role_text_and_border_are_not_proof_of_the_active_color_slot) ... FAIL
+test_malformed_value_region_is_unknown_instead_of_crashing_publication (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_malformed_value_region_is_unknown_instead_of_crashing_publication) ... ERROR
+
+======================================================================
+ERROR: test_malformed_value_region_is_unknown_instead_of_crashing_publication (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_malformed_value_region_is_unknown_instead_of_crashing_publication)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 214, in test_malformed_value_region_is_unknown_instead_of_crashing_publication
+    update = StateTimeline(lambda _:None,lambda _:None).observe('colorInputState',raw,evidence)
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\state_timeline.py", line 10, in call
+    return method(self,*args,**kwargs)
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\state_timeline.py", line 114, in observe
+    update = self._update(module,result,evidence,error,False)
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\state_timeline.py", line 121, in _update
+    if module == 'colorInputState' and state is not None and not color_input_evidence_valid(state,evidence):
+                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\state_timeline.py", line 156, in color_input_evidence_valid
+    if not isinstance(regions,list) or len(regions) != 3 or {r.get('channel') for r in regions} != {'r','g','b'}:
+                                                             ^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+======================================================================
+FAIL: test_decorative_role_text_and_border_are_not_proof_of_the_active_color_slot (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_decorative_role_text_and_border_are_not_proof_of_the_active_color_slot)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 70, in test_decorative_role_text_and_border_are_not_proof_of_the_active_color_slot
+    self.assertEqual(result['activeColorSlot'], 'unknown')
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'main' != 'unknown'
+- main
++ unknown
+
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.022s
+
+FAILED (failures=1, errors=1)

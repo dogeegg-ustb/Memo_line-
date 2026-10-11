@@ -1,0 +1,4 @@
+System.Exception: A reference-control readback callback actually executes before replay.
+   at PacketChecks.Check(Boolean ok, String message) in D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\PacketChecks.cs:line 14
+   at PacketChecks.EventReplayAsync() in D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\EventReplayChecks.cs:line 41
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\Program.cs:line 13

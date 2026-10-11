@@ -1,0 +1,56 @@
+test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard) ... 
+  test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard) (contract='wheelGuard') ... FAIL
+  test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard) (contract='ticks') ... FAIL
+  test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard) (contract='captureEndTicks') ... FAIL
+  test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard) (contract='captureLatencyMs') ... FAIL
+  test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard) (contract='captureDurationMs') ... FAIL
+
+======================================================================
+FAIL: test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard) (contract='wheelGuard')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 245, in test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard
+    self.assertIn(COLOR_INPUT,jobs[COLOR]['crops'])
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'ɫ�ʻ���' not found in {'ɫ��': {'screenshotId': 'b888220834884fb79f2c617e46f598ee', 'path': 'D:\\Memo_Line\\Memo_Line\\recognizer\\recorder_integration\\tests\\.color-input-7dh5wid4\\b888220834884fb79f2c617e46f598ee.png', 'roi': [-200, 300, 320, 220], 'panel': 'ɫ��', 'capturedTicks': 110, 'captureEndTicks': 120}}
+
+======================================================================
+FAIL: test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard) (contract='ticks')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 249, in test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard
+    self.assertEqual(jobs[COLOR_INPUT][key],expected)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 900 != 110
+
+======================================================================
+FAIL: test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard) (contract='captureEndTicks')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 249, in test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard
+    self.assertEqual(jobs[COLOR_INPUT][key],expected)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 900 != 120
+
+======================================================================
+FAIL: test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard) (contract='captureLatencyMs')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 249, in test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard
+    self.assertEqual(jobs[COLOR_INPUT][key],expected)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 800.0 != 20
+
+======================================================================
+FAIL: test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard (recorder_integration.tests.test_color_input_state.ColorInputStateTests.test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard) (contract='captureDurationMs')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Memo_Line\Memo_Line\recognizer\recorder_integration\tests\test_color_input_state.py", line 249, in test_persisted_jobs_keep_actual_slider_capture_span_and_color_wheel_guard
+    self.assertEqual(jobs[COLOR_INPUT][key],expected)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 790.0 != 10
+
+----------------------------------------------------------------------
+Ran 1 test in 0.038s
+
+FAILED (failures=5)

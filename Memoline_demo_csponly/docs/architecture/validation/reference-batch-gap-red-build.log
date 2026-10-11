@@ -1,0 +1,13 @@
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+  PacketReplay -> D:\Memo_Line\Memo_Line\replayer\packetreplayer\source\bin\Release\net10.0-windows\PacketReplay.dll
+D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\EventReplayChecks.cs(36,77): error CS0117: “EventReplaySchedule”未包含“FollowingStrokeStartTicks”的定义 [D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\PacketReplayChecks.csproj]
+D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\EventReplayChecks.cs(41,77): error CS0117: “EventReplaySchedule”未包含“FollowingStrokeStartTicks”的定义 [D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\PacketReplayChecks.csproj]
+
+生成失败。
+
+D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\EventReplayChecks.cs(36,77): error CS0117: “EventReplaySchedule”未包含“FollowingStrokeStartTicks”的定义 [D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\PacketReplayChecks.csproj]
+D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\EventReplayChecks.cs(41,77): error CS0117: “EventReplaySchedule”未包含“FollowingStrokeStartTicks”的定义 [D:\Memo_Line\Memo_Line\replayer\packetreplayer\checks\PacketReplayChecks.csproj]
+    0 个警告
+    2 个错误
+
+已用时间 00:00:05.74

@@ -1,0 +1,5 @@
+Unhandled exception. System.InvalidOperationException: A subtool change uses the complete confirmed target snapshot, applies shared numeric overrides and keeps target-only properties.
+   at MemolineDemo.CspEditTransactionChecks.<>c__DisplayClass3_0.<RunAsync>g__Check|0(Boolean ok, String label) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs:line 21
+   at MemolineDemo.CspEditTransactionChecks.RunAsync(String root)
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\csp-transaction-runner\Entry.cs:line 3
+   at Program.<Main>(String[] args)

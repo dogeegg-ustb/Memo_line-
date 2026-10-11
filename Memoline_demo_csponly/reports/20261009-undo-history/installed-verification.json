@@ -1,0 +1,39 @@
+{
+  "verifiedAt": "2026-10-09T22:33:55.9796978+09:00",
+  "host": [
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\Memoline.exe",
+      "sha256": "9320B94579165126EF082B1A81C7900FC412D810B35844D12E7A39461E8EE973"
+    },
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\MemolineDemo.exe",
+      "sha256": "9320B94579165126EF082B1A81C7900FC412D810B35844D12E7A39461E8EE973"
+    }
+  ],
+  "projects": [
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\recordings\\记艺线测试.memoline",
+      "sha256": "83F2D1DFE9B3727CFD7299B66AE83B89F9CFB19858FF47455177EB9D9957A0B7"
+    },
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\recordings\\记艺线测试2.memoline",
+      "sha256": "114E9DC5F5F5E3810F2B2F53AC0E3082644BE746EDF5BEADA8E990229D2F038A"
+    }
+  ],
+  "settings": [
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\demo-settings.json",
+      "sha256": "7CDA680A9D617DBB61886CC06F601E19BE64465FAE776A9AEDDD3A29E2E3823C"
+    },
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\input-settings.json",
+      "sha256": "C88C5129074B4DC3B5D3C06B094741F733E0882705B848425C29ABA41143A0FD"
+    },
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\Recognizer\\integration\\settings.json",
+      "sha256": "DC71C147A4F54B9CB3832C7D46644D036A5712B0F7355EB2B75C8A0ED10C6EA5"
+    }
+  ],
+  "recorderSha256": "8C953C39AD295F5864B7297F68F4D6175C48130667926B44268672C4969FD0E8",
+  "realCspInputsInjected": false
+}

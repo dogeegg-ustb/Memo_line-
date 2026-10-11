@@ -1,0 +1,5 @@
+Unhandled exception. System.Exception: 4961x7016 full-resolution compare completes within the release performance budget
+   at Program.<>c__DisplayClass0_0.<<Main>$>g__Check|0(Boolean condition, String name) in D:\Memo_Line\Memo_Line\Organizer\canvas layer watcher\checks\Program.cs:line 9
+   at DiffChecks.Run(Action`2 check, String artifacts) in D:\Memo_Line\Memo_Line\Organizer\canvas layer watcher\checks\DiffChecks.cs:line 338
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Organizer\canvas layer watcher\checks\Program.cs:line 301
+   at Program.<Main>(String[] args)

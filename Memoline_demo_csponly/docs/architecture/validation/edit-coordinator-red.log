@@ -1,0 +1,5 @@
+Unhandled exception. System.InvalidOperationException: coordinator must abort typed executor failure before dispose
+   at MemolineDemo.EditingCoordinatorChecks.<>c__DisplayClass2_0.<RunAsync>g__Check|0(Boolean ok, String message) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingCoordinatorChecks.cs:line 31
+   at MemolineDemo.EditingCoordinatorChecks.RunAsync() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditingCoordinatorChecks.cs:line 37
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\edit-coordinator\Program.cs:line 1
+   at Program.<Main>(String[] args)

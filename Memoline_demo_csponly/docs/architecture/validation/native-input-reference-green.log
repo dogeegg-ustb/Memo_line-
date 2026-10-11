@@ -1,2 +1,18 @@
+D:\Memo_Line\Memo_Line\recognizer\Recognizer\tests\BehaviorRecognizer.Tests\bin\Release\net10.0\BehaviorRecognizer.Tests.dll (.NETCoreApp,Version=v10.0)的测试运行
+总共 1 个测试文件与指定模式相匹配。
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.12)
+[xUnit.net 00:00:00.06]   Discovering: BehaviorRecognizer.Tests
+[xUnit.net 00:00:00.09]   Discovered:  BehaviorRecognizer.Tests
+[xUnit.net 00:00:00.11]   Starting:    BehaviorRecognizer.Tests
+[���̼���] A ע��=False ͼ�㱣������=False ����Hook��ֹ=False ��Դ���=0x0
+[���̼���] A ע��=False ͼ�㱣������=False ����Hook��ֹ=False ��Դ���=0x0
+[���̼���] B ע��=True ͼ�㱣������=False ����Hook��ֹ=False ��Դ���=0x0
+[xUnit.net 00:00:00.26]   Finished:    BehaviorRecognizer.Tests
+  已通过 BehaviorRecognizer.Tests.InputControlTests.PhysicalAlertForUnrecordedMouseMoveDoesNotReusePreviousInputReference [70 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.PhysicalAlertsReferenceInputRecordsDespiteSynchronousStatePackageAppend [30 ms]
+  已通过 BehaviorRecognizer.Tests.InputControlTests.TransactionReportsPhysicalPenMouseAndKeyboardButNotInjectedOrTaggedInput [19 ms]
 
-已通过! - 失败:     0，通过:   119，已跳过:     0，总计:   119，持续时间: 1 s - BehaviorRecognizer.Tests.dll (net10.0)
+测试运行成功。
+测试总数: 3
+     通过数: 3
+总时间: 0.6247 秒

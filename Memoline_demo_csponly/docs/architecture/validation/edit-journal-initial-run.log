@@ -1,0 +1,7 @@
+Unhandled exception. System.IO.IOException: The process cannot access the file 'D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\edit-journal\2aa9c91166a64320b9384fc489645b06\crash-tail\edit-journal.jsonl' because it is being used by another process.
+   at Microsoft.Win32.SafeHandles.SafeFileHandle.CreateFile(String fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options)
+   at Microsoft.Win32.SafeHandles.SafeFileHandle.Open(String fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options, Int64 preallocationSize, Nullable`1 unixCreateMode)
+   at System.IO.File.OpenHandle(String path, FileMode mode, FileAccess access, FileShare share, FileOptions options, Int64 preallocationSize)
+   at System.IO.File.ReadAllBytes(String path)
+   at MemolineDemo.EditJournalChecks.Run(String root) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\EditJournalChecks.cs:line 100
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\edit-journal-runner\Program.cs:line 3

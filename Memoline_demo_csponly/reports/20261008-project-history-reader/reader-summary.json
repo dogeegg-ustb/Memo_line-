@@ -1,0 +1,153 @@
+{
+  "source": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\recordings\\记艺线测试.memoline",
+  "sourceSha256": "83F2D1DFE9B3727CFD7299B66AE83B89F9CFB19858FF47455177EB9D9957A0B7",
+  "sourceUnchanged": true,
+  "cache": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\reports\\20261008-project-history-reader\\reader-cache-4f2d417c3c6d4720bb3318affb5a914b",
+  "readSeconds": 17.0341567,
+  "totalSeconds": 73.8890823,
+  "sessions": [
+    {
+      "sessionId": "86218026f357443aa9505328db9d40be",
+      "frequency": 10000000,
+      "boundaryAppendId": 66,
+      "boundaryTicks": 176681578,
+      "rawPenBegin": 0,
+      "indexedStrokes": 0,
+      "indexedImages": 0,
+      "layers": [],
+      "nativeMechanicalSha256": "6AB524C8DDD808211DDDF03CE9D8452DD07B4231018E71FFFF7EBA79AABAE2D0",
+      "issues": []
+    },
+    {
+      "sessionId": "4cd6b862a09449beaac155f15c3b308d",
+      "frequency": 10000000,
+      "boundaryAppendId": 60587,
+      "boundaryTicks": 5803532929,
+      "rawPenBegin": 590,
+      "indexedStrokes": 13,
+      "indexedImages": 19,
+      "layers": [
+        {
+          "sourceLayer": "4cd6b862a09449beaac155f15c3b308d/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b",
+          "packetCount": 9,
+          "sourceStrokeCount": 13,
+          "chainValidWithinSession": false,
+          "baselinePresent": true,
+          "finalPresent": true,
+          "firstCaptureTicks": 1341317073,
+          "finalCaptureTicks": 4860471025,
+          "finalIsBoundary": false,
+          "baselineRgbaSha256": "C878F73F47154AC1DA5940B87240708B6E782E11BE38F4493610A6D6C41FD000",
+          "finalRgbaSha256": "43257D7D94C179C3275239EA31F102AF10C3C0B976C9C9A0C648DEF353BCC8C1",
+          "differencePixelsFromPreviousFinalToThisBaseline": null,
+          "issues": [
+            {
+              "code": "CaptureMismatch",
+              "message": "编辑边界缺少最后一组的整层捕获。"
+            }
+          ]
+        }
+      ],
+      "nativeMechanicalSha256": "08C260D33C4871D7257C9570540718CDD2443632C079F8E85F99C66790ABD292",
+      "issues": [
+        {
+          "code": "CaptureMismatch",
+          "message": "编辑边界缺少最后一组的整层捕获。"
+        }
+      ]
+    },
+    {
+      "sessionId": "edb612a65c4c4462b80079f12448a4aa",
+      "frequency": 10000000,
+      "boundaryAppendId": 801,
+      "boundaryTicks": 20777065780,
+      "rawPenBegin": 0,
+      "indexedStrokes": 0,
+      "indexedImages": 0,
+      "layers": [],
+      "nativeMechanicalSha256": "647FB97CD19E2AB9FB21C2799A9BA90954E8CD907A6B52FB95C82E40D777411B",
+      "issues": []
+    },
+    {
+      "sessionId": "c9d0dcb8522d4372b3ec44891988c9ef",
+      "frequency": 10000000,
+      "boundaryAppendId": 533,
+      "boundaryTicks": 987577014,
+      "rawPenBegin": 0,
+      "indexedStrokes": 0,
+      "indexedImages": 0,
+      "layers": [],
+      "nativeMechanicalSha256": "98052AD4A9CC20A9647FEFDFAA683ADB44100476BFC10EDF2C2B4679C632D41A",
+      "issues": []
+    },
+    {
+      "sessionId": "a0534a60dbd04b09b5c1673ba0224347",
+      "frequency": 10000000,
+      "boundaryAppendId": 167,
+      "boundaryTicks": 328406511,
+      "rawPenBegin": 0,
+      "indexedStrokes": 0,
+      "indexedImages": 0,
+      "layers": [],
+      "nativeMechanicalSha256": "6813BF3126FD6823163D7E4E571067F8ABCA0B0847897E09FEDD1EEE12A901AD",
+      "issues": []
+    },
+    {
+      "sessionId": "b1d2cf2b8cbe4077bbe0b5e6b9bce726",
+      "frequency": 10000000,
+      "boundaryAppendId": 627,
+      "boundaryTicks": 978393158,
+      "rawPenBegin": 0,
+      "indexedStrokes": 0,
+      "indexedImages": 0,
+      "layers": [
+        {
+          "sourceLayer": "b1d2cf2b8cbe4077bbe0b5e6b9bce726/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b",
+          "packetCount": 3,
+          "sourceStrokeCount": 0,
+          "chainValidWithinSession": true,
+          "baselinePresent": true,
+          "finalPresent": true,
+          "firstCaptureTicks": 205943140,
+          "finalCaptureTicks": 792529233,
+          "finalIsBoundary": true,
+          "baselineRgbaSha256": "EE3E0D4F72842DE12DD003D10648D66BFC3860FBE80E8E184980BA48C750DD50",
+          "finalRgbaSha256": "EE3E0D4F72842DE12DD003D10648D66BFC3860FBE80E8E184980BA48C750DD50",
+          "differencePixelsFromPreviousFinalToThisBaseline": 105396,
+          "issues": []
+        }
+      ],
+      "nativeMechanicalSha256": "744407E5DF7611F91A6DF95105EBF6B66EF78E4CABA3A0EC4F1F4CD906831929",
+      "issues": []
+    },
+    {
+      "sessionId": "6bbb0fe0e7a6481eb697d5ed0e0b6623",
+      "frequency": 10000000,
+      "boundaryAppendId": 190,
+      "boundaryTicks": 607034403,
+      "rawPenBegin": 0,
+      "indexedStrokes": 0,
+      "indexedImages": 0,
+      "layers": [
+        {
+          "sourceLayer": "6bbb0fe0e7a6481eb697d5ed0e0b6623/1/a6afd90e4a-7b45-c1aa-1b1e-835423813b",
+          "packetCount": 1,
+          "sourceStrokeCount": 0,
+          "chainValidWithinSession": true,
+          "baselinePresent": true,
+          "finalPresent": true,
+          "firstCaptureTicks": 145270661,
+          "finalCaptureTicks": 145270661,
+          "finalIsBoundary": true,
+          "baselineRgbaSha256": "EE3E0D4F72842DE12DD003D10648D66BFC3860FBE80E8E184980BA48C750DD50",
+          "finalRgbaSha256": "EE3E0D4F72842DE12DD003D10648D66BFC3860FBE80E8E184980BA48C750DD50",
+          "differencePixelsFromPreviousFinalToThisBaseline": 0,
+          "issues": []
+        }
+      ],
+      "nativeMechanicalSha256": "40487B31968D041382616E917C359C9D5CA964862FEC4F19466B7D8110CC6BF0",
+      "issues": []
+    }
+  ],
+  "note": "A historical Before reconstructed by reversing complete difference patches is derived evidence; it is not an independent recording-start full snapshot. Cross-session equality compares that baseline with the preceding captured full layer."
+}

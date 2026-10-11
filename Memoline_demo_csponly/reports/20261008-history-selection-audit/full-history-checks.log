@@ -1,0 +1,44 @@
+Project session reader checks passed: 17.
+Project session reader checks: 17.
+Project edit index checks passed: 29.
+Project edit index checks: 29.
+Cross session replay checks: 20.
+Cross session journal checks: 21.
+Project continuation checks: 13.
+Replay persistence checks: 5.
+Editing coordinator checks: 7.
+Editing boundary checks: 9.
+CSP edit transaction checks passed: 91.
+CSP transaction checks: 91.
+End packet checks: 46.
+Passed 15 lifecycle checks; no Recognizer or CSP input was started.
+Input selection checks: 6.
+Layer and pen region checks: 21.
+Public interface checks: 37.
+Live session reader checks passed: 21.
+Editing core checks passed: 42.
+Editing core checks: 42.
+Editing selection checks: 41.
+Undo capacity checks: 7.
+Editing host contract checks: 6.
+Canvas interaction checks: 25.
+Recorded canvas view checks: 16.
+Brush parameter contract checks: 16.
+C#/Node production compositor parity passed: 54 assertions across 7 scenarios. No CSP or clipboard input.
+Compositor parity checks: 54.
+Reconstruction request contract checks passed: 21.
+Reconstruction checks: 96.
+Precise undo checks passed: 30.
+Precise undo checks: 30.
+Cross-layer reconstruction checks passed: 23.
+Cross-layer reconstruction checks: 23.
+Edit index hardening checks passed: 49.
+Edit index hardening checks: 49.
+Footprint contract checks passed: 19.
+Footprint contract checks: 19.
+PASS 57 edit-journal checks (D:\Memo_Line\Memo_Line\Memoline_demo_csponly\.stage\foreground-checks-temp\memoline-demo-checks-3a9e93b7cf4842c1a3ec6446a4f81cd7\checks\artifacts\edit-journal\343a0bbb04734e94b3ddfd8b50c49ae6)
+Edit journal checks: 57.
+PASS 38 bundle edit checks (D:\Memo_Line\Memo_Line\Memoline_demo_csponly\.stage\foreground-checks-temp\memoline-demo-checks-3a9e93b7cf4842c1a3ec6446a4f81cd7\bundle-edits-e14e3ef8765e42e3b77226f00e8a3433)
+Bundle edit checks: 38.
+Bundle checks: 65; aggregate checks: 47; lifecycle checks: 15.
+Memoline integration checks passed.

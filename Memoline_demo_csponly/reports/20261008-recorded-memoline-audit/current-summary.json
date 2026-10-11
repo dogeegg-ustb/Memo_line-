@@ -1,0 +1,797 @@
+{
+  "source": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\recordings\\记艺线测试.memoline",
+  "sessionId": "c9d0dcb8522d4372b3ec44891988c9ef",
+  "historicalSessions": 3,
+  "mechanicalSha256": "98052ad4a9cc20a9647fefdfaa683adb44100476bfc10edf2c2b4679c632d41a",
+  "aggregationSha256": "6065947e8709ae9a5ce53f10fb14ff591ebba22171434de735b19e091c2f7169",
+  "indexHashesMatch": true,
+  "nativeFramesCrcValidated": true,
+  "header": {
+    "kind": "header",
+    "version": 2,
+    "sessionId": "c9d0dcb8522d4372b3ec44891988c9ef",
+    "createdAt": "2026-10-08T20:22:35.843122+08:00",
+    "clock": "Stopwatch",
+    "frequency": 10000000,
+    "originTicks": 3040005842,
+    "timelineModel": "causalPackagesV1",
+    "statePersistence": "successfulOnly",
+    "compression": "brotliPerFrame",
+    "durableFlushIntervalMs": 100,
+    "metadata": {
+      "deviceName": "Gaomon M6",
+      "deviceId": "256C:0064:Gaomon_M6",
+      "profileId": "builtin-default"
+    }
+  },
+  "footer": {
+    "kind": "footer",
+    "hardwareEvents": 160,
+    "appendedRecords": 533,
+    "ticks": 987577014
+  },
+  "kindCounts": {
+    "header": 1,
+    "shortcutResolved": 3,
+    "statePackageReserved": 1,
+    "clipSaveRequest": 1,
+    "mouseUp": 2,
+    "driverConfiguration": 1,
+    "shortcutConfiguration": 3,
+    "tabletDeviceChanged": 1,
+    "recordingEndRequested": 1,
+    "mouseCursorChanged": 318,
+    "panelActivationEnded": 2,
+    "clipParseResult": 1,
+    "mouseDown": 2,
+    "footer": 1,
+    "coreStateUpdated": 5,
+    "saveGuardResult": 1,
+    "statePackageResult": 1,
+    "keyboardStateChanged": 15,
+    "editBoundaryRequested": 3,
+    "saveGuardUnavailable": 1,
+    "workspaceStatus": 2,
+    "screenshotBlob": 10,
+    "keyInput": 3,
+    "mouseDrag": 153,
+    "panelUpdateRequested": 2,
+    "initializationConfiguration": 1
+  },
+  "coreCounts": {
+    "clipState/changed": 1,
+    "colorState/changed": 1,
+    "subtoolState/changed": 1,
+    "currentLayerState/changed": 1,
+    "brushState/changed": 1
+  },
+  "coreUpdates": [
+    {
+      "appendId": 93,
+      "ticks": 207149707,
+      "module": "clipState",
+      "status": "changed",
+      "state": {
+        "canvas": {
+          "width_raw": 4961.0,
+          "height_raw": 7016.0,
+          "unit_raw": 0,
+          "resolution": 300.0,
+          "current_layer_id": 3
+        },
+        "layer_count": 2,
+        "unlinked_layer_count": 0,
+        "layers": [
+          {
+            "id": 4,
+            "parent_id": null,
+            "depth": 0,
+            "name": "纸张",
+            "opacity_raw": 256,
+            "opacity_percent": 100.0,
+            "visible": true,
+            "effective_visible": true,
+            "blend_mode_id": 0,
+            "blend_mode": "正常",
+            "clipped": false,
+            "locked": false,
+            "is_folder": false,
+            "folder_collapsed": false,
+            "is_adjustment": false,
+            "is_paper": true,
+            "has_mask": false,
+            "masking_raw": 0,
+            "type_raw": 1584,
+            "folder_raw": 0,
+            "offset_x": 0,
+            "offset_y": 0,
+            "selected": false,
+            "draft": false,
+            "uuid": "2122296a56-0a4a-efa0-8913-c6ae8d2abb"
+          },
+          {
+            "id": 3,
+            "parent_id": null,
+            "depth": 0,
+            "name": "图层 1",
+            "opacity_raw": 256,
+            "opacity_percent": 100.0,
+            "visible": true,
+            "effective_visible": true,
+            "blend_mode_id": 0,
+            "blend_mode": "正常",
+            "clipped": false,
+            "locked": false,
+            "is_folder": false,
+            "folder_collapsed": false,
+            "is_adjustment": false,
+            "is_paper": false,
+            "has_mask": false,
+            "masking_raw": 0,
+            "type_raw": 1,
+            "folder_raw": 0,
+            "offset_x": 0,
+            "offset_y": 0,
+            "selected": true,
+            "draft": false,
+            "uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+          }
+        ]
+      },
+      "error": null,
+      "evidence": {
+        "saveId": "8b6149eee5184c5282e34aa34b1af36b",
+        "observedTicks": 207149707,
+        "completedTicks": 207150150
+      }
+    },
+    {
+      "appendId": 104,
+      "ticks": 201235940,
+      "module": "subtoolState",
+      "status": "changed",
+      "state": {
+        "entries": [
+          {
+            "name": "G筆",
+            "nodeIds": [
+              "tool_24"
+            ],
+            "selectionState": "selected"
+          },
+          {
+            "name": "擬真G筆",
+            "nodeIds": [
+              "tool_301"
+            ],
+            "selectionState": "unknown"
+          },
+          {
+            "name": "圓筆",
+            "nodeIds": [
+              "tool_25"
+            ],
+            "selectionState": "unknown"
+          },
+          {
+            "name": "粗線沾水筆",
+            "nodeIds": [
+              "tool_26"
+            ],
+            "selectionState": "unknown"
+          },
+          {
+            "name": "美術字",
+            "nodeIds": [
+              "tool_27"
+            ],
+            "selectionState": "unknown"
+          },
+          {
+            "name": "粗澀筆",
+            "nodeIds": [
+              "tool_322"
+            ],
+            "selectionState": "unknown"
+          },
+          {
+            "name": "粗糙沾水笔",
+            "nodeIds": [
+              "tool_409"
+            ],
+            "selectionState": "unknown"
+          }
+        ],
+        "groups": [
+          {
+            "name": "沾水筆",
+            "nodeIds": [
+              "tool_23"
+            ],
+            "selectionState": "selected"
+          },
+          {
+            "name": "麥克筆",
+            "nodeIds": [
+              "tool_30"
+            ],
+            "selectionState": "unknown"
+          }
+        ]
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "ec2453537142445e86f92456e78a7d2d"
+        ],
+        "capturedTicks": 201235940,
+        "captureId": "8051257196be456e91d9d8f76d4d2e46",
+        "captureEndTicks": 201632618,
+        "panelRoi": [
+          65,
+          102,
+          345,
+          422
+        ],
+        "triggerTicks": 201055037,
+        "causalAmbiguous": false,
+        "relatedEventIds": [],
+        "completedTicks": 234516540,
+        "analysisStartedTicks": 203965100,
+        "analysisQuietMs": 150.0,
+        "analysisToken": null,
+        "finalEvidence": true,
+        "observedAfterEventId": 0
+      }
+    },
+    {
+      "appendId": 105,
+      "ticks": 201632618,
+      "module": "brushState",
+      "status": "changed",
+      "state": {
+        "name": "G筆",
+        "properties": [
+          {
+            "key": "correction.vector_magnet",
+            "value": "unknown",
+            "type": "compound",
+            "unit": null,
+            "enabled": "disabled",
+            "status": "disabled"
+          },
+          {
+            "key": "antialiasing",
+            "value": 2,
+            "type": "highlight_index",
+            "unit": null,
+            "enabled": "unknown",
+            "status": "ok"
+          },
+          {
+            "key": "brush_size",
+            "value": 20,
+            "type": "number",
+            "unit": null,
+            "enabled": "unknown",
+            "status": "ok"
+          },
+          {
+            "key": "opacity",
+            "value": 100,
+            "type": "number",
+            "unit": null,
+            "enabled": "unknown",
+            "status": "ok"
+          },
+          {
+            "key": "stabilization",
+            "value": 6,
+            "type": "number",
+            "unit": null,
+            "enabled": "unknown",
+            "status": "ok"
+          }
+        ]
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "64458d9ae2ee4bc884f8ac9681b10946",
+          "ec2453537142445e86f92456e78a7d2d"
+        ],
+        "capturedTicks": 201632618,
+        "captureId": "8051257196be456e91d9d8f76d4d2e46",
+        "panelRoi": [
+          65,
+          524,
+          345,
+          520
+        ],
+        "triggerTicks": 201055037,
+        "causalAmbiguous": false,
+        "relatedEventIds": [],
+        "completedTicks": 236490383,
+        "analysisStartedTicks": 204026091,
+        "analysisQuietMs": 150.0,
+        "analysisToken": null,
+        "finalEvidence": true,
+        "observedAfterEventId": 0
+      }
+    },
+    {
+      "appendId": 106,
+      "ticks": 201632618,
+      "module": "colorState",
+      "status": "changed",
+      "state": {
+        "kind": "color",
+        "rgb": [
+          0,
+          2,
+          2
+        ],
+        "hex": "#000202"
+      },
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "8c983599e3b341a293f5d35464eb40e4",
+          "625d2ed0255b4dd3a267fdf15b5bd8a2"
+        ],
+        "capturedTicks": 201632618,
+        "captureId": "8051257196be456e91d9d8f76d4d2e46",
+        "triggerTicks": 201055037,
+        "causalAmbiguous": false,
+        "relatedEventIds": [],
+        "completedTicks": 240135434,
+        "analysisStartedTicks": 234939627,
+        "analysisQuietMs": 150.0,
+        "analysisToken": null,
+        "finalEvidence": true,
+        "observedAfterEventId": 0
+      }
+    },
+    {
+      "appendId": 107,
+      "ticks": 201632618,
+      "module": "currentLayerState",
+      "status": "changed",
+      "state": "图层1",
+      "error": null,
+      "evidence": {
+        "screenshotIds": [
+          "c21e987076b14e11a711bd53b2de751d"
+        ],
+        "capturedTicks": 201632618,
+        "captureId": "8051257196be456e91d9d8f76d4d2e46",
+        "captureEndTicks": 201632618,
+        "panelRoi": [
+          2278,
+          819,
+          282,
+          708
+        ],
+        "triggerTicks": 201055037,
+        "causalAmbiguous": false,
+        "relatedEventIds": [],
+        "completedTicks": 257080911,
+        "analysisStartedTicks": 236882311,
+        "analysisQuietMs": 150.0,
+        "analysisToken": null,
+        "finalEvidence": true,
+        "observedAfterEventId": 0
+      }
+    }
+  ],
+  "packageResults": [
+    {
+      "appendId": 121,
+      "ticks": 0,
+      "data": {
+        "packageId": "1de3a677b434401d844bf38a1324cade",
+        "afterEventId": 0,
+        "occurredTicks": 0,
+        "result": {
+          "status": "changed",
+          "initial": true,
+          "updates": [
+            {
+              "module": "brushState",
+              "status": "changed",
+              "state": {
+                "name": "G筆",
+                "properties": [
+                  {
+                    "key": "correction.vector_magnet",
+                    "value": "unknown",
+                    "type": "compound",
+                    "unit": null,
+                    "enabled": "disabled",
+                    "status": "disabled"
+                  },
+                  {
+                    "key": "antialiasing",
+                    "value": 2,
+                    "type": "highlight_index",
+                    "unit": null,
+                    "enabled": "unknown",
+                    "status": "ok"
+                  },
+                  {
+                    "key": "brush_size",
+                    "value": 20,
+                    "type": "number",
+                    "unit": null,
+                    "enabled": "unknown",
+                    "status": "ok"
+                  },
+                  {
+                    "key": "opacity",
+                    "value": 100,
+                    "type": "number",
+                    "unit": null,
+                    "enabled": "unknown",
+                    "status": "ok"
+                  },
+                  {
+                    "key": "stabilization",
+                    "value": 6,
+                    "type": "number",
+                    "unit": null,
+                    "enabled": "unknown",
+                    "status": "ok"
+                  }
+                ]
+              },
+              "error": null,
+              "evidence": {
+                "screenshotIds": [
+                  "64458d9ae2ee4bc884f8ac9681b10946",
+                  "ec2453537142445e86f92456e78a7d2d"
+                ],
+                "capturedTicks": 201632618,
+                "captureId": "8051257196be456e91d9d8f76d4d2e46",
+                "panelRoi": [
+                  65,
+                  524,
+                  345,
+                  520
+                ],
+                "triggerTicks": 201055037,
+                "causalAmbiguous": false,
+                "relatedEventIds": [],
+                "completedTicks": 236490383,
+                "analysisStartedTicks": 204026091,
+                "analysisQuietMs": 150.0,
+                "analysisToken": null,
+                "finalEvidence": true,
+                "observedAfterEventId": 0
+              }
+            },
+            {
+              "module": "clipState",
+              "status": "changed",
+              "state": {
+                "canvas": {
+                  "width_raw": 4961.0,
+                  "height_raw": 7016.0,
+                  "unit_raw": 0,
+                  "resolution": 300.0,
+                  "current_layer_id": 3
+                },
+                "layer_count": 2,
+                "unlinked_layer_count": 0,
+                "layers": [
+                  {
+                    "id": 4,
+                    "parent_id": null,
+                    "depth": 0,
+                    "name": "纸张",
+                    "opacity_raw": 256,
+                    "opacity_percent": 100.0,
+                    "visible": true,
+                    "effective_visible": true,
+                    "blend_mode_id": 0,
+                    "blend_mode": "正常",
+                    "clipped": false,
+                    "locked": false,
+                    "is_folder": false,
+                    "folder_collapsed": false,
+                    "is_adjustment": false,
+                    "is_paper": true,
+                    "has_mask": false,
+                    "masking_raw": 0,
+                    "type_raw": 1584,
+                    "folder_raw": 0,
+                    "offset_x": 0,
+                    "offset_y": 0,
+                    "selected": false,
+                    "draft": false,
+                    "uuid": "2122296a56-0a4a-efa0-8913-c6ae8d2abb"
+                  },
+                  {
+                    "id": 3,
+                    "parent_id": null,
+                    "depth": 0,
+                    "name": "图层 1",
+                    "opacity_raw": 256,
+                    "opacity_percent": 100.0,
+                    "visible": true,
+                    "effective_visible": true,
+                    "blend_mode_id": 0,
+                    "blend_mode": "正常",
+                    "clipped": false,
+                    "locked": false,
+                    "is_folder": false,
+                    "folder_collapsed": false,
+                    "is_adjustment": false,
+                    "is_paper": false,
+                    "has_mask": false,
+                    "masking_raw": 0,
+                    "type_raw": 1,
+                    "folder_raw": 0,
+                    "offset_x": 0,
+                    "offset_y": 0,
+                    "selected": true,
+                    "draft": false,
+                    "uuid": "a6afd90e4a-7b45-c1aa-1b1e-835423813b"
+                  }
+                ]
+              },
+              "error": null,
+              "evidence": {
+                "saveId": "8b6149eee5184c5282e34aa34b1af36b",
+                "observedTicks": 207149707
+              }
+            },
+            {
+              "module": "colorState",
+              "status": "changed",
+              "state": {
+                "kind": "color",
+                "rgb": [
+                  0,
+                  2,
+                  2
+                ],
+                "hex": "#000202"
+              },
+              "error": null,
+              "evidence": {
+                "screenshotIds": [
+                  "8c983599e3b341a293f5d35464eb40e4",
+                  "625d2ed0255b4dd3a267fdf15b5bd8a2"
+                ],
+                "capturedTicks": 201632618,
+                "captureId": "8051257196be456e91d9d8f76d4d2e46",
+                "triggerTicks": 201055037,
+                "causalAmbiguous": false,
+                "relatedEventIds": [],
+                "completedTicks": 240135434,
+                "analysisStartedTicks": 234939627,
+                "analysisQuietMs": 150.0,
+                "analysisToken": null,
+                "finalEvidence": true,
+                "observedAfterEventId": 0
+              }
+            },
+            {
+              "module": "currentLayerState",
+              "status": "changed",
+              "state": "图层1",
+              "error": null,
+              "evidence": {
+                "screenshotIds": [
+                  "c21e987076b14e11a711bd53b2de751d"
+                ],
+                "capturedTicks": 201632618,
+                "captureId": "8051257196be456e91d9d8f76d4d2e46",
+                "captureEndTicks": 201632618,
+                "panelRoi": [
+                  2278,
+                  819,
+                  282,
+                  708
+                ],
+                "triggerTicks": 201055037,
+                "causalAmbiguous": false,
+                "relatedEventIds": [],
+                "completedTicks": 257080911,
+                "analysisStartedTicks": 236882311,
+                "analysisQuietMs": 150.0,
+                "analysisToken": null,
+                "finalEvidence": true,
+                "observedAfterEventId": 0
+              }
+            },
+            {
+              "module": "subtoolState",
+              "status": "changed",
+              "state": {
+                "entries": [
+                  {
+                    "name": "G筆",
+                    "nodeIds": [
+                      "tool_24"
+                    ],
+                    "selectionState": "selected"
+                  },
+                  {
+                    "name": "擬真G筆",
+                    "nodeIds": [
+                      "tool_301"
+                    ],
+                    "selectionState": "unknown"
+                  },
+                  {
+                    "name": "圓筆",
+                    "nodeIds": [
+                      "tool_25"
+                    ],
+                    "selectionState": "unknown"
+                  },
+                  {
+                    "name": "粗線沾水筆",
+                    "nodeIds": [
+                      "tool_26"
+                    ],
+                    "selectionState": "unknown"
+                  },
+                  {
+                    "name": "美術字",
+                    "nodeIds": [
+                      "tool_27"
+                    ],
+                    "selectionState": "unknown"
+                  },
+                  {
+                    "name": "粗澀筆",
+                    "nodeIds": [
+                      "tool_322"
+                    ],
+                    "selectionState": "unknown"
+                  },
+                  {
+                    "name": "粗糙沾水笔",
+                    "nodeIds": [
+                      "tool_409"
+                    ],
+                    "selectionState": "unknown"
+                  }
+                ],
+                "groups": [
+                  {
+                    "name": "沾水筆",
+                    "nodeIds": [
+                      "tool_23"
+                    ],
+                    "selectionState": "selected"
+                  },
+                  {
+                    "name": "麥克筆",
+                    "nodeIds": [
+                      "tool_30"
+                    ],
+                    "selectionState": "unknown"
+                  }
+                ]
+              },
+              "error": null,
+              "evidence": {
+                "screenshotIds": [
+                  "ec2453537142445e86f92456e78a7d2d"
+                ],
+                "capturedTicks": 201235940,
+                "captureId": "8051257196be456e91d9d8f76d4d2e46",
+                "captureEndTicks": 201632618,
+                "panelRoi": [
+                  65,
+                  102,
+                  345,
+                  422
+                ],
+                "triggerTicks": 201055037,
+                "causalAmbiguous": false,
+                "relatedEventIds": [],
+                "completedTicks": 234516540,
+                "analysisStartedTicks": 203965100,
+                "analysisQuietMs": 150.0,
+                "analysisToken": null,
+                "finalEvidence": true,
+                "observedAfterEventId": 0
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "boundaries": [
+    {
+      "appendId": 123,
+      "path": "immediate",
+      "kind": "editBoundaryRequested",
+      "eventId": 0,
+      "ticks": 269156064,
+      "appendedTicks": 269156070,
+      "operationId": null,
+      "relatedEventIds": [],
+      "deviceSource": null,
+      "data": {
+        "requestId": "baseline-before-8b6c18016105487c982d0ff9a5f1c142"
+      }
+    },
+    {
+      "appendId": 130,
+      "path": "immediate",
+      "kind": "editBoundaryRequested",
+      "eventId": 0,
+      "ticks": 287060659,
+      "appendedTicks": 287060664,
+      "operationId": null,
+      "relatedEventIds": [],
+      "deviceSource": null,
+      "data": {
+        "requestId": "baseline-after-a60d168a718e40e7b8be47d0c5bfcdd0"
+      }
+    },
+    {
+      "appendId": 166,
+      "path": "immediate",
+      "kind": "editBoundaryRequested",
+      "eventId": 0,
+      "ticks": 354735016,
+      "appendedTicks": 354735022,
+      "operationId": null,
+      "relatedEventIds": [],
+      "deviceSource": null,
+      "data": {
+        "requestId": "edit-0aabf94417494414afc28ac893fd3c3f"
+      }
+    },
+    {
+      "appendId": 533,
+      "path": "immediate",
+      "kind": "recordingEndRequested",
+      "eventId": 0,
+      "ticks": 984634344,
+      "appendedTicks": 984634359,
+      "operationId": null,
+      "relatedEventIds": [],
+      "deviceSource": null,
+      "data": {
+        "reason": "externalControl",
+        "boundaryKind": "recordingEnd"
+      }
+    }
+  ],
+  "aggregationKinds": [
+    {
+      "kind": "footer",
+      "count": 1
+    },
+    {
+      "kind": "header",
+      "count": 1
+    },
+    {
+      "kind": "packet",
+      "count": 1
+    }
+  ],
+  "packets": [
+    {
+      "packetId": null,
+      "boundaryKind": "recordingEnd",
+      "fromTicks": 0,
+      "toTicks": 987577014,
+      "observationAppendId": 533,
+      "status": "empty",
+      "reason": "recordingEndLayerOrCanvasUnconfirmed",
+      "eventPointerCount": 160,
+      "dirtyMatrixCount": 0,
+      "manifest": null
+    }
+  ]
+}

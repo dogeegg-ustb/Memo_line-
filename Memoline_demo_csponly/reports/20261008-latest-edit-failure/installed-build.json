@@ -1,0 +1,19 @@
+{
+  "installedAt": "2026-10-08T21:08:35.0007245+08:00",
+  "build": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\.stage\\live-canvas-fix-publish\\MemolineDemo.exe",
+  "sha256": "BAFBC294F3F93ED9F94A5C8A72670F8ABB3B78935231D6DB10D0608207F4A4C1",
+  "files": [
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\Memoline.exe",
+      "beforeSha256": "375ACB0A702252F24426F50344B7E95EEE43E7A3D74FC937048E242D3594472F",
+      "sha256": "BAFBC294F3F93ED9F94A5C8A72670F8ABB3B78935231D6DB10D0608207F4A4C1",
+      "backup": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\.stage\\live-canvas-fix-backup-7b45a5eeb3fe4d579980ad3821c0ce79\\before-Memoline.exe"
+    },
+    {
+      "path": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\publish\\win-x64\\MemolineDemo.exe",
+      "beforeSha256": "375ACB0A702252F24426F50344B7E95EEE43E7A3D74FC937048E242D3594472F",
+      "sha256": "BAFBC294F3F93ED9F94A5C8A72670F8ABB3B78935231D6DB10D0608207F4A4C1",
+      "backup": "D:\\Memo_Line\\Memo_Line\\Memoline_demo_csponly\\.stage\\live-canvas-fix-backup-7b45a5eeb3fe4d579980ad3821c0ce79\\before-MemolineDemo.exe"
+    }
+  ]
+}

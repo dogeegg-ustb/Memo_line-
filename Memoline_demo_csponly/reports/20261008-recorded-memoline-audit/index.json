@@ -1,0 +1,42 @@
+{
+  "schema": "memoline-csponly/v4",
+  "sessionId": "c9d0dcb8522d4372b3ec44891988c9ef",
+  "frequency": 10000000,
+  "originTicks": 3040005842,
+  "mechanical": {
+    "entry": "mechanical/recording.memoline",
+    "sha256": "98052ad4a9cc20a9647fefdfaa683adb44100476bfc10edf2c2b4679c632d41a",
+    "size": 1288321,
+    "codec": "brotli"
+  },
+  "aggregation": {
+    "entry": "aggregation/events.jsonl",
+    "sha256": "6065947e8709ae9a5ce53f10fb14ff591ebba22171434de735b19e091c2f7169",
+    "size": 21525,
+    "codec": "brotli"
+  },
+  "fixedSha256": "3ce17aee38b00ff053c72696f75e73589584606721cca3cac25985f7c5bbc7f8",
+  "activeDimensionsEntry": "aggregation/events.jsonl",
+  "dimensions": [],
+  "projectPath": "D:\\\u611F\u5B98\u89E3\u51BB\u539F\u753B\u53CA\u53C2\u8003\\\u8BB0\u827A\u7EBF\u6D4B\u8BD5.clip",
+  "previousSessions": [
+    {
+      "entry": "sessions/6ab524c8ddd808211dddf03ce9d8452dd07b4231018e71ffff7eba79aabae2d0.memoline",
+      "sha256": "ea95ad1c3d345d1281c000684d2a91b2b31025ea33bf00343aeba4658988d639",
+      "size": 582584,
+      "codec": null
+    },
+    {
+      "entry": "sessions/08c260d33c4871d7257c9570540718cdd2443632c079f8e85f99c66790abd292.memoline",
+      "sha256": "880145c63282328ae8aea0009b2282a77ac958c2db2106b46a4dc008334c82af",
+      "size": 113991268,
+      "codec": null
+    },
+    {
+      "entry": "sessions/647fb97cd19e2ab9fb21c2799a9ba90954e8cd907a6b52fb95c82e40d777411b.memoline",
+      "sha256": "998f4e9c48cc8b563c89031f273a3caafb0f1b0f806f2b1f6614ffe79a241335",
+      "size": 1235484,
+      "codec": null
+    }
+  ]
+}

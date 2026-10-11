@@ -1,0 +1,10 @@
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+CSC : error CS2012: 无法打开“D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\obj\Release\net10.0-windows\MemolineDemo.dll”以进行写入 - The process cannot access the file 'D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\obj\Release\net10.0-windows\MemolineDemo.dll' because it is being used by another process. [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\MemolineDemo.csproj]
+
+生成失败。
+
+CSC : error CS2012: 无法打开“D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\obj\Release\net10.0-windows\MemolineDemo.dll”以进行写入 - The process cannot access the file 'D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\obj\Release\net10.0-windows\MemolineDemo.dll' because it is being used by another process. [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\MemolineDemo.csproj]
+    0 个警告
+    1 个错误
+
+已用时间 00:00:02.89

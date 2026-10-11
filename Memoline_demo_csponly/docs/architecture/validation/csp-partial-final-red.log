@@ -1,0 +1,7 @@
+Unhandled exception. System.InvalidOperationException: Expected transaction failure CaptureMismatch
+   at MemolineDemo.CspEditTransactionChecks.<>c__DisplayClass3_0.<<RunAsync>g__Fails|2>d.MoveNext() in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs:line 35
+--- End of stack trace from previous location ---
+   at MemolineDemo.CspEditTransactionChecks.RunAsync(String root) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs:line 87
+   at MemolineDemo.CspEditTransactionChecks.RunAsync(String root) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\CspEditTransactionChecks.cs:line 88
+   at Program.<Main>$(String[] args) in D:\Memo_Line\Memo_Line\Memoline_demo_csponly\checks\artifacts\csp-transaction\Program.cs:line 1
+   at Program.<Main>(String[] args)

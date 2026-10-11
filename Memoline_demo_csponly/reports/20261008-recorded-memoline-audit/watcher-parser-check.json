@@ -1,0 +1,17 @@
+[
+  {
+    "historicalSession": 0,
+    "actualWatcherParseAccepted": 1,
+    "actualWatcherParseRejected": 0
+  },
+  {
+    "historicalSession": 1,
+    "actualWatcherParseAccepted": 14,
+    "actualWatcherParseRejected": 0
+  },
+  {
+    "historicalSession": 2,
+    "actualWatcherParseAccepted": 1,
+    "actualWatcherParseRejected": 0
+  }
+]

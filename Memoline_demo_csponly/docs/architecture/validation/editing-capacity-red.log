@@ -1,0 +1,10 @@
+  Memoline.Core -> D:\Memo_Line\Memo_Line\recognizer\core\memoline\bin\Release\net10.0\Memoline.Core.dll
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\Editing\EditIndex.cs(195,34): error CS0246: 未能找到类型或命名空间名“UndoRedoEvidence”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\MemolineDemo.csproj]
+
+生成失败。
+
+D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\Editing\EditIndex.cs(195,34): error CS0246: 未能找到类型或命名空间名“UndoRedoEvidence”(是否缺少 using 指令或程序集引用?) [D:\Memo_Line\Memo_Line\Memoline_demo_csponly\source\MemolineDemo.csproj]
+    0 个警告
+    1 个错误
+
+已用时间 00:00:02.35
