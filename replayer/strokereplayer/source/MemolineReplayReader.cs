@@ -45,9 +45,9 @@ internal static class MemolineReplayReader
             previousTicks = ticks;
         }
 
-        var slots = ResolveViews(relevant, ids);
         var operations = ReadPenOperations(relevant, hardware);
         var navigationOperations = FindNavigationOperations(relevant);
+        var slots = SettleViews(ResolveViews(relevant, ids), relevant, hardware, operations, navigationOperations);
         var deviceLimits = ReadDeviceLimits(relevant);
         var initialization = relevant.Where(f => Kind(f) == "initializationConfiguration")
             .OrderBy(f => RequiredUnsigned(f, "appendId")).ToArray();
@@ -119,8 +119,65 @@ internal static class MemolineReplayReader
         return new(path, sessionId, frequency, strokes, skippedNavigation, skippedOutside, skippedInvalidView);
     }
 
+    /// <summary>
+    /// A reading taken right after navigation can pair the new origin with the old zoom number (the
+    /// navigator redraws later). The view only changes through navigation input, so every reading takes
+    /// the last valid reading made before the next navigation input.
+    /// </summary>
+    private static ViewSlot[] SettleViews(ViewSlot[] slots, JsonElement[] frames, JsonElement[] hardware,
+        List<PenOperation> operations, HashSet<ulong> navigationOperations)
+    {
+        // Resolved keys only move the canvas when a match targets the canvas viewport or navigator. Unmapped
+        // keys (Memoline's Alt+M, a lone Space), tool switches and undo cannot. Unresolved keys count.
+        var keyMovesView = new Dictionary<ulong, bool>();
+        foreach (var resolved in frames.Where(f => Kind(f) == "shortcutResolved"))
+        {
+            if (!resolved.TryGetProperty("relatedEventIds", out var refs) || refs.ValueKind != JsonValueKind.Array) continue;
+            var data = resolved.GetProperty("data");
+            bool view = data.TryGetProperty("matches", out var matches) && matches.ValueKind == JsonValueKind.Array &&
+                matches.EnumerateArray().Any(m => m.TryGetProperty("targets", out var targets) && targets.ValueKind == JsonValueKind.Array &&
+                    targets.EnumerateArray().Any(t => t.GetString() is "画布视口" or "导航器"));
+            foreach (var reference in refs.EnumerateArray())
+                if (reference.TryGetUInt64(out var id)) keyMovesView[id] = view;
+        }
+        var boundaries = new List<ulong>();
+        foreach (var frame in hardware)
+        {
+            string kind = Kind(frame);
+            ulong id = RequiredUnsigned(frame, "eventId");
+            if (kind is "mouseWheel" or "mouseDown" || kind == "keyInput" && keyMovesView.GetValueOrDefault(id, true)) boundaries.Add(id);
+        }
+        // Space/R drags, and pen use outside the canvas viewport (navigator, zoom slider), move the view.
+        CanvasViewSnapshot? raw = null; int index = 0;
+        foreach (var operation in operations.OrderBy(o => o.Id))
+        {
+            while (index < slots.Length && slots[index].Anchor < operation.Id) raw = slots[index++].View;
+            bool navigation = navigationOperations.Contains(operation.Id);
+            if (!navigation && raw?.Viewport is { } viewport)
+            {
+                var start = Coordinates(operation.Begin.GetProperty("data"), operation.Id);
+                navigation = start.X < viewport.Left || start.X >= viewport.Right || start.Y < viewport.Top || start.Y >= viewport.Bottom;
+            }
+            if (navigation)
+                boundaries.AddRange(operation.Frames.Select(f => RequiredUnsigned(f, "eventId")));
+        }
+        boundaries.Sort();
+        var settled = new ViewSlot[slots.Length];
+        for (int i = 0; i < slots.Length; i++)
+        {
+            int next = boundaries.BinarySearch(slots[i].Anchor + 1);
+            if (next < 0) next = ~next;
+            ulong limit = next < boundaries.Count ? boundaries[next] : ulong.MaxValue;
+            var view = slots[i].View;
+            for (int j = i + 1; j < slots.Length && slots[j].Anchor < limit; j++)
+                if (slots[j].View is { } later) view = later;
+            settled[i] = slots[i] with { View = view, Error = view is null ? slots[i].Error : null };
+        }
+        return settled;
+    }
+
     private static bool IsRelevant(JsonElement frame)
-        => IsHardware(frame) || Kind(frame) is "header" or "statePackageReserved" or "statePackageResult"
+        => IsHardware(frame) || Kind(frame) is "header" or "statePackageReserved" or "statePackageResult" or "shortcutResolved"
             or "penInterrupted" or "tabletDeviceChanged" or "driverConfiguration" or "panelUpdateRequested" or "initializationConfiguration" or "keyboardStateChanged" ||
             Kind(frame) == "coreStateUpdated" && Text(frame.GetProperty("data"), "module") == "canvasViewState";
 
@@ -168,7 +225,12 @@ internal static class MemolineReplayReader
             }
             if (update.ValueKind != JsonValueKind.Undefined)
             {
-                var parsed = CanvasViewSnapshot.TryParse(update, raw, out var view);
+                // Externally requested readings have no triggering input (causalAmbiguous), but the
+                // recognizer still records which input they were observed after; that places them.
+                var evidence = update.TryGetProperty("evidence", out var e) ? e : default;
+                bool placed = evidence.ValueKind == JsonValueKind.Object && evidence.TryGetProperty("observedAfterEventId", out var observed) &&
+                    observed.TryGetUInt64(out var observedAfter) && observedAfter == anchor;
+                var parsed = CanvasViewSnapshot.TryParse(update, raw, out var view, requireCausalAnchor: !placed);
                 slots.Add(new(anchor, reservationOrder, parsed ? view : null,
                     parsed ? null : $"canvasViewState 状态为 {Text(update, "status") ?? "无效"}（package {id}）"));
             }

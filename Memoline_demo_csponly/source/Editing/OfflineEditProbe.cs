@@ -34,6 +34,35 @@ internal static class OfflineEditProbe
             }
             return 0;
         }
+        if (args[1] == "--frame-json" && args.Length >= 5)
+        {
+            // --frame-json 机械流 起始秒 结束秒 [kind过滤正则]：输出时间段内帧的原始 JSON（秒数相对首帧）。
+            double from = double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture);
+            double to = double.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture);
+            var filter = args.Length > 5 ? new System.Text.RegularExpressions.Regex(args[5]) : null;
+            long? origin = null, frequency = null;
+            foreach (var frame in BehaviorRecognizer.Storage.Memoline.MemolineReader.Read(Path.GetFullPath(args[2])))
+            {
+                string kind = PacketReplay.J.Text(frame, "kind") ?? "";
+                if (kind == "header") { frequency = PacketReplay.J.I64(frame, "frequency"); continue; }
+                if (kind == "screenshotBlob") continue;
+                long ticks = PacketReplay.J.I64(frame, "ticks"); origin ??= ticks;
+                double second = (ticks - origin.Value) / (double)(frequency ?? 10_000_000);
+                if (second < from || second > to || filter is not null && !filter.IsMatch(kind)) continue;
+                Console.WriteLine($"{second,9:0.000}s {frame.GetRawText()}");
+            }
+            return 0;
+        }
+        if (args[1] == "--stroke-views" && args.Length >= 3)
+        {
+            // --stroke-views 机械流：每笔重放时要恢复的画布视图（落笔秒数相对首帧）。
+            var document = StrokeReplay.MemolineReplayReader.Read(Path.GetFullPath(args[2]));
+            long origin = document.Strokes.Count > 0 ? document.Strokes.Min(s => s.StartTicks) : 0;
+            foreach (var stroke in document.Strokes)
+                Console.WriteLine($"{(stroke.StartTicks - origin) / (double)document.Frequency,9:0.000}s op={stroke.OperationId} " +
+                    $"origin=({stroke.View.OriginX:0.#},{stroke.View.OriginY:0.#}) scale={stroke.View.ScalePercent} rot={stroke.View.RotationDegrees}");
+            return 0;
+        }
         if (args[1] == "--views" && args.Length >= 3)
         {
             // --views 机械流：画布视图状态（捕获时间、原点、缩放）与落笔时间对照，秒数相对首帧。

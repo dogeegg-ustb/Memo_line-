@@ -22,6 +22,7 @@ internal static partial class PacketChecks
         NumericRegions();
         await RgbRestoreAsync();
         CausalHistory();
+        SettledViews();
         PacketBoundaries();
         await BrushAndLayerRestoreAsync();
         await RecordedStateTableAsync();
