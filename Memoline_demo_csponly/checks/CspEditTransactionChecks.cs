@@ -127,9 +127,9 @@ internal static class CspEditTransactionChecks
             await f.Transaction.BeginAsync(CancellationToken.None);
             await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), [reverted], CancellationToken.None);
             await f.Transaction.CompleteAsync(CancellationToken.None);
-            Check(f.Actions.Replays.Count == 2 && f.Actions.Replays.All(r => r.Mode == ReplayMode.Discrete) &&
+            Check(f.Actions.Replays.Count == 2 && f.Actions.Replays[0].Mode == ReplayMode.Concentrated && f.Actions.Replays[1].Mode == ReplayMode.Discrete &&
                   f.Actions.Replays[0].Events.Single().Stroke.BeginEventId == 5 && f.Actions.Replays[1].Events.Single().Stroke.BeginEventId == 2,
-                "Precise undo replays reverted contacts first and the undone strokes last, as separate discrete replays.");
+                "Precise undo replays reverted contacts first (concentrated) and the undone strokes last (discrete).");
         }
         await using(var f=Create("discrete-reference-off"))
         {

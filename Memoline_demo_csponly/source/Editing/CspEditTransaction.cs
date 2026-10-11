@@ -161,21 +161,22 @@ internal sealed class CspEditTransaction : IEditingTransaction
         if (_installed.Contains(layer)) throw Error(PlanIssueCode.LayerIdentityUnconfirmed, "同一原图层不能重复安装复现层。");
         var (original, before) = await OriginalAsync(layer, hide: true, ct);
         var final = await PasteAsync(layer, original, before, expected, ct);
-        // Event replay is the last step, after the pasted state, discrete. The contacts the snapshot reverted
-        // come first; the undone strokes come last, so CSP's own undo steps back through exactly them.
+        // Event replay is the last step, after the pasted state. The contacts the snapshot reverted come first,
+        // concentrated (they only rebuild pixels); the undone strokes come last, discrete, so CSP's own undo
+        // steps back through exactly them.
         var undone = _discrete.TryGetValue(layer, out var discrete) ? discrete.Select(e => e with { Change = null }).ToArray() : [];
         var undoneKeys = undone.Select(e => e.Stroke.Key).ToHashSet();
         var restored = finalReplay.Where(e => !undoneKeys.Contains(e.Stroke.Key)).DistinctBy(e => e.Stroke.Key).ToArray();
-        foreach (var batch in new[] { restored, undone }.Where(b => b.Length > 0))
+        foreach (var (batch, mode) in new[] { (restored, ReplayMode.Concentrated), (undone, ReplayMode.Discrete) }.Where(b => b.Item1.Length > 0))
         {
             var ordered = Ordered(batch, layer);
             if (ordered.Any(ReadsReferences))
                 foreach (var drawing in ordered)
-                    await ReplayAsync(final, [drawing], ReplayMode.Discrete,
+                    await ReplayAsync(final, [drawing], mode,
                         ReadsReferences(drawing) && _discreteReferences.ContainsKey(drawing.Stroke.Key) ? ReferencesFor(drawing) :
                         new Dictionary<LayerKey, ImageRgba>(), ct);
             else
-                await ReplayAsync(final, ordered, ReplayMode.Discrete, new Dictionary<LayerKey, ImageRgba>(), ct);
+                await ReplayAsync(final, ordered, mode, new Dictionary<LayerKey, ImageRgba>(), ct);
         }
         var captured = await CaptureAsync(layer, original, final, ct);
         var asset = JournalCapture(captured);
