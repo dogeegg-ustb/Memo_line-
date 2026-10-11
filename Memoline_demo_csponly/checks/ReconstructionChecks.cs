@@ -275,6 +275,17 @@ internal static class ReconstructionChecks
             Check(r.Status==ReconstructionStatus.Executed&&f.Deferred.Count==0,"no other contact to revert");
             Bytes(r,s.Layer,0,0,90,0,0,0,0,0);
         }
+        {
+            // Event editing: pixel 2 of a's image has no replayable contact, and b, a later causal contact that reads
+            // the deleted area, draws over it in the same replay batch. The unexplained pixel goes into the seed, so
+            // b stays on top.
+            var s=new Scene();var a=s.Stroke(10,10,Mask(0));
+            s.Group(s.Image("a",Mask(0,2),Pixels(10,0,90,0,0,0,0,0),a) with{HasUnreplayableEvents=true});
+            var b=s.Stroke(20,50,Mask(0,2),causal:true);s.Group(s.Image("b",Mask(0,2),Pixels(50,0,50,0,0,0,0,0),b));
+            var f=new Fake(s);var r=await Run(s,s.Plan(a),f);
+            Check(r.Status==ReconstructionStatus.Executed&&f.Replayed.SequenceEqual(new[]{b}),"only the later causal contact is replayed");
+            Bytes(r,s.Layer,50,0,50,0,0,0,0,0);
+        }
         n += ReconstructionRequestContractChecks.Run();
         return n;
     }

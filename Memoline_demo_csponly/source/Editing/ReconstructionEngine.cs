@@ -48,10 +48,8 @@ internal static class ReconstructionEngine
         internal readonly HashSet<EditableStrokeKey> Composed = [];
         internal readonly HashSet<DirtyImageKey> RuntimeUntrusted = [];
         // Recorded pixels of replayed images that no replayable contact explains (mouse input,
-        // unrecorded changes, labels without contacts). They are pasted after the replay.
+        // unrecorded changes, labels without contacts). They go into the seed of the next replay.
         internal readonly List<(DirtyImage Image, PixelMask Pixels)> Residuals = [];
-        // PreciseUndo: contacts collected for the single final replay.
-        internal readonly List<ReplayEvent> Deferred = [];
         internal bool Started, Touched;
         internal long LastGroupTicks;
         internal int LastGroupSessionOrder;
@@ -104,11 +102,15 @@ internal static class ReconstructionEngine
             async Task Flush(Cursor c)
             {
                 token.ThrowIfCancellationRequested();
-                if(c.Pending.Count>0&&plan.Request.Kind==EditKind.PreciseUndo)
-                {
-                    // Event replay is the last step of a precise undo: defer, never flush into a work layer.
-                    c.Deferred.AddRange(c.Pending.Values); c.Pending.Clear();
-                }
+                // Pixels no replayable contact explains go into the seed, before the replay: a later image's
+                // contact replayed in this same batch must be able to draw over them.
+                foreach(var (image,pixels) in c.Residuals)
+                    foreach(var (x,y) in pixels.Pixels())
+                    {
+                        int source=((y-image.Mask.Top)*image.Mask.Width+x-image.Mask.Left)*4;
+                        image.Now.Bytes.AsSpan(source,4).CopyTo(c.Actual.Bytes.AsSpan((y*c.Actual.Width+x)*4,4));
+                    }
+                c.Residuals.Clear();
                 if(c.Pending.Count>0)
                 {
                     var events=c.Pending.Values.OrderBy(e=>e.Stroke.SessionOrder).ThenBy(e=>e.Stroke.BeginEventId).ThenBy(e=>e.Stroke.Key.BeginAppendId)
@@ -122,13 +124,6 @@ internal static class ReconstructionEngine
                     if(actual.Width!=c.Actual.Width||actual.Height!=c.Actual.Height) throw new ReconstructionFailure(new(PlanIssueCode.CaptureMismatch,"重放捕获的尺寸与图层不符。"));
                     c.Actual=actual; c.Pending.Clear();
                 }
-                foreach(var (image,pixels) in c.Residuals)
-                    foreach(var (x,y) in pixels.Pixels())
-                    {
-                        int source=((y-image.Mask.Top)*image.Mask.Width+x-image.Mask.Left)*4;
-                        image.Now.Bytes.AsSpan(source,4).CopyTo(c.Actual.Bytes.AsSpan((y*c.Actual.Width+x)*4,4));
-                    }
-                c.Residuals.Clear();
                 c.Difference=ImageCompositor.Difference(c.Actual,c.Historical);
                 c.PendingGrowth=new(c.Actual.Width,c.Actual.Height);
             }
@@ -243,19 +238,14 @@ internal static class ReconstructionEngine
             foreach(var c in cursors.Values.Where(c=>c.Touched))
             {
                 token.ThrowIfCancellationRequested();
-                var deferred=c.Deferred.OrderBy(e=>e.Stroke.SessionOrder).ThenBy(e=>e.Stroke.BeginEventId).ThenBy(e=>e.Stroke.Key.BeginAppendId)
-                    .Select(e=>e with {Stroke=e.Stroke with {Samples=e.Stroke.Samples.OrderBy(s=>s.AppendId).ToArray()}}).ToArray();
-                var observed=deferred.Length==0
-                    ? await executor.InstallReproductionLayerAsync(c.Plan.Layer,c.Actual.Copy(),token)
-                    : await executor.InstallReproductionLayerAsync(c.Plan.Layer,c.Actual.Copy(),deferred,token);
-                hasReplayed|=deferred.Length>0;
+                var observed=await executor.InstallReproductionLayerAsync(c.Plan.Layer,c.Actual.Copy(),token);
                 if(observed.Width!=c.Actual.Width||observed.Height!=c.Actual.Height)
                     return Fail(new PlanIssue(PlanIssueCode.CaptureMismatch,"复现层读回尺寸与期望不一致。"));
-                if(plan.Request.Kind!=EditKind.PreciseUndo&&!ImageCompositor.Difference(observed,c.Actual).IsEmpty)
+                if(!ImageCompositor.Difference(observed,c.Actual).IsEmpty)
                     return Fail(new PlanIssue(PlanIssueCode.PasteNotExact,"复现层读回与期望 RGBA 不一致。"));
                 layers.Add(c.Plan.Layer,observed);
             }
-            return new(hasReplayed||plan.Request.Kind==EditKind.PreciseUndo ? ReconstructionStatus.Executed : ReconstructionStatus.PixelVerified,layers,[],promoted);
+            return new(hasReplayed ? ReconstructionStatus.Executed : ReconstructionStatus.PixelVerified,layers,[],promoted);
         }
         catch(OperationCanceledException)when(token.IsCancellationRequested)
         {return new(ReconstructionStatus.Cancelled,layers,[],promoted);}
