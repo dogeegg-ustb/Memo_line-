@@ -61,6 +61,16 @@ internal sealed class LivePacketFeed : IPacketStateFeed, IAsyncDisposable
     internal long Generation { get { lock (_sync) return _generation; } }
     internal CanvasViewSnapshot? RequestedView { get { lock (_sync) return _requestedView; } }
     internal JsonElement RequestedCanvasView { get { lock (_sync) return _requestedCanvasView; } }
+    /// <summary>The latest automatically observed view, bound to this session; default when none is confirmed.</summary>
+    internal JsonElement ObservedCanvasView
+    {
+        get
+        {
+            var data = View.ObservedCanvasViewEvidence; string? session; lock (_sync) session = _sessionId;
+            if (data.ValueKind != JsonValueKind.Object || session is null) return default;
+            try { return BindCanvasViewToSession(data, session); } catch (IOException) { return default; }
+        }
+    }
     public async Task RequestAsync(string[] modules, CancellationToken token, string? saveId = null)
     {
         int[]? roi;lock(_sync)roi=modules.Contains("brushState")?_editingBrushPanelRoi?.ToArray():null;

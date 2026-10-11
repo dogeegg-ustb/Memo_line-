@@ -191,9 +191,14 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
     private async Task<ReconstructionResult> ExecuteEditCoreAsync(EditRequest request, bool undoLimitConfirmed, CancellationToken token)
     {
         var shown=_session ?? throw new InvalidOperationException("请先建立编辑边界。");
-        // A changed boundary must be reviewed again; never silently execute a different plan.
-        await BeginEditSessionCoreAsync(token);
-        if(!EditingBoundaryMatches(shown,_session!))
+        // A changed boundary must be reviewed again; never silently execute a different plan. The canvas stayed
+        // frozen since the boundary, so only physical input recorded in CSP can have changed it: checking the
+        // mechanical stream replaces building a whole second boundary (save, captures, index).
+        var monitor=_window?.EditingMonitor ?? throw new InvalidOperationException("Recognizer 监听尚未就绪。");
+        string mechanical=monitor.LiveFilePath ?? throw new InvalidDataException("没有可读取的机械流路径。");
+        bool changed=monitor.SessionId!=shown.LiveView.SessionId||!IsRecording||await Task.Run(()=>
+            EditingBoundaryCoordinator.HasPhysicalInput(BehaviorRecognizer.Storage.Memoline.MemolineReader.Read(mechanical),shown.LiveView.BoundaryAppendId,ulong.MaxValue),token);
+        if(changed)
             return new(ReconstructionStatus.Failed,new Dictionary<LayerKey,ImageRgba>(),
                 [new(PlanIssueCode.CaptureMismatch,"选择期间录制或画布内容发生变化，请重新选区并预览方案。")],new HashSet<DirtyImageKey>());
         var plan = await PlanEditAsync(request, token);
@@ -245,6 +250,22 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         return result;
     }
 
+    /// <summary>The view to freeze the screen with at once: the latest automatic observation when there is one. The
+    /// boundary built afterwards reads the view again, and the selection only attaches if both agree.</summary>
+    public async Task<JsonElement> FreezeCanvasViewAsync(CancellationToken token)
+    {
+        await _operationGate.WaitAsync(token);
+        try
+        {
+            var feed=await FeedAsync(token);
+            static long Captured(JsonElement view)=>PacketReplay.J.Get(PacketReplay.J.Get(view,"evidence"),"capturedTicks") is {ValueKind:JsonValueKind.Number} n&&n.TryGetInt64(out long t)?t:-1;
+            foreach(var known in new[]{feed.ObservedCanvasView,feed.RequestedCanvasView}.Where(v=>v.ValueKind==JsonValueKind.Object).OrderByDescending(Captured))
+                try{_=new CanvasAffineTransform(known);return known;}catch(InvalidDataException){}
+            await feed.RequestAsync(["canvasViewState"],token);
+            return feed.RequestedCanvasView;
+        }
+        finally{_operationGate.Release();}
+    }
     public async Task<JsonElement> ReadCurrentCanvasViewAsync(CancellationToken token)
     {
         await _operationGate.WaitAsync(token);

@@ -142,8 +142,12 @@ internal static class EditingSelectionChecks
                 model.ClearSelection();host.DelayedPlan.SetResult(ReconstructionPlanner.Build(session.Index,host.Request!));
                 while(!pending.IsCompleted){Application.DoEvents();Thread.Yield();}
                 pending.GetAwaiter().GetResult();Check(!execute.Enabled,"A delayed preview cannot revive a superseded canvas selection.");
+                int beginsBefore=host.Begins;
+                Invoke(panel,"SelectModeAsync",EditKind.PreciseUndo);
+                Check(host.Begins==beginsBefore&&Get<CanvasInteraction>(panel,"_interaction")==model&&model.RegionSelection is null,
+                    "Switching function on a frozen canvas keeps its boundary and only resets the region.");
                 host.DelayedBegin=new(TaskCreationOptions.RunContinuationsAsynchronously);
-                var capture=(Task)panel.GetType().GetMethod("SelectModeAsync",Private)!.Invoke(panel,[EditKind.EventEditing])!;
+                var capture=(Task)panel.GetType().GetMethod("BeginAsync",Private)!.Invoke(panel,[])!;
                 Check(Passive()&&!capture.IsCompleted&&Get<CanvasInteraction?>(panel,"_interaction") is { IsReady: false },
                     "While the boundary is still being built, the frozen selection is open and CSP keeps the foreground.");
                 panel.OpenAsync().GetAwaiter().GetResult();

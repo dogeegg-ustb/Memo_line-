@@ -14,6 +14,7 @@ internal interface IDemoEditingHost
     Task<ReconstructionPlan> PlanEditAsync(EditRequest request,CancellationToken token);
     Task<ReconstructionResult> ExecuteEditAsync(EditRequest request,bool undoLimitConfirmed,CancellationToken token);
     Task<JsonElement> ReadCurrentCanvasViewAsync(CancellationToken token);
+    Task<JsonElement> FreezeCanvasViewAsync(CancellationToken token)=>ReadCurrentCanvasViewAsync(token);
     Task<JsonElement> ConfirmBrushForEditingAsync(string name,CancellationToken token);
     Task<JsonElement> CaptureBrushPanelAsync(Rectangle region,CancellationToken token)
         => throw new NotSupportedException("识别器尚不支持截图笔刷属性选区。");
@@ -187,7 +188,12 @@ internal sealed class EditingPanel : Form
         _status.Text=_host.IsRecording?"按下功能按钮后冻结 CSP 画布。":"当前没有正在录制的会话。";
     }
     private async Task SelectModeAsync(EditKind mode)
-    {_mode=mode;ConfigureWorkflow();await BeginAsync();}
+    {
+        _mode=mode;ConfigureWorkflow();
+        // Switching function on a frozen canvas keeps its boundary; only a fresh entry (or 重新冻结) freezes again.
+        if(_overlay is not null&&_interaction is not null&&!_busy){InvalidatePlan();BeginRegion();UpdateSummary();return;}
+        await BeginAsync();
+    }
     private void ConfigureWorkflow()
     {
         bool undo=_mode==EditKind.PreciseUndo;
@@ -209,7 +215,7 @@ internal sealed class EditingPanel : Form
         {
             // Freeze at once so the user can select; the boundary (save, layer captures, history) follows in the
             // background and the selection is evaluated as soon as it is ready.
-            var view=await _host.ReadCurrentCanvasViewAsync(token);
+            var view=await _host.FreezeCanvasViewAsync(token);
             if(IsDisposed||attempt!=_beginAttempt)return;
             var model=new CanvasInteraction(new CanvasAffineTransform(view));
             BindOverlay(_overlayFactory(model));

@@ -114,6 +114,7 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
     private CanvasViewSnapshot? _confirmedView;
     private RecognizerUpdateTiming? _lastUpdateTiming;
     private JsonElement? _driverConfiguration;
+    private JsonElement _observedEvidence;
     private JsonElement _initializationConfiguration;
     private readonly Dictionary<string, JsonElement> _devices = new(StringComparer.Ordinal);
     private bool _connected;
@@ -146,6 +147,8 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
     internal event Action? ConnectionReset;
     internal long? ClockOriginTicks { get { lock (_sync) return _clockOriginTicks; } }
     internal JsonElement InitializationConfiguration { get { lock (_sync) return _initializationConfiguration; } }
+    /// <summary>The raw payload of the latest confirmed automatic observation; default when there is none.</summary>
+    internal JsonElement ObservedCanvasViewEvidence { get { lock (_sync) return _observedEvidence; } }
 
     internal async Task WaitForConnectionAsync(CancellationToken token)
     {
@@ -181,7 +184,7 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
         {
             if (!Ready) throw new IOException("Memoline 会话已断开。");
             if (!CanvasViewSnapshot.TryParse(data, CanvasViewSnapshot.Property(data, "rawResult"), out var view, requireCausalAnchor: false) || view is null)
-            { _confirmedView = null; throw new InvalidOperationException("本次主动请求未确认当前画布视图。"); }
+            { _confirmedView = null; _observedEvidence = default; throw new InvalidOperationException("本次主动请求未确认当前画布视图。"); }
             _confirmedView = view.WithInitializationConfiguration(_initializationConfiguration);
             _revision++; _confirmedRevision = _revision; Pulse();
             return _confirmedView;
@@ -304,7 +307,7 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
                         _failedUntil.Remove(endpoint.PipeName);
                         lock (_sync)
                         {
-                            _connected = true; _confirmedView = null; _lastUpdateTiming = null; _confirmedRevision = -1;
+                            _connected = true; _confirmedView = null; _observedEvidence = default; _lastUpdateTiming = null; _confirmedRevision = -1;
                             _configurationReady = false; _configurationFailure = null;
                             _clockOriginTicks = null; _minimumCaptureTicks = 0; _driverConfiguration = null; _initializationConfiguration = default; _devices.Clear();
                             _connectionGeneration++; Pulse();
@@ -378,6 +381,7 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
                     if (valid)
                     {
                         _confirmedView = confirmed!.WithInitializationConfiguration(configuration);
+                        _observedEvidence = message.Data.Clone();
                         _confirmedRevision = _revision;
                     }
                     // Keep the session's last confirmed state through unknown intermediate
@@ -514,7 +518,7 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
     {
         lock (_sync)
         {
-            _confirmedView = null; _lastUpdateTiming = null; _confirmedRevision = -1; _revision++;
+            _confirmedView = null; _observedEvidence = default; _lastUpdateTiming = null; _confirmedRevision = -1; _revision++;
             if (disconnect)
             {
                 _connected = false; _clockOriginTicks = null; _configurationReady = false; _configurationFailure = null; _initializationConfiguration = default;
@@ -535,7 +539,7 @@ public sealed class RecognizerViewMonitor : ICanvasViewFeed, IAsyncDisposable
     private bool Ready => _connected && _configurationReady && _clockOriginTicks is not null && _configurationFailure is null;
     private void ConfigurationFailed(string failure)
     {
-        lock (_sync) { _configurationFailure = failure; _confirmedView = null; _confirmedRevision = -1; Pulse(); }
+        lock (_sync) { _configurationFailure = failure; _confirmedView = null; _observedEvidence = default; _confirmedRevision = -1; Pulse(); }
         SetStatus("Recognizer 当前会话校准不可用：" + failure);
     }
 
