@@ -90,10 +90,21 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
         return commands.All(Usable);
     }
     public bool CanHideLayer { get; private set; }
-    public async Task<CspLayerInspection> SaveAndInspectAsync(CancellationToken token)
+    private CspLayerInspection? _inspection;
+    private long _inspectedInputs=-1;
+    private int _penReplays, _inspectedPenReplays=-1;
+    public async Task<CspLayerInspection> SaveAndInspectAsync(CancellationToken token,bool refresh=false)
     {
         _feed.EnsureConnected(); _input.EnsureTarget();
         if (_monitor.SessionId!=_session.LiveView.SessionId) throw new InvalidDataException("录制会话已改变。");
+        // Each save costs a CLIP write plus clipState/currentLayerState requests (~4.6 s). Without any input or
+        // pen replay from Memoline since the last one, the document is still the one inspected: physical input
+        // aborts the transaction. The saved snapshot that exports read from stays the same as well.
+        long inputs=WindowsViewInput.SentInputs;
+        if (!refresh && _inspection is { } known && _saved is not null && inputs==_inspectedInputs && _penReplays==_inspectedPenReplays &&
+            known.SessionId==_monitor.SessionId && known.Generation==_monitor.Generation)
+            return known;
+        _inspection=null;
         if (_saved is not null) _backend.Cleanup(_saved);
         long ticks=Stopwatch.GetTimestamp()-_feed.View.ClockOriginTicks!.Value;
         _saved=await _backend.SaveSnapshotAsync(ticks,token);
@@ -107,11 +118,13 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
         // The OCR layer name is only a fallback (see ReadCurrentLayerAsync); a hidden or unreadable
         // selected row must not stop the structural confirmation.
         try{await _feed.RequestAsync(["currentLayerState"],token);}catch(InvalidOperationException){}
-        return new(_monitor.SessionId,_monitor.Generation,true,rows.Select(r=>new CspLayerEvidence(
+        _inspection=new(_monitor.SessionId,_monitor.Generation,true,rows.Select(r=>new CspLayerEvidence(
             CanvasLayerWatcher.J.Text(r,"uuid")!,CanvasLayerWatcher.J.Text(r,"name") ?? "",
             CanvasLayerWatcher.J.Get(r,"isRaster").ValueKind==JsonValueKind.True,
             CanvasLayerWatcher.J.Get(r,"folder").ValueKind==JsonValueKind.True,
             CanvasLayerWatcher.J.Get(r,"visible").ValueKind==JsonValueKind.True,CanvasLayerWatcher.J.Text(r,"parentUuid"))).ToArray());
+        _inspectedInputs=inputs; _inspectedPenReplays=_penReplays;
+        return _inspection;
     }
     private string _bridge = "";
     public Task NavigateToLayerAsync(string name,CancellationToken token)=>new PacketStateRestorer(_feed,new PacketWindowsInput(_input),_status).RestoreLayerAsync(name,token);
@@ -161,6 +174,7 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
         // Validate every source before preparing CSP, then replay project sessions
         // in order without manufacturing a gap between unrelated native clocks.
         var schedules=BuildSchedules(_session,_request,events,mode,work.Name,work.Uuid);
+        _penReplays++; // Injected pen input does not pass through WindowsViewInput.SentInputs.
         if (events.Any(e=>e.ReadsReferenceLayers))
             await VerifyReferenceSceneAsync(events[0].Stroke.Layer,events,mode,references,token);
         await PacketReplayRunner.InitializeStatesAsync(_feed,false,true,token);

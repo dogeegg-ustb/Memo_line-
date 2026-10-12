@@ -226,8 +226,14 @@ internal sealed class WindowsViewInput : IViewInput
         else throw new ArgumentException("仅支持鼠标和键盘输入。");
         return input;
     }
+    private static long s_sentInputs;
+    /// <summary>Every keyboard/mouse input this process sent to CSP. While it is unchanged (and no pen
+    /// was injected) the document can only change through physical input, which aborts an edit.</summary>
+    internal static long SentInputs => Interlocked.Read(ref s_sentInputs);
     private static void Send(Input input)
     {
+        // Counted before sending: a failed call may still have reached CSP in part.
+        Interlocked.Increment(ref s_sentInputs);
         if (Native.SendInput(1, [WithRecorderTag(input)], Marshal.SizeOf<Input>()) != 1)
             throw new Win32Exception(Marshal.GetLastWin32Error(), "无法发送视图恢复输入。");
     }

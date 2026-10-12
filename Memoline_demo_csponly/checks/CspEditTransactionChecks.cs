@@ -200,6 +200,8 @@ internal static class CspEditTransactionChecks
             var actual = await f.Transaction.FlushAsync(Original, Seed(), [Stroke()], new Dictionary<LayerKey, ImageRgba>(), CancellationToken.None);
             await f.Transaction.InstallReproductionLayerAsync(Original, actual, CancellationToken.None);
             await f.Transaction.CompleteAsync(CancellationToken.None);
+            Check(f.Actions.Calls.Count(c => c == "save:refresh") >= 2,
+                "Retries after a stale save must ask for a new save rather than the remembered inspection.");
             Check(f.Actions.Layers.Count == 2 && f.Actions.Calls.Contains("end:executed"),
                 "A save that still shows the document before a paste or delete is retried instead of failing the structure check.");
         }
@@ -359,9 +361,9 @@ internal static class CspEditTransactionChecks
         public Task<IAsyncDisposable> AcquireCaptureCoordinatorAsync(CancellationToken token)
         { Calls.Add("coordinator:acquire"); return Task.FromResult<IAsyncDisposable>(new Lease(Calls)); }
         public Task<bool> VerifyShortcutsAsync(CancellationToken token) { Calls.Add("shortcuts"); return Task.FromResult(ShortcutsAvailable); }
-        public Task<CspLayerInspection> SaveAndInspectAsync(CancellationToken token)
+        public Task<CspLayerInspection> SaveAndInspectAsync(CancellationToken token, bool refresh = false)
         {
-            Calls.Add("save");
+            Calls.Add(refresh ? "save:refresh" : "save");
             var layers = _staleLeft-- > 0 ? _stale! : Layers.ToArray();
             return Task.FromResult(new CspLayerInspection(Original.SessionId, Original.Generation, true, layers));
         }

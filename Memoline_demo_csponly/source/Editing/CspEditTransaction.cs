@@ -21,7 +21,9 @@ internal interface ICspEditingActions
     Task EndNativeTransactionAsync(string id, string outcome, CancellationToken token);
     Task<IAsyncDisposable> AcquireCaptureCoordinatorAsync(CancellationToken token);
     Task<bool> VerifyShortcutsAsync(CancellationToken token);
-    Task<CspLayerInspection> SaveAndInspectAsync(CancellationToken token);
+    // refresh: save again even when no input was sent since the last inspection (CSP may have
+    // been too busy to apply the previous action when that save ran).
+    Task<CspLayerInspection> SaveAndInspectAsync(CancellationToken token, bool refresh = false);
     Task NavigateToLayerAsync(string name, CancellationToken token);
     Task<CspCurrentLayerEvidence> ReadCurrentLayerAsync(CancellationToken token);
     Task<CspHideEvidence> HideLayerAsync(CspLayerEvidence layer, CancellationToken token);
@@ -279,9 +281,9 @@ internal sealed class CspEditTransaction : IEditingTransaction
         return _journal.Capture(segment, capture.Evidence.Layer.Uuid, capture.Evidence.Png, capture.Pixels.Width, capture.Pixels.Height);
     }
 
-    private async Task<CspLayerInspection> InspectAsync(LayerKey layer, CancellationToken ct)
+    private async Task<CspLayerInspection> InspectAsync(LayerKey layer, CancellationToken ct, bool refresh = false)
     {
-        ct.ThrowIfCancellationRequested(); var inspection = await _actions.SaveAndInspectAsync(ct);
+        ct.ThrowIfCancellationRequested(); var inspection = await _actions.SaveAndInspectAsync(ct, refresh);
         if (!inspection.Saved || inspection.SessionId != layer.SessionId || inspection.Generation != layer.Generation ||
             inspection.Layers.Any(l => string.IsNullOrWhiteSpace(l.Uuid) || string.IsNullOrWhiteSpace(l.Name)) ||
             inspection.Layers.Select(l => l.Uuid).Distinct(StringComparer.Ordinal).Count() != inspection.Layers.Count)
@@ -295,7 +297,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
     {
         for (int attempt = 0; ; attempt++)
         {
-            var after = await InspectAsync(layer, ct);
+            var after = await InspectAsync(layer, ct, refresh: attempt > 0);
             if (attempt >= 5 || !after.Layers.SequenceEqual(before.Layers)) return after;
             await Task.Delay(300, ct);
         }
