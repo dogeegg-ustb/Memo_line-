@@ -143,7 +143,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
         catch (Exception error) { throw Error(PlanIssueCode.CaptureMismatch, "删除前检查点及资产读回失败。", error); }
         ct.ThrowIfCancellationRequested();
         await _actions.DeleteLayerAsync(ct);
-        var after = await InspectAsync(layer, ct);
+        var after = await InspectChangedAsync(layer, proof, ct);
         if (after.Layers.Any(l => l.Uuid == work.Uuid)) throw Error(PlanIssueCode.LayerIdentityUnconfirmed, "删除后工作层 UUID 仍存在。");
         RequireLayer(after, original.Uuid, original.Name, hidden: !_skipHide);
         _journal.WorkLayerDeleted(checkpoint);
@@ -235,7 +235,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
     {
         await _actions.SetClipboardImageAsync(image.Copy(), ct);
         ct.ThrowIfCancellationRequested(); await _actions.PasteAsync(ct);
-        var after = await InspectAsync(layer, ct);
+        var after = await InspectChangedAsync(layer, before, ct);
         var oldIds = before.Layers.Select(l => l.Uuid).ToHashSet(StringComparer.Ordinal);
         var added = after.Layers.Where(l => !oldIds.Contains(l.Uuid)).ToArray();
         if (added.Length != 1 || !added[0].IsRaster || added[0].IsFolder ||
@@ -287,6 +287,18 @@ internal sealed class CspEditTransaction : IEditingTransaction
             inspection.Layers.Select(l => l.Uuid).Distinct(StringComparer.Ordinal).Count() != inspection.Layers.Count)
             throw Error(PlanIssueCode.LayerIdentityUnconfirmed, "保存后的图层结构身份未确认。");
         return inspection;
+    }
+
+    // CSP may still be busy with the paste/delete when the save shortcut arrives; the save then leaves the
+    // file untouched and the snapshot is the old document. Save again while nothing has changed at all.
+    private async Task<CspLayerInspection> InspectChangedAsync(LayerKey layer, CspLayerInspection before, CancellationToken ct)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            var after = await InspectAsync(layer, ct);
+            if (attempt >= 5 || !after.Layers.SequenceEqual(before.Layers)) return after;
+            await Task.Delay(300, ct);
+        }
     }
 
     private static CspLayerEvidence RequireLayer(CspLayerInspection inspection, string uuid, string? name = null, bool hidden = false)

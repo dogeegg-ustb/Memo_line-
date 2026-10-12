@@ -193,6 +193,16 @@ internal static class CspEditTransactionChecks
             catch (CspEditingException) { }
             Check(f.Actions.Calls.Count == calls, "A failed transaction cannot send more CSP actions on a later method call.");
         }
+        await using (var f = Create("stale-save"))
+        {
+            f.Actions.StaleSaves = 2;
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            var actual = await f.Transaction.FlushAsync(Original, Seed(), [Stroke()], new Dictionary<LayerKey, ImageRgba>(), CancellationToken.None);
+            await f.Transaction.InstallReproductionLayerAsync(Original, actual, CancellationToken.None);
+            await f.Transaction.CompleteAsync(CancellationToken.None);
+            Check(f.Actions.Layers.Count == 2 && f.Actions.Calls.Contains("end:executed"),
+                "A save that still shows the document before a paste or delete is retried instead of failing the structure check.");
+        }
         await using (var f = Create("paste-multiple"))
         {
             f.Actions.NewLayersOnPaste = 2;
@@ -337,7 +347,9 @@ internal static class CspEditTransactionChecks
         internal bool PhysicalDuringReplay, ThrowEnd, ThrowRelease, BadEyeEvidence, ThrowBaseline;
         internal Action? DuringReplay;
         internal bool ShortcutsAvailable = true, FullCanvas = true, DeletionHadDurableCheckpoint;
-        internal int NewLayersOnPaste = 1;
+        internal int NewLayersOnPaste = 1, StaleSaves;
+        private CspLayerEvidence[]? _stale;
+        private int _staleLeft;
         internal LayerExportEvidence? LastExport;
         public event Action<PhysicalInputEvidence>? PhysicalInput;
         public bool CaptureRequestsPaused { get => _paused; set { Calls.Add("pause:" + value); _paused = value; } }
@@ -348,7 +360,13 @@ internal static class CspEditTransactionChecks
         { Calls.Add("coordinator:acquire"); return Task.FromResult<IAsyncDisposable>(new Lease(Calls)); }
         public Task<bool> VerifyShortcutsAsync(CancellationToken token) { Calls.Add("shortcuts"); return Task.FromResult(ShortcutsAvailable); }
         public Task<CspLayerInspection> SaveAndInspectAsync(CancellationToken token)
-        { Calls.Add("save"); return Task.FromResult(new CspLayerInspection(Original.SessionId, Original.Generation, true, Layers.ToArray())); }
+        {
+            Calls.Add("save");
+            var layers = _staleLeft-- > 0 ? _stale! : Layers.ToArray();
+            return Task.FromResult(new CspLayerInspection(Original.SessionId, Original.Generation, true, layers));
+        }
+        // CSP still busy when the save arrives: the next saves return the document before the last paste/delete.
+        private void Mutating() { _stale = Layers.ToArray(); _staleLeft = StaleSaves; }
         public Task NavigateToLayerAsync(string name, CancellationToken token)
         { Calls.Add("navigate:" + name); _current = Layers.Single(l => l.Name == name).Uuid; return Task.CompletedTask; }
         public Task<CspCurrentLayerEvidence> ReadCurrentLayerAsync(CancellationToken token)
@@ -368,7 +386,7 @@ internal static class CspEditTransactionChecks
         public Task SetClipboardImageAsync(ImageRgba image, CancellationToken token) { Calls.Add("clipboard"); _clipboard = image.Copy(); return Task.CompletedTask; }
         public Task PasteAsync(CancellationToken token)
         {
-            Calls.Add("paste"); int originalIndex = Layers.FindIndex(l => l.Uuid == _current);
+            Calls.Add("paste"); Mutating(); int originalIndex = Layers.FindIndex(l => l.Uuid == _current);
             for (int n = 0; n < NewLayersOnPaste; n++)
             {
                 string uuid = "new-" + ++_pastes; var layer = new CspLayerEvidence(uuid, "Work " + _pastes, true, false, true);
@@ -393,7 +411,7 @@ internal static class CspEditTransactionChecks
         }
         public Task DeleteLayerAsync(CancellationToken token)
         {
-            Calls.Add("delete"); DeletionHadDurableCheckpoint = journal.Snapshot.LastCheckpoint?.WorkLayerUuid == _current;
+            Calls.Add("delete"); Mutating(); DeletionHadDurableCheckpoint = journal.Snapshot.LastCheckpoint?.WorkLayerUuid == _current;
             Layers.RemoveAll(l => l.Uuid == _current); _current = Original.Uuid; return Task.CompletedTask;
         }
         public Task RegisterBaselineAsync(LayerExportEvidence capture, CancellationToken token)
