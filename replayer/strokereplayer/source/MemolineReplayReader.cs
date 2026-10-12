@@ -49,6 +49,7 @@ internal static class MemolineReplayReader
         var navigationOperations = FindNavigationOperations(relevant);
         var slots = SettleViews(ResolveViews(relevant, ids), relevant, hardware, operations, navigationOperations);
         var deviceLimits = ReadDeviceLimits(relevant);
+        var driverCurves = ReadDriverCurves(relevant);
         var initialization = relevant.Where(f => Kind(f) == "initializationConfiguration")
             .OrderBy(f => RequiredUnsigned(f, "appendId")).ToArray();
         var strokes = new List<MemolineReplayStroke>();
@@ -98,7 +99,7 @@ internal static class MemolineReplayReader
                 if (contact && Text(data, "contactState") is { } contactState && contactState != "Contact")
                     throw new InvalidDataException($"笔操作 {operation.Id} 包含非接触的落笔/采样记录。");
                 var coordinates = Coordinates(data, operation.Id);
-                double pressure = contact ? Pressure(frame, deviceLimits, operation.Id) : 0;
+                double pressure = contact ? Pressure(frame, deviceLimits, driverCurves, operation.Id) : 0;
                 samples.Add(new(ticks, coordinates.X, coordinates.Y, pressure,
                     OptionalNumber(data, "tiltX", 0), OptionalNumber(data, "tiltY", 0), contact,
                     RequiredUnsigned(frame, "appendId"), RequiredUnsigned(frame, "eventId")));
@@ -314,9 +315,86 @@ internal static class MemolineReplayReader
         return limits.OrderBy(l => l.AppendId).ToArray();
     }
 
-    private static double Pressure(JsonElement frame, DeviceLimit[] limits, ulong operationId)
+    /// <summary>
+    /// The selected driver configuration's response curve, as Recognizer applied it
+    /// (recognizer_core DriverProfile.TransformPressure). Physical input still passes
+    /// through the driver, so CSP received the curved pressure.
+    /// </summary>
+    private sealed record DriverPressureCurve(double Scale, double Threshold, double? Gamma, (double X, double Y)[]? Bezier)
+    {
+        internal double Normalize(double raw)
+        {
+            if (raw <= 0) return 0;
+            double input = Math.Clamp(raw / Scale, 0, 1);
+            if (Threshold >= 1) return 0;
+            if (Threshold > 0)
+            {
+                if (input < Threshold) return 0;
+                input = (input - Threshold) / (1 - Threshold);
+            }
+            if (Bezier is { } p)
+            {
+                double domainMin = Math.Min(p[0].X, p[3].X), domainMax = Math.Max(p[0].X, p[3].X);
+                double rangeMin = Math.Min(p[0].Y, p[3].Y), rangeMax = Math.Max(p[0].Y, p[3].Y);
+                double x = domainMin + input * Math.Max(domainMax - domainMin, 1e-12);
+                double y;
+                if (x <= p[0].X) y = p[0].Y;
+                else if (x >= p[3].X) y = p[3].Y;
+                else
+                {
+                    double low = 0, high = 1;
+                    for (int i = 0; i < 20; i++)
+                    {
+                        double mid = (low + high) * .5;
+                        if (Point(p, mid).X < x) low = mid; else high = mid;
+                    }
+                    y = Point(p, (low + high) * .5).Y;
+                }
+                return Math.Clamp((y - rangeMin) / Math.Max(rangeMax - rangeMin, 1e-12), 0, 1);
+            }
+            if (Gamma is > 0) return Math.Clamp(Math.Pow(input, Gamma.Value), 0, 1);
+            return input;
+        }
+
+        private static (double X, double Y) Point((double X, double Y)[] p, double t)
+        {
+            double u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+            return (a * p[0].X + b * p[1].X + c * p[2].X + d * p[3].X, a * p[0].Y + b * p[1].Y + c * p[2].Y + d * p[3].Y);
+        }
+    }
+
+    private static Dictionary<string, DriverPressureCurve> ReadDriverCurves(JsonElement[] frames)
+    {
+        var curves = new Dictionary<string, DriverPressureCurve>(StringComparer.Ordinal);
+        foreach (var frame in frames.Where(f => Kind(f) == "driverConfiguration"))
+        {
+            var data = frame.GetProperty("data");
+            if (Text(data, "snapshotId") is not { } id || Text(data, "pressureMappingStatus") != "ready" ||
+                !data.TryGetProperty("selectedProfile", out var profile) || profile.ValueKind != JsonValueKind.Object) continue;
+            // Recordings so far divided raw pressure by the device-reported maximum (8191 for the
+            // Gaomon M6), yet the hardware reports up to the driver's 16383 scale; most of a firm
+            // stroke then saturated at 1. Raw values cannot exceed the true maximum, so take the larger.
+            double device = data.TryGetProperty("device", out var d) ? Number(d, "maxPressure") ?? 0 : 0;
+            double scale = Math.Max(device, Number(profile, "RecommendedPressureMax") ?? 0);
+            if (scale <= 0) continue;
+            (double X, double Y)[]? bezier = null;
+            if (profile.TryGetProperty("BezierPoints", out var points) && points.ValueKind == JsonValueKind.Object)
+                bezier = new[] { "P0", "P1", "P2", "P3" }.Select(name => points.TryGetProperty(name, out var point)
+                    && Number(point, "X") is { } x && Number(point, "Y") is { } y ? (x, y)
+                    : throw new InvalidDataException("驱动压感曲线缺少控制点。")).ToArray();
+            curves[id] = new(scale, Number(profile, "ThresholdRatio") ?? 0, Number(profile, "Gamma"), bezier);
+        }
+        return curves;
+    }
+
+    private static double Pressure(JsonElement frame, DeviceLimit[] limits, Dictionary<string, DriverPressureCurve> curves, ulong operationId)
     {
         var data = frame.GetProperty("data");
+        // Recompute from the raw report when the recording carries its driver curve; the
+        // recorded normalizedPressure used the wrong scale (see ReadDriverCurves).
+        if (Text(data, "pressureMappingStatus") == "ready" && Text(data, "driverSnapshotId") is { } snapshot &&
+            curves.TryGetValue(snapshot, out var curve) && Number(data, "pressure") is { } rawPressure)
+            return ValidatePressure(curve.Normalize(rawPressure), operationId);
         if (Number(data, "normalizedPressure") is { } normalized)
             return ValidatePressure(normalized, operationId);
         // Recognizer's mappedPressure still uses the device's hardware pressure range.

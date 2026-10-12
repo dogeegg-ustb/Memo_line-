@@ -17,6 +17,7 @@ internal static class ParserChecks
         KeyboardNavigationStateExcludesSparsePenOperations();
         RawPressureNeedsRecordedDeviceLimit();
         MappedPressureUsesHardwareUnits();
+        DriverCurveUsesDriverScale();
         InvalidAndIncompletePenDataIsRejected();
         SharedContainerReaderHandlesCompressedSessionAsync().GetAwaiter().GetResult();
         Console.WriteLine("Memoline parser checks passed.");
@@ -244,6 +245,39 @@ internal static class ParserChecks
             "Mapped pressure can be normalized from sample metadata without a raw pressure field.");
         records[3] = Hardware("penBegin", 4, 1, 10, new { x = 200, y = 300, mappedPressure = 4095 });
         Reject(() => Read(records), "Hardware-range mapped pressure without a recorded maximum must not guess its units.");
+    }
+
+    private static void DriverCurveUsesDriverScale()
+    {
+        // Gaomon M6: the device reports maxPressure 8191, the hardware reaches the driver's 16383.
+        object Configuration(double? driverMax) => new
+        {
+            snapshotId = "drv", status = "selected", pressureMappingStatus = "ready",
+            device = new { deviceId = "test-pen", maxPressure = 8191 },
+            selectedProfile = new
+            {
+                CurveType = "CubicBezier", RecommendedPressureMax = driverMax, ThresholdRatio = 0,
+                BezierPoints = new { P0 = new { X = 327, Y = 409 }, P1 = new { X = 2539, Y = 12614 },
+                    P2 = new { X = 5652, Y = 15891 }, P3 = new { X = 16384, Y = 16384 } }
+            }
+        };
+        object Sample(double raw) => new
+        {
+            x = 200, y = 300, pressure = raw, normalizedPressure = .7553946, mappedPressure = 6187.4,
+            pressureMappingStatus = "ready", driverSnapshotId = "drv", contactState = "Contact"
+        };
+        var records = ValidInitial();
+        records.Add(Frame("driverConfiguration", 3, 0, 0, Configuration(16383)));
+        records.Add(Hardware("penBegin", 4, 1, 10, Sample(2314)));
+        records.Add(Hardware("penEnd", 5, 2, 20, new { x = 210, y = 310 }, 1));
+        Check(Math.Abs(Read(records).Strokes.Single().Samples[0].Pressure - .52618) < 1e-4,
+            "Raw pressure must be curved on the driver's 16383 scale, not the recorded 8191 normalization.");
+        records[3] = Frame("driverConfiguration", 3, 0, 0, Configuration(null));
+        Check(Math.Abs(Read(records).Strokes.Single().Samples[0].Pressure - .7553946) < 1e-5,
+            "The recomputed curve must reproduce Recognizer's own mapping on the same scale.");
+        records[3] = Frame("driverConfiguration", 3, 0, 0, Configuration(16383));
+        records[4] = Hardware("penBegin", 4, 1, 10, Sample(16383));
+        Check(Read(records).Strokes.Single().Samples[0].Pressure == 1, "The driver maximum maps to full pressure.");
     }
 
     private static void InvalidAndIncompletePenDataIsRejected()
