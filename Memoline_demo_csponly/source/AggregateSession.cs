@@ -101,6 +101,10 @@ internal sealed class AggregateSession : IDisposable
                 throw new InvalidDataException("视口观测必须属于同一会话并按 triggerTicks 单向排列");
             if (observation.IsBaseline && observation.Changed != 0)
                 throw new InvalidDataException("视口基线的变化值必须为 0");
+            // The recorder keeps states read during a Memoline edit transaction out of the native file
+            // (AppendId 0). Memoline's own view restores there have no frame to point at, so they neither
+            // sample a dimension nor bound a packet; the edit boundary and the end packet own that window.
+            if (observation.Message.AppendId == 0 && !observation.IsBaseline) return;
             Write(new { kind = "dimensionSample", SessionId, ticks = observation.TriggerTicks,
                 canvasViewportChanged = observation.Changed, actionPatternContinuity = (double?)null,
                 toolContinuity = (double?)null, layerContinuity = (double?)null,

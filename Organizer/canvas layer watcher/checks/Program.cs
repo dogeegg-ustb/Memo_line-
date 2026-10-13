@@ -208,6 +208,11 @@ Check(emptyState.Accept(ViewEvent(2, 20)) is null && emptyObservation is { Chang
     "A true viewport change without edits or a known layer still exposes an empty-package boundary without requesting a save");
 emptyState.Accept(ViewEvent(3, 30, initial: true));
 Check(emptyObservation is { Changed: 0, IsBaseline: true }, "Explicit initial geometry establishes a zero-valued baseline");
+var transactionState = new WatchState(requireConfirmedViewChange: true);
+transactionState.Reset(); transactionState.Accept(Layer(1)); transactionState.Accept(ViewEvent(2, snapshot: true)); transactionState.Accept(Pen(3));
+Check(transactionState.Accept(ViewEvent(4, 40)) is null && transactionState.Dirty
+    && transactionState.Accept(ViewEvent(5, 80) with { AppendId = 502 }) is { TriggerTicks: 5 },
+    "A view the recorder kept out of its file (inside an edit transaction) updates the view without requesting a save");
 var pointerEvidence = new RecognitionEvidence(); pointerEvidence.Reset("test", 1000, 0);
 pointerEvidence.Configuration(1, JsonSerializer.SerializeToElement(new { clipPath = "test.clip" }), 500);
 pointerEvidence.Accept(confirmedMessage);

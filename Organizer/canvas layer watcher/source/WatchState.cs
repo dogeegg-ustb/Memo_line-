@@ -206,6 +206,9 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         if (baseline) return Skip("建立视口基线");
         if (ticks <= _completedTriggerTicks) return Skip("该 triggerTicks 已由存证消息完成保存，只更新视口状态");
         if (!changed) return Skip("视口值未变化");
+        // Aggregate packets point at native frames; an observation the recorder kept out of its file
+        // (states read inside a Memoline edit transaction) only updates the view.
+        if (requireConfirmedViewChange && message.AppendId == 0) return Skip("原生记录未收录该观测（编辑事务内），只更新视口状态");
         if (_reserved) return Skip("已有保存任务，合并本次变化");
         return Reserve(message, ticks, view, pending: false);
     }

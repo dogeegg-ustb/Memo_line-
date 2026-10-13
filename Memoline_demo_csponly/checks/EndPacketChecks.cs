@@ -55,6 +55,13 @@ internal static class EndPacketChecks
                 }
                 MemolineEvent? sample = begin is null ? null : Pen("penSample");
                 if (begin is not null && mode == "captured") Pen("penEnd");
+                // A view Memoline restored inside an edit transaction: the recorder publishes it but keeps it
+                // out of the native file, so it has no appendId and must not become a packet boundary.
+                Thread.Sleep(1);
+                long restoredTicks = writer.NowTicks;
+                aggregate.ObserveViewport(new(new(1, writer.SessionId, 0, "core.canvasViewState", "stateUpdated", false,
+                    0, 0, restoredTicks, restoredTicks, restoredTicks, null, null, null,
+                    JsonSerializer.SerializeToElement(new { module = "canvasViewState", status = "changed" })), restoredTicks, 1, false, true));
                 MemolineEvent? marker = null;
                 CaptureRequest? request = null;
                 byte[]? imageBytes = null;
@@ -109,6 +116,8 @@ internal static class EndPacketChecks
                     mode + " owns the full tail through the native footer");
                 Check(J.Tick(final, "triggerTicks", -1) == (marker?.Ticks ?? footer), "Trigger ticks remain distinct from shutdown completion");
                 Check(J.Tick(rows[^1], "lastBoundaryTicks", -1) == footer, "Aggregate footer closes the final range");
+                Check(!rows.Any(r => J.Text(r, "kind") is "packet" or "dimensionSample" && J.Tick(r, "triggerTicks", J.Tick(r, "ticks", -1)) == restoredTicks),
+                    "A view restored inside an edit transaction neither samples nor bounds a packet");
                 var hardware = records.Where(r => r.Path == "hardware").ToArray();
                 var pointers = packets.SelectMany(p => J.Get(p, "eventPointers").EnumerateArray()).ToArray();
                 Check(pointers.Length == hardware.Length && pointers.Select(p => J.Tick(p, "appendId", -1)).Distinct().Count() == hardware.Length,
