@@ -25,6 +25,7 @@ internal sealed partial class MainWindow
         public bool CaptureRequestsPaused{get=>monitor.CaptureRequestsPaused;set=>monitor.CaptureRequestsPaused=value;}
         public async Task DrainPendingAsync(CancellationToken token)=>await Task.WhenAll(owner.PendingCaptureTasks()).WaitAsync(token);
         public Task<IDisposable> EnterCaptureAsync(CancellationToken token)=>owner.CaptureCoordinator.EnterAsync(token);
+        public void Status(string text)=>owner.Status(text);
         public async Task<PreparedEditingBoundary> PrepareAsync(string requestId,CancellationToken token)
         {
             _requests=await monitor.PrepareEditBoundaryAsync(requestId,token);
@@ -45,10 +46,11 @@ internal sealed partial class MainWindow
                 // any boundary packet is committed. Its marker never replaces the original limit.
                 string checkId=boundary.RequestId+"-validate";
                 var checkedBoundary=BaselineBarrier.FromResponse(await control.PrepareEditBoundaryAsync(checkId,token),checkId);
-                if(checkedBoundary.SessionId!=boundary.SessionId||!Current()||
-                    EditingBoundaryCoordinator.HasPhysicalInput(MemolineReader.Read(monitor.LiveFilePath??throw new InvalidDataException("没有机械录制路径。")),
+                if(checkedBoundary.SessionId!=boundary.SessionId||!Current())
+                    throw new InvalidDataException("建立边界期间录制会话或图层状态已改变；请重新打开编辑面板。");
+                if(EditingBoundaryCoordinator.HasPhysicalInput(MemolineReader.Read(monitor.LiveFilePath??throw new InvalidDataException("没有机械录制路径。")),
                         boundary.AppendId,checkedBoundary.AppendId))
-                    throw new InvalidDataException("建立边界期间检测到新的物理输入；请重新打开编辑面板。");
+                    throw new EditingBoundaryInputException();
                 foreach(var capture in captures)
                 {
                     owner._host?.CaptureQueued(capture.Request);
