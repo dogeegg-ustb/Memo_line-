@@ -33,7 +33,7 @@ internal static class CanvasSelectionGeometry
             {
                 int left = (int)Math.Clamp(Math.Ceiling(intersections[i] - .5), 0, canvas.Width);
                 int right = (int)Math.Clamp(Math.Ceiling(intersections[i + 1] - .5), 0, canvas.Width);
-                for (int x = left; x < right; x++) mask.Set(x, y);
+                mask.SetRun(left, right - 1, y);
             }
         }
         return mask;

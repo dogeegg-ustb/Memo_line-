@@ -24,6 +24,24 @@ internal static class EditingSelectionChecks
         Check(concave.Count==51&&!concave.Contains(5,5)&&concave.Contains(1,8),"Concave lasso cutouts remain unselected.");
         Check(CanvasSelectionGeometry.Polygon(size,CanvasSelectionGeometry.Rectangle(new(-5,-5),new(20,20))).Count==100,"Masks remain inside canvas bounds.");
         Check(CanvasSelectionGeometry.Polygon(size,[new(1,1),new(2,2)]).IsEmpty,"Unfinished lassos cannot be committed.");
+        var lassoRandom=new Random(20261013);bool lassosExact=true;
+        for(int round=0;round<200;round++)
+        {
+            var lassoSize=new Size(lassoRandom.Next(1,140),lassoRandom.Next(1,140));
+            var lasso=Enumerable.Range(0,lassoRandom.Next(3,12)).Select(_=>new PointF(lassoRandom.Next(-200,lassoSize.Width*10+200)/10f,
+                lassoRandom.Next(-200,lassoSize.Height*10+200)/10f)).ToArray();
+            var filled=CanvasSelectionGeometry.Polygon(lassoSize,lasso);
+            // Even-odd at pixel centres: an odd number of edge crossings at or left of the centre.
+            bool Inside(int x,int y)=>Enumerable.Range(0,lasso.Length).Count(i=>
+            {
+                var a=lasso[i];var b=lasso[(i+1)%lasso.Length];double scan=y+.5;
+                return ((a.Y<=scan&&b.Y>scan)||(b.Y<=scan&&a.Y>scan))&&a.X+(scan-a.Y)*(b.X-a.X)/(b.Y-a.Y)<=x+.5;
+            })%2==1;
+            long expected=0;bool same=true;
+            for(int y=0;y<lassoSize.Height;y++)for(int x=0;x<lassoSize.Width;x++){bool inside=Inside(x,y);expected+=inside?1:0;same&=filled.Contains(x,y)==inside;}
+            lassosExact&=same&&filled.Count==expected;
+        }
+        Check(lassosExact,"Random lasso rows are filled exactly at even-odd pixel centres.");
         var sparse=new PixelMask(10,10);sparse.Set(8,8);
         Check(!triangle.Intersects(sparse),"Actual mask pixels determine intersection.");
         var offset=new PixelMask(7,1,2,2);offset.Set(7,1);
