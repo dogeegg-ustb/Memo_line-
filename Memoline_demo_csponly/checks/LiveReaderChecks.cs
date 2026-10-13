@@ -32,6 +32,13 @@ internal static class LiveReaderChecks
         Reject(() => LiveSessionReader.Read(path, root, 2), "Out-of-order append IDs cannot be repaired by sorting.");
         Write(path,[header,boundary]);
         Reject(() => LiveSessionReader.Read(path, root, 2), "A boundary that is not durable yet is rejected.");
+        // The reader keeps what it decoded of the live file and continues where the recorder appended.
+        Write(path,[header,boundary,future]);
+        Check(LiveSessionReader.Read(path, root, 2).Frames.Count == 3 && LiveSessionReader.Read(path, root, 1).Frames.Count == 2,
+            "A grown live file continues from the decoded prefix and still cuts at each boundary.");
+        Write(path,[header,future]);
+        Reject(() => LiveSessionReader.Read(path, root, 1), "A replaced live file is decoded again, not served from the old prefix.");
+        Write(path,[header,boundary]);
         string packetRoot = Path.Combine(root, "png-reader");
         string packet = Path.Combine(packetRoot, "packets", "fixture");
         Directory.CreateDirectory(packet);
@@ -119,14 +126,20 @@ internal static class LiveReaderChecks
         }
         File.WriteAllBytes(Path.Combine(packet, "now.png"), rgba.AsSpan(0, 28).ToArray());
         Reject(() => LiveSessionReader.Read(path, packetRoot, 1), "Truncated PNG header must report invalid data before decoding.");
+        LiveSessionReader.ReleaseLiveFrames();
         Console.WriteLine($"Live session reader checks passed: {count}.");
         return count;
     }
 
-    // The public v1 wire fixture deliberately allows out-of-order append IDs.
+    // The public v1 wire fixture deliberately allows out-of-order append IDs. Like the recorder, the
+    // writer shares the file with the reader that keeps the live recording open between boundaries.
     private static void Write(string path, IReadOnlyList<JsonElement> frames)
     {
-        BundleChecks.WriteV1(path, frames.Select(f => JsonNode.Parse(f.GetRawText())!));
+        string fixture = path + ".fixture";
+        BundleChecks.WriteV1(fixture, frames.Select(f => JsonNode.Parse(f.GetRawText())!));
+        using (var target = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
+            target.Write(File.ReadAllBytes(fixture));
+        File.Delete(fixture);
     }
 
     private static byte[] Png(byte colorType, byte interlace = 0)

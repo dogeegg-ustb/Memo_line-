@@ -54,6 +54,7 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         var mechanical = monitor.LiveFilePath ?? throw new InvalidDataException("没有可读取的机械流路径。");
         // Usually loaded since recording began; otherwise it loads while the boundary is saved and captured.
         var historyLoad = LoadHistory();
+        LiveSessionReader.Prefetch(mechanical);
         var feed = await FeedAsync(token);
         var input = new WindowsViewInput();
         _progress?.Invoke("正在读取 CSP 当前画布与图层状态…");
@@ -327,6 +328,7 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         _activeOperation?.Cancel();
         await WaitForIdleAsync();
         _session=null;
+        LiveSessionReader.ReleaseLiveFrames();
     }
     private async Task<LivePacketFeed> FeedAsync(CancellationToken token)
     {

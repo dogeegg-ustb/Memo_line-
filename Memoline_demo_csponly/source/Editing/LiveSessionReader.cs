@@ -22,23 +22,15 @@ internal static class LiveSessionReader
     {
         token.ThrowIfCancellationRequested();
         string path = Path.GetFullPath(mechanicalPath);
-        var prefix = new List<JsonElement>();
-        ulong previousAppend = 0;
         using var readFrames = EditingProfiler.Stage("  mechanical frames + replay + packets");
-        foreach (var frame in MemolineReader.Read(path))
+        JsonElement[] all;
+        ulong previousAppend;
+        if (boundaryAppendId > 0) all = LiveFrames.Prefix(path, boundaryAppendId, token, out previousAppend);
+        else
         {
-            token.ThrowIfCancellationRequested();
-            if (frame.TryGetProperty("appendId", out var appended))
-            {
-                ulong append = RequiredUlong(appended);
-                if (append != previousAppend + 1) throw new InvalidDataException("memoline appendId 未按文件顺序连续。");
-                if (boundaryAppendId > 0 && append > boundaryAppendId) break;
-                previousAppend = append;
-            }
-            if (Text(frame, "kind") is not ("screenshotBlob" or "mouseCursorChanged")) prefix.Add(frame);
-            if (boundaryAppendId > 0 && previousAppend == boundaryAppendId) break;
+            using var tail = new FrameTail(path);
+            all = tail.Prefix(ulong.MaxValue, token, out previousAppend);
         }
-        var all = prefix.ToArray();
         var headers = all.Where(f => Text(f, "kind") == "header").ToArray();
         if (headers.Length != 1) throw new InvalidDataException("memoline 必须且只能包含一个 header。");
         var header = headers[0];
@@ -72,6 +64,88 @@ internal static class LiveSessionReader
         using (EditingProfiler.Stage("  state history")) history = StateHistory.Resolve(frames);
         return new(path, sessionId, frequency, frames, replay, packets, boundaryAppendId, boundaryTicks)
         { History = history };
+    }
+
+    /// <summary>Decodes the live recording's frames written so far, ahead of the boundary that will need them.</summary>
+    internal static void Prefetch(string mechanicalPath)
+        => _ = Task.Run(() =>
+        {
+            try { LiveFrames.Prefix(Path.GetFullPath(mechanicalPath), 0, CancellationToken.None, out _); }
+            catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException) { /* The boundary reads it again. */ }
+        });
+
+    /// <summary>
+    /// The live recording only grows, yet every freeze decoded it again from its first frame (about 2 s for 22 000
+    /// frames). The reader of the current live file keeps its decoded, checked frames and decodes only frames
+    /// appended since; a failed read drops it, so the next read starts over from the file.
+    /// </summary>
+    private static class LiveFrames
+    {
+        private static readonly object Gate = new();
+        private static FrameTail? _tail;
+        internal static JsonElement[] Prefix(string path, ulong boundaryAppendId, CancellationToken token, out ulong reached)
+        {
+            lock (Gate)
+            {
+                if (_tail is not null && (_tail.Source != path || _tail.Truncated())) { _tail.Dispose(); _tail = null; }
+                _tail ??= new FrameTail(path);
+                try { return _tail.Prefix(boundaryAppendId, token, out reached); }
+                catch { _tail.Dispose(); _tail = null; throw; }
+            }
+        }
+        internal static void Release() { lock (Gate) { _tail?.Dispose(); _tail = null; } }
+    }
+
+    /// <summary>Closes the live recording, which is renamed and sealed when recording stops.</summary>
+    internal static void ReleaseLiveFrames() => LiveFrames.Release();
+
+    private sealed class FrameTail(string path) : IDisposable
+    {
+        internal readonly string Source = path;
+        private readonly MemolineReadSession _session = MemolineReader.Open(path);
+        // Kept frames with the last appendId at or before them: their own for numbered frames.
+        private readonly List<(JsonElement Frame, ulong Append, bool Numbered)> _kept = [];
+        private ulong _lastAppend;
+
+        /// <summary>Frames up to and including <paramref name="boundary"/>, as one pass over the file would return
+        /// them; with 0, only decodes what is available. <paramref name="reached"/> is the last appendId returned.</summary>
+        internal JsonElement[] Prefix(ulong boundary, CancellationToken token, out ulong reached)
+        {
+            while (boundary == 0 || _lastAppend < boundary)
+            {
+                token.ThrowIfCancellationRequested();
+                var frames = _session.ReadAvailable();
+                if (frames.Count == 0) break;
+                foreach (var frame in frames)
+                {
+                    bool numbered = frame.TryGetProperty("appendId", out var appended);
+                    if (numbered)
+                    {
+                        ulong append = RequiredUlong(appended);
+                        if (append != _lastAppend + 1) throw new InvalidDataException("memoline appendId 未按文件顺序连续。");
+                        _lastAppend = append;
+                    }
+                    if (Text(frame, "kind") is not ("screenshotBlob" or "mouseCursorChanged")) _kept.Add((frame, _lastAppend, numbered));
+                }
+            }
+            reached = Math.Min(_lastAppend, boundary);
+            var result = new List<JsonElement>(_kept.Count);
+            foreach (var (frame, append, numbered) in _kept)
+            {
+                // An unnumbered frame after the boundary frame belongs to the next read, as in a single pass.
+                if (numbered ? append > boundary : append >= boundary && boundary != ulong.MaxValue) break;
+                result.Add(frame);
+            }
+            return result.ToArray();
+        }
+        /// <summary>The recorder only appends, so a file shorter than what was decoded has been replaced.</summary>
+        internal bool Truncated()
+        {
+            string other = Source.EndsWith(".part", StringComparison.OrdinalIgnoreCase) ? Source[..^5] : Source + ".part";
+            string? current = File.Exists(Source) ? Source : File.Exists(other) ? other : null;
+            return current is not null && new FileInfo(current).Length < _session.Offset;
+        }
+        public void Dispose() => _session.Dispose();
     }
 
     private static IReadOnlyList<LayerPacket> ReadPackets(string root, string sessionId, long boundaryTicks, CancellationToken token)
