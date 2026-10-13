@@ -17,12 +17,21 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
     private readonly SemaphoreSlim _operationGate = new(1,1);
     private CancellationTokenSource? _activeOperation;
     private Action<string>? _progress;
+    private sealed record History(IReadOnlyList<SessionSnapshot> Sessions, IReadOnlyDictionary<string, EditIndex> Indexes);
+    private readonly object _historyGate = new();
     private string? _historyFingerprint;
-    private IReadOnlyList<SessionSnapshot> _historySessions = [];
-    private IReadOnlyDictionary<string, EditIndex> _historyIndexes = new Dictionary<string, EditIndex>();
+    private Task<History>? _history;
     public void SetProgressObserver(Action<string>? observer)=>_progress=observer;
     public void ReportEditingError(string operation,Exception error)=>_window?.EditingStatus(operation+"："+error);
-    internal DemoEditingHost(DemoController controller) => _controller = controller;
+    internal DemoEditingHost(DemoController controller)
+    {
+        _controller = controller;
+        controller.RecordingStarted += () =>
+        {
+            try { _ = LoadHistory(); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { /* The boundary reads it again. */ }
+        };
+    }
     internal void Attach(MainWindow window)
     { _window = window;window.BeforeRecordingStop=StopEditingAsync; }
     public bool IsRecording => _window?.IsRecording == true;
@@ -43,6 +52,8 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         if (!window.IsRecording) throw new InvalidOperationException("只可在录制中建立编辑边界。");
         var monitor = window.EditingMonitor ?? throw new InvalidOperationException("Recognizer 监听尚未就绪。");
         var mechanical = monitor.LiveFilePath ?? throw new InvalidDataException("没有可读取的机械流路径。");
+        // Usually loaded since recording began; otherwise it loads while the boundary is saved and captured.
+        var historyLoad = LoadHistory();
         var feed = await FeedAsync(token);
         var input = new WindowsViewInput();
         _progress?.Invoke("正在读取 CSP 当前画布与图层状态…");
@@ -52,8 +63,10 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         input.EnsureTarget();
         var boundary = await window.CaptureEditingBoundaryAsync("edit-" + Guid.NewGuid().ToString("N"), token);
         var snapshot = await LiveSessionReader.ReadAsync(mechanical, _controller.DiffRoot, boundary.AppendId, token);
-        var history = await HistoryAsync(token);
-        var index = history.Count == 0 ? EditIndexBuilder.Build(snapshot) : ProjectEditIndex.Build(history, snapshot, _historyIndexes);
+        if (historyLoad is { IsCompleted: false }) _progress?.Invoke("正在读取工程中以前录制的笔画和图层图片…");
+        var loaded = historyLoad is null ? null : await historyLoad.WaitAsync(token);
+        var history = loaded?.Sessions ?? [];
+        var index = history.Count == 0 ? EditIndexBuilder.Build(snapshot) : ProjectEditIndex.Build(history, snapshot, loaded!.Indexes);
         _controller.RegisterEditReplaySources(history.Where(s=>s.Frames.Any(f=>PacketReplay.J.Text(f,"kind")=="penBegin"))
             .Select(s=>s.MechanicalPath));
         JsonElement liveBrush=default;
@@ -80,23 +93,27 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         return _session;
     }
 
-    private async Task<IReadOnlyList<SessionSnapshot>> HistoryAsync(CancellationToken token)
+    /// <summary>
+    /// The project's sealed history and its per-session indexes, read once per project content. Sealing rewrites
+    /// the project file, so its size and write time identify that content; it never changes while recording.
+    /// Reading it takes about 11 s on 记艺线测试2, so it starts as soon as the recorder does (see the constructor)
+    /// instead of when the user first freezes the canvas. A failed load is retried by the next call.
+    /// </summary>
+    private Task<History>? LoadHistory()
     {
         string? project=_controller.ProjectRecording;
-        if(project is null||!File.Exists(project))return [];
-        // Sealing rewrites the project file, so its size and write time identify its content.
+        if(project is null||!File.Exists(project))return null;
         string fingerprint=Path.GetFullPath(project)+"/"+ProjectSessionReader.CacheStamp(project);
-        if(_historyFingerprint==fingerprint)return _historySessions;
-        _progress?.Invoke("正在读取工程中以前录制的笔画和图层图片…");
-        var sources=await ProjectSessionReader.ReadProjectCachedAsync(project,token);
-        _historyIndexes=await Task.Run(()=>sources.ToDictionary(s=>s.SessionId,s=>
+        lock(_historyGate)
         {
-            token.ThrowIfCancellationRequested();
-            _progress?.Invoke("正在建立历史笔画索引："+(Array.IndexOf(sources.ToArray(),s)+1)+"/"+sources.Count+"…");
-            return EditIndexBuilder.Build(s);
-        }),token);
-        _historySessions=sources;_historyFingerprint=fingerprint;
-        return sources;
+            if(_historyFingerprint==fingerprint&&_history is { IsFaulted:false,IsCanceled:false })return _history;
+            _historyFingerprint=fingerprint;
+            return _history=Task.Run(()=>
+            {
+                var sources=ProjectSessionReader.ReadProjectCached(project);
+                return new History(sources,sources.ToDictionary(s=>s.SessionId,EditIndexBuilder.Build));
+            });
+        }
     }
     public async Task<JsonElement> ConfirmBrushForEditingAsync(string name,CancellationToken token)
     {

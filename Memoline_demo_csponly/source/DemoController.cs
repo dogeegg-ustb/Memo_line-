@@ -37,6 +37,8 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
         _editReplaySources = paths.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     public bool HasPendingSeal => _recorder is not null || _mechanicalPath is not null;
     public event Action<string>? Status;
+    /// <summary>Raised once the recorder process runs for a project; editing loads that project's history then.</summary>
+    internal event Action? RecordingStarted;
 
     public DemoController(bool renderOnly = false)
     {
@@ -88,6 +90,7 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
         _stdout = PumpAsync(_recorder.StandardOutput);
         _stderr = PumpAsync(_recorder.StandardError);
         Status?.Invoke("Recognizer 已启动；请完成初始化并切回 CSP。");
+        RecordingStarted?.Invoke();
         string directory = Path.Combine(RecorderRoot, "procedure", "stroke");
         while (true)
         {

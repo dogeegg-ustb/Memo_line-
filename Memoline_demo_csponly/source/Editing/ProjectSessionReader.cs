@@ -16,9 +16,6 @@ internal static class ProjectSessionReader
     /// It is keyed by the project file's size and write time: sealing a new session rewrites the file and
     /// the next read rebuilds the cache once. Only a complete build (cache.json written last) is reused.
     /// </summary>
-    internal static Task<IReadOnlyList<SessionSnapshot>> ReadProjectCachedAsync(string projectPath, CancellationToken token = default)
-        => Task.Run(() => ReadProjectCached(projectPath, token), token);
-
     internal static IReadOnlyList<SessionSnapshot> ReadProjectCached(string projectPath, CancellationToken token = default)
     {
         projectPath = Path.GetFullPath(projectPath);
