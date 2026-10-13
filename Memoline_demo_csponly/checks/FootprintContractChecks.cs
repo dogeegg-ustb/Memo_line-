@@ -120,6 +120,23 @@ internal static class FootprintContractChecks
             runsMatch &= runs.Equals(pixels) && runs.Count == pixels.Count;
         }
         Check(runsMatch, "Setting a row run a word at a time equals setting its pixels one by one, overlaps included.");
+        bool intersectionsMatch = true; int intersecting = 0;
+        for (int trial = 0; trial < 2000 && intersectionsMatch; trial++)
+        {
+            PixelMask Sparse()
+            {
+                int left = random.Next(-70, 70), top = random.Next(-6, 6), width = random.Next(0, 200), height = random.Next(0, 8);
+                double density = random.Next(3) == 0 ? 0 : Math.Pow(random.NextDouble(), 3) * 0.05;
+                var mask = PixelMask.FromPredicate(left, top, width, height, (_, _) => random.NextDouble() < density);
+                if (width > 0 && height > 0 && random.Next(2) == 0) mask.Set(left + random.Next(width), top + random.Next(height));
+                return mask;
+            }
+            var a = Sparse(); var b = random.Next(8) == 0 ? a : Sparse();
+            bool expected = a.Pixels().Any(p => b.Contains(p.X, p.Y));
+            intersecting += expected ? 1 : 0;
+            intersectionsMatch &= a.Intersects(b) == expected && b.Intersects(a) == expected && PreciseUndoSelector.Intersects(a, b) == expected;
+        }
+        Check(intersectionsMatch && intersecting is > 100 and < 1900, "Word-level intersection agrees with the pixel definition at unaligned bounds.");
         if (failures.Count > 0) throw new InvalidOperationException(
             $"Footprint contract checks: {count - failures.Count}/{count} passed.\n" + string.Join("\n", failures));
         Console.WriteLine($"Footprint contract checks passed: {count}.");

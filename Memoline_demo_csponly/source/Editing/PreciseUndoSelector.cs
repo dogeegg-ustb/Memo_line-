@@ -82,15 +82,5 @@ internal static class PreciseUndoSelector
     private static PreciseUndoSelection Failure(LayerKey? layer, PlanIssueCode code, string message)
         => new(layer, [], 0, 0, [], [], [new(code, message)]);
 
-    internal static bool Intersects(PixelMask left, PixelMask right)
-    {
-        if (left.IsEmpty || right.IsEmpty) return false;
-        int x0 = Math.Max(left.Left, right.Left), y0 = Math.Max(left.Top, right.Top);
-        long x1 = Math.Min((long)left.Left + left.Width, (long)right.Left + right.Width);
-        long y1 = Math.Min((long)left.Top + left.Height, (long)right.Top + right.Height);
-        for (long y = y0; y < y1; y++)
-            for (long x = x0; x < x1; x++)
-                if (left.Contains((int)x, (int)y) && right.Contains((int)x, (int)y)) return true;
-        return false;
-    }
+    internal static bool Intersects(PixelMask left, PixelMask right) => left.Intersects(right);
 }

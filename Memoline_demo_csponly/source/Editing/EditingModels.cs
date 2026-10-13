@@ -130,9 +130,17 @@ public sealed class PixelMask : IEquatable<PixelMask>
         int left = Math.Max(Left, other.Left), top = Math.Max(Top, other.Top);
         long right = Math.Min((long)Left + Width, (long)other.Left + other.Width);
         long bottom = Math.Min((long)Top + Height, (long)other.Top + other.Height);
+        // Rows of the overlap are compared 64 pixels at a time from either mask's bit offset.
         for (int y = top; y < bottom; y++)
-            for (int x = left; x < right; x++)
-                if (Contains(x, y) && other.Contains(x, y)) return true;
+        {
+            long mine = (long)(y - Top) * Width + (left - Left), theirs = (long)(y - other.Top) * other.Width + (left - other.Left);
+            for (long remaining = right - left; remaining > 0;)
+            {
+                int n = (int)Math.Min(64, remaining);
+                if ((ReadBits(_words, mine, n) & ReadBits(other._words, theirs, n)) != 0) return true;
+                mine += n; theirs += n; remaining -= n;
+            }
+        }
         return false;
     }
 
