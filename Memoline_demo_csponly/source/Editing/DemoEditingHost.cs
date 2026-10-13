@@ -72,7 +72,10 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
             .Select(s=>s.MechanicalPath));
         JsonElement liveBrush=default;
         try{await feed.RequestAsync(["brushState"],token);liveBrush=feed.BrushEvidence;}
-        catch(InvalidOperationException){ /* Selection/deletion does not require a current numeric editor. */ }
+        // Selection/deletion does not require a current numeric editor. An unreadable brush panel (CSP not in front
+        // while the user selects on the overlay) must not discard the boundary that is already saved and captured;
+        // a brush change confirms the brush again before it is used.
+        catch(Exception error)when(error is InvalidOperationException or IOException){ }
         var layers = PacketReplay.J.Array(PacketReplay.J.Get(feed.Layers,"layers"))
             .Where(l=>LayerMapping.SameName(PacketReplay.J.Text(l,"name") ?? "",feed.Layer ?? "")).ToArray();
         string? uuid=layers.Length==1?PacketReplay.J.Text(layers[0],"uuid"):null;
