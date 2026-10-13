@@ -38,7 +38,8 @@ internal static class SaveCapture
     public static Task<IReadOnlyList<BoundaryLayerCapture>> CaptureBoundaryAsync(string clip, string bridge,
         RecorderControlClient control, Size pixelSize, IReadOnlyList<CaptureRequest> requests,
         Func<bool> stillValid, Func<bool> inContact, Action<string> status, CancellationToken token)
-        => CaptureBoundaryAsync(new ClipLayerCaptureBackend(clip, bridge, control), pixelSize, requests,
+        => CaptureBoundaryAsync(new ClipLayerCaptureBackend(clip, bridge, control,
+                activateCsp: requests.Count > 0 && requests[0].TriggerKind == "recordingEnd"), pixelSize, requests,
             stillValid, inContact, status, token);
 
     internal static async Task<IReadOnlyList<BoundaryLayerCapture>> CaptureBoundaryAsync(ILayerCaptureBackend backend,

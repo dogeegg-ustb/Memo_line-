@@ -13,13 +13,15 @@ internal interface ILayerCaptureBackend
     void Cleanup(SavedLayerDocument document);
 }
 
-internal sealed class ClipLayerCaptureBackend(string clip, string bridge, RecorderControlClient control) : ILayerCaptureBackend
+/// <param name="activateCsp">The recording-end save follows a click on Memoline's Stop button, so CSP may not be
+/// foreground any more; the recorder then refuses the save unless asked to activate CSP first.</param>
+internal sealed class ClipLayerCaptureBackend(string clip, string bridge, RecorderControlClient control, bool activateCsp = false) : ILayerCaptureBackend
 {
     public bool InputIdle => Native.InputIdle();
     public async Task<SavedLayerDocument> SaveSnapshotAsync(long triggerTicks, CancellationToken token)
     {
         var before = SaveCapture.Stat(clip);
-        var response = await control.SaveClipAsync(clip, token, triggerTicks);
+        var response = await control.SaveClipAsync(clip, token, triggerTicks, activateCsp);
         string directory = Path.Combine(AppContext.BaseDirectory, "snapshots"); Directory.CreateDirectory(directory);
         string snapshot = Path.Combine(directory, "edit-boundary-" + Guid.NewGuid().ToString("N") + ".clip");
         try
