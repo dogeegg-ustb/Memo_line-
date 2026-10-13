@@ -68,7 +68,13 @@ internal static unsafe class LayerDiff
 
     public static LayerDiffResult Compare(string afterPath, string nowPath, DirtyEvidence evidence, string outputDirectory, CancellationToken token)
     {
-        using var after = Load(afterPath); using var now = Load(nowPath);
+        // The decodes dominate a large compare: run both at once, and read the decoded bitmaps through the same
+        // 32bpp ARGB lock that Load copies from, instead of copying ~140 MB per A4 canvas first.
+        var decodingAfter = Task.Run(() => (Bitmap)Image.FromFile(afterPath));
+        Bitmap decodedNow;
+        try { decodedNow = (Bitmap)Image.FromFile(nowPath); }
+        catch { _ = decodingAfter.ContinueWith(t => t.Result.Dispose(), TaskContinuationOptions.OnlyOnRanToCompletion); throw; }
+        using var now = decodedNow; using var after = decodingAfter.GetAwaiter().GetResult();
         if (after.Size != now.Size) throw new InvalidDataException("after/now 的完整画布尺寸不一致");
         var size = now.Size; var matrix = new DirtyTileMatrix(size.Width, size.Height, TileSize);
         var labelList = Describe(evidence, size).ToList();
@@ -91,19 +97,35 @@ internal static unsafe class LayerDiff
         // predicted matrix remains evidence metadata and label ownership only;
         // it is never used to skip pixels because edits can occur outside the
         // recognizer's predicted coverage.
-        foreach (int cell in Enumerable.Range(0, matrix.Rows * matrix.Columns))
+        // Rows are scanned whole, one band of tiles at a time: identical bytes are never Different, so one
+        // vectorized compare clears an unchanged row, and only differing tile rows are visited pixel by pixel.
+        int columns = matrix.Columns, rowBytes = size.Width * 4;
+        var minXs = new int[columns]; var minYs = new int[columns]; var maxXs = new int[columns]; var maxYs = new int[columns];
+        var counts = new long[columns];
+        for (int cy = 0; cy < matrix.Rows; cy++)
         {
-            token.ThrowIfCancellationRequested(); int cx = cell % matrix.Columns, cy = cell / matrix.Columns;
-            int left = cx * TileSize, top = cy * TileSize, right = Math.Min(size.Width, left + TileSize), bottom = Math.Min(size.Height, top + TileSize);
-            int minX = right, minY = bottom, maxX = left, maxY = top; long changed = 0;
-            for (int y = top; y < bottom; y++) for (int x = left; x < right; x++)
+            token.ThrowIfCancellationRequested();
+            int top = cy * TileSize, bottom = Math.Min(size.Height, top + TileSize);
+            Array.Clear(counts);
+            for (int y = top; y < bottom; y++)
             {
-                compared++;
-                if (!Different(fullAfter.At(x, y), fullNow.At(x, y))) continue;
-                changed++; minX = Math.Min(minX, x); minY = Math.Min(minY, y); maxX = Math.Max(maxX, x + 1); maxY = Math.Max(maxY, y + 1);
+                if (new ReadOnlySpan<byte>(fullAfter.At(0, y), rowBytes).SequenceEqual(new ReadOnlySpan<byte>(fullNow.At(0, y), rowBytes))) continue;
+                for (int cx = 0; cx < columns; cx++)
+                {
+                    int left = cx * TileSize, right = Math.Min(size.Width, left + TileSize);
+                    if (new ReadOnlySpan<byte>(fullAfter.At(left, y), (right - left) * 4).SequenceEqual(new ReadOnlySpan<byte>(fullNow.At(left, y), (right - left) * 4))) continue;
+                    for (int x = left; x < right; x++)
+                    {
+                        if (!Different(fullAfter.At(x, y), fullNow.At(x, y))) continue;
+                        if (counts[cx]++ == 0) { minXs[cx] = maxXs[cx] = x; minYs[cx] = y; }
+                        minXs[cx] = Math.Min(minXs[cx], x); maxXs[cx] = Math.Max(maxXs[cx], x + 1); maxYs[cx] = y + 1;
+                    }
+                }
             }
-            if (changed > 0) changedCells[cell] = (new(minX, minY, maxX, maxY), changed);
+            for (int cx = 0; cx < columns; cx++)
+                if (counts[cx] > 0) changedCells[cy * columns + cx] = (new(minXs[cx], minYs[cx], maxXs[cx], maxYs[cx]), counts[cx]);
         }
+        compared = (long)size.Width * size.Height;
         var remaining = changedCells.Keys.ToHashSet(); var images = new List<DiffImage>();
         while (remaining.Count > 0)
         {

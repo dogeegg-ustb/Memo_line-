@@ -336,7 +336,7 @@ internal static class DiffChecks
         var perfDiff = LayerDiff.Compare(perfAfter, perfNow, minimal, Path.Combine(root, "performance"), CancellationToken.None);
         perfWatch.Stop();
         check(perfDiff.ChangedPixels == 1 && perfDiff.FullResolutionComparedPixels == 4961L * 7016 && perfDiff.CoarseComparedPixels == 0
-            && perfWatch.ElapsedMilliseconds < 400, "4961x7016 full-resolution compare completes within the release performance budget");
+            && perfWatch.ElapsedMilliseconds < 400, $"4961x7016 full-resolution compare completes within the release performance budget ({perfWatch.ElapsedMilliseconds} ms of 400)");
         var recreatedResult=Result("recreated-ink",57) with { Metadata=JsonSerializer.Serialize(new
             { width=256,height=256,fullCanvas=true,layerId=3,layerUuid="recreated-ink" }) };
         var recreated=history.Advance(recreatedResult,Request(57),"test",Collect,()=>true,CancellationToken.None);
