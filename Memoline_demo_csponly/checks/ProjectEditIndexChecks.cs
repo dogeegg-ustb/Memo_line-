@@ -196,6 +196,11 @@ internal static class ProjectEditIndexChecks
         Check(cachedIndex.IsValid && cachedIndex.Strokes.Keys.OrderBy(k => k.SessionId).SequenceEqual(index.Strokes.Keys.OrderBy(k => k.SessionId)) &&
             cachedIndex.Layers[route].Packets.Count == 3,
             "Cached historical native indexes may be reused while the live session always builds afresh.");
+        var corruptCached = new Dictionary<string, EditIndex>(cached) { [corruptSession.SessionId] = EditIndexBuilder.Build(corruptSession) };
+        ProjectEditIndex.VerifyHistory(corruptCached.Values);
+        Check(Enumerable.Range(0, 2).All(_ => ProjectEditIndex.Build([first, corruptSession], current, corruptCached)
+                .Layers[route].Issues.Any(i => i.Message.Contains("差异补丁的前像素"))),
+            "A reused history layer verified once keeps reporting its corrupt pixel chain on every join.");
         Console.WriteLine($"Project edit index checks passed: {count}.");
         return count;
     }

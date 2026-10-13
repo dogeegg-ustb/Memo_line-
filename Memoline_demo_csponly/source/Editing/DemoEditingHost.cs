@@ -112,7 +112,9 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
             return _history=Task.Run(()=>
             {
                 var sources=ProjectSessionReader.ReadProjectCached(project);
-                return new History(sources,sources.ToDictionary(s=>s.SessionId,EditIndexBuilder.Build));
+                var indexes=sources.ToDictionary(s=>s.SessionId,EditIndexBuilder.Build);
+                ProjectEditIndex.VerifyHistory(indexes.Values);
+                return new History(sources,indexes);
             });
         }
     }

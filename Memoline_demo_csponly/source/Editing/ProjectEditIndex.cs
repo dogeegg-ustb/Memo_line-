@@ -1,4 +1,5 @@
 using PacketReplay;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace MemolineDemo.Editing;
@@ -36,8 +37,9 @@ internal static class ProjectEditIndex
                     "历史会话记录了笔接触但没有可验证的整层捕获：" + session.SessionId));
                 continue;
             }
-            var native = order < prior.Count && sourceIndexes is not null && sourceIndexes.TryGetValue(session.SessionId, out var cached)
-                ? cached : EditIndexBuilder.Build(session);
+            EditIndex? cached = null;
+            bool reused = order < prior.Count && sourceIndexes is not null && sourceIndexes.TryGetValue(session.SessionId, out cached);
+            var native = reused ? cached! : EditIndexBuilder.Build(session);
             foreach (var layer in native.Layers.Values)
             {
                 LayerKey route = layer.Layer;
@@ -47,15 +49,14 @@ internal static class ProjectEditIndex
                 else routeIssues.Add(new(PlanIssueCode.LayerIdentityUnconfirmed,
                     "历史图层尚未唯一对应当前 CSP 捕获：" + layer.Layer.Uuid));
                 var packets = layer.Packets.OrderBy(p => p.TriggerTicks).ToArray();
-                var baseline = packets.Select(p => p.Before).FirstOrDefault(i => i is not null) ??
-                    packets.Where(p => p.IsRecordingBaseline).Select(p => p.Current).FirstOrDefault(i => i is not null) ?? layer.Baseline;
-                var final = packets.Select(p => p.Current).LastOrDefault(i => i is not null) ?? layer.Current;
+                var (baseline, final) = Endpoints(layer);
                 var issues = layer.Issues.ToList();
                 // A full, unchanged capture with no contacts is still a continuity checkpoint.
                 if (layer.Strokes.Count == 0 && packets.All(p => p.IsRecordingBaseline) && SamePixels(baseline, final))
                     issues.RemoveAll(i => i.Code == PlanIssueCode.NoBaseline && i.Message == "图层没有可重建的差异链。");
                 issues.AddRange(routeIssues);
-                issues.AddRange(VerifyPixels(layer, baseline, final, session.SessionId));
+                // Baseline and final come from the layer alone, so a reused history layer is verified once.
+                issues.AddRange(reused ? VerifiedHistory(layer) : VerifyPixels(layer, baseline, final, session.SessionId));
                 if (!sources.TryGetValue(route, out var chain)) sources.Add(route, chain = []);
                 chain.Add(new(order, session, layer, baseline, final, issues));
             }
@@ -121,6 +122,28 @@ internal static class ProjectEditIndex
                 UndoCheckpoints = undoCheckpoints });
         }
         return new(layers, strokes, images, globalIssues.Concat(layers.Values.SelectMany(layer => layer.Issues)).ToArray());
+    }
+
+    private static (ImageRgba? Baseline, ImageRgba? Final) Endpoints(LayerIndex layer)
+    {
+        var packets = layer.Packets.OrderBy(p => p.TriggerTicks).ToArray();
+        return (packets.Select(p => p.Before).FirstOrDefault(i => i is not null) ??
+                packets.Where(p => p.IsRecordingBaseline).Select(p => p.Current).FirstOrDefault(i => i is not null) ?? layer.Baseline,
+            packets.Select(p => p.Current).LastOrDefault(i => i is not null) ?? layer.Current);
+    }
+
+    // Prior sessions' indexes are immutable and shared by every boundary of a recording.
+    private static readonly ConditionalWeakTable<LayerIndex, IReadOnlyList<PlanIssue>> Verified = new();
+    private static IReadOnlyList<PlanIssue> VerifiedHistory(LayerIndex layer) => Verified.GetValue(layer, _ =>
+    {
+        var (baseline, final) = Endpoints(layer);
+        return VerifyPixels(layer, baseline, final, layer.Layer.SessionId);
+    });
+
+    /// <summary>Verifies the pixel chains of history indexes ahead of the first boundary that joins them.</summary>
+    internal static void VerifyHistory(IEnumerable<EditIndex> indexes)
+    {
+        foreach (var layer in indexes.SelectMany(index => index.Layers.Values)) VerifiedHistory(layer);
     }
 
     private static IReadOnlyList<PlanIssue> VerifyPixels(LayerIndex layer, ImageRgba? baseline, ImageRgba? final, string session)
