@@ -83,6 +83,43 @@ internal static class FootprintContractChecks
         legacy["labels"]![0]!.AsObject().Remove("coverageSettings");
         Check(ReadLabels(JsonSerializer.SerializeToElement(legacy)).Single().CoverageSettings is null,
             "Legacy labels remain readable with an explicitly absent recipe for UnsupportedOverride handling.");
+        // Word-level union and fill against the pixel-by-pixel definition, at unaligned offsets and widths.
+        var random = new Random(20261013);
+        bool unionsMatch = true;
+        for (int trial = 0; trial < 300 && unionsMatch; trial++)
+        {
+            var masks = Enumerable.Range(0, random.Next(1, 5)).Select(_ =>
+            {
+                int left = random.Next(-5, 140), top = random.Next(-5, 40), width = random.Next(0, 150), height = random.Next(0, 9);
+                double density = random.NextDouble();
+                return PixelMask.FromPredicate(left, top, width, height, (_, _) => random.NextDouble() < density);
+            }).ToArray();
+            var union = Footprints.UnionBounded(masks);
+            var nonEmpty = masks.Where(m => !m.IsEmpty).ToArray();
+            if (nonEmpty.Length == 0) { unionsMatch &= union.IsEmpty; continue; }
+            int l = nonEmpty.Min(m => m.Left), t = nonEmpty.Min(m => m.Top);
+            var expected = new PixelMask(l, t, nonEmpty.Max(m => m.Left + m.Width) - l, nonEmpty.Max(m => m.Top + m.Height) - t);
+            foreach (var mask in nonEmpty) foreach (var (x, y) in mask.Pixels()) expected.Set(x, y);
+            unionsMatch &= union.Equals(expected) && union.Count == expected.Count;
+        }
+        Check(unionsMatch, "Bounded union ORs whole words yet equals the pixel-by-pixel union.");
+        Check(Enumerable.Range(0, 130).All(width => PixelMask.Filled(3, -2, width, 3) is var filled &&
+                filled.Equals(PixelMask.FromPredicate(3, -2, width, 3, (_, _) => true)) && filled.Count == width * 3L),
+            "A filled mask equals one set pixel by pixel, including partial last words.");
+        bool runsMatch = true;
+        for (int trial = 0; trial < 300 && runsMatch; trial++)
+        {
+            int left = random.Next(-3, 9), top = random.Next(-3, 4), width = random.Next(1, 200), height = random.Next(1, 6);
+            PixelMask runs = new(left, top, width, height), pixels = new(left, top, width, height);
+            for (int i = 0; i < 8; i++)
+            {
+                int y = top + random.Next(height), x0 = left + random.Next(width), x1 = Math.Min(left + width - 1, x0 + random.Next(-2, 140));
+                runs.SetRun(x0, x1, y);
+                for (int x = x0; x <= x1; x++) pixels.Set(x, y);
+            }
+            runsMatch &= runs.Equals(pixels) && runs.Count == pixels.Count;
+        }
+        Check(runsMatch, "Setting a row run a word at a time equals setting its pixels one by one, overlaps included.");
         if (failures.Count > 0) throw new InvalidOperationException(
             $"Footprint contract checks: {count - failures.Count}/{count} passed.\n" + string.Join("\n", failures));
         Console.WriteLine($"Footprint contract checks passed: {count}.");

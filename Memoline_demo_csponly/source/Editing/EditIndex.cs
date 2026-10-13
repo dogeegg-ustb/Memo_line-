@@ -69,7 +69,7 @@ internal static class EditIndexBuilder
             var probe = classification.ProbeGuaranteed
                 ? Footprints.RasterizeCenterlineBounded(points, width, height)
                 : write.Clone();
-            var impact = classification.Causal ? (classification.ReadsUnknownSource ? PixelMask.FromPredicate(0, 0, width, height, (_, _) => true) : write.Clone())
+            var impact = classification.Causal ? (classification.ReadsUnknownSource ? PixelMask.Filled(0, 0, width, height) : write.Clone())
                 : new PixelMask(0, 0);
             raster.Dispose();
             var key = new EditableStrokeKey(session.SessionId, beginAppend);

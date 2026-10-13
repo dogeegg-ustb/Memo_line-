@@ -213,7 +213,7 @@ internal static class ReconstructionPlanner
         // Its route and readback are checked by the restorer; planning assumes no
         // smaller geometric footprint until the replacement has verified metadata.
         if (ChangesSubtool(stroke, change))
-            return PixelMask.FromPredicate(bounds.Left, bounds.Top, bounds.Width, bounds.Height, static (_, _) => true);
+            return PixelMask.Filled(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
         if (!change.NumberValues.TryGetValue("brush_size", out var size) || stroke.Numbers.TryGetValue("brush_size", out var old) && size == old)
             return CanvasMask(stroke.WriteMask, bounds);
         var labels = stroke.CoverageLabels.Select(l => l with { Radius =

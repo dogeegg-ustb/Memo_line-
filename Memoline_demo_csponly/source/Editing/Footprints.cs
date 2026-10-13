@@ -125,7 +125,7 @@ public static class Footprints
             spans.Sort();
             int y = result.Top + row, filled = int.MinValue;
             foreach (var (s, e) in spans)
-                for (int x = Math.Max(s, filled + 1); x <= e; x++) { result.Set(x, y); filled = x; }
+            { result.SetRun(Math.Max(s, filled + 1), e, y); filled = Math.Max(filled, e); }
         }
     }
 
@@ -135,7 +135,7 @@ public static class Footprints
         if (items.Length == 0) return new(0,0);
         int left=items.Min(m=>m.Left), top=items.Min(m=>m.Top);
         var result=new PixelMask(left,top,items.Max(m=>m.Left+m.Width)-left,items.Max(m=>m.Top+m.Height)-top);
-        foreach(var mask in items) foreach(var (x,y) in mask.Pixels()) result.Set(x,y);
+        foreach(var mask in items) result.UnionWithin(mask);
         return result;
     }
 
@@ -168,7 +168,7 @@ public static class Footprints
             int x0 = Math.Max(left, (int)Math.Ceiling(lo - .5) - 1), x1 = Math.Min(right - 1, (int)Math.Floor(hi - .5) + 1);
             while (x0 <= x1 && DistanceToSegment(new(x0 + .5, y + .5), start, end) > radius) x0++;
             while (x1 >= x0 && DistanceToSegment(new(x1 + .5, y + .5), start, end) > radius) x1--;
-            for (int x = x0; x <= x1; x++) result.Set(x, y);
+            result.SetRun(x0, x1, y);
         }
     }
 
@@ -235,7 +235,7 @@ public static class Footprints
         return settings with { BrushSize = size };
     }
     private static PixelMask Empty(int width, int height) => new(0, 0, width, height);
-    private static PixelMask Full(int width, int height) => PixelMask.FromPredicate(0, 0, width, height, static (_, _) => true);
+    private static PixelMask Full(int width, int height) => PixelMask.Filled(0, 0, width, height);
     private static double Distance(PointD a, PointD b) => Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
     private static double DistanceToSegment(PointD p, PointD a, PointD b)
     {

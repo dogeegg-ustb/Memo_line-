@@ -74,6 +74,20 @@ public sealed class PixelMask : IEquatable<PixelMask>
         return true;
     }
 
+    /// <summary>Sets pixels <paramref name="x0"/>..<paramref name="x1"/> (inclusive) of row <paramref name="y"/>, a word at a time.</summary>
+    public void SetRun(int x0, int x1, int y)
+    {
+        if (x0 > x1) return;
+        if (!TryIndex(x0, y, out long bit) || !TryIndex(x1, y, out long end)) throw new ArgumentOutOfRangeException(nameof(x0));
+        while (bit <= end)
+        {
+            int word = (int)(bit >> 6), shift = (int)(bit & 63), n = (int)Math.Min(64 - shift, end - bit + 1);
+            ulong run = (n == 64 ? ulong.MaxValue : (1UL << n) - 1) << shift;
+            Count += System.Numerics.BitOperations.PopCount(run & ~_words[word]);
+            _words[word] |= run; bit += n;
+        }
+    }
+
     public IEnumerable<(int X, int Y)> Pixels()
     {
         // Same row-major order as a per-pixel scan, but empty 64-pixel words are skipped:
@@ -137,6 +151,52 @@ public sealed class PixelMask : IEquatable<PixelMask>
         EnsureSameBounds(other);
         for (int i = 0; i < _words.Length; i++) _words[i] &= ~other._words[i];
         Recount(); return this;
+    }
+
+    /// <summary>Every pixel of the bounds set, without visiting them one by one (a canvas has 35 million).</summary>
+    public static PixelMask Filled(int left, int top, int width, int height)
+    {
+        var result = new PixelMask(left, top, width, height);
+        long bits = (long)width * height;
+        if (bits == 0) return result;
+        result._words.AsSpan().Fill(ulong.MaxValue);
+        if ((bits & 63) != 0) result._words[^1] = (1UL << (int)(bits & 63)) - 1;
+        result.Count = bits; return result;
+    }
+
+    /// <summary>ORs a mask lying inside these bounds into this one, up to 64 pixels of a row at a time.</summary>
+    public void UnionWithin(PixelMask other)
+    {
+        if (other.IsEmpty) return;
+        if (other.Left < Left || other.Top < Top || (long)other.Left + other.Width > (long)Left + Width ||
+            (long)other.Top + other.Height > (long)Top + Height)
+            throw new ArgumentException("合并的像素位集超出目标外框。", nameof(other));
+        if (other.Left == Left && other.Top == Top && other.Width == Width && other.Height == Height) { UnionInPlace(other); return; }
+        for (int row = 0; row < other.Height; row++)
+        {
+            long source = (long)row * other.Width, target = (long)(other.Top - Top + row) * Width + (other.Left - Left);
+            for (int remaining = other.Width; remaining > 0;)
+            {
+                int n = Math.Min(64, remaining);
+                ulong bits = ReadBits(other._words, source, n);
+                if (bits != 0) OrBits(_words, target, bits, n);
+                source += n; target += n; remaining -= n;
+            }
+        }
+        Recount();
+    }
+    private static ulong ReadBits(ulong[] words, long bit, int n)
+    {
+        int word = (int)(bit >> 6), shift = (int)(bit & 63);
+        ulong value = words[word] >> shift;
+        if (shift != 0 && shift + n > 64) value |= words[word + 1] << (64 - shift);
+        return n == 64 ? value : value & ((1UL << n) - 1);
+    }
+    private static void OrBits(ulong[] words, long bit, ulong value, int n)
+    {
+        int word = (int)(bit >> 6), shift = (int)(bit & 63);
+        words[word] |= value << shift;
+        if (shift != 0 && shift + n > 64) words[word + 1] |= value >> (64 - shift);
     }
 
     public static PixelMask FromPredicate(int left, int top, int width, int height, Func<int, int, bool> predicate)
