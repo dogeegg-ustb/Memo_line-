@@ -60,6 +60,8 @@ internal sealed class EditingPanel : Form
     private readonly ListView _images=new(){Dock=DockStyle.Fill,View=View.LargeIcon,MultiSelect=false,ShowItemToolTips=true};
     private readonly ListView _events=new(){Dock=DockStyle.Fill,View=View.Details,FullRowSelect=true,CheckBoxes=false};
     private readonly ImageList _thumbnails=new(){ImageSize=new(128,128),ColorDepth=ColorDepth.Depth32Bit};
+    // A session's dirty images never change; each region change only picks among them.
+    private readonly Dictionary<DirtyImageKey,Bitmap> _thumbnailCache=[];
     private readonly TreeView _details=new(){Dock=DockStyle.Fill,ShowNodeToolTips=true};
     private readonly TabControl _tabs=new(){Dock=DockStyle.Fill};
     private readonly CheckBox _delete=new(){Text="让所选事件不再发生",Checked=true,AutoSize=true};
@@ -277,7 +279,7 @@ internal sealed class EditingPanel : Form
     }
     private void BindSession(EditSession session)
     {
-        _shown=session;_liveBrushEvidence=session.LiveBrushEvidence;
+        _shown=session;_liveBrushEvidence=session.LiveBrushEvidence;ClearThumbnailCache();
         _preciseSummary=null;_delete.Checked=true;_changeBrush.Checked=false;
         _brushPreview.Image?.Dispose();_brushPreview.Image=null;_brushPreview.Visible=false;
         _brush.Items.Clear();foreach(string name in session.BrushChoices)_brush.Items.Add(name);
@@ -298,14 +300,7 @@ internal sealed class EditingPanel : Form
         foreach(var candidate in _interaction.Candidates)
         {
             var image=candidate.Image;
-            using var stream=new MemoryStream(DirtyMatrixPaster.ClipboardImageCodec.EncodePng(image.Now.Width,image.Now.Height,image.Now.Bytes));
-            using var decoded=new Bitmap(stream);using var thumbnail=new Bitmap(128,128);using(var graphics=Graphics.FromImage(thumbnail))
-            {
-                for(int y=0;y<128;y+=8)for(int x=0;x<128;x+=8)
-                {using var square=new SolidBrush(((x+y)/8)%2==0?Color.White:Color.FromArgb(225,225,225));graphics.FillRectangle(square,x,y,8,8);}
-                float scale=Math.Min(128f/decoded.Width,128f/decoded.Height);float w=decoded.Width*scale,h=decoded.Height*scale;
-                graphics.DrawImage(decoded,(128-w)/2,(128-h)/2,w,h);
-            }
+            if(!_thumbnailCache.TryGetValue(image.Key,out var thumbnail))_thumbnailCache[image.Key]=thumbnail=Thumbnail(image.Now);
             _thumbnails.Images.Add(thumbnail);
             double seconds=(double)candidate.TriggerTicks/_shown!.Source(candidate.SourceSessionId??_shown.LiveView.SessionId).Frequency;
             _images.Items.Add(new ListViewItem($"{candidate.LayerName} · 第 {candidate.SessionOrder+1} 次录制 {seconds:0.00}s\r\n{image.Events.Count} 笔 · {(candidate.CanSelect?"可扫选":"不可编辑")}")
@@ -313,6 +308,33 @@ internal sealed class EditingPanel : Form
         }
         _tabs.SelectedTab=_imagePage;UpdateSummary();
     }
+    private static Bitmap Thumbnail(ImageRgba image)
+    {
+        // The same 32bpp ARGB bitmap the PNG codec would build from these RGBA bytes, without encoding and decoding it.
+        using var full=new Bitmap(image.Width,image.Height,System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var bits=full.LockBits(new(0,0,image.Width,image.Height),System.Drawing.Imaging.ImageLockMode.WriteOnly,System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        try
+        {
+            var row=new byte[image.Width*4];
+            for(int y=0;y<image.Height;y++)
+            {
+                image.Bytes.AsSpan(y*row.Length,row.Length).CopyTo(row);
+                for(int x=0;x<row.Length;x+=4)(row[x],row[x+2])=(row[x+2],row[x]);
+                System.Runtime.InteropServices.Marshal.Copy(row,0,bits.Scan0+y*bits.Stride,row.Length);
+            }
+        }
+        finally{full.UnlockBits(bits);}
+        var thumbnail=new Bitmap(128,128);
+        using(var graphics=Graphics.FromImage(thumbnail))
+        {
+            for(int y=0;y<128;y+=8)for(int x=0;x<128;x+=8)
+            {using var square=new SolidBrush(((x+y)/8)%2==0?Color.White:Color.FromArgb(225,225,225));graphics.FillRectangle(square,x,y,8,8);}
+            float scale=Math.Min(128f/full.Width,128f/full.Height);float w=full.Width*scale,h=full.Height*scale;
+            graphics.DrawImage(full,(128-w)/2,(128-h)/2,w,h);
+        }
+        return thumbnail;
+    }
+    private void ClearThumbnailCache(){foreach(var thumbnail in _thumbnailCache.Values)thumbnail.Dispose();_thumbnailCache.Clear();}
     private void ChooseImage()
     {
         if(_images.SelectedItems.Count!=1||_interaction is null||_overlay is null)return;
@@ -568,5 +590,5 @@ internal sealed class EditingPanel : Form
         _cancel.Enabled=_cancel.Visible=true;_status.Text="正在复现，按「取消复现」可停止当前操作。";Render("editing-progress.png");MinimumSize=minimum;Hide();
     }
     protected override void Dispose(bool disposing)
-    {if(disposing){_host.SetProgressObserver(null);_operation?.Cancel();_operation?.Dispose();CloseOverlay();_thumbnails.Dispose();_brushPreview.Image?.Dispose();}base.Dispose(disposing);}
+    {if(disposing){_host.SetProgressObserver(null);_operation?.Cancel();_operation?.Dispose();CloseOverlay();_thumbnails.Dispose();ClearThumbnailCache();_brushPreview.Image?.Dispose();}base.Dispose(disposing);}
 }
