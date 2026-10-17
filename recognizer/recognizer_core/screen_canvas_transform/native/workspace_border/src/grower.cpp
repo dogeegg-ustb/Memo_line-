@@ -1,8 +1,10 @@
 #include "wb/grower.hpp"
 
+#include "wb/parallel.hpp"
+
 #include <algorithm>
+#include <mutex>
 #include <queue>
-#include <unordered_set>
 
 namespace wb {
 namespace {
@@ -15,27 +17,31 @@ void BridgeGaps(ImageU8& growable, const ImageU8& weak, const ImageU8& strong, c
                 int gap) {
   if (gap <= 0) return;
   const int x0 = roi.left, x1 = roi.right, y0 = roi.top, y1 = roi.bottom;
-  ImageU8 dilated;
-  dilated.Allocate(growable.width, growable.height, 0);
-  for (int y = y0; y < y1; ++y) {
-    for (int x = x0; x < x1; ++x) {
-      if (!growable.At(x, y)) continue;
-      for (int dy = -gap; dy <= gap; ++dy) {
-        for (int dx = -gap; dx <= gap; ++dx) {
-          const int xx = x + dx;
-          const int yy = y + dy;
-          if (xx < x0 || xx >= x1 || yy < y0 || yy >= y1) continue;
-          dilated.At(xx, yy) = 1;
-        }
+  // Square dilation by `gap` inside the ROI, done separably: along rows, then columns.
+  ImageU8 dilated_rows;
+  dilated_rows.Allocate(growable.width, growable.height, 0);
+  ParallelRows(y1 - y0, [&](int begin, int end) {
+    for (int y = y0 + begin; y < y0 + end; ++y) {
+      for (int x = x0; x < x1; ++x) {
+        const int last = std::min(x1 - 1, x + gap);
+        bool any = false;
+        for (int xx = std::max(x0, x - gap); xx <= last && !any; ++xx) any = growable.At(xx, y);
+        dilated_rows.At(x, y) = any ? 1 : 0;
       }
     }
-  }
-  for (int y = y0; y < y1; ++y) {
-    for (int x = x0; x < x1; ++x) {
-      const bool keep = dilated.At(x, y) && (weak.At(x, y) || strong.At(x, y));
-      growable.At(x, y) = keep ? 1 : 0;
+  });
+  ParallelRows(y1 - y0, [&](int begin, int end) {
+    for (int y = y0 + begin; y < y0 + end; ++y) {
+      const int last = std::min(y1 - 1, y + gap);
+      for (int x = x0; x < x1; ++x) {
+        bool dilated = false;
+        for (int yy = std::max(y0, y - gap); yy <= last && !dilated; ++yy)
+          dilated = dilated_rows.At(x, yy);
+        const bool keep = dilated && (weak.At(x, y) || strong.At(x, y));
+        growable.At(x, y) = keep ? 1 : 0;
+      }
     }
-  }
+  });
 }
 
 }  // namespace
@@ -67,15 +73,17 @@ GrownBackground* GrowBackground(const std::vector<SeedPatch>& seeds,
 
   ImageU8 growable;
   growable.Allocate(w, h, 0);
-  for (int y = y0; y < y1; ++y) {
-    for (int x = x0; x < x1; ++x) {
-      // Keep weak/strong background pixels growable even on gradient ridges so the
-      // outer rim (bg↔UI transition) is not shaved off. Barriers still stop leakage
-      // into non-background neighbors during flood fill below.
-      const bool g = similarity.weak_mask.At(x, y) != 0 || similarity.strong_mask.At(x, y) != 0;
-      growable.At(x, y) = g ? 1 : 0;
+  ParallelRows(y1 - y0, [&](int begin, int end) {
+    for (int y = y0 + begin; y < y0 + end; ++y) {
+      for (int x = x0; x < x1; ++x) {
+        // Keep weak/strong background pixels growable even on gradient ridges so the
+        // outer rim (bg↔UI transition) is not shaved off. Barriers still stop leakage
+        // into non-background neighbors during flood fill below.
+        const bool g = similarity.weak_mask.At(x, y) != 0 || similarity.strong_mask.At(x, y) != 0;
+        growable.At(x, y) = g ? 1 : 0;
+      }
     }
-  }
+  });
   BridgeGaps(growable, similarity.weak_mask, similarity.strong_mask, grow_roi,
              std::max(0, std::min(cfg.grow_gap_bridge_px, 2)));
 
@@ -151,34 +159,48 @@ GrownBackground* GrowBackground(const std::vector<SeedPatch>& seeds,
   std::sort(order.begin(), order.end(),
             [&](int a, int b) { return comps[a].pixels > comps[b].pixels; });
 
-  std::unordered_set<int> keep;
+  // Per label (index = label id): kept or not, and its majority seed side.
+  std::vector<uint8_t> keep(comps.size() + 1, 0);
   for (int i : order) {
     if (count + comps[i].pixels > max_pixels && count > 0) continue;
-    keep.insert(i + 1);
+    keep[i + 1] = 1;
     count += comps[i].pixels;
   }
   if (count < 16) return nullptr;
+  std::vector<uint8_t> majority(comps.size() + 1, 1);
+  for (size_t i = 0; i < comps.size(); ++i) {
+    int maj = 1, majv = -1;
+    for (int s = 1; s <= 4; ++s) {
+      if (comps[i].side_vote[s] > majv) {
+        majv = comps[i].side_vote[s];
+        maj = s;
+      }
+    }
+    majority[i + 1] = static_cast<uint8_t>(maj);
+  }
 
   int bx0 = w, bx1 = 0, by0 = h, by1 = 0;
-  for (int y = y0; y < y1; ++y) {
-    for (int x = x0; x < x1; ++x) {
-      const int lid = label_at(x, y);
-      if (!lid || !keep.count(lid)) continue;
-      out.mask.At(x, y) = 1;
-      int maj = 1, majv = -1;
-      for (int s = 1; s <= 4; ++s) {
-        if (comps[lid - 1].side_vote[s] > majv) {
-          majv = comps[lid - 1].side_vote[s];
-          maj = s;
-        }
+  std::mutex bbox_lock;
+  ParallelRows(y1 - y0, [&](int begin, int end) {
+    int bandx0 = w, bandx1 = 0, bandy0 = h, bandy1 = 0;
+    for (int y = y0 + begin; y < y0 + end; ++y) {
+      for (int x = x0; x < x1; ++x) {
+        const int lid = label_at(x, y);
+        if (!lid || !keep[lid]) continue;
+        out.mask.At(x, y) = 1;
+        out.source_label.At(x, y) = majority[lid];
+        bandx0 = std::min(bandx0, x);
+        bandx1 = std::max(bandx1, x + 1);
+        bandy0 = std::min(bandy0, y);
+        bandy1 = std::max(bandy1, y + 1);
       }
-      out.source_label.At(x, y) = static_cast<uint8_t>(maj);
-      bx0 = std::min(bx0, x);
-      bx1 = std::max(bx1, x + 1);
-      by0 = std::min(by0, y);
-      by1 = std::max(by1, y + 1);
     }
-  }
+    std::lock_guard<std::mutex> hold(bbox_lock);
+    bx0 = std::min(bx0, bandx0);
+    bx1 = std::max(bx1, bandx1);
+    by0 = std::min(by0, bandy0);
+    by1 = std::max(by1, bandy1);
+  });
 
   out.pixel_count = count;
   out.bbox = {bx0, by0, bx1, by1};

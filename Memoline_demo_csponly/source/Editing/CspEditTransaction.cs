@@ -7,7 +7,10 @@ using PacketReplay;
 namespace MemolineDemo.Editing;
 
 internal sealed record CspLayerEvidence(string Uuid, string Name, bool IsRaster, bool IsFolder, bool Visible, string? ParentUuid = null);
-internal sealed record CspLayerInspection(string SessionId, long Generation, bool Saved, IReadOnlyList<CspLayerEvidence> Layers);
+// Revision identifies the saved document's bytes. CSP skips writing an unmodified document, so an
+// unchanged revision after a paste means CSP never applied the paste (null when the source cannot tell).
+internal sealed record CspLayerInspection(string SessionId, long Generation, bool Saved, IReadOnlyList<CspLayerEvidence> Layers,
+    string? Revision = null);
 internal sealed record CspCurrentLayerEvidence(string Name, bool Confirmed, string? Uuid = null);
 internal sealed record CspHideEvidence(bool UsedShortcut, bool ShortcutSemanticsConfirmed, bool SameFrame,
     bool RowSelected, string RowName, bool EyeClosed);
@@ -26,6 +29,8 @@ internal interface ICspEditingActions
     Task<CspLayerInspection> SaveAndInspectAsync(CancellationToken token, bool refresh = false);
     Task NavigateToLayerAsync(string name, CancellationToken token);
     Task<CspCurrentLayerEvidence> ReadCurrentLayerAsync(CancellationToken token);
+    // Reads the selected layer from the screen now, not from the last save: used around the deletion of an original.
+    Task<CspCurrentLayerEvidence> ReadLiveCurrentLayerAsync(CancellationToken token) => ReadCurrentLayerAsync(token);
     Task<CspHideEvidence> HideLayerAsync(CspLayerEvidence layer, CancellationToken token);
     // False when CSP has no show/hide-layer shortcut: the original stays visible under the reproduction.
     bool CanHideLayer => true;
@@ -39,6 +44,11 @@ internal interface ICspEditingActions
     Task DeleteLayerAsync(CancellationToken token);
     Task RegisterBaselineAsync(LayerExportEvidence capture, CancellationToken token);
     void ReleaseInputs();
+    void Status(string text) { }
+    // The reproduction now stands for the deleted original; reported with the native editing action.
+    void LayerReplaced(string replacedUuid, string reproductionUuid) { }
+    // Precise undo may work on a layer other than the user's: select the user's layer again before the end.
+    Task ReturnToUserLayerAsync(CancellationToken token) => Task.CompletedTask;
 }
 
 internal sealed class CspEditingException(PlanIssue issue, Exception? inner = null,
@@ -61,7 +71,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
     private readonly CancellationTokenSource _physical = new();
     private readonly CancellationTokenSource _shutdown = new();
     private readonly SemaphoreSlim _gate = new(1);
-    private readonly HashSet<LayerKey> _hidden = [], _installed = [];
+    private readonly HashSet<LayerKey> _hidden = [], _installed = [], _deleted = [];
     private bool _skipHide;
     private readonly HashSet<LayerKey> _requiredFinal, _usedLayers = [];
     private readonly ConcurrentQueue<Exception> _cleanupErrors = new();
@@ -161,8 +171,12 @@ internal sealed class CspEditTransaction : IEditingTransaction
     {
         Active(); ValidatePixels(layer, expected);
         if (_installed.Contains(layer)) throw Error(PlanIssueCode.LayerIdentityUnconfirmed, "同一原图层不能重复安装复现层。");
-        var (original, before) = await OriginalAsync(layer, hide: true, ct);
+        // No hiding: the original is deleted right after the paste, so hiding it would only cost another save.
+        var (original, before) = await OriginalAsync(layer, hide: false, ct);
         var final = await PasteAsync(layer, original, before, expected, ct);
+        // The reproduction replaces the original (kept in the recycle bin). Deleting it before the replay keeps the
+        // replayed strokes on top of CSP's undo stack, so its own undo still steps back through exactly them.
+        await DeleteOriginalAsync(layer, original, final, ct);
         // Event replay is the last step, after the pasted state. The contacts the snapshot reverted come first,
         // concentrated (they only rebuild pixels); the undone strokes come last, discrete, so CSP's own undo
         // steps back through exactly them.
@@ -183,6 +197,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
         var captured = await CaptureAsync(layer, original, final, ct);
         var asset = JournalCapture(captured);
         _journal.ReproductionInstalled(final.Uuid, asset);
+        _actions.LayerReplaced(original.Uuid, final.Uuid);
         await _actions.RegisterBaselineAsync(captured.Evidence, ct);
         _installed.Add(layer);
         return captured.Pixels;
@@ -193,6 +208,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
         Active();
         if (_installed.Count == 0 || _requiredFinal.Concat(_usedLayers).Any(layer=>!_installed.Contains(layer)))
             throw Error(PlanIssueCode.CaptureMismatch, "尚未安装全部受影响目标图层的最终复现层。");
+        await _actions.ReturnToUserLayerAsync(ct);
         _actions.ReleaseInputs();
         await _actions.EndNativeTransactionAsync(_id, "executed", ct); _nativeEnded = true;
         await RestoreAsync();
@@ -232,21 +248,39 @@ internal sealed class CspEditTransaction : IEditingTransaction
         return (original, inspection);
     }
 
+    internal const int PasteAttempts = 2;
+
     private async Task<CspLayerEvidence> PasteAsync(LayerKey layer, CspLayerEvidence original, CspLayerInspection before,
         ImageRgba image, CancellationToken ct)
     {
-        await _actions.SetClipboardImageAsync(image.Copy(), ct);
-        ct.ThrowIfCancellationRequested(); await _actions.PasteAsync(ct);
-        var after = await InspectChangedAsync(layer, before, ct);
+        CspLayerInspection after;
+        for (int attempt = 1; ; attempt++)
+        {
+            // The clipboard is written again on a retry: another program may have replaced it.
+            await _actions.SetClipboardImageAsync(image.Copy(), ct);
+            ct.ThrowIfCancellationRequested(); await _actions.PasteAsync(ct);
+            after = await InspectChangedAsync(layer, before, ct);
+            if (!after.Layers.SequenceEqual(before.Layers)) break;
+            // Nothing changed over every save of InspectChangedAsync: CSP ignored the paste (a dialog, a
+            // focused panel field). The document is untouched, so pasting again cannot duplicate a layer.
+            bool unwritten = after.Revision is not null && after.Revision == before.Revision;
+            if (attempt < PasteAttempts) { _actions.Status($"CSP 未执行粘贴{(unwritten ? "（文档未被修改）" : "")}，重新激活 CSP 后再次粘贴（{attempt + 1}/{PasteAttempts}）…"); continue; }
+            throw Error(PlanIssueCode.LayerIdentityUnconfirmed, $"CSP 连续 {PasteAttempts} 次没有执行粘贴：保存后的图层结构没有任何变化" +
+                (unwritten ? "，文档也未被写入" : "") + "。请关闭 CSP 中打开的对话框、让画布获得焦点后重试。");
+        }
         var oldIds = before.Layers.Select(l => l.Uuid).ToHashSet(StringComparer.Ordinal);
         var added = after.Layers.Where(l => !oldIds.Contains(l.Uuid)).ToArray();
-        if (added.Length != 1 || !added[0].IsRaster || added[0].IsFolder ||
-            added[0].ParentUuid != original.ParentUuid ||
-            !after.Layers.Where(l => l.Uuid != added[0].Uuid).SequenceEqual(before.Layers) ||
-            after.Layers.ToList().IndexOf(added[0]) != before.Layers.ToList().IndexOf(original))
-            throw Error(PlanIssueCode.LayerIdentityUnconfirmed, "粘贴前后必须恰好新增一个位于原层之上的非文件夹栅格层，其余结构保持一致。");
+        string Order(CspLayerInspection inspection) => string.Join(" / ", inspection.Layers.Select(l => l.Name));
+        if (added.Length != 1)
+            throw Error(PlanIssueCode.LayerIdentityUnconfirmed, $"粘贴后新增了 {added.Length} 个图层（应为 1 个）。粘贴前：{Order(before)}；粘贴后：{Order(after)}。");
+        if (!added[0].IsRaster || added[0].IsFolder)
+            throw Error(PlanIssueCode.LayerIdentityUnconfirmed, $"粘贴新增的「{added[0].Name}」不是普通栅格层。");
+        if (added[0].ParentUuid != original.ParentUuid || after.Layers.ToList().IndexOf(added[0]) != before.Layers.ToList().IndexOf(original))
+            throw Error(PlanIssueCode.LayerIdentityUnconfirmed, $"粘贴新增的「{added[0].Name}」没有紧贴在原层「{original.Name}」之上（粘贴时 CSP 当前层不是原层）。粘贴后：{Order(after)}。");
+        if (!after.Layers.Where(l => l.Uuid != added[0].Uuid).SequenceEqual(before.Layers))
+            throw Error(PlanIssueCode.LayerIdentityUnconfirmed, $"粘贴期间其他图层的结构或显示状态发生了变化。粘贴前：{Order(before)}；粘贴后：{Order(after)}。");
         var work = RequireLayer(after, added[0].Uuid, added[0].Name);
-        RequireLayer(after, original.Uuid, original.Name, hidden: !_skipHide);
+        RequireLayer(after, original.Uuid, original.Name, hidden: _hidden.Contains(layer));
         await ConfirmAsync(after, work, ct);
         var captured = LayerCapture.Read(await _actions.ExportLayerAsync(layer with { Uuid = work.Uuid }, ct),
             layer with { Uuid = work.Uuid }, _sizes[layer]);
@@ -254,11 +288,44 @@ internal sealed class CspEditTransaction : IEditingTransaction
         return work;
     }
 
+    /// <summary>
+    /// The pasted reproduction sits directly above the original and is selected. Steps down to the original,
+    /// confirms it on screen by its unique name, deletes it, and returns to the reproduction. The next save
+    /// (the capture) proves structurally that exactly the original disappeared.
+    /// </summary>
+    private async Task DeleteOriginalAsync(LayerKey layer, CspLayerEvidence original, CspLayerEvidence work, CancellationToken ct)
+    {
+        await _actions.NavigateToLayerAsync(original.Name, ct);
+        var current = await _actions.ReadLiveCurrentLayerAsync(ct);
+        if (!current.Confirmed || current.Uuid != original.Uuid)
+            throw Error(PlanIssueCode.LayerIdentityUnconfirmed,
+                $"删除前未能确认当前层是原层「{original.Name}」（识别为「{current.Name}」），已停止，未删除任何图层。");
+        ct.ThrowIfCancellationRequested();
+        _journal.OriginalDeleted(original.Uuid, work.Uuid);
+        await _actions.DeleteLayerAsync(ct);
+        _deleted.Add(layer);
+        current = await _actions.ReadLiveCurrentLayerAsync(ct);
+        if (!current.Confirmed || current.Uuid != work.Uuid)
+        {
+            await _actions.NavigateToLayerAsync(work.Name, ct);
+            current = await _actions.ReadLiveCurrentLayerAsync(ct);
+        }
+        if (!current.Confirmed || current.Uuid != work.Uuid)
+            throw Error(PlanIssueCode.LayerIdentityUnconfirmed, $"删除原层后未能回到复现层「{work.Name}」。");
+    }
+
     private async Task<CapturedLayer> CaptureAsync(LayerKey layer, CspLayerEvidence original, CspLayerEvidence work, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var inspection = await InspectAsync(layer, ct);
-        RequireLayer(inspection, original.Uuid, original.Name, hidden: !_skipHide);
+        if (_deleted.Contains(layer))
+            // CSP may still be busy with the delete when the save arrives (see InspectChangedAsync).
+            for (int attempt = 1; inspection.Layers.Any(l => l.Uuid == original.Uuid); attempt++)
+            {
+                if (attempt > 5) throw Error(PlanIssueCode.LayerIdentityUnconfirmed, $"已删除的原层「{original.Name}」仍在 CSP 中。");
+                await Task.Delay(300, ct); inspection = await InspectAsync(layer, ct, refresh: true);
+            }
+        else RequireLayer(inspection, original.Uuid, original.Name, hidden: _hidden.Contains(layer));
         await ConfirmAsync(inspection, RequireLayer(inspection, work.Uuid, work.Name), ct);
         var key = layer with { Uuid = work.Uuid };
         return LayerCapture.Read(await _actions.ExportLayerAsync(key, ct), key, _sizes[layer]);

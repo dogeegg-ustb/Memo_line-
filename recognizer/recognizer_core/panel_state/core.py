@@ -4,12 +4,13 @@ import time
 from pathlib import Path
 from typing import Any
 
+import cv2
 import numpy as np
 
-from .visual_value_extraction import apply_visual_values
+from .visual_value_extraction import _label_box, _right_region, apply_visual_values
 from .models import OcrText, Rect, RoiRecognition, RoiRole, utc_now
 from .ocr_engine import OcrUnavailable, RapidOcrEngine, normalize_rapid_result
-from .panel_parser import PanelParser
+from .panel_parser import NUMBER_RE, UNIT_RE, VALUE_NUMBER_RE, PanelParser
 from .property_catalog import PropertyCatalog
 from .state_assembler import StateAssembler
 from .visual_state import VisualStateRecognizer
@@ -94,6 +95,7 @@ class PanelStateCore:
             diagnostics.append(info)
             states = self.visual.analyze(image, items)
             recognition = self.parser.parse(roi_id, role, items, states)
+            self._reread_missing_numbers(image, recognition)
             apply_visual_values(image, recognition, self.catalog)
             recognitions.append(recognition)
 
@@ -164,6 +166,60 @@ class PanelStateCore:
         recognitions.append(RoiRecognition('tool_list', 'tool_list', [], [], brush_candidates=[candidate]))
         resolution.update(source='selected_subtool', catalogMatched=True, nodeId=match['id'], name=match['name'])
         return resolution
+
+    MIN_REREAD_SCORE = 0.8
+
+    def _reread_missing_numbers(self, image: np.ndarray, recognition: RoiRecognition) -> None:
+        """Re-read a number whose label matched but whose digits the panel OCR missed.
+
+        A lone small digit such as the stabilization "6" can drop out of
+        full-panel detection after a one-pixel shift of the crop; OCR of the
+        enlarged area right of its label finds it again. Only one plain number
+        there is accepted, otherwise the value stays partial.
+        """
+        for parameter in recognition.parameters:
+            if parameter['type'] != 'number' or parameter['value'] != 'unknown' or parameter['status'] != 'partial':
+                continue
+            label = _label_box(parameter)
+            region = _right_region(image, label) if label else None
+            if region is None:
+                continue
+            # Stop before a second property's label on the same row.
+            center = label[1] + label[3] / 2
+            right = min([box[0] for other in recognition.parameters if other is not parameter
+                         and (box := _label_box(other)) and box[0] > label[0]
+                         and abs(box[1] + box[3] / 2 - center) <= max(12, label[3] * .75)],
+                        default=region.x + region.width)
+            if right - region.x < 12:
+                continue
+            crop = image[region.y:region.y + region.height, region.x:right]
+            item = None
+            # A border keeps the detector from fusing the digit with the
+            # spinner arrows at the crop edge ("6~" instead of "6").
+            for scale, pad in ((1, 8), (2, 16)):
+                view = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC) if scale > 1 else crop
+                view = cv2.copyMakeBorder(view, pad, pad, pad, pad, cv2.BORDER_REPLICATE)
+                numbers = [OcrText(found.text, found.score,
+                                   [[(point[0] - pad) / scale + region.x, (point[1] - pad) / scale + region.y]
+                                    for point in found.box])
+                           for found in self._normalize(self._recognize(view))
+                           if VALUE_NUMBER_RE.fullmatch(found.text)]
+                if len(numbers) == 1 and (numbers[0].score or 0.0) >= self.MIN_REREAD_SCORE:
+                    item = numbers[0]
+                    break
+            if item is None:
+                continue
+            raw_number = NUMBER_RE.search(item.text).group(0)
+            number = PanelParser._number(raw_number)
+            unit_match = UNIT_RE.search(item.text[item.text.find(raw_number) + len(raw_number):])
+            unit = unit_match.group(1) if unit_match else None
+            evidence = dict(roi_id=recognition.roi_id, bbox=item.bbox(), type='ocr_text', text=item.text,
+                            ocr_score=item.score, reason='标签右侧局部放大重读的数字值')
+            parameter.update(value=number, raw_text=raw_number, unit=unit, status='ok',
+                             evidence=parameter['evidence'] + [evidence],
+                             observed={'label': parameter['label'], 'number': number, 'unit': unit})
+            parameter['_value_evidence'] = [evidence]
+            parameter['_value_category'] = 'number'
 
     def _recognize(self, image: np.ndarray) -> Any:
         if hasattr(self.ocr, "recognize"):

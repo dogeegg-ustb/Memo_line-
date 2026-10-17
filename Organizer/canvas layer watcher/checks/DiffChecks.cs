@@ -42,6 +42,30 @@ internal static class DiffChecks
     internal static void Run(Action<bool, string> check, string artifacts)
     {
         string root = Path.Combine(artifacts, "diff-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        // Controls need a single-threaded apartment; the checks run on the thread pool.
+        Exception? previewError = null;
+        var previewThread = new Thread(() =>
+        {
+            try
+            {
+                using var layer = new Bitmap(4961, 7016, PixelFormat.Format32bppArgb);
+                using var reduced = Preview.Reduce(layer);
+                using var preview = new Preview { Size = new(400, 300), CanvasBounds = new(Point.Empty, layer.Size) };
+                check(reduced.Height == Preview.ReducedEdge && reduced.Width == 1448, "A fitted full layer keeps only a copy reduced to 2048 px");
+                int loads = 0;
+                preview.Show(reduced, () => { loads++; return new Bitmap(layer); });
+                check(loads == 0, "A fitted preview does not decode the full layer");
+                preview.Fit = false; preview.Fit = false;
+                check(loads == 1, "Actual size decodes the full layer once");
+                preview.Fit = true; preview.Fit = false;
+                check(loads == 2, "Returning to the fitted view drops the full layer");
+                preview.Image = null;
+            }
+            catch (Exception error) { previewError = error; }
+        });
+        previewThread.SetApartmentState(ApartmentState.STA); previewThread.Start();
+        if (!previewThread.Join(TimeSpan.FromSeconds(60))) throw new TimeoutException("Preview checks did not finish.");
+        if (previewError is not null) throw previewError;
         var evidence = Ready(); evidence.Accept(Pen(5, "penBegin", 120, 220)); evidence.Accept(Pen(6, "penSample", 130, 220));
         evidence.Accept(Core("brushState", 7, Brush(1, "mm", true)));
         evidence.Accept(Pen(8, "penSample", 140, 220)); evidence.Accept(Pen(9, "penEnd", 140, 220));

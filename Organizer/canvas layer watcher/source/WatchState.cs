@@ -54,6 +54,7 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
 {
     private readonly SortedDictionary<long, string?> _layers = [];
     private readonly SortedDictionary<long, LayerReference[]> _clipLayers = [];
+    private readonly SortedDictionary<long, string[]> _paperLayers = [];
     private readonly Dictionary<long, long> _dirty = [];
     private readonly Dictionary<long, long> _lastDirty = [];
     private readonly Dictionary<long, long> _strokeBegins = [];
@@ -79,7 +80,7 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
     public bool Dirty => _dirty.Count > 0;
     public void Reset()
     {
-        Generation++; _layers.Clear(); _clipLayers.Clear(); _dirty.Clear(); _lastDirty.Clear(); _view = null;
+        Generation++; _layers.Clear(); _clipLayers.Clear(); _paperLayers.Clear(); _dirty.Clear(); _lastDirty.Clear(); _view = null;
         _strokeBegins.Clear(); _strokeLast.Clear(); _canvasStrokeOperations.Clear(); _capturedLayers.Clear(); _pendingBoundaryLayers.Clear(); _lastEditBoundaryTicks = -1;
         _mouseOperation = _penOperation = null;
         _viewTicks = _evidenceTicks = _completedTriggerTicks = -1;
@@ -173,7 +174,9 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
             if (J.Confirmed(message.Data))
             {
                 _clipLayers[ticks] = LayerMapping.ReadLayers(J.Get(message.Data, "state"));
+                _paperLayers[ticks] = LayerMapping.ReadPaperNames(J.Get(message.Data, "state"));
                 while (_clipLayers.Count > 64) _clipLayers.Remove(_clipLayers.First().Key);
+                while (_paperLayers.Count > 64) _paperLayers.Remove(_paperLayers.First().Key);
                 Diagnostic?.Invoke($"图层属性核心：ticks={ticks}，图层数={_clipLayers[ticks].Length}，snapshot={message.IsSnapshot}");
             }
             return null;
@@ -250,8 +253,9 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         if (_view is null) throw new InvalidDataException("编辑边界画布视图未确认");
         string current = _layers.LastOrDefault(pair => pair.Key <= triggerTicks).Value
             ?? throw new InvalidDataException("编辑边界当前图层未确认");
+        bool Paper(string key) => PaperAt(key, triggerTicks, layers);
         var touched = new Dictionary<string, List<long>>(StringComparer.Ordinal);
-        touched.Add(LayerMapping.Compact(current), []);
+        if (!Paper(LayerMapping.Compact(current))) touched.Add(LayerMapping.Compact(current), []);
         // Previous captures have consumed their contact tracking. They still
         // need fresh full-layer pixels at this boundary for cross-layer selection.
         foreach(string captured in _capturedLayers.Keys)
@@ -267,10 +271,13 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
             string name = _layers.LastOrDefault(pair => pair.Key <= stroke.Value).Value
                 ?? throw new InvalidDataException("笔接触开始时的历史图层未确认");
             string key = LayerMapping.Compact(name);
+            if (Paper(key)) continue;
             if (_strokeLast.GetValueOrDefault(stroke.Key, stroke.Value) <= _capturedLayers.GetValueOrDefault(key, -1)) continue;
             if (!touched.TryGetValue(key, out var operations)) touched[key] = operations = [];
             operations.Add(stroke.Key);
         }
+        if (touched.Count == 0)
+            throw new InvalidDataException($"当前图层「{current}」是纸张，边界没有需要保存的图层；请先选中要编辑的图层");
         var requests = new List<CaptureRequest>();
         foreach (var entry in touched)
         {
@@ -290,6 +297,8 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         CaptureRequest? Skip(string reason) { ViewDiagnostic(message, ticks, reason, view); return null; }
         string? layer = _layers.LastOrDefault(p => p.Key <= ticks).Value;
         if (string.IsNullOrWhiteSpace(layer)) return Skip("切换时图层未确认");
+        if (PaperAt(LayerMapping.Compact(layer), ticks, _clipLayers.LastOrDefault(p => p.Key <= ticks).Value ?? []))
+            return Skip("切换时图层是纸张，不接受笔画，不保存");
         var operations = _dirty.Where(pair => pair.Value <= ticks
             && LayerMapping.SameName(_layers.LastOrDefault(observation => observation.Key
                 <= _strokeBegins.GetValueOrDefault(pair.Key, pair.Value)).Value, layer))
@@ -305,6 +314,11 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         ViewDiagnostic(message, ticks, pending ? "存证已发生，立即触发保存，不等待解析" : "触发保存", view);
         return new(Generation, ticks, layer, view, operations, identity, J.ObservationClock(message), message.Kind, pending);
     }
+    // A raster layer of the same name wins: only a name that is nothing but CSP's
+    // paper layer proves the contact changed no pixels.
+    private bool PaperAt(string key, long ticks, IReadOnlyList<LayerReference> layers)
+        => (_paperLayers.LastOrDefault(pair => pair.Key <= ticks).Value ?? []).Contains(key, StringComparer.Ordinal)
+            && !layers.Any(layer => LayerMapping.Compact(layer.Name) == key);
     private static bool NavigationHeld(JsonElement data)
     {
         var keys = J.Get(data, "heldKeys");

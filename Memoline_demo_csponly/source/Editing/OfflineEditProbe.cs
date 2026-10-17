@@ -102,7 +102,8 @@ internal static class OfflineEditProbe
         string project = Path.GetFullPath(args[1]), work = Path.GetFullPath(args[2]);
         string? layerPrefix = Option(args, "--layer"), rect = Option(args, "--rect");
         var clock = Stopwatch.StartNew();
-        void Log(string text) => Console.WriteLine($"[{clock.Elapsed.TotalSeconds,7:0.0}s] {text}");
+        void Log(string text) => Console.WriteLine(
+            $"[{clock.Elapsed.TotalSeconds,7:0.0}s {Process.GetCurrentProcess().PrivateMemorySize64 >> 20,5} MB 堆 {GC.GetTotalMemory(Environment.GetEnvironmentVariable("MEMOLINE_PROBE_LIVE") == "1") >> 20,5} MB] {text}");
 
         Log("读取工程：" + project);
         // --use-cache：与 Alt+M 相同，读写工程旁的 .memoline.cache（忽略工作目录）。
@@ -116,11 +117,15 @@ internal static class OfflineEditProbe
         if (Option(args, "--live") is { } live)
         {
             int at = Array.IndexOf(args, "--live");
-            current = LiveSessionReader.Read(live, args[at + 2], 0);
+            // --boundary appendId：只读到该编辑边界为止，与当时 Alt+M 看到的一样。
+            current = LiveSessionReader.Read(live, args[at + 2], Option(args, "--boundary") is { } boundary ? ulong.Parse(boundary) : 0);
             prior = sessions.ToArray();
             Log($"实时会话 {current.SessionId[..8]}：帧 {current.Frames.Count}，包 {current.Packets.Count}，笔画 {current.Replay.Strokes.Count}");
         }
-        var index = prior.Length == 0 ? EditIndexBuilder.Build(current) : ProjectEditIndex.Build(prior, current);
+        // History is indexed as the recorder does when recording starts.
+        var index = prior.Length == 0 && !ProjectEditIndex.HasReplacements(current) ? EditIndexBuilder.Build(current)
+            : ProjectEditIndex.Build(prior, current, ProjectEditIndex.BuildHistory(prior));
+        EditingMemory.Park(index); EditingMemory.Compact();
         Log($"索引：图层 {index.Layers.Count}，合格/全部笔画 {index.Strokes.Values.Count(s => s.Eligible)}/{index.Strokes.Count}，图片 {index.Images.Count}，问题 {index.Issues.Count}");
         foreach (var issue in index.Issues.Take(20)) Log($"  索引问题 {issue.Code}：{issue.Message}");
         foreach (var reason in index.Strokes.Values.Where(s => !s.Eligible).GroupBy(s => s.IneligibleReason ?? "?").Take(10))
@@ -130,6 +135,11 @@ internal static class OfflineEditProbe
                 $"笔画 {layer.Strokes.Count}（因果 {layer.Strokes.Count(s => s.IsCausal)}），链 {(layer.ChainValid ? "有效" : "无效")}，" +
                 $"当前捕获 {(layer.Current is null ? "无" : layer.Current.Width + "×" + layer.Current.Height)}");
 
+        foreach (var stroke in current.Replay.Strokes)
+            Log($"  实时笔画 op {stroke.OperationId}：样本 {stroke.Samples.Count}，" +
+                (index.Strokes.Values.FirstOrDefault(s => s.Key.SessionId == current.SessionId && s.OperationId == stroke.OperationId) is { } indexed
+                    ? $"已索引，图层 {indexed.Layer.Uuid[..8]}，合格 {indexed.Eligible}，已撤销 {indexed.IsUndone}，图片 {indexed.Images.Count}"
+                    : "未进入索引"));
         foreach (var layer in index.Layers.Values)
             foreach (var command in layer.UndoRedo)
                 Log($"  未解析的 {command.Command}：会话序号 {command.SessionOrder}，输入 appendId {command.InputAppendId}，歧义 {command.Ambiguous}");
@@ -235,6 +245,10 @@ internal static class OfflineEditProbe
             long changed = original is null ? -1 : ImageCompositor.Difference(layer, original).Count;
             log($"  复现层 {key.Uuid}：{layer.Width}×{layer.Height}，与编辑前当前图层相差 {changed} 像素");
         }
+        // As the recorder does after an edit.
+        foreach (var layer in result.Layers.Values) layer.Park();
+        EditingMemory.Park(index); EditingMemory.Compact();
+        log("释放编辑内存后");
         return result.Status is ReconstructionStatus.Executed or ReconstructionStatus.PixelVerified;
     }
 

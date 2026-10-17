@@ -18,8 +18,15 @@ internal static class ProjectEditIndex
         var sessions = prior.Append(current).ToArray();
         if (sessions.Select(s => s.SessionId).Distinct(StringComparer.Ordinal).Count() != sessions.Length)
             throw new InvalidDataException("工程历史包含重复的原生 sessionId。");
-        var currentRoutes = current.Packets.Select(p => p.Layer).Distinct()
-            .GroupBy(layer => layer.Uuid, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.ToArray(), StringComparer.Ordinal);
+        // A layer Memoline installed in place of another (event editing, precise undo) is that layer: both
+        // histories join under the newest replacement still captured now. No other layers are ever joined.
+        var replaced = Replacements(sessions);
+        var successors = replaced.ToLookup(pair => pair.Value, pair => pair.Key, StringComparer.Ordinal);
+        string Canonical(string uuid) => CanonicalUuid(uuid, replaced);
+        var currentLayers = current.Packets.Select(p => p.Layer).Distinct().ToArray();
+        var currentUuids = currentLayers.Select(l => l.Uuid).ToHashSet(StringComparer.Ordinal);
+        var currentRoutes = currentLayers.Where(layer => !successors[layer.Uuid].Any(currentUuids.Contains))
+            .GroupBy(layer => Canonical(layer.Uuid), StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.ToArray(), StringComparer.Ordinal);
         var sources = new Dictionary<LayerKey, List<SourceLayer>>();
         var globalIssues = new List<PlanIssue>();
         for (int order = 0; order < sessions.Length; order++)
@@ -44,7 +51,7 @@ internal static class ProjectEditIndex
             {
                 LayerKey route = layer.Layer;
                 var routeIssues = new List<PlanIssue>();
-                if (currentRoutes.TryGetValue(layer.Layer.Uuid, out var matches) && matches.Length == 1)
+                if (currentRoutes.TryGetValue(Canonical(layer.Layer.Uuid), out var matches) && matches.Length == 1)
                     route = matches[0];
                 else routeIssues.Add(new(PlanIssueCode.LayerIdentityUnconfirmed,
                     "历史图层尚未唯一对应当前 CSP 捕获：" + layer.Layer.Uuid));
@@ -64,8 +71,11 @@ internal static class ProjectEditIndex
         var layers = new Dictionary<LayerKey, LayerIndex>();
         var strokes = new Dictionary<EditableStrokeKey, EditableStroke>();
         var images = new Dictionary<DirtyImageKey, DirtyImage>();
-        foreach (var (route, chain) in sources)
+        foreach (var (route, unordered) in sources)
         {
+            // One session can hold an original and its replacement: order by session, then by capture time.
+            var chain = unordered.OrderBy(source => source.Order)
+                .ThenBy(source => source.Index.Packets.Count == 0 ? long.MinValue : source.Index.Packets.Min(p => p.TriggerTicks)).ToList();
             var issues = new List<PlanIssue>();
             var packets = new List<LayerPacket>();
             var layerStrokes = new List<EditableStroke>();
@@ -80,7 +90,7 @@ internal static class ProjectEditIndex
                 var source = chain[i];
                 bool joinedToNext = i + 1 < chain.Count &&
                     (SamePixels(source.Current, chain[i + 1].Baseline) || bridges.ContainsKey(i + 1));
-                issues.AddRange(source.Issues.Where(issue => !(joinedToNext && source.Session.SessionId != current.SessionId &&
+                issues.AddRange(source.Issues.Where(issue => !(joinedToNext && (source.Session.SessionId != current.SessionId || source.Index.Layer != route) &&
                     issue.Code == PlanIssueCode.CaptureMismatch && issue.Message == "编辑边界缺少最后一组的整层捕获。"))
                     .Select(issue => MapIssue(issue, route, source.Session.SessionId)));
                 if (i > 0 && !SamePixels(chain[i - 1].Current, source.Baseline) && !bridges.ContainsKey(i))
@@ -124,6 +134,28 @@ internal static class ProjectEditIndex
         return new(layers, strokes, images, globalIssues.Concat(layers.Values.SelectMany(layer => layer.Issues)).ToArray());
     }
 
+    /// <summary>reproduction UUID → the layer it replaced, from every completed Memoline editing action.</summary>
+    internal static IReadOnlyDictionary<string, string> Replacements(IEnumerable<SessionSnapshot> sessions)
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var session in sessions)
+            foreach (var frame in session.Frames.Where(f => J.Text(f, "kind") == "editingActionCompleted" &&
+                         J.U64(f, "appendId") <= session.BoundaryAppendId).OrderBy(f => J.U64(f, "appendId")))
+                foreach (var item in J.Array(J.Get(J.Get(frame, "data"), "layerReplacements")))
+                    if (J.Text(item, "replaced") is { Length: > 0 } old && J.Text(item, "reproduction") is { Length: > 0 } now && old != now)
+                        map[now] = old;
+        return map;
+    }
+
+    internal static bool HasReplacements(SessionSnapshot session) => Replacements([session]).Count > 0;
+
+    internal static string CanonicalUuid(string uuid, IReadOnlyDictionary<string, string> replaced)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        while (seen.Add(uuid) && replaced.TryGetValue(uuid, out var earlier)) uuid = earlier;
+        return uuid;
+    }
+
     private static (ImageRgba? Baseline, ImageRgba? Final) Endpoints(LayerIndex layer)
     {
         var packets = layer.Packets.OrderBy(p => p.TriggerTicks).ToArray();
@@ -144,6 +176,26 @@ internal static class ProjectEditIndex
     internal static void VerifyHistory(IEnumerable<EditIndex> indexes)
     {
         foreach (var layer in indexes.SelectMany(index => index.Layers.Values)) VerifiedHistory(layer);
+    }
+
+    /// <summary>
+    /// Indexes and verifies sealed sessions for <see cref="Build"/>. Each session is decoded only while it is
+    /// indexed and verified, and kept compressed afterwards.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, EditIndex> BuildHistory(IEnumerable<SessionSnapshot> sessions)
+    {
+        var indexes = new Dictionary<string, EditIndex>();
+        foreach (var session in sessions)
+        {
+            var index = EditIndexBuilder.Build(session);
+            VerifyHistory([index]);
+            EditingMemory.Park(session); EditingMemory.Park(index);
+            indexes.Add(session.SessionId, index);
+            // Verification copies whole canvases; collect them before the next session allocates its own.
+            EditingMemory.Collect();
+        }
+        EditingMemory.Compact();
+        return indexes;
     }
 
     private static IReadOnlyList<PlanIssue> VerifyPixels(LayerIndex layer, ImageRgba? baseline, ImageRgba? final, string session)
@@ -210,7 +262,9 @@ internal static class ProjectEditIndex
                 if (oldPixels[index] != newPixels[index]) mask.Set(x, y);
             }
         }
-        string id = Scoped(next.Session.SessionId, "project-observed-gap/" + previous.Session.SessionId);
+        // A replacement inside one session joins two layers of that session; the layer keeps the bridge unique.
+        string id = Scoped(next.Session.SessionId, "project-observed-gap/" + previous.Session.SessionId +
+            (previous.Index.Layer.Uuid == next.Index.Layer.Uuid ? "" : "/" + previous.Index.Layer.Uuid));
         var image = new DirtyImage(new(route, id, "unrecorded-change"), mask,
             new(width, height, oldCrop), new(width, height, newCrop), [], IsCausal: true, HasUnreplayableEvents: true)
         { UnknownHistoryInterval = true,
@@ -223,10 +277,12 @@ internal static class ProjectEditIndex
         return true;
     }
 
-    private static bool CompletePixels(ImageRgba? image) => image is { Width: > 0, Height: > 0, Bytes: not null } &&
-        (long)image.Width * image.Height <= int.MaxValue / 4 && image.Bytes.Length == (long)image.Width * image.Height * 4;
+    // A parked image restores exactly Width × Height × 4 bytes, so it is complete without being restored.
+    private static bool CompletePixels(ImageRgba? image) => image is { Width: > 0, Height: > 0 } &&
+        (long)image.Width * image.Height <= int.MaxValue / 4 &&
+        (image.IsParked || image.Bytes is { } bytes && bytes.Length == (long)image.Width * image.Height * 4);
     private static bool SamePixels(ImageRgba? first, ImageRgba? second) => first is { } a && second is { } b &&
-        CompletePixels(a) && CompletePixels(b) && a.Width == b.Width && a.Height == b.Height && a.Bytes.AsSpan().SequenceEqual(b.Bytes);
+        CompletePixels(a) && CompletePixels(b) && a.SamePixels(b);
     private static string Scoped(string session, string value) => Uri.EscapeDataString(session) + "/" + Uri.EscapeDataString(value);
     private static DirtyImageKey MapImageKey(DirtyImageKey key, LayerKey route, string session) =>
         new(route, Scoped(session, key.PacketId), key.ImageId);

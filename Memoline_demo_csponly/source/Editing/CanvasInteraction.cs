@@ -127,6 +127,8 @@ internal sealed class CanvasInteraction
     private PointF? _sweepPrevious;
     internal CanvasAffineTransform Transform { get; }
     internal PixelMask? RegionSelection { get; private set; }
+    /// <summary>The selected region as drawn on screen (the frozen view), for the progress frame around it.</summary>
+    internal IReadOnlyList<PointF>? ScreenPolygon => _polygon;
     internal IReadOnlyList<CanvasImageCandidate> Candidates { get; private set; } = [];
     internal DirtyImageKey? ChosenImage { get; private set; }
     internal IReadOnlySet<EditableStrokeKey> SelectedEvents => _selected;

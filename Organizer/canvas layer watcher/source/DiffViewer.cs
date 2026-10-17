@@ -284,7 +284,16 @@ internal sealed class DiffViewer : UserControl
                 DiffDisplayFrame? focus = null;
                 try
                 {
-                    if (packet.Images.Length > 0) focus = DiffDisplay.Focus(packet, selection, mode, token);
+                    if (packet.Images.Length > 0)
+                    {
+                        focus = DiffDisplay.Focus(packet, selection, mode, token);
+                        // Changes spread over the canvas give a near full-size union; keep it reduced.
+                        if (Math.Max(focus.Image.Width, focus.Image.Height) > Preview.ReducedEdge)
+                        {
+                            var full = focus.Image;
+                            try { focus = focus with { Image = Preview.Reduce(full) }; } finally { full.Dispose(); }
+                        }
+                    }
                     return (Focus: focus, Canvas: needCanvas ? DiffDisplay.Locator(packet, token) : null);
                 }
                 catch { focus?.Image.Dispose(); throw; }
@@ -294,7 +303,9 @@ internal sealed class DiffViewer : UserControl
             if (frames.Focus is { } frame)
             {
                 _preview.CanvasBounds = frame.CanvasBounds; _preview.ImageBounds = frame.ImageBounds; _preview.Fit = _fit;
-                _image = pending; pending = null; _preview.Image = _image;
+                var image = frame.Image; _image = image; pending = null;
+                _preview.Show(image, image.Size == frame.ImageBounds.Size ? null
+                    : () => DiffDisplay.Focus(packet, selection, mode, CancellationToken.None).Image);
             }
             if (frames.Canvas is { } canvas)
             {

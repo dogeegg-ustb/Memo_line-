@@ -106,7 +106,10 @@ class LayerOcrReader:
             name_boxes = name_boxes or self._name_boxes(prop_line["boxes"], min_x=int(image.shape[1] * 0.22)) or prop_line["boxes"]
             name_x = min(box.bounds[0] for box in name_boxes)
             original_name = name
-            name = self._normalize_ocr_default_name(name)
+            # NFKC would turn the placeholder's full-width brackets into ASCII
+            # and hide it from every later "（名称未识别" check.
+            if not name.startswith("（名称未识别"):
+                name = self._normalize_ocr_default_name(name)
             is_group = self._is_group_name(name)
             if is_group:
                 name = self._normalize_default_group_name(name)
@@ -114,6 +117,10 @@ class LayerOcrReader:
             center = float(np.median([box.bounds[1] + box.bounds[3] / 2 for box in combined_boxes]))
             property_boxes = [box for box in prop_line["boxes"]
                               if box.bounds[0] >= int(image.shape[1] * 0.22)] or prop_line["boxes"]
+            # At high display scales the name line can fall into the same OCR
+            # row; only the opacity text locates the property line itself.
+            property_boxes = [box for box in property_boxes
+                              if self._parse_layer_row_details([box])[1] is not None] or property_boxes
             relevant_scores = [float(box.score) for box in property_boxes + name_boxes
                                if box.score is not None]
             name_scores = [float(box.score) for box in name_boxes if box.score is not None]
@@ -179,6 +186,7 @@ class LayerOcrReader:
             enhanced_boxes = self._enhanced_name_boxes(
                 image, int(target_y - half_band), int(target_y + half_band),
                 min_x=int(image.shape[1] * 0.22), target_y=target_y,
+                below=property_box[1] + property_box[3],
             )
             enhanced_name = self._parse_layer_row(enhanced_boxes)[0] if enhanced_boxes else ""
             enhanced_name = self._normalize_ocr_default_name(enhanced_name)
@@ -457,7 +465,7 @@ class LayerOcrReader:
         return [x0, y0, max(1, x1 - x0), max(1, y1 - y0)]
 
     def _enhanced_name_boxes(self, image: np.ndarray, top: int, bottom: int, min_x: int,
-                             target_y: float | None = None) -> list[TextBox]:
+                             target_y: float | None = None, below: float | None = None) -> list[TextBox]:
         """Retry only a missed name line with local contrast enhancement."""
         height, width = image.shape[:2]
         x0 = min(width - 1, max(0, min_x - 6))
@@ -469,20 +477,70 @@ class LayerOcrReader:
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop
         enhanced = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(gray)
         enlarged = cv2.resize(enhanced, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
-        local_boxes = self._recognize(enlarged)
+        attempts = []
+        # A highlighted name touching the crop edge can lose its first word to
+        # the detector ("1" without "图层"); a replicated border brings it back.
+        for pad in (0, 24):
+            view = cv2.copyMakeBorder(enlarged, pad, pad, pad, pad, cv2.BORDER_REPLICATE) if pad else enlarged
+            result = []
+            for box in self._join_line_fragments(self._recognize(view)):
+                if not self._parse_layer_row([box])[0]:
+                    continue
+                points = [[(point[0] - pad) / 2.0 + x0, (point[1] - pad) / 2.0 + top] for point in box.points]
+                mapped = TextBox(box.text, points, box.score)
+                # The name line lies below the opacity/mode line, which the
+                # band can partly include.
+                if mapped.bounds[0] >= min_x and (
+                        below is None or mapped.bounds[1] + mapped.bounds[3] / 2 > below):
+                    result.append(mapped)
+            if target_y is not None and result:
+                result.sort(key=lambda box: abs(box.bounds[1] + box.bounds[3] / 2 - target_y))
+                nearest_center = result[0].bounds[1] + result[0].bounds[3] / 2
+                result = [box for box in result
+                          if abs(box.bounds[1] + box.bounds[3] / 2 - nearest_center) <= max(8, box.bounds[3] * 0.5)]
+            name = self._normalize_ocr_default_name(self._parse_layer_row(result)[0]) if result else ""
+            if name and not self._is_incomplete_default_name(name):
+                return result
+            attempts.append(result)
+        return attempts[0]
+
+    @staticmethod
+    def _join_line_fragments(boxes: list[TextBox]) -> list[TextBox]:
+        """Rejoin one text line that OCR detected as separate words.
+
+        At high display scales CSP spaces a default name's index widely
+        (``图层  1``); the detector then returns ``图层`` and ``1``, and
+        neither fragment is a layer name on its own.
+        """
+        lines: list[list[TextBox]] = []
+        for box in sorted(boxes, key=lambda item: item.bounds[1] + item.bounds[3] / 2):
+            center = box.bounds[1] + box.bounds[3] / 2
+            line = next((line for line in lines
+                         if abs(center - (line[0].bounds[1] + line[0].bounds[3] / 2))
+                         <= min(box.bounds[3], line[0].bounds[3]) * 0.5), None)
+            if line is None:
+                lines.append([box])
+            else:
+                line.append(box)
         result = []
-        for box in local_boxes:
-            if not self._parse_layer_row([box])[0]:
-                continue
-            points = [[point[0] / 2.0 + x0, point[1] / 2.0 + top] for point in box.points]
-            mapped = TextBox(box.text, points, box.score)
-            if mapped.bounds[0] >= min_x:
-                result.append(mapped)
-        if target_y is not None and result:
-            result.sort(key=lambda box: abs(box.bounds[1] + box.bounds[3] / 2 - target_y))
-            nearest_center = result[0].bounds[1] + result[0].bounds[3] / 2
-            result = [box for box in result
-                      if abs(box.bounds[1] + box.bounds[3] / 2 - nearest_center) <= max(8, box.bounds[3] * 0.5)]
+        for line in lines:
+            line.sort(key=lambda item: item.bounds[0])
+            current = line[0]
+            for box in line[1:]:
+                x, y, width, height = current.bounds
+                gap = box.bounds[0] - (x + width)
+                if -min(height, box.bounds[3]) * 0.5 <= gap <= max(height, box.bounds[3]) * 1.5:
+                    bx, by, bw, bh = box.bounds
+                    x0, y0 = min(x, bx), min(y, by)
+                    x1, y1 = max(x + width, bx + bw), max(y + height, by + bh)
+                    scores = [score for score in (current.score, box.score) if score is not None]
+                    current = TextBox(f"{current.text.strip()} {box.text.strip()}",
+                                      [[x0, y0], [x1, y0], [x1, y1], [x0, y1]],
+                                      min(scores) if scores else None)
+                else:
+                    result.append(current)
+                    current = box
+            result.append(current)
         return result
 
     @staticmethod

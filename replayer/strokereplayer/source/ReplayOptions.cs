@@ -2,7 +2,9 @@ namespace StrokeReplay;
 
 internal enum ReplayMode { Concentrated, Discrete }
 
-internal sealed record ReplayOptions(ReplayMode Mode = ReplayMode.Concentrated, double StrokeGapSeconds = .2)
+/// <param name="FixedGap">Discrete strokes always wait exactly <paramref name="StrokeGapSeconds"/> between contacts,
+/// whatever the recorded pause; otherwise the recorded pause is capped at it.</param>
+internal sealed record ReplayOptions(ReplayMode Mode = ReplayMode.Concentrated, double StrokeGapSeconds = .2, bool FixedGap = false)
 {
     internal string DisplayName => Mode == ReplayMode.Discrete ? "离散模式" : "集中模式";
 
@@ -17,6 +19,7 @@ internal sealed record ReplayOptions(ReplayMode Mode = ReplayMode.Concentrated, 
     {
         Validate();
         if (frequency <= 0) throw new ArgumentException("录制时钟频率必须是正数。");
+        if (Mode == ReplayMode.Discrete && FixedGap) return TimeSpan.FromSeconds(StrokeGapSeconds);
         if (Mode != ReplayMode.Discrete || nextStartTicks is null || nextStartTicks <= endTicks)
             return TimeSpan.Zero;
         var seconds = ((double)nextStartTicks.Value - endTicks) / frequency;

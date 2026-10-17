@@ -22,8 +22,15 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
     private SavedLayerDocument? _saved;
     private Dictionary<string,LayerReference> _layers = [];
     private string? _transactionId;
-    internal WindowsCspEditingActions(MainWindow window, LivePacketFeed feed, EditSession session, EditRequest request, string bridge, Action<string> status)
+    // True while the .clip on disk is known to hold the current document: the boundary saved it and no input
+    // has reached CSP since. The first inspection then reads that file instead of saving again.
+    private bool _documentSaved;
+    private readonly long _initialInputs=WindowsViewInput.SentInputs;
+    private readonly List<(string Replaced,string Reproduction)> _replacements=[];
+    internal WindowsCspEditingActions(MainWindow window, LivePacketFeed feed, EditSession session, EditRequest request, string bridge, Action<string> status,
+        bool documentSaved=false)
     {
+        _documentSaved=documentSaved;
         _window=window; _monitor=window.EditingMonitor ?? throw new InvalidOperationException("录制已停止。");
         _feed=feed; _session=session; _request=request; _status=status; _bridge=bridge;
         _input=new WindowsViewInput();
@@ -56,7 +63,8 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
             var action=await _control.SendAsync(new { command="recordEditingAction", transactionId=id,
                 editKind=_request.Kind==EditKind.PreciseUndo?"preciseUndo":"eventEditing",
                 changes=_request.Changes.Select(c=>new { sessionId=c.Key.SessionId,beginAppendId=c.Key.BeginAppendId,
-                    delete=c.Value.Delete,brushName=c.Value.BrushName,numbers=c.Value.NumberValues }).ToArray() },CancellationToken.None);
+                    delete=c.Value.Delete,brushName=c.Value.BrushName,numbers=c.Value.NumberValues }).ToArray(),
+                layerReplacements=_replacements.Select(r=>new { replaced=r.Replaced,reproduction=r.Reproduction }).ToArray() },CancellationToken.None);
             if(CanvasLayerWatcher.J.Text(action,"sessionId")!=_session.LiveView.SessionId || CanvasLayerWatcher.J.Text(action,"transactionId")!=id)
                 throw new InvalidDataException("编辑记录回执身份不符。");
         }
@@ -107,14 +115,28 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
         _inspection=null;
         if (_saved is not null) _backend.Cleanup(_saved);
         long ticks=Stopwatch.GetTimestamp()-_feed.View.ClockOriginTicks!.Value;
-        _saved=await _backend.SaveSnapshotAsync(ticks,token);
+        string saveId;
+        if(_documentSaved&&inputs==_initialInputs&&_penReplays==0)
+        {
+            _documentSaved=false;
+            (_saved,saveId)=await CopySavedDocumentAsync(token);
+        }
+        else
+        {
+            _documentSaved=false;
+            _saved=await _backend.SaveSnapshotAsync(ticks,token);
+            saveId=CanvasLayerWatcher.J.Text(_saved.ControlResponse,"requestId") ?? throw new InvalidDataException("保存回执缺少 requestId。");
+        }
         using var inspection=JsonDocument.Parse(await Bridge.RunAsync(_bridge,["inspect",_saved.SnapshotPath],token));
         var rows=CanvasLayerWatcher.J.Get(inspection.RootElement,"layers").EnumerateArray()
             .Where(r=>CanvasLayerWatcher.J.Get(r,"isRoot").ValueKind!=JsonValueKind.True)
             .OrderBy(r=>CanvasLayerWatcher.J.Tick(r,"stackOrder",long.MaxValue)).ToArray();
         _layers=rows.ToDictionary(r=>CanvasLayerWatcher.J.Text(r,"uuid") ?? throw new InvalidDataException("图层 UUID 缺失。"),
             r=>new LayerReference(CanvasLayerWatcher.J.Tick(r,"id",0),CanvasLayerWatcher.J.Text(r,"name") ?? "",CanvasLayerWatcher.J.Text(r,"uuid")));
-        await _feed.RequestAsync(["clipState"],token);
+        // Bind the structure request to this save: an unbound clipState may describe an earlier document.
+        await _feed.RequestAsync(["clipState"],token,saveId);
+        if(PacketReplay.J.Text(_feed.LayersEvidence,"saveId")!=saveId)
+            throw new InvalidDataException("主动请求的图层结构不属于本次保存。");
         // The OCR layer name is only a fallback (see ReadCurrentLayerAsync); a hidden or unreadable
         // selected row must not stop the structural confirmation. The replay and layer navigation still
         // read the current layer from it, so it is refreshed only when the saved selection is not the
@@ -125,11 +147,65 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
             CanvasLayerWatcher.J.Text(r,"uuid")!,CanvasLayerWatcher.J.Text(r,"name") ?? "",
             CanvasLayerWatcher.J.Get(r,"isRaster").ValueKind==JsonValueKind.True,
             CanvasLayerWatcher.J.Get(r,"folder").ValueKind==JsonValueKind.True,
-            CanvasLayerWatcher.J.Get(r,"visible").ValueKind==JsonValueKind.True,CanvasLayerWatcher.J.Text(r,"parentUuid"))).ToArray());
+            CanvasLayerWatcher.J.Get(r,"visible").ValueKind==JsonValueKind.True,CanvasLayerWatcher.J.Text(r,"parentUuid"))).ToArray(),
+            Revision(_saved.SnapshotPath));
         _inspectedInputs=inputs; _inspectedPenReplays=_penReplays;
         return _inspection;
     }
     private string _bridge = "";
+    /// <summary>Copies the already saved document without a CSP save; the Recognizer parses the same file under
+    /// a request ID of its own, so the structure stays bound to this copy.</summary>
+    private async Task<(SavedLayerDocument Document,string SaveId)> CopySavedDocumentAsync(CancellationToken token)
+    {
+        string clip=_monitor.ClipPath ?? throw new InvalidDataException("没有 CLIP 路径。");
+        string directory=Path.Combine(AppContext.BaseDirectory,"snapshots");Directory.CreateDirectory(directory);
+        string snapshot=Path.Combine(directory,"edit-inspect-"+Guid.NewGuid().ToString("N")+".clip");
+        for(int attempt=0;;attempt++)
+        {
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                var before=SaveCapture.Stat(clip);
+                await using(var input=new FileStream(clip,FileMode.Open,FileAccess.Read,FileShare.Read))
+                await using(var output=new FileStream(snapshot,FileMode.Create,FileAccess.Write,FileShare.None))
+                    await input.CopyToAsync(output,token);
+                if(SaveCapture.Stat(clip)==before)
+                {
+                    string id="inspect-"+Guid.NewGuid().ToString("N");
+                    return (new(snapshot,-1,JsonSerializer.SerializeToElement(new{requestId=id})),id);
+                }
+            }
+            catch(IOException) when(attempt<10){}
+            SaveCapture.TryDelete(snapshot);
+            if(attempt>=10)throw new IOException("CLIP 文件持续被写入，无法读取已保存的文档。");
+            await Task.Delay(100,token);
+        }
+    }
+    public async Task<CspCurrentLayerEvidence> ReadLiveCurrentLayerAsync(CancellationToken token)
+    {
+        await _feed.RequestAsync(["currentLayerState"],token);
+        string name=_feed.Layer ?? throw new InvalidOperationException("当前图层状态不可用。");
+        // OCR drops spaces ("图层1" for "图层 1"): the row maps to its UUID through the saved structure, and the
+        // saved name is what the transaction compares.
+        var matches=_layers.Values.Where(l=>LayerMapping.SameName(l.Name,name)).ToArray();
+        return matches is [var match]?new(match.Name,true,match.Uuid):new(name,false,null);
+    }
+    public void LayerReplaced(string replacedUuid,string reproductionUuid)=>_replacements.Add((replacedUuid,reproductionUuid));
+    public async Task ReturnToUserLayerAsync(CancellationToken token)
+    {
+        if(_session.CurrentLayer is not { } user||_request.CurrentLayer==user)return;
+        // The user's own layer was not replaced: its UUID still names it in the saved structure.
+        if(!_layers.TryGetValue(user.Uuid,out var layer)){_status("提示：未在 CSP 中找到原来所在的图层，保持在复现层。");return;}
+        try{await NavigateToLayerAsync(layer.Name,token);_status($"已回到原来所在的图层「{layer.Name}」。");}
+        catch(Exception error)when(error is not OperationCanceledException)
+        {_status($"提示：未能切回图层「{layer.Name}」：{error.Message}");}
+    }
+    private static string Revision(string path)
+    {
+        using var stream=File.OpenRead(path);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+    }
+    public void Status(string text)=>_status(text);
     public Task NavigateToLayerAsync(string name,CancellationToken token)=>new PacketStateRestorer(_feed,new PacketWindowsInput(_input),_status).RestoreLayerAsync(name,token);
     public async Task<CspCurrentLayerEvidence> ReadCurrentLayerAsync(CancellationToken token)
     {
@@ -193,7 +269,9 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
                     VerifyReferenceControlsOff(ReferenceBrushEvidence(editing),_feed.BrushEvidence,
                         (drawing.OverrideBrush??drawing.State.Brush!).Name);
                 }
-            },new WindowsReplayEnvironment(_feed,_input),1,new(mode),_status,token);
+            },new WindowsReplayEnvironment(_feed,_input),1,
+            // Discrete strokes (precise undo) follow each other at a fixed 30 ms instead of the recorded pauses.
+            mode==ReplayMode.Discrete?new(mode,.03,FixedGap:true):new(mode),_status,token);
     }
     internal static IReadOnlyList<EventReplaySchedule> BuildSchedules(EditSession session,EditRequest request,
         IReadOnlyList<ReplayEvent> events,ReplayMode mode,string workName,string workUuid)

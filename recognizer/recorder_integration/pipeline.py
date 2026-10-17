@@ -10,6 +10,8 @@ import queue
 import shutil
 import hashlib
 import subprocess
+import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -25,6 +27,215 @@ def now_ticks():
     value = ctypes.c_longlong()
     ctypes.windll.kernel32.QueryPerformanceCounter(ctypes.byref(value))
     return value.value - int(os.environ["MEMOLINE_CLOCK_ORIGIN"])
+
+
+def transform_host_path():
+    host = Path(__file__).parent / "transform_host" / "TransformHost.exe"
+    return host if host.is_file() else host.parent / "publish" / host.name
+
+
+def analysis_workers(settings):
+    """Analysis jobs that may run at once. Each core stays serial, so more than one job per
+    module never helps; 0 (the default) follows the CPU and leaves cores for CSP and the recorder."""
+    configured = int(settings.get("analysisConcurrency", 0) or 0)
+    if configured > 0:
+        return min(configured, len(MODULES))
+    return max(2, min(len(MODULES), (os.cpu_count() or 4) // 4))
+
+
+class TransformHost:
+    """One persistent canvas host process; JSONL requests are answered in order."""
+
+    def __init__(self):
+        self.process = subprocess.Popen([str(transform_host_path())], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=None, text=True, encoding="utf-8", creationflags=subprocess.CREATE_NO_WINDOW)
+        self.lines = queue.Queue()
+        self.lock = threading.Lock()
+        stream, lines = self.process.stdout, self.lines
+        def receive():
+            for line in stream:
+                lines.put(line)
+            lines.put("")
+        threading.Thread(target=receive, daemon=True, name="transform-results").start()
+
+    def poll(self):
+        return self.process.poll()
+
+    def call(self, payload, timeout=120):
+        """Raises OSError when the request cannot be sent, TimeoutError (host killed) and EOFError."""
+        with self.lock:
+            try:
+                self.process.stdin.write(json.dumps(payload)+"\n")
+                self.process.stdin.flush()
+            except OSError:
+                self.kill()
+                raise
+            try:
+                line = self.lines.get(timeout=timeout)
+            except queue.Empty:
+                self.kill()
+                raise TimeoutError(timeout) from None
+            if not line:
+                raise EOFError("canvas host exited")
+            return json.loads(line)
+
+    def kill(self):
+        if self.process.poll() is None:
+            self.process.kill()
+
+    def close(self):
+        try:
+            self.process.stdin.close()
+            self.process.wait(timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            self.kill()
+
+
+# The setup probe and the pipeline share one host, started while the recorder is still being set up:
+# its process start and OCR model load (about 2.7 s) then happen before the initial state package.
+_host_lock = threading.Lock()
+_shared_host = None
+
+
+def shared_transform_host():
+    global _shared_host
+    with _host_lock:
+        if _shared_host is None or _shared_host.poll() is not None:
+            _shared_host = TransformHost()
+        return _shared_host
+
+
+def take_transform_host():
+    """Hands the prepared host to the pipeline, which owns and closes it from then on."""
+    global _shared_host
+    with _host_lock:
+        host, _shared_host = _shared_host, None
+    return host if host is not None and host.poll() is None else TransformHost()
+
+
+def close_shared_transform_host():
+    global _shared_host
+    with _host_lock:
+        host, _shared_host = _shared_host, None
+    if host is not None:
+        host.close()
+
+
+def warm_transform_host():
+    """Starts the shared host and loads its OCR with a throwaway probe; a probe leaves the transform state untouched."""
+    from PIL import Image, ImageDraw
+    descriptor, name = tempfile.mkstemp(prefix="memoline-warm-", suffix=".png")
+    os.close(descriptor)
+    frame = Path(name)
+    try:
+        image = Image.new("RGB", (160, 48), (255, 255, 255))
+        ImageDraw.Draw(image).text((8, 16), "100.0  0", fill=(0, 0, 0))
+        image.save(frame)
+        shared_transform_host().call(dict(probeNumbers=True, dpi=96, frame=dict(path=str(frame), roi=[0, 0, 160, 48]),
+                                          crops=dict(numbers=dict(roi=[0, 0, 160, 48]))), timeout=60)
+    finally:
+        frame.unlink(missing_ok=True)
+
+
+def probe_numbers(frame_path, frame_roi, numbers_roi, dpi, timeout=30):
+    """Ask the canvas host whether a digit selection still reads both navigator numbers,
+    with the same acceptance as initialization."""
+    request = dict(probeNumbers=True, dpi=dpi, frame=dict(path=str(frame_path), roi=list(frame_roi)),
+                   crops=dict(numbers=dict(roi=list(numbers_roi))))
+    try:
+        return shared_transform_host().call(request, timeout)
+    except TimeoutError:
+        raise RuntimeError(f"画布核心 {timeout} 秒内未返回数字识别结果") from None
+    except EOFError:
+        return dict(success=False, message="画布核心未返回数字识别结果")
+
+
+OCR_PARAMS = {"EngineConfig.onnxruntime.intra_op_num_threads":2,
+              "EngineConfig.onnxruntime.inter_op_num_threads":1,"Global.log_level":"warning"}
+PREPARED_MODULES = (LAYERS, BRUSH, TOOLGROUP, COLOR_INPUT, COLOR)
+
+
+# First imports of recognizer_core from several analysis threads deadlock on Python's module locks
+# ("deadlock detected by _ModuleLock('recognizer_core.panel_state.core')", seen at startup on 2026-10-06
+# and 2026-10-12), so cores are only ever built one at a time.
+_build_lock = threading.Lock()
+
+
+def build_core(module):
+    """A new recognition core and its OCR engine (None for the color wheel)."""
+    with _build_lock:
+        return _build_core(module)
+
+
+def _build_core(module):
+    if module == COLOR:
+        from recognizer_core.color_state import ColorStateCore
+        return ColorStateCore(), None
+    from rapidocr import RapidOCR
+    ocr = RapidOCR(params=OCR_PARAMS)
+    if module == BRUSH:
+        from recognizer_core.panel_state import PanelStateCore
+        return PanelStateCore(ocr_engine=ocr), ocr
+    if module == LAYERS:
+        from recognizer_core.layer_state import LayerStateCore
+        return LayerStateCore(ocr_engine=ocr), ocr
+    if module == TOOLGROUP:
+        from recognizer_core.subtool_state import SubtoolPanelCore
+        return SubtoolPanelCore(ocr_engine=ocr), ocr
+    if module == COLOR_INPUT:
+        from recognizer_core.color_input_state import ColorInputStateCore
+        return ColorInputStateCore(ocr_engine=ocr), ocr
+    raise ValueError(module)
+
+
+_prepared = {}
+_preparing = {module: threading.Lock() for module in PREPARED_MODULES}
+
+
+def _prepare_core(module):
+    with _preparing[module]:
+        if module in _prepared:
+            return
+        core, ocr = build_core(module)
+        if ocr is not None:
+            # The first inference allocates onnxruntime's buffers; text makes both det and rec run.
+            import cv2
+            import numpy as np
+            image = np.full((48, 200, 3), 255, np.uint8)
+            cv2.putText(image, "Layer 100", (6, 34), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+            ocr(image)
+        _prepared[module] = core
+
+
+def take_core(module):
+    """The core prepared ahead of this module's first job (waiting while it still loads), or a new one."""
+    lock = _preparing.get(module)
+    if lock is not None:
+        with lock:
+            core = _prepared.pop(module, None)
+        if core is not None:
+            return core
+    return build_core(module)[0]
+
+
+def prepare_analysis():
+    """Load the canvas host and every OCR core in the background while setup runs, so the
+    initial state package does not pay for imports, model loads and first inferences."""
+    def report(name, run):
+        try:
+            run()
+        except Exception as ex:
+            print(f"[Initialization] 预加载{name}失败，首次解析时再加载：{ex}", file=sys.stderr, flush=True)
+    threading.Thread(target=report, args=("画布核心", warm_transform_host), daemon=True, name="prepare-canvas-host").start()
+    def cores():
+        # Import once on this thread; the builds then run side by side.
+        import cv2, numpy, rapidocr  # noqa: F401
+        import recognizer_core.panel_state, recognizer_core.layer_state, recognizer_core.subtool_state  # noqa: F401
+        import recognizer_core.color_state, recognizer_core.color_input_state  # noqa: F401
+        for module in PREPARED_MODULES:
+            threading.Thread(target=report, args=(module, lambda m=module: _prepare_core(m)), daemon=True,
+                             name="prepare-core").start()
+    threading.Thread(target=report, args=("识别核心", cores), daemon=True, name="prepare-cores").start()
 
 
 class Pipeline:
@@ -56,7 +267,7 @@ class Pipeline:
         self.analysis_sequence = 0
         self.panel_activity = {}
         self.closing = False
-        self.executor = ThreadPoolExecutor(max_workers=settings["analysisConcurrency"], thread_name_prefix="state-core")
+        self.executor = ThreadPoolExecutor(max_workers=analysis_workers(settings), thread_name_prefix="state-core")
         self.clip_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clip-parser")
         self.capture_thread = threading.Thread(target=self._capture_loop, name="roi-capture")
         self.dispatch_thread = threading.Thread(target=self._dispatch, name="state-dispatch")
@@ -477,7 +688,8 @@ class Pipeline:
                     self.active.discard(module)
                     # Keep failed job inputs on disk for diagnosis; consumed metadata is marked.
                     file.replace(file.with_suffix(".done"))
-            if len(running) < self.settings["analysisConcurrency"]:
+            workers = analysis_workers(self.settings)
+            if len(running) < workers:
                 for file in sorted(self.directory.glob("*.job")):
                     if any(file == entry[0] for entry in running.values()):
                         continue
@@ -498,7 +710,7 @@ class Pipeline:
                             continue
                         self.active.add(module)
                         running[self.executor.submit(self._analyze, job)] = (file, module)
-                    if len(running) >= self.settings["analysisConcurrency"]:
+                    if len(running) >= workers:
                         break
             time.sleep(0.025)
 
@@ -514,18 +726,7 @@ class Pipeline:
             if module == CANVAS:
                 if self.transform is None or self.transform.poll() is not None:
                     self.transform_ready = False
-                    host = Path(__file__).parent / "transform_host" / "TransformHost.exe"
-                    if not host.is_file():
-                        host = host.parent / "publish" / host.name
-                    self.transform = subprocess.Popen([str(host)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                        stderr=None, text=True, encoding="utf-8", creationflags=subprocess.CREATE_NO_WINDOW)
-                    self.transform_lines = queue.Queue()
-                    stream, lines = self.transform.stdout, self.transform_lines
-                    def receive():
-                        for line in stream:
-                            lines.put(line)
-                        lines.put("")
-                    threading.Thread(target=receive,daemon=True,name="transform-results").start()
+                    self.transform = take_transform_host()
                 if not self.transform_ready and self.transform_initial_payload:
                     restored = self._transform_call(self.transform_initial_payload)
                     if not restored.get("success"):
@@ -558,25 +759,8 @@ class Pipeline:
             else:
                 import cv2
                 import numpy as np
-                if module not in self.cores:
-                    if module in (BRUSH,LAYERS,TOOLGROUP):
-                        from rapidocr import RapidOCR
-                        ocr = RapidOCR(params={"EngineConfig.onnxruntime.intra_op_num_threads":2,
-                            "EngineConfig.onnxruntime.inter_op_num_threads":1,"Global.log_level":"warning"})
-                    if module == BRUSH:
-                        from recognizer_core.panel_state import PanelStateCore
-                        core = PanelStateCore(ocr_engine=ocr)
-                    elif module == LAYERS:
-                        from recognizer_core.layer_state import LayerStateCore
-                        core = LayerStateCore(ocr_engine=ocr)
-                    elif module == TOOLGROUP:
-                        from recognizer_core.subtool_state import SubtoolPanelCore
-                        core = SubtoolPanelCore(ocr_engine=ocr)
-                    elif module != COLOR_INPUT:
-                        from recognizer_core.color_state import ColorStateCore
-                        core = ColorStateCore()
-                    if module != COLOR_INPUT:
-                        self.cores[module] = core
+                if module not in self.cores and module != COLOR_INPUT:
+                    self.cores[module] = take_core(module)
                 pixels = cv2.imdecode(np.fromfile(crops[module]["path"], dtype=np.uint8), cv2.IMREAD_COLOR)
                 if module == TOOLGROUP:
                     result = self.cores[module].process(pixels,catalog=self.tool_catalog)
@@ -631,11 +815,7 @@ class Pipeline:
         # one shared booth. Keep the OCR core resident and serialize its calls.
         with self.locks[COLOR_INPUT]:
             if COLOR_INPUT not in self.cores:
-                from rapidocr import RapidOCR
-                from recognizer_core.color_input_state import ColorInputStateCore
-                ocr = RapidOCR(params={"EngineConfig.onnxruntime.intra_op_num_threads":2,
-                    "EngineConfig.onnxruntime.inter_op_num_threads":1,"Global.log_level":"warning"})
-                self.cores[COLOR_INPUT] = ColorInputStateCore(ocr_engine=ocr)
+                self.cores[COLOR_INPUT] = take_core(COLOR_INPUT)
             return self.cores[COLOR_INPUT].process(pixels,panel_roi=roi,capture_frame_id=frame_id)
 
     def _complete_analysis(self, job, result, analysis_started):
@@ -653,7 +833,7 @@ class Pipeline:
                 captureDurationMs=job["captureDurationMs"],captureBudgetExceeded=job["captureBudgetExceeded"],
                 captureBackend=job.get("captureBackend"),dpi=job.get("dpi"),
                 canvasCaptureValidation=job.get("canvasCaptureValidation"),
-                retryOfCaptureId=job["reason"].partition(":")[2] if job["reason"].startswith("canvasRetry:") else None,
+                retryOfCaptureId=job["reason"].partition(":")[2] if job["reason"].startswith(("canvasRetry:","layerRetry:")) else None,
                 triggerReason=job["reason"],initialization=job["initialize"]),"delayed")
             if not current:
                 self._defer_job(job)
@@ -664,6 +844,8 @@ class Pipeline:
                 if (not job["initialize"] and not result.get("success") and result.get("failedStage") == 9
                         and self._retry_canvas(job)):
                     return
+            if module == LAYERS and self._retry_layers(job, result):
+                return
             if job.get("packageId"):
                 self.timeline.complete_if_pending(job["packageId"],MODULES[module],result,dict(
                     screenshotIds=[c["screenshotId"] for c in crops.values()],capturedTicks=job["ticks"],
@@ -686,25 +868,29 @@ class Pipeline:
                          packageId=job.get("packageId"),captureId=job["captureId"]))
         return True
 
+    def _retry_layers(self, job, result):
+        # Rows without a selected one: CSP was still redrawing the layer panel (after a delete, a paste,
+        # a scroll). Read one fresh frame for the same package instead of publishing an unknown layer.
+        locator = result.get("layerLocator") if isinstance(result, dict) else None
+        if (self.closing or job["initialize"] or job["reason"].startswith("layerRetry:")
+                or not isinstance(locator, dict) or not locator.get("rows") or result.get("selectedName")):
+            return False
+        self.notify(dict(type="layerRetry",ticks=job["triggerTicks"],refs=job["refs"],
+                         packageId=job.get("packageId"),captureId=job["captureId"]))
+        return True
+
     def _transform_call(self, payload):
         try:
-            self.transform.stdin.write(json.dumps(payload)+"\n")
-            self.transform.stdin.flush()
+            return self.transform.call(payload, timeout=120)
         except OSError:
             self.transform_ready = False
-            if self.transform.poll() is None:
-                self.transform.kill()
             raise
-        try:
-            line = self.transform_lines.get(timeout=120)
-        except queue.Empty:
-            self.transform.kill()
+        except TimeoutError:
             self.transform_ready = False
-            raise RuntimeError("画布核心 120 秒未返回；原始截图已保留")
-        if not line:
+            raise RuntimeError("画布核心 120 秒未返回；原始截图已保留") from None
+        except EOFError:
             self.transform_ready = False
-            raise RuntimeError("画布核心进程已退出")
-        return json.loads(line)
+            raise RuntimeError("画布核心进程已退出") from None
 
     def close(self):
         self.closing = True
@@ -718,9 +904,4 @@ class Pipeline:
         self.clip_executor.shutdown(wait=True)
         self.timeline.close(now_ticks())
         if self.transform:
-            try:
-                self.transform.stdin.close()
-                self.transform.wait(timeout=10)
-            except (OSError,subprocess.TimeoutExpired):
-                if self.transform.poll() is None:
-                    self.transform.kill()
+            self.transform.close()

@@ -197,6 +197,11 @@ public sealed class EditJournal : IDisposable
     {
         lock (_sync) Append("workLayerDeleted", new { checkpoint });
     }
+    /// <summary>The original target was removed from CSP; its pixels and properties are in the recycle bin.</summary>
+    public void OriginalDeleted(string layerUuid, string replacementUuid)
+    {
+        lock (_sync) Append("originalDeleted", new { layerUuid, replacementUuid });
+    }
     public void ReproductionInstalled(string layerUuid, EditJournalAsset asset)
     {
         lock (_sync) Append("reproductionInstalled", new { layerUuid, asset });
@@ -327,6 +332,10 @@ public sealed class EditJournal : IDisposable
                     Require(state.Checkpoint == checkpoint && state.SegmentId is null, "Deletion requires this transaction's latest durable checkpoint");
                     Require(!state.OriginalLayerUuids!.Contains(checkpoint.WorkLayerUuid), "An original target cannot be deleted as a work layer");
                     verify(checkpoint.Asset); break;
+                case "originalDeleted":
+                    Require(state.SegmentId is null, "Cannot delete an original during an unfinished segment");
+                    Require(state.OriginalLayerUuids!.Contains(GetText(data, "layerUuid")), "Only a frozen original target can be deleted");
+                    Require(!state.OriginalLayerUuids!.Contains(GetText(data, "replacementUuid")), "An original target cannot replace another"); break;
                 case "reproductionInstalled":
                     Require(state.SegmentId is null, "Cannot install reproduction during an unfinished segment");
                     Require(!state.OriginalLayerUuids!.Contains(GetText(data, "layerUuid")), "An original target cannot become a reproduction layer");

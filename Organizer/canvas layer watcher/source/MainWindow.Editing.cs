@@ -26,22 +26,36 @@ internal sealed partial class MainWindow
         public async Task DrainPendingAsync(CancellationToken token)=>await Task.WhenAll(owner.PendingCaptureTasks()).WaitAsync(token);
         public Task<IDisposable> EnterCaptureAsync(CancellationToken token)=>owner.CaptureCoordinator.EnterAsync(token);
         public void Status(string text)=>owner.Status(text);
+        private readonly HashSet<long> _completed=[];
         public async Task<PreparedEditingBoundary> PrepareAsync(string requestId,CancellationToken token)
         {
-            _requests=await monitor.PrepareEditBoundaryAsync(requestId,token);
-            if(_requests.Count==0)throw new InvalidDataException("边界没有已确认 UUID 的图层。");
-            return monitor.GetPreparedEditBoundary(requestId);
+            _requests=await monitor.PrepareEditBoundaryAsync(requestId,token);_completed.Clear();
+            try
+            {
+                if(_requests.Count==0)throw new InvalidDataException("边界没有已确认 UUID 的图层。");
+                return monitor.GetPreparedEditBoundary(requestId);
+            }
+            catch{Abandon();throw;}
+        }
+        // The reservation blocks every later boundary until each of its layers is completed, so any
+        // failure after PrepareAsync (cancel, timeout, save/export error) must release it.
+        public void Abandon()
+        {
+            foreach(var request in _requests.Where(r=>!_completed.Contains(r.Layer!.Id)))
+            {owner._host?.CaptureFailed(request,"编辑边界捕获未完成。");monitor.Complete(request,false);}
+            _requests=[];
         }
         public async Task CaptureAndCommitAsync(PreparedEditingBoundary boundary,CancellationToken token)
         {
-            var context=_requests[0].Context??throw new InvalidDataException("边界缺少固定的捕获上下文。");
-            var completed=new HashSet<long>();
+            var completed=_completed;
             bool Current()=>monitor.SessionId==boundary.SessionId&&_requests.Where(r=>!completed.Contains(r.Layer!.Id)).All(monitor.Current)&&owner.IsRecording;
-            var control=new RecorderControlClient(context.ControlPipe,owner.WriteLog);
-            var captures=await SaveCapture.CaptureBoundaryAsync(owner._clip.Text,Path.Combine(AppContext.BaseDirectory,"clip-layer-bridge.exe"),
-                control,context.PixelSize,_requests,Current,()=>monitor.InContact,owner.Status,token);
+            IReadOnlyList<BoundaryLayerCapture> captures=[];
             try
             {
+                var context=_requests[0].Context??throw new InvalidDataException("边界缺少固定的捕获上下文。");
+                var control=new RecorderControlClient(context.ControlPipe,owner.WriteLog);
+                captures=await SaveCapture.CaptureBoundaryAsync(owner._clip.Text,Path.Combine(AppContext.BaseDirectory,"clip-layer-bridge.exe"),
+                    control,context.PixelSize,_requests,Current,()=>monitor.InContact,owner.Status,token);
                 // A second native queue barrier makes input during save/export observable before
                 // any boundary packet is committed. Its marker never replaces the original limit.
                 string checkId=boundary.RequestId+"-validate";
@@ -61,11 +75,7 @@ internal sealed partial class MainWindow
                 }
                 owner.Status("编辑边界已固定，图层捕获与差异包已提交。");
             }
-            catch
-            {
-                foreach(var request in _requests){owner._host?.CaptureFailed(request,"编辑边界捕获未完成。");monitor.Complete(request,false);}
-                throw;
-            }
+            catch{Abandon();throw;}
             finally{foreach(var capture in captures)SaveCapture.TryDelete(capture.Result.PngPath);}
         }
     }

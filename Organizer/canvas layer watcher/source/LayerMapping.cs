@@ -20,6 +20,16 @@ internal static class LayerMapping
             .Select(item => new LayerReference(J.Tick(item, "id", 0), J.Text(item, "name")!, J.Text(item, "uuid"))).ToArray();
     }
 
+    // CSP's paper layer is not a raster layer and takes no strokes: a contact
+    // made while it is selected changes no layer's pixels.
+    public static string[] ReadPaperNames(JsonElement state)
+    {
+        var layers = J.Get(state, "layers");
+        if (layers.ValueKind != JsonValueKind.Array) return [];
+        return layers.EnumerateArray().Where(item => J.Get(item, "is_paper").ValueKind == JsonValueKind.True && J.Text(item, "name") is not null)
+            .Select(item => Compact(J.Text(item, "name")!)).ToArray();
+    }
+
     // The bridge calls this field `kind`; Recognizer's clipState parser
     // publishes the same LayerType value as `type_raw`.
     private static long? RasterKind(JsonElement layer)

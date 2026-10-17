@@ -152,6 +152,9 @@ internal static class LiveSessionReader
     {
         string packetsRoot = Path.Combine(root, "packets");
         if (!Directory.Exists(packetsRoot)) return [];
+        // A rebuilt project cache deletes the previous one; its decoded packets must not outlive it.
+        lock (PacketCache)
+            foreach (var stale in PacketCache.Keys.Where(key => !File.Exists(key.Path)).ToArray()) PacketCache.Remove(stale);
         var result = new List<LayerPacket>();
         foreach (string manifestPath in Directory.EnumerateFiles(packetsRoot, "manifest.json", SearchOption.AllDirectories).Order())
         {
@@ -295,10 +298,12 @@ internal static class LiveSessionReader
                 hit.Length == info.Length && hit.Image.Width == width && hit.Image.Height == height)
                 return hit.Image.Copy();
         var image = LoadRgba(path, width, height);
+        // Kept compressed: a hit inflates in about 0.2 s instead of decoding the PNG again.
+        var cached = image.ParkedCopy();
         lock (SnapshotCache)
         {
             if (SnapshotCache.Count >= SnapshotCacheLimit) SnapshotCache.Remove(SnapshotCache.Keys.First());
-            SnapshotCache[info.FullName] = (info.LastWriteTimeUtc, info.Length, image.Copy());
+            SnapshotCache[info.FullName] = (info.LastWriteTimeUtc, info.Length, cached);
         }
         return image;
     }

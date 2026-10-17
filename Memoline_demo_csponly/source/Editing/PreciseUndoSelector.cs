@@ -79,8 +79,39 @@ internal static class PreciseUndoSelector
         return new(layer, ordered, baseCount, candidates.Length, images, reasons.ToArray(), issues);
     }
 
+    /// <summary>
+    /// Searches the region on every layer of the live document and undoes on one: the current layer when the
+    /// region holds undoable strokes there, otherwise the nearest layer in the stack that does (on a tie, the
+    /// layer above, whose ink is what shows). Only that layer's strokes are selected.
+    /// </summary>
+    /// <param name="stackOrder">Live layer UUIDs from bottom to top, as CSP's saved structure lists them.</param>
+    internal static PreciseUndoSelection SelectNearest(EditIndex index, LayerKey? confirmedCurrentLayer,
+        IReadOnlyList<string> stackOrder, PixelMask selection)
+    {
+        var own = Select(index, confirmedCurrentLayer, selection);
+        if (own.CandidateCount > 0 || confirmedCurrentLayer is not { } current) return own;
+        int Position(string uuid) { for (int i = 0; i < stackOrder.Count; i++) if (stackOrder[i] == uuid) return i; return -1; }
+        int at = Position(current.Uuid);
+        if (at < 0) return own;
+        var others = index.Layers.Keys
+            .Where(k => k != current && k.SessionId == current.SessionId && k.Generation == current.Generation && Position(k.Uuid) >= 0)
+            .OrderBy(k => Math.Abs(Position(k.Uuid) - at)).ThenByDescending(k => Position(k.Uuid));
+        foreach (var layer in others)
+            if (Select(index, layer, selection) is { CandidateCount: > 0 } nearest) return nearest;
+        return own;
+    }
+
     private static PreciseUndoSelection Failure(LayerKey? layer, PlanIssueCode code, string message)
         => new(layer, [], 0, 0, [], [], [new(code, message)]);
 
     internal static bool Intersects(PixelMask left, PixelMask right) => left.Intersects(right);
+}
+
+internal static class EditSessionPreciseUndo
+{
+    internal static PreciseUndoSelection SelectPreciseUndo(this EditSession session, PixelMask region)
+        => PreciseUndoSelector.SelectNearest(session.Index, session.CurrentLayer, session.LayerOrder.Select(l => l.Uuid).ToArray(), region);
+
+    internal static string LayerName(this EditSession session, LayerKey layer)
+        => session.LayerOrder.FirstOrDefault(l => l.Uuid == layer.Uuid).Name ?? layer.Uuid;
 }

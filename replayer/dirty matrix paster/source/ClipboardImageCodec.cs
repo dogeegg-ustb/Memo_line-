@@ -104,11 +104,15 @@ internal static class ClipboardImageCodec
     }
 
     // Clipboard history and other watchers can briefly hold or re-render the clipboard right after a
-    // write. Retry the read; when it stays unreadable, rely on the caller's own verification of the
-    // pasted result (the editing transaction exports and compares the pasted layer).
+    // write: for a few tens of milliseconds a read may return nothing, or bytes of the right length that
+    // are not ours (measured: about 40% of first reads, always correct by the second or third). Retry
+    // both. A clipboard that stays unreadable is left to the caller's own verification of the pasted
+    // result (the editing transaction exports and compares the pasted layer); one that keeps holding
+    // other bytes was replaced by another program and fails.
+    internal const int ReadBackAttempts = 10;
     private static void VerifyReadBack(byte[] png, byte[] dib)
     {
-        for (int attempt = 0; ; attempt++)
+        for (int attempt = 1; ; attempt++)
         {
             try
             {
@@ -121,8 +125,12 @@ internal static class ClipboardImageCodec
             }
             catch (Exception error) when (error is InvalidDataException or System.Runtime.InteropServices.ExternalException)
             {
-                if (attempt >= 4) return;
-                Thread.Sleep(100);
+                if (attempt >= ReadBackAttempts) return;
+                Thread.Sleep(50);
+            }
+            catch (IOException) when (attempt < ReadBackAttempts)
+            {
+                Thread.Sleep(50);
             }
         }
     }

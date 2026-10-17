@@ -84,13 +84,20 @@ internal static class NativeUndoTimelineChecks
         Check(State(result, orphanPen) == NativeUndoPenState.Unknown && result.Commands.Single().InputAppendId == 0,
             "A shortcut without a native input reference creates an explicit barrier.");
 
-        foreach ((long Hook, bool Guard) blocked in new[] { (1L, false), (0L, true) })
-        {
-            var blockedInput = new Fixture(); ulong blockedPen = blockedInput.Pen("A");
-            blockedInput.Command("undo", hookResult: blocked.Hook, guard: blocked.Guard); result = blockedInput.Resolve();
-            Check(State(result, blockedPen) == NativeUndoPenState.Active && result.Commands.Single().State == NativeUndoCommandState.Blocked,
-                "A blocked or intercepted hook input is not applied to the document undo stack.");
-        }
+        var blockedInput = new Fixture(); ulong blockedPen = blockedInput.Pen("A");
+        blockedInput.Command("undo", hookResult: 1); result = blockedInput.Resolve();
+        Check(State(result, blockedPen) == NativeUndoPenState.Active && result.Commands.Single().State == NativeUndoCommandState.Blocked,
+            "An input another hook blocked is not applied to the document undo stack.");
+        var guardedInput = new Fixture(); ulong guardedPen = guardedInput.Pen("A");
+        guardedInput.Command("undo", guard: true); result = guardedInput.Resolve();
+        Check(State(result, guardedPen) == NativeUndoPenState.Undone && result.Commands.Single().State == NativeUndoCommandState.Resolved,
+            "The save guard releases its intercepted key after the save, so the key reaches CSP at its recorded position.");
+        var cancelledRelease = new Fixture(); ulong cancelledPen = cancelledRelease.Pen("A");
+        cancelledRelease.Command("toolselectpen", guard: true);
+        cancelledRelease.Add("saveGuardResult", new { saveId = "guard-fixture", released = false, error = "CSP lost foreground; guarded input cancelled." });
+        cancelledRelease.Command("undo"); result = cancelledRelease.Resolve();
+        Check(State(result, cancelledPen) == NativeUndoPenState.Unknown && result.Barriers.Any(barrier => barrier.Reason == "guardedInputNotReleased"),
+            "When the guard cancels its intercepted input, whether CSP received it is unknown.");
         var missingDelivery = new Fixture(); missingDelivery.Pen("A"); missingDelivery.Command("undo", hookResult: null); result = missingDelivery.Resolve();
         Check(result.Commands.Single().Reason == "nativeHookDeliveryUnknown", "Absent delivery metadata is not invented as a CSP acknowledgment.");
         var injected = new Fixture(); ulong injectedPen = injected.Pen("A"); injected.Command("undo", injected: true); result = injected.Resolve();
@@ -221,6 +228,84 @@ internal static class NativeUndoTimelineChecks
         Check(State(result, unmappedWheelInk) == NativeUndoPenState.Unknown,
             "Canvas coordinates alone do not prove an unclassified wheel operation's history effect.");
 
+        foreach (string device in new[] { "mouse", "pen" })
+        {
+            var opacity = new Fixture(); ulong opacityA = opacity.Pen("A"), opacityB = opacity.Pen("B");
+            opacity.Save(opacity: 100); var gesture = opacity.LayerClick(device); opacity.Save(opacity: 50);
+            opacity.Command("undo"); result = opacity.Resolve();
+            Check(result.Commands.Single() is { State: NativeUndoCommandState.Resolved, Target: { Kind: NativeUndoUnitKind.LayerProperty } property } &&
+                property.BeginAppendId == gesture.First && property.Description?.Contains("不透明度") == true &&
+                State(result, opacityA) == NativeUndoPenState.Active && State(result, opacityB) == NativeUndoPenState.Active &&
+                result.Units.Single().State == NativeUndoPenState.Undone && result.Barriers.Count == 0,
+                $"Undo after a proven layer property change ({device}) reverts that change, not the latest stroke.");
+            opacity.Command("undo"); result = opacity.Resolve();
+            Check(State(result, opacityB) == NativeUndoPenState.Undone && State(result, opacityA) == NativeUndoPenState.Active,
+                $"The stroke below a layer property unit ({device}) is the next undo target.");
+        }
+
+        var unprovenTap = new Fixture(); ulong tapInk = unprovenTap.Pen("A"); unprovenTap.Pen("A", region: "layers");
+        unprovenTap.Command("undo"); result = unprovenTap.Resolve();
+        Check(State(result, tapInk) == NativeUndoPenState.Unknown && result.Barriers.Any(barrier => barrier.Reason == "layerPanelContactUnproven") &&
+            result.Commands.Single().State == NativeUndoCommandState.Unknown,
+            "A pen tap in the layer panel may have changed a layer; without proof Undo is not credited to the previous stroke.");
+        var twoProperties = new Fixture(); ulong twoInk = twoProperties.Pen("A");
+        twoProperties.Save(opacity: 100); twoProperties.LayerClick("mouse"); twoProperties.Save(opacity: 50, blend: "正片叠底");
+        result = twoProperties.Resolve();
+        Check(result.Units.Count == 0 && State(result, twoInk) == NativeUndoPenState.Unknown,
+            "Two changed properties do not prove how many undo units one gesture made.");
+        foreach (string device in new[] { "mouse", "pen" })
+        {
+            var visibility = new Fixture(); ulong hiddenInk = visibility.Pen("A");
+            visibility.Save(); visibility.LayerClick(device); visibility.Save(visible: false); visibility.Command("undo");
+            result = visibility.Resolve();
+            Check(result.Units.Count == 0 && result.Barriers.Count == 0 && State(result, hiddenInk) == NativeUndoPenState.Undone,
+                $"Hiding a layer ({device}) is not in CSP's history: Undo still reverts the previous stroke.");
+        }
+        var selection = new Fixture(); ulong selectedInk = selection.Pen("A");
+        selection.Save(extraLayer: true, selected: 1); selection.LayerClick("mouse"); selection.Save(extraLayer: true, selected: 2);
+        selection.Command("undo"); result = selection.Resolve();
+        Check(result.Barriers.Count == 0 && State(result, selectedInk) == NativeUndoPenState.Undone,
+            "Selecting another layer is not an undo step: Undo still reverts the previous stroke.");
+        var reorder = new Fixture(); ulong reorderInk = reorder.Pen("A");
+        reorder.Save(extraLayer: true, selected: 1); reorder.LayerClick("mouse"); reorder.Save(extraLayer: true, selected: 1, reversed: true);
+        result = reorder.Resolve();
+        Check(result.Units.Count == 0 && State(result, reorderInk) == NativeUndoPenState.Unknown,
+            "A changed layer order is a document change, never mistaken for a selection.");
+        var nothing = new Fixture(); ulong nothingInk = nothing.Pen("A");
+        nothing.Save(); nothing.LayerClick("mouse"); nothing.Save(); result = nothing.Resolve();
+        Check(State(result, nothingInk) == NativeUndoPenState.Unknown,
+            "A layer panel click with no visible change may still have changed pixels and stays unproven.");
+        var interleaved = new Fixture(); interleaved.Pen("A");
+        interleaved.Save(opacity: 100); interleaved.LayerClick("mouse"); interleaved.Command("toolselectpen"); interleaved.Save(opacity: 50);
+        result = interleaved.Resolve();
+        Check(result.Units.Count == 0, "Another press between the two saves leaves the property change unattributed.");
+        var newLayer = new Fixture(); newLayer.Pen("A");
+        newLayer.Save(); newLayer.LayerClick("mouse"); newLayer.Save(extraLayer: true); result = newLayer.Resolve();
+        Check(result.Units.Count == 0, "Layer creation is a macro operation, not a property change, and is left to its own detector.");
+
+        foreach (string outcome in new[] { "failed", "cancelled" })
+        {
+            var transaction = new Fixture(); ulong beforeTransaction = transaction.Pen("A");
+            transaction.Add("editTransactionEnded", new { transactionId = "edit-txn-fixture", outcome }); transaction.Command("undo");
+            result = transaction.Resolve();
+            Check(State(result, beforeTransaction) == NativeUndoPenState.Unknown &&
+                result.Barriers.Any(barrier => barrier.Reason == "editTransactionLeftUnknownChanges"),
+                $"A {outcome} editing transaction may leave CSP operations on the stack; Undo is not credited to an earlier stroke.");
+        }
+        var executed = new Fixture(); executed.Pen("A"); executed.Add("editTransactionEnded", new { transactionId = "edit-txn-fixture", outcome = "executed" });
+        Check(executed.Resolve().Barriers.Count == 0, "An executed transaction is accounted for by its editingActionCompleted record.");
+
+        var macro = new Fixture(); ulong macroInk = macro.Pen("A"); var fill = macro.Key();
+        macro.ResolveShortcut(fill, ["editfill"]); macro.Command("undo");
+        ulong fillAppend = fill.GetProperty("appendId").GetUInt64();
+        result = macro.Resolve(detectors: [new FixedUnits(new NativeUndoUnitProof(NativeUndoUnitKind.Macro, fillAppend, fillAppend, null, "填充"))]);
+        Check(result.Commands.Single().Target is { Kind: NativeUndoUnitKind.Macro, Description: "填充" } &&
+            State(result, macroInk) == NativeUndoPenState.Active && result.Barriers.Count == 0,
+            "A detector plugged into the timeline turns a recognized macro command into a stack unit.");
+        result = macro.Resolve(detectors: [new FixedUnits(new NativeUndoUnitProof(NativeUndoUnitKind.Macro, fillAppend, fillAppend + 2, null, "吞掉撤销"))]);
+        Check(result.Units.Count == 0 && State(result, macroInk) == NativeUndoPenState.Unknown,
+            "A claim that would swallow an Undo input is rejected.");
+
         var immutable = new Fixture(); immutable.Pen("A"); immutable.Command("undo");
         string before = string.Join("\n", immutable.Frames.Select(frame => frame.GetRawText())); immutable.Resolve();
         Check(before == string.Join("\n", immutable.Frames.Select(frame => frame.GetRawText())), "Timeline derivation never edits the original native frames.");
@@ -295,9 +380,44 @@ internal static class NativeUndoTimelineChecks
         }
         internal void Command(string command, long? hookResult = 0, bool guard = false, bool injected = false, bool tagged = false)
             => ResolveShortcut(Key(hookResult, guard, injected, tagged), [command]);
+        // A save-triggered reading of the document, as the recorder records after a guarded or requested save.
+        internal void Save(int opacity = 100, string blend = "正常", bool visible = true, bool extraLayer = false,
+            int selected = 1, bool reversed = false)
+        {
+            var layers = new List<object> { new { id = 1, name = "A", uuid = "A", opacity_percent = (double)opacity,
+                opacity_raw = opacity * 256 / 100, blend_mode = blend, visible, selected = selected == 1 } };
+            if (extraLayer) layers.Add(new { id = 2, name = "图层 2", uuid = "C", opacity_percent = 100.0, opacity_raw = 256,
+                blend_mode = "正常", visible = true, selected = selected == 2 });
+            if (reversed) layers.Reverse();
+            long trigger = (long)_append;
+            Add("coreStateUpdated", new { module = "clipState", status = "changed",
+                state = new { canvas = new { width_raw = 100.0, height_raw = 100.0, unit_raw = 0, current_layer_id = selected }, layers },
+                evidence = new { saveId = $"save-{trigger}", triggerTicks = trigger, saveCompletionConfirmed = false } });
+        }
+        internal (ulong First, ulong Last) LayerClick(string device)
+        {
+            if (device == "pen")
+            {
+                var contact = Begin("A", region: "layers");
+                var end = Add("penEnd", new { inCsp = true, injected = false, reason = "penUp" }, hardware: true, operation: contact.Operation);
+                return (contact.Begin, end.GetProperty("appendId").GetUInt64());
+            }
+            var location = new PenDownLocation("layers", "图层面板", 20, 20, "windowsCursor", "matched");
+            var down = Add("mouseDown", new { x = 20, y = 20, button = "left", inCsp = true, penDownLocation = location }, hardware: true);
+            Add("mouseDrag", new { x = 24, y = 20, button = "left", inCsp = true, penDownLocation = location }, hardware: true);
+            var up = Add("mouseUp", new { x = 24, y = 20, button = "left", inCsp = true, penDownLocation = location }, hardware: true);
+            return (down.GetProperty("appendId").GetUInt64(), up.GetProperty("appendId").GetUInt64());
+        }
         internal SessionSnapshot Snapshot() => new("fixture.part", "undo-fixture", 1000, Frames.ToArray(),
             new MemolineReplayDocument("fixture.part", "undo-fixture", 1000, []), [], _append, (long)_append);
-        internal NativeUndoTimelineResult Resolve(int? capacity = null, bool initialEmpty = false)
-            => NativeUndoTimeline.Build(Snapshot(), Proofs, capacity, initialEmpty);
+        internal NativeUndoTimelineResult Resolve(int? capacity = null, bool initialEmpty = false,
+            IReadOnlyList<INativeUndoUnitDetector>? detectors = null)
+            => NativeUndoTimeline.Build(Snapshot(), Proofs, capacity, initialEmpty, detectors);
+    }
+
+    private sealed class FixedUnits(params NativeUndoUnitProof[] proofs) : INativeUndoUnitDetector
+    {
+        public IEnumerable<NativeUndoUnitProof> Detect(SessionSnapshot session, IReadOnlyList<JsonElement> frames,
+            IReadOnlyList<PacketReplay.HistorySlot> history) => proofs;
     }
 }

@@ -100,6 +100,7 @@ internal static class StateHistory
             .GroupBy(f => (J.Text(J.Get(f, "data"), "packageId"), J.Text(J.Get(f, "data"), "module")))
             .ToDictionary(g => g.Key, g => g.OrderBy(f => J.U64(f, "appendId")).Last());
         var covered = new HashSet<(string?, string?)>();
+        Func<JsonElement, ulong>? lastInputBefore = null;
         foreach (var result in frames.Where(f => J.Text(f, "kind") == "statePackageResult"))
         {
             var d = J.Get(result, "data");
@@ -125,13 +126,40 @@ internal static class StateHistory
             // null-package updates would discard both history and invalidations.
             if (id is not null && (covered.Contains((id, module)) ||
                 J.U64(packageCores[(id, module)], "appendId") != J.U64(frame, "appendId"))) continue;
-            ulong anchor = J.U64(J.Get(d, "evidence"), "observedAfterEventId");
+            var evidence = J.Get(d, "evidence");
             ulong order = J.U64(frame, "appendId");
+            // An observation that does not name the input it followed (a parsed saved Clip) is
+            // placed after the last input recorded before its trigger. Treating it as anchor 0
+            // would move a late reading ahead of every input and replace the initial state.
+            ulong anchor = J.Get(evidence, "observedAfterEventId").ValueKind == JsonValueKind.Number
+                ? J.U64(evidence, "observedAfterEventId") : (lastInputBefore ??= LastInputBefore(frames))(frame);
             if (id is not null && reservations.TryGetValue(id, out var reserved))
             { anchor = J.U64(reserved, "afterEventId"); order = J.U64(reserved, "reservationOrder"); }
             slots.Add(new(anchor, order, module, d));
         }
         return slots.OrderBy(s => s.Anchor).ThenBy(s => s.Order).ToArray();
+    }
+
+    private static Func<JsonElement, ulong> LastInputBefore(IReadOnlyList<JsonElement> frames)
+    {
+        var inputs = frames.Where(f => J.U64(f, "eventId") > 0)
+            .Select(f => (Append: J.U64(f, "appendId"), Ticks: J.I64(f, "ticks", long.MaxValue), Event: J.U64(f, "eventId"),
+                Press: J.Text(f, "kind") is "mouseDown" or "penBegin" or "keyInput" or "keyDown")).ToArray();
+        // The layer guard saves before releasing the press that triggered it, yet that press is recorded
+        // first, with a timestamp taken on another thread: the save precedes the press closest to its trigger.
+        var guarded = frames.Where(f => J.Text(f, "kind") == "clipSaveRequest" && J.Text(J.Get(f, "data"), "reason") == "beforeLayerOperation")
+            .Select(f => J.Text(J.Get(f, "data"), "saveId")).OfType<string>().ToHashSet();
+        return observation =>
+        {
+            ulong append = J.U64(observation, "appendId");
+            var evidence = J.Get(J.Get(observation, "data"), "evidence");
+            long ticks = J.I64(evidence, "triggerTicks", J.I64(observation, "ticks", long.MaxValue));
+            ulong until = append;
+            if (J.Text(evidence, "saveId") is { } saveId && guarded.Contains(saveId) && inputs.Where(i => i.Press && i.Append < append &&
+                i.Ticks != long.MaxValue).OrderBy(i => Math.Abs(i.Ticks - ticks)).FirstOrDefault() is { Append: > 0 } intercepted)
+                until = intercepted.Append;
+            return inputs.Where(i => i.Append < until && i.Ticks <= ticks).Select(i => i.Event).DefaultIfEmpty().Max();
+        };
     }
 
     internal static HistoricalState At(IReadOnlyList<HistorySlot> slots, ulong eventId)

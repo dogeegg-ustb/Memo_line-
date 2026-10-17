@@ -15,6 +15,9 @@ import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+# numpy's OpenBLAS commits a work buffer per CPU when it is imported (about 740 MB
+# on 32 threads). OCR runs in onnxruntime, so one BLAS thread is enough.
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 if (HERE / "python_libs").is_dir():
     sys.path.insert(0,str(HERE / "python_libs"))
 if (HERE.parent / "csp_workspace_overlay.py").is_file():
@@ -24,7 +27,7 @@ from catalog import Catalog, BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR, COLOR_INPU
 from engine import UpdateEngine
 from csp_workspace_overlay import Overlay, border_strips, find_dock_file, inspect
 from csp_panel_validator.window_service import enable_per_monitor_dpi_awareness
-from pipeline import Pipeline, now_ticks
+from pipeline import Pipeline, now_ticks, prepare_analysis, close_shared_transform_host
 from setup_ui import SetupDialog
 
 OUTPUT_LOCK = threading.Lock()
@@ -45,7 +48,9 @@ class Runtime:
         self.layouts = queue.Queue(maxsize=1)
         self.settings_path = HERE / "settings.json"
         self.settings = json.loads(self.settings_path.read_text(encoding="utf-8"))
-        self.settings["analysisConcurrency"] = max(1,min(4,int(self.settings.get("analysisConcurrency",2))))
+        # 0 = follow the CPU (see pipeline.analysis_workers); at most one job per core module.
+        self.settings["analysisConcurrency"] = max(0,min(6,int(self.settings.get("analysisConcurrency",0))))
+        prepare_analysis()
         self.pipeline = None
         self.setup = None
         self.driver_configurations = None
@@ -123,8 +128,7 @@ class Runtime:
                    for e in entries):
                 bindings.append(dict(vk=vk,mods=mods))
         emit(dict(type="guardConfig",data=dict(enabled=bool(self.pipeline and self.engine.regions and not self.engine.suspended),
-            region=self.engine.regions.get(LAYERS),bindings=bindings,saveSettleMs=0,
-            autoHotkeyPath=self.settings.get("autoHotkeyPath",""))))
+            region=self.engine.regions.get(LAYERS),bindings=bindings,saveSettleMs=0)))
 
     def request_states(self, msg):
         """One explicit request captures fresh pixels; results keep its package identity."""
@@ -531,6 +535,10 @@ class Runtime:
                     self.schedule_capture([CANVAS,NAVIGATOR],msg["ticks"],msg["refs"],
                                           "canvasRetry:"+msg["captureId"],msg.get("packageId"))
                     continue
+                if msg["type"] == "layerRetry":
+                    self.schedule_capture([LAYERS],msg["ticks"],msg["refs"],
+                                          "layerRetry:"+msg["captureId"],msg.get("packageId"))
+                    continue
                 if msg["type"] == "captureFinished":
                     self.captures_pending = max(0,self.captures_pending-1)
                     if msg.get("success"):
@@ -614,6 +622,7 @@ class Runtime:
                         reason="sessionStoppedBeforePackageReserved",triggerReason=reason))
             self.pending_captures.clear()
             self.pipeline.close()
+        close_shared_transform_host()
         self.root.destroy()
 
     def run(self):

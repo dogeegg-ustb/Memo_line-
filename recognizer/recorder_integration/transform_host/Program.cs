@@ -37,10 +37,18 @@ while (Console.ReadLine() is { } line)
                 throw new ArgumentException($"{name}: ROI must stay inside the original frame.");
             return local;
         }
+        float dpi = root.TryGetProperty("dpi",out var dpiValue) ? dpiValue.GetSingle() : 96;
+        // Setup probe: can this digit selection still be read? Leaves the transform state untouched.
+        if (root.TryGetProperty("probeNumbers",out var probeValue) && probeValue.GetBoolean())
+        {
+            var (ok, numbers) = await core.ProbeNumbersAsync(frame,originX,originY,dpi,dpi,LocalRoi("numbers"));
+            Console.WriteLine(JsonSerializer.Serialize(new { success = ok, numbers.ScalePercent, numbers.RotationDegrees,
+                numbers.ScaleRawText, numbers.RotationRawText }, options));
+            continue;
+        }
         var workspaceRoi=LocalRoi("workspace");
         var navigatorRoi=LocalRoi("navigator");
         var numbersRoi=LocalRoi("numbers");
-        float dpi = root.TryGetProperty("dpi",out var dpiValue) ? dpiValue.GetSingle() : 96;
         // One real, untouched frame with local ROIs, as in the original application.
         // Native red-line completion can inspect factual pixels beyond the thumbnail.
         // Recompute keeps the core's initial workspace/thumbnail/OCR anchors.

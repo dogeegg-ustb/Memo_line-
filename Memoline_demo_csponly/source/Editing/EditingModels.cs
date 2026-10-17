@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PacketReplay;
@@ -244,11 +246,109 @@ public sealed class PixelMask : IEquatable<PixelMask>
 
 public sealed record ImageRgba(int Width, int Height, byte[] Bytes)
 {
+    // A full canvas is 139 MB at 4961×7016. Park() keeps only the zlib-compressed
+    // pixels (about 1 MB for a line-art layer) until Bytes is read again.
+    private readonly object _gate = new();
+    private byte[]? _bytes = Bytes;
+    private byte[]? _packed;
+    private byte[]? _digest;
+
+    public byte[] Bytes
+    {
+        get
+        {
+            // Pixel loops read Bytes per pixel; only a parked image takes the lock.
+            if (Volatile.Read(ref _bytes) is { } loaded) return loaded;
+            lock (_gate)
+            {
+                if (_bytes is null)
+                {
+                    // The caller may write into the array, so the packed copy and its digest end here.
+                    _bytes = Unpack(_packed!, Width, Height);
+                    _packed = null; _digest = null;
+                }
+                return _bytes;
+            }
+        }
+        init { _bytes = value; _packed = null; _digest = null; }
+    }
+
     public ImageRgba(int width, int height, ReadOnlySpan<byte> bytes) : this(width, height, bytes.ToArray()) { }
     public void Validate() =>
         _ = Width > 0 && Height > 0 && Bytes.Length == checked(Width * Height * 4)
             ? true : throw new InvalidDataException("RGBA 图像尺寸或字节数无效。");
-    public ImageRgba Copy() => new(Width, Height, Bytes.ToArray());
+    public ImageRgba Copy()
+    {
+        lock (_gate) return new(Width, Height, _bytes is { } bytes ? bytes.ToArray() : Unpack(_packed!, Width, Height));
+    }
+
+    public bool IsParked { get { lock (_gate) return _bytes is null; } }
+
+    /// <summary>Releases the pixel array; reading Bytes later restores identical pixels.</summary>
+    public void Park()
+    {
+        lock (_gate)
+        {
+            if (_bytes is null) return;
+            _digest = SHA256.HashData(_bytes);
+            _packed = Pack(_bytes);
+            _bytes = null;
+        }
+    }
+
+    /// <summary>A parked copy, made without a second full-size array.</summary>
+    public ImageRgba ParkedCopy()
+    {
+        lock (_gate)
+            return new ImageRgba(Width, Height, [])
+            {
+                _bytes = null,
+                _packed = _packed ?? Pack(_bytes!),
+                _digest = _bytes is null ? _digest : SHA256.HashData(_bytes),
+            };
+    }
+
+    /// <summary>Compares pixels; parked images compare by digest without being restored.</summary>
+    public bool SamePixels(ImageRgba other)
+    {
+        if (ReferenceEquals(this, other)) return true;
+        if (Width != other.Width || Height != other.Height) return false;
+        if (!IsParked && !other.IsParked) return Bytes.AsSpan().SequenceEqual(other.Bytes);
+        return Digest().AsSpan().SequenceEqual(other.Digest());
+    }
+
+    private byte[] Digest()
+    {
+        lock (_gate) return _digest is { } digest && _bytes is null ? digest : SHA256.HashData(_bytes!);
+    }
+
+    private static byte[] Pack(byte[] bytes)
+    {
+        using var output = new MemoryStream();
+        using (var zlib = new ZLibStream(output, CompressionLevel.Fastest, leaveOpen: true)) zlib.Write(bytes);
+        return output.ToArray();
+    }
+
+    private static byte[] Unpack(byte[] packed, int width, int height)
+    {
+        var bytes = new byte[checked(width * height * 4)];
+        using var zlib = new ZLibStream(new MemoryStream(packed, writable: false), CompressionMode.Decompress);
+        zlib.ReadExactly(bytes);
+        return bytes;
+    }
+
+    // Identity as before: the same dimensions over the same pixel storage.
+    public bool Equals(ImageRgba? other)
+    {
+        if (ReferenceEquals(this, other)) return true;
+        if (other is null || Width != other.Width || Height != other.Height) return false;
+        object? mine, theirs;
+        lock (_gate) mine = (object?)_bytes ?? _packed;
+        lock (other._gate) theirs = (object?)other._bytes ?? other._packed;
+        return ReferenceEquals(mine, theirs);
+    }
+    public override int GetHashCode() => HashCode.Combine(Width, Height);
+    public override string ToString() => $"ImageRgba {{ Width = {Width}, Height = {Height}{(IsParked ? ", Parked" : "")} }}";
 }
 
 public sealed record DirtyImage(
@@ -366,4 +466,6 @@ internal sealed record EditSession(SessionSnapshot LiveView, EditIndex Index, La
     internal int? VerifiedUndoCapacity { get; init; }
     internal JsonElement LiveBrushEvidence { get; init; }
     internal ShortcutConfiguration? Shortcuts { get; init; }
+    /// <summary>Live layers from bottom to top (CSP's saved structure at the boundary).</summary>
+    internal IReadOnlyList<(string Uuid, string Name)> LayerOrder { get; init; } = [];
 }

@@ -63,5 +63,32 @@ class LayerLocatorTests(unittest.TestCase):
         self.assertEqual(data['rawResult'], raw)
 
 
+class LayerPanelRetryTests(unittest.TestCase):
+    def pipeline(self):
+        pipe = Pipeline.__new__(Pipeline)
+        pipe.closing = False
+        pipe.notify = Mock()
+        return pipe
+
+    def job(self, reason='operation'):
+        return dict(initialize=False, reason=reason, triggerTicks=10, refs=[3], packageId='pkg', captureId='frame-1')
+
+    def result(self, selected):
+        rows = [dict(name='图层2', selected=False, visible=False, rowBounds=None, eyeBounds=None)]
+        return dict(selectedName=selected, layerLocator=dict(panelRoi=[0, 0, 10, 10], captureFrameId='frame-1', rows=rows))
+
+    def test_rows_without_a_selection_are_read_once_more_for_the_same_package(self):
+        pipe = self.pipeline()
+        self.assertTrue(pipe._retry_layers(self.job(), self.result(None)))
+        pipe.notify.assert_called_once_with(dict(type='layerRetry', ticks=10, refs=[3], packageId='pkg', captureId='frame-1'))
+
+    def test_a_selected_row_a_hidden_panel_or_a_retry_is_published_as_read(self):
+        pipe = self.pipeline()
+        self.assertFalse(pipe._retry_layers(self.job(), self.result('图层1')))
+        self.assertFalse(pipe._retry_layers(self.job(), dict(selectedName=None, layerLocator=dict(rows=[]))))
+        self.assertFalse(pipe._retry_layers(self.job('layerRetry:frame-0'), self.result(None)))
+        pipe.notify.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

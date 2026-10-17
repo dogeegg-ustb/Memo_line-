@@ -201,6 +201,25 @@ internal static class ProjectEditIndexChecks
         Check(Enumerable.Range(0, 2).All(_ => ProjectEditIndex.Build([first, corruptSession], current, corruptCached)
                 .Layers[route].Issues.Any(i => i.Message.Contains("差异补丁的前像素"))),
             "A reused history layer verified once keeps reporting its corrupt pixel chain on every join.");
+        // A layer Memoline installed in place of another (event editing, precise undo) is that layer, transitively.
+        var replacedA = Session("rep-a", 41, 1000, 100000, blank, 1);
+        var replacedB = Session("rep-b", 42, 1000, 100, replacedA.Packets[0].Current!, 5, "repro-1", [("ink", "repro-1")]);
+        var replacedNow = Session("rep-now", 43, 1000, 10, replacedB.Packets[0].Current!, null, "repro-2", [("repro-1", "repro-2")]);
+        var nowRoute = replacedNow.Packets[0].Layer;
+        var chained = ProjectEditIndex.Build([replacedA, replacedB], replacedNow);
+        Check(chained.IsValid && chained.Layers.Count == 1 && chained.Layers.ContainsKey(nowRoute) && chained.Strokes.Count == 2 &&
+              chained.Strokes.Values.All(s => s.Layer == nowRoute) &&
+              chained.Strokes.Values.Single(s => s.Key.SessionId == "rep-a").SourceLayer?.Uuid == "ink",
+            "A reproduction layer that was replaced again carries the original layer's whole history: the identity is transitive.");
+        var undoneMask = new PixelMask(8, 8); undoneMask.Set(1, 1);
+        Check(PreciseUndoSelector.Select(chained, nowRoute, undoneMask) is { IsValid: true } chainedUndo &&
+              chainedUndo.Selected.Single().Key.SessionId == "rep-a",
+            "Precise undo on the newest reproduction reaches strokes drawn on the original layer.");
+        var unrelatedB = Session("rep-b", 42, 1000, 100, replacedA.Packets[0].Current!, 5, "repro-1");
+        var unrelatedNow = Session("rep-now", 43, 1000, 10, unrelatedB.Packets[0].Current!, null, "repro-2");
+        var separate = ProjectEditIndex.Build([replacedA, unrelatedB], unrelatedNow);
+        Check(separate.Strokes.Count == 2 && separate.Strokes.Values.All(s => s.Layer != unrelatedNow.Packets[0].Layer),
+            "Without Memoline's own replacement record a different UUID stays a different layer: user-made layers are never joined.");
         Console.WriteLine($"Project edit index checks passed: {count}.");
         return count;
     }
@@ -214,9 +233,10 @@ internal static class ProjectEditIndexChecks
         { token.ThrowIfCancellationRequested(); return Task.FromResult(expected.Copy()); }
     }
 
-    private static SessionSnapshot Session(string id, long generation, long frequency, long start, ImageRgba baseline, int? drawX = null)
+    private static SessionSnapshot Session(string id, long generation, long frequency, long start, ImageRgba baseline, int? drawX = null,
+        string uuid = "ink", (string Replaced, string Reproduction)[]? replacements = null)
     {
-        var layer = new LayerKey(id, generation, "ink");
+        var layer = new LayerKey(id, generation, uuid);
         JsonElement Update(string module, object state) => JsonSerializer.SerializeToElement(new
         { kind = "coreStateUpdated", data = new { module, status = "changed", state, evidence = new { observedAfterEventId = 0, causalAmbiguous = false } } });
         JsonElement Pen(string kind, ulong eventId, long ticks) => JsonSerializer.SerializeToElement(new
@@ -228,10 +248,14 @@ internal static class ProjectEditIndexChecks
             { new { id = "tool", kind = "tool", name = "Pen", parentId = "root", toolId = "tool" },
               new { id = "subtool", kind = "subtool", name = "G pen", parentId = "tool", toolId = "tool" } } } } }),
             Update("brushState", new { name = "G pen", properties = new[] { new { key = "brush_size", type = "number", status = "ok", value = 2 } } }),
-            Update("currentLayerState", "Ink"), Update("clipState", new { layers = new[] { new { name = "Ink", uuid = "ink" } } }),
+            Update("currentLayerState", "Ink"), Update("clipState", new { layers = new[] { new { name = "Ink", uuid } } }),
             Update("canvasViewState", new { canvasOriginScreenPx = new { x = 0, y = 0 }, ocrScalePercent = 100, ocrRotationDegrees = 0 })
         };
         if (drawX is not null) frames.AddRange([Pen("penBegin", 2, start), Pen("penSample", 3, start + 10), Pen("penEnd", 4, start + 20)]);
+        if (replacements is not null)
+            frames.Add(JsonSerializer.SerializeToElement(new { kind = "editingActionCompleted", ticks = start + 100, data = new
+            { transactionId = "tx-" + id, editKind = "preciseUndo", changes = Array.Empty<object>(),
+              layerReplacements = replacements.Select(r => new { replaced = r.Replaced, reproduction = r.Reproduction }).ToArray() } }));
         frames.Add(JsonSerializer.SerializeToElement(new { kind = "editBoundaryRequested", ticks = start + 200, data = new { } }));
         var nativeFrames = frames.Select((f, i) =>
         {

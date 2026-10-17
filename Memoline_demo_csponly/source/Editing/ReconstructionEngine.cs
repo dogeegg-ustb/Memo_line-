@@ -81,6 +81,8 @@ internal static class ReconstructionEngine
                     foreach (var key in packet.Images.SelectMany(i => i.Events)) cursor.Composed.Add(key);
                 }
                 cursors.Add(lp.Layer,cursor);
+                // The boundary capture was only needed for the seed; reference reads restore it.
+                layer.Current!.Park();
             }
             IReadOnlyDictionary<LayerKey, PixelMask> Differences() => plan.Index.Layers.ToDictionary(kv=>kv.Key,
                 kv=>cursors.TryGetValue(kv.Key,out var c)&&c.Started?c.Difference.Union(c.PendingGrowth):ReconstructionPlanner.Empty(kv.Value));
@@ -111,13 +113,16 @@ internal static class ReconstructionEngine
                         image.Now.Bytes.AsSpan(source,4).CopyTo(c.Actual.Bytes.AsSpan((y*c.Actual.Width+x)*4,4));
                     }
                 c.Residuals.Clear();
-                if(c.Pending.Count>0)
+                bool replaced=c.Pending.Count>0;
+                if(replaced)
                 {
                     var events=c.Pending.Values.OrderBy(e=>e.Stroke.SessionOrder).ThenBy(e=>e.Stroke.BeginEventId).ThenBy(e=>e.Stroke.Key.BeginAppendId)
                         .Select(e=>e with {Stroke=e.Stroke with {Samples=e.Stroke.Samples.OrderBy(s=>s.AppendId).ToArray()}}).ToArray();
                     var references=events.Any(e=>e.RequiresReferenceScene)
                         ? plan.Index.Layers.ToDictionary(kv=>kv.Key,kv=>kv.Key==c.Plan.Layer?c.Actual:ReferenceAt(kv.Key,c.LastGroupSessionOrder,c.LastGroupTicks))
                         : new Dictionary<LayerKey,ImageRgba>{{c.Plan.Layer,c.Actual}};
+                    // Replaced by the capture below: compressed meanwhile, restored only if the executor reads it.
+                    c.Actual.Park();
                     var actual=await executor.FlushAsync(c.Plan.Layer,c.Actual.Copy(),events,references,token);
                     hasReplayed = true;
                     actual.Validate();
@@ -126,6 +131,7 @@ internal static class ReconstructionEngine
                 }
                 c.Difference=ImageCompositor.Difference(c.Actual,c.Historical);
                 c.PendingGrowth=new(c.Actual.Width,c.Actual.Height);
+                if(replaced)EditingMemory.Collect();
             }
             async Task<PlanIssue?> Queue(Cursor c,DirtyImage image,bool runtime)
             {

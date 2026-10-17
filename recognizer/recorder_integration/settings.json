@@ -1,9 +1,8 @@
 {
   "flashBorders": true,
-  "analysisConcurrency": 2,
+  "analysisConcurrency": 0,
   "analysisQuietMs": 150,
   "saveSettleMs": 0,
-  "autoHotkeyPath": "",
   "clipPath": "",
   "captureBudgetMs": 100
 }

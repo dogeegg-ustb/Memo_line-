@@ -11,6 +11,8 @@ internal interface IEditingBoundaryActions
     Task<IDisposable> EnterCaptureAsync(CancellationToken token);
     Task<PreparedEditingBoundary> PrepareAsync(string requestId,CancellationToken token);
     Task CaptureAndCommitAsync(PreparedEditingBoundary boundary,CancellationToken token);
+    /// <summary>Releases the prepared reservation that was not committed. Idempotent.</summary>
+    void Abandon();
     void Status(string text);
 }
 
@@ -39,14 +41,19 @@ internal static class EditingBoundaryCoordinator
                 // input, like the recording baseline; the same request ID would return the old native marker.
                 string id=attempt==1?requestId:$"{requestId}-retry{attempt}";
                 var boundary=await actions.PrepareAsync(id,token);
-                if(boundary.SessionId!=session||actions.SessionId!=session||boundary.RequestId!=id||boundary.AppendId==0||boundary.TriggerTicks<0)
-                    throw new InvalidDataException("Recognizer 返回的编辑边界与本次会话不一致。");
-                try{await actions.CaptureAndCommitAsync(boundary,token);}
+                try
+                {
+                    if(boundary.SessionId!=session||actions.SessionId!=session||boundary.RequestId!=id||boundary.AppendId==0||boundary.TriggerTicks<0)
+                        throw new InvalidDataException("Recognizer 返回的编辑边界与本次会话不一致。");
+                    await actions.CaptureAndCommitAsync(boundary,token);
+                }
                 catch(EditingBoundaryInputException)when(attempt<Attempts&&!token.IsCancellationRequested)
                 {
+                    actions.Abandon();
                     actions.Status($"建立编辑边界期间检测到物理输入，重新保存并捕获（{attempt+1}/{Attempts}）…");
                     continue;
                 }
+                catch{actions.Abandon();throw;}
                 if(actions.SessionId!=session)throw new InvalidDataException("捕获期间录制会话已改变。");
                 return boundary;
             }

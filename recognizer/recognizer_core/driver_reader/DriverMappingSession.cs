@@ -196,7 +196,9 @@ public sealed class DriverMappingSession
         if (!matchesDevice) pressureStatus = coordinateStatus = "differentDevice";
         if (matchesDevice && pressureStatus == "ready" && rawPressure is { } pressure && double.IsFinite(pressure))
         {
-            double maximum = pressureMaximum ?? _profile!.RecommendedPressureMax ?? 0;
+            // OTD reports 8191 for the Gaomon M6 while its raw reports reach the driver's 16383 scale;
+            // dividing by the smaller maximum saturated most strokes. Raw values cannot exceed the true one.
+            double maximum = Math.Max(pressureMaximum ?? 0, _profile!.RecommendedPressureMax ?? 0);
             if (double.IsFinite(maximum) && maximum > 0)
             {
                 mappedPressure = _profile!.TransformPressure(pressure, maximum);

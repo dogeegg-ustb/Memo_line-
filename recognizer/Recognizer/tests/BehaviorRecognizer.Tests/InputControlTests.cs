@@ -169,6 +169,27 @@ public sealed partial class InputControlTests
     }
 
     [Fact]
+    public async Task AutomaticLayerProtectionSavesInProcessWithoutAutoHotkey()
+    {
+        await using var session = new TestSession();
+        session.Guard.Configure(JsonSerializer.SerializeToElement(new { enabled = true, region = new[] { 100, 100, 200, 200 },
+            bindings = Array.Empty<object>(), saveSettleMs = 0 }));
+        using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
+            while (!session.Guard.GetInputControlStatus().SaveWorkerReady) await Task.Delay(1, timeout.Token);
+        Assert.Equal("inProcess", session.Backend.InitializedWith);
+        Assert.False(session.Guard.Mouse(0x201, 50, 50, 0));
+        Assert.True(session.Guard.Mouse(0x201, 150, 150, 0));
+        await session.Backend.SaveStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Empty(session.Backend.Replayed);
+        session.Backend.SaveAcknowledged.TrySetResult();
+        await session.WaitIdleAsync();
+        Assert.Equal(1, session.Backend.Dispatches);
+        var click = Assert.Single(session.Backend.Replayed);
+        Assert.Equal(2u, click.Union.Mouse.Flags & 2u);
+        Assert.Equal((nuint)0x4D4C5243, click.Union.Mouse.Extra);
+    }
+
+    [Fact]
     public async Task AllQueuedInputIsReleasedInOrderOnlyAfterSaveDispatch()
     {
         await using var session = new TestSession();
@@ -270,7 +291,7 @@ public sealed partial class InputControlTests
             await using (var writer = new MemolineWriter(directory, new { test = "drain diagnostics" }))
             {
                 path = writer.FilePath;
-                await using var guard = new LayerSaveGuard(writer, _ => { }, null, backend);
+                await using var guard = new LayerSaveGuard(writer, _ => { }, backend);
                 await guard.ConfigureInputInterceptionAsync(EnableWindows);
                 Assert.True(guard.Keyboard(65, 30, false, true));
                 await backend.SaveStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
@@ -383,7 +404,7 @@ public sealed partial class InputControlTests
             await using (var writer = new MemolineWriter(directory, new { test = "trigger save diagnostics" }))
             {
                 path = writer.FilePath;
-                await using var guard = new LayerSaveGuard(writer, _ => { }, null, backend);
+                await using var guard = new LayerSaveGuard(writer, _ => { }, backend);
                 saved = await guard.RequestClipSaveAsync(new(@"C:\art\drawing.clip", "trigger-save", 0));
                 Assert.True(saved.Success);
                 Assert.Equal(0L, saved.TriggerTicks);
@@ -415,7 +436,7 @@ public sealed partial class InputControlTests
         public TestSession()
         {
             _writer = new MemolineWriter(_directory, new { test = "offline input control" });
-            Guard = new LayerSaveGuard(_writer, _ => { }, null, Backend);
+            Guard = new LayerSaveGuard(_writer, _ => { }, Backend);
         }
         public async Task WaitIdleAsync()
         {
@@ -454,9 +475,11 @@ public sealed partial class InputControlTests
         public bool IsCspPoint(int x, int y) => IsCspForeground;
         public bool IsKeyHeld(int vk) => HeldKeys.Contains(vk);
         public int GetSystemMetric(int metric) => metric is 78 or 79 ? 2000 : 0;
+        public string? InitializedWith;
         public Task InitializeSaveWorkerAsync(string executable)
         {
             Initializations++;
+            InitializedWith = executable;
             if (WarmupError is not null) throw WarmupError;
             SaveWorkerReady = true;
             return Task.CompletedTask;

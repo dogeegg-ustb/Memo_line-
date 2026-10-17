@@ -7,15 +7,14 @@ using BehaviorRecognizer.Storage.Memoline;
 
 namespace BehaviorRecognizer.Capture;
 
-/// <summary>Hook callbacks only buffer. A dedicated worker dispatches save in-process
-/// (or through AHK for automatic layer protection), then replays original input in order.</summary>
+/// <summary>Hook callbacks only buffer. A dedicated worker dispatches save in-process,
+/// then replays original input in order.</summary>
 public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
 {
     private sealed record Configuration(bool Enabled, int[] Region, HashSet<(int,int)> Keys,
-        string Executable, long Updated, bool Controlled = false);
+        long Updated, bool Controlled = false);
     private readonly MemolineWriter _writer;
     private readonly Action<object> _notify;
-    private readonly Action<Process>? _registerProcess;
     private readonly ILayerSaveGuardBackend? _backend;
     private readonly object _sync = new();
     private sealed record Buffered(Input Input, bool SaveFirst, long Ticks, int Modifiers, bool ExactReplay);
@@ -32,7 +31,7 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
     private volatile bool _workerReady;
     private volatile bool _directReady;
     private readonly List<Buffered> _pending = [];
-    private Configuration _config = new(false, [], [], "", 0);
+    private Configuration _config = new(false, [], [], 0);
     private Configuration? _controlConfig;
     private readonly SemaphoreSlim _controlLock = new(1, 1);
     private string? _editProtectionOwner;
@@ -43,18 +42,15 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
     private readonly Task _worker;
     private readonly TaskCompletionSource _workerStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private static readonly ushort[] ModifierKeys = [0xA2,0xA3,0xA0,0xA1,0xA4,0xA5,0x5B,0x5C];
-    private Process? _ahk;
-    private readonly SemaphoreSlim _ahkLock = new(1,1);
+    private readonly SemaphoreSlim _warmupLock = new(1,1);
     private Task _warmup = Task.CompletedTask;
     private bool _warmupStarted;
-    private string? _reportedError;
 
-    public LayerSaveGuard(MemolineWriter writer, Action<object> notify, Action<Process>? registerProcess=null)
-        : this(writer, notify, registerProcess, null) { }
+    public LayerSaveGuard(MemolineWriter writer, Action<object> notify) : this(writer, notify, null) { }
 
-    internal LayerSaveGuard(MemolineWriter writer, Action<object> notify, Action<Process>? registerProcess, ILayerSaveGuardBackend? backend)
+    internal LayerSaveGuard(MemolineWriter writer, Action<object> notify, ILayerSaveGuardBackend? backend)
     {
-        (_writer,_notify,_registerProcess) = (writer,notify,registerProcess);
+        (_writer,_notify) = (writer,notify);
         _backend = backend;
         _diagnosticWorker = Task.Run(WriteDiagnosticsAsync);
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -68,7 +64,7 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
     }
 
     private Configuration EffectiveConfiguration => Volatile.Read(ref _controlConfig) ?? Volatile.Read(ref _config);
-    private bool SaveWorkerReady => _workerReady && (_backend?.SaveWorkerReady ?? (_ahk is { HasExited: false }));
+    private bool SaveWorkerReady => _workerReady && !_worker.IsCompleted && (_backend?.SaveWorkerReady ?? true);
     private bool ReadyFor(Configuration config) => config.Controlled
         ? _directReady && !_worker.IsCompleted && (_backend?.SaveWorkerReady ?? true) : SaveWorkerReady;
     private nint ForegroundWindow => _backend?.ForegroundWindow ?? Native.GetForegroundWindow();
@@ -125,8 +121,7 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
             ObjectDisposedException.ThrowIf(_closed, this);
             if (_editProtectionOwner is not null && _editProtectionOwner != owner)
                 throw new InvalidOperationException("Input protection belongs to an edit transaction.");
-            string exe = Volatile.Read(ref _config).Executable;
-            var config = new Configuration(request.Enabled, [], [], exe, Stopwatch.GetTimestamp(), Controlled: true);
+            var config = new Configuration(request.Enabled, [], [], Stopwatch.GetTimestamp(), Controlled: true);
             if (request.Enabled)
             {
                 if (_backend is null && !OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
@@ -229,26 +224,13 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
             dispatchedTicks, false, error, save.Request.TriggerTicks));
     }
 
-    private static string ResolveExecutable(string? exe)
-        => !string.IsNullOrWhiteSpace(exe) ? exe : new[] {
-            Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),"Programs","AutoHotkey","v2","AutoHotkey64.exe"),
-            @"C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe" }.FirstOrDefault(File.Exists) ?? "";
-
     public void Configure(JsonElement data)
     {
-        string exe = ResolveExecutable(data.GetProperty("autoHotkeyPath").GetString());
         bool enabled = data.GetProperty("enabled").GetBoolean();
-        if (enabled && !File.Exists(exe))
-        {
-            if (_reportedError != "missing")
-                _writer.AppendState("saveGuardUnavailable",_writer.NowTicks,[],new { message="AutoHotkey v2 not found; configure autoHotkeyPath. Layer operations are not intercepted." },"immediate");
-            _reportedError = "missing";
-            enabled = false;
-        }
         var region = data.GetProperty("region");
         var config = new Configuration(enabled, region.ValueKind == JsonValueKind.Array ? region.EnumerateArray().Select(v=>v.GetInt32()).ToArray() : [],
             data.GetProperty("bindings").EnumerateArray().Select(v=>(v.GetProperty("vk").GetInt32(),v.GetProperty("mods").GetInt32())).ToHashSet(),
-            exe,Stopwatch.GetTimestamp());
+            Stopwatch.GetTimestamp());
         Volatile.Write(ref _config,config);
         lock (_sync)
         {
@@ -257,7 +239,7 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
                 _warmupStarted=true;
                 _warmup=Task.Run(async () =>
                 {
-                    try { await EnsureSaveWorkerAsync(config); }
+                    try { await EnsureSaveWorkerAsync(); }
                     catch (Exception ex) {
                         Console.Error.WriteLine($"[图层保存保护未启用] {ex.Message}；输入保持放行。");
                         _writer.AppendState("saveGuardUnavailable",_writer.NowTicks,[],new { message=ex.Message, inputPolicy="passThrough" },"immediate");
@@ -416,24 +398,16 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
                         throw new IOException("Save worker unavailable; original input will be released.");
                     if (_backend is not null)
                         await _backend.DispatchSaveAsync(hwnd);
-                    else if (config.Controlled)
-                        DispatchSaveInProcess(hwnd);
                     else
-                    {
-                        await _ahk!.StandardInput.WriteLineAsync($"{hwnd.ToInt64()}");
-                        await _ahk.StandardInput.FlushAsync();
-                        string? response=await _ahk.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromMilliseconds(250));
-                        if (response?.TrimStart('﻿') != "save-input-sent") throw new IOException(response ?? "AHK worker exited.");
-                    }
+                        DispatchSaveInProcess(hwnd);
                     dispatchedTicks=_writer.NowTicks;
                 }
                 catch(Exception ex)
                 {
+                    // The original input is still released. A failed chord does not disable
+                    // automatic protection; the next guarded input simply tries again.
                     if (config.Controlled) _directReady=false;
-                    else _workerReady=false;
                     error=ex.Message;
-                    try { if (!config.Controlled && _ahk is { HasExited:false }) _ahk.Kill(); }
-                    catch (Exception cleanupError) { error += "; cleanup: "+cleanupError.Message; }
                 }
             }
             bool released=false;
@@ -540,43 +514,25 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
         return (inputs, count);
     }
 
-    private async Task EnsureSaveWorkerAsync(Configuration config)
+    // Automatic protection uses the same resident in-process dispatcher as controlled input and
+    // one-shot saves: the tagged Ctrl+S chord needs no helper process.
+    private async Task EnsureSaveWorkerAsync()
     {
-        await _ahkLock.WaitAsync();
-        string stage="processLaunch";
+        await _warmupLock.WaitAsync();
         try
         {
-            if (_backend is not null)
-            {
-                await _backend.InitializeSaveWorkerAsync(config.Executable);
-                _workerReady = _backend.SaveWorkerReady;
-                if (!_workerReady) throw new IOException("Save worker did not become ready.");
-                return;
-            }
-            if (_workerReady && _ahk is { HasExited:false }) return;
-            _ahk?.Dispose();
-            var start = new ProcessStartInfo(config.Executable) { UseShellExecute=false,CreateNoWindow=true,
-                RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true };
-            start.ArgumentList.Add("/ErrorStdOut");
-            start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory,"integration","CSP_SaveBeforeClick.ahk"));
-            start.ArgumentList.Add("--recorder-worker");
-            _ahk=Process.Start(start) ?? throw new IOException("AHK save worker failed to start.");
-            stage="processLifetimeRegistration";
-            _registerProcess?.Invoke(_ahk);
-            stage="readyHandshake";
-            string? ready=await _ahk.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
-            if (ready?.TrimStart('﻿') != "ready") throw new IOException(ready ?? "AHK worker exited during initialization.");
-            _workerReady=true;
+            await _workerStarted.Task;
+            if (_backend is not null) await _backend.InitializeSaveWorkerAsync("inProcess");
+            else if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+            _workerReady = _backend?.SaveWorkerReady ?? true;
+            if (!_workerReady) throw new IOException("Save dispatcher did not become ready.");
         }
-        catch (Exception ex)
+        catch
         {
             _workerReady=false;
-            string cleanup="";
-            try { if (_ahk is { HasExited:false }) _ahk.Kill(); }
-            catch (Exception cleanupError) { cleanup="; cleanup: "+cleanupError.Message; }
-            throw new IOException($"AHK {stage}: {ex.Message}{cleanup}",ex);
+            throw;
         }
-        finally { _ahkLock.Release(); }
+        finally { _warmupLock.Release(); }
     }
 
     private bool Held(int vk) => _backend?.IsKeyHeld(vk) ?? ((Native.GetAsyncKeyState(vk)&0x8000)!=0);
@@ -588,8 +544,6 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
         await _worker;
         _diagnostics.Writer.TryComplete();
         await _diagnosticWorker;
-        if (_ahk is { HasExited:false }) { _ahk.StandardInput.Close(); await _ahk.WaitForExitAsync(); }
-        _ahk?.Dispose();
     }
 
     [StructLayout(LayoutKind.Sequential)] internal struct Input { public uint Type; public InputUnion Union; }

@@ -11,22 +11,34 @@ public sealed partial class UnifiedInputCapture
     private readonly Dictionary<string, MemolineEvent> _completedBoundaries = new(StringComparer.Ordinal);
     private readonly Dictionary<string, MemolineEvent> _completedTransactions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, MemolineEvent> _editingActions = new(StringComparer.Ordinal);
-    public Task<MemolineEvent> RecordEditingActionAsync(string transactionId,string kind,System.Text.Json.JsonElement changes,CancellationToken token)
+    // layerReplacements: Memoline replaced each "replaced" layer by its "reproduction" layer; readers treat the
+    // reproduction as the same layer. Only these records create that identity.
+    public Task<MemolineEvent> RecordEditingActionAsync(string transactionId,string kind,System.Text.Json.JsonElement changes,CancellationToken token,
+        System.Text.Json.JsonElement layerReplacements=default)
         => RunControlAsync(() =>
         {
             lock (_sync)
             {
                 if (_editingActions.TryGetValue(transactionId,out var existing))
                 {
-                    if(existing.Data.GetProperty("editKind").GetString()!=kind || existing.Data.GetProperty("changes").GetRawText()!=changes.GetRawText())
+                    if(existing.Data.GetProperty("editKind").GetString()!=kind || existing.Data.GetProperty("changes").GetRawText()!=changes.GetRawText() ||
+                       (existing.Data.TryGetProperty("layerReplacements",out var known)?known.GetRawText():"[]")!=
+                       (layerReplacements.ValueKind==System.Text.Json.JsonValueKind.Array?layerReplacements.GetRawText():"[]"))
                         throw new InvalidOperationException("Editing action identity was already used with different content.");
                     return Task.FromResult(existing);
                 }
                 if (_editTransactionId is not null || !_completedTransactions.TryGetValue(transactionId,out var ended) ||
                     ended.Data.GetProperty("outcome").GetString()!="executed" || kind is not ("eventEditing" or "preciseUndo") || changes.ValueKind!=System.Text.Json.JsonValueKind.Array)
                     throw new InvalidOperationException("Editing action requires one successfully completed native transaction.");
+                if(layerReplacements.ValueKind is not (System.Text.Json.JsonValueKind.Undefined or System.Text.Json.JsonValueKind.Array) ||
+                   layerReplacements.ValueKind==System.Text.Json.JsonValueKind.Array && layerReplacements.EnumerateArray().Any(r=>r.ValueKind!=System.Text.Json.JsonValueKind.Object ||
+                       !r.TryGetProperty("replaced",out var a) || a.ValueKind!=System.Text.Json.JsonValueKind.String || string.IsNullOrWhiteSpace(a.GetString()) ||
+                       !r.TryGetProperty("reproduction",out var b) || b.ValueKind!=System.Text.Json.JsonValueKind.String || string.IsNullOrWhiteSpace(b.GetString()) ||
+                       a.GetString()==b.GetString()))
+                    throw new ArgumentException("layerReplacements must list distinct replaced and reproduction layer UUIDs.");
+                var replacements=layerReplacements.ValueKind==System.Text.Json.JsonValueKind.Array?layerReplacements.Clone():System.Text.Json.JsonSerializer.SerializeToElement(Array.Empty<object>());
                 var record=_writer.AppendImmediateState("editingActionCompleted",new { transactionId,editKind=kind,
-                    displayName=kind=="preciseUndo"?"精确撤销":"事件编辑",changes=changes.Clone() });
+                    displayName=kind=="preciseUndo"?"精确撤销":"事件编辑",changes=changes.Clone(),layerReplacements=replacements });
                 _editingActions.Add(transactionId,record); return Task.FromResult(record);
             }
         },token);

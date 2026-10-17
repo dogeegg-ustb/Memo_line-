@@ -41,12 +41,14 @@ if (-not $SkipChecks) {
     dotnet test (Join-Path $repository 'recognizer/Recognizer/tests/BehaviorRecognizer.Tests/BehaviorRecognizer.Tests.csproj') -c Release -m:1 -p:UseSharedCompilation=false -nr:false
     if ($LASTEXITCODE -ne 0) { throw 'Native recorder checks failed' }
     $checkPython = if ($env:MEMOLINE_PYTHON) { $env:MEMOLINE_PYTHON } else { 'py' }
-    $pythonPrefix = if ($env:MEMOLINE_PYTHON) { @() } else { @('-3') }
-    & $checkPython @pythonPrefix -m unittest discover -s (Join-Path $repository 'recognizer/recorder_integration/tests') -p 'test_*.py' -v
+    # Windows PowerShell unwraps a one-element array assigned from 'if', and splatting the bare
+    # string '-3' passes '-' '3': Python then reads stdin and hangs in its REPL. Keep it an array.
+    $pythonPrefix = @(if (-not $env:MEMOLINE_PYTHON) { '-3' })
+    $null | & $checkPython @pythonPrefix -m unittest discover -s (Join-Path $repository 'recognizer/recorder_integration/tests') -p 'test_*.py' -v
     if ($LASTEXITCODE -ne 0) { throw 'Python integration checks failed' }
     Push-Location -LiteralPath $repository
     try {
-        & $checkPython @pythonPrefix -m unittest CSP_Shortcut_Manager/test_csp_shortcuts.py CSP_Shortcut_Manager/test_csp_shortcut_writer.py
+        $null | & $checkPython @pythonPrefix -m unittest CSP_Shortcut_Manager/test_csp_shortcuts.py CSP_Shortcut_Manager/test_csp_shortcut_writer.py
         if ($LASTEXITCODE -ne 0) { throw 'Shortcut manager checks failed' }
     } finally { Pop-Location }
     Push-Location -LiteralPath (Join-Path $repository 'replayer/dirty matrix paster/backend')

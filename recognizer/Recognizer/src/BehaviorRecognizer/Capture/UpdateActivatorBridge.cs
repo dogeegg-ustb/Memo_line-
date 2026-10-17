@@ -49,7 +49,7 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
         _process = process;
         _processJob = processJob;
         _driverInitialization = driverInitialization;
-        Guard = new LayerSaveGuard(writer, msg => _outgoing.Writer.TryWrite(msg),_processJob.Add);
+        Guard = new LayerSaveGuard(writer, msg => _outgoing.Writer.TryWrite(msg));
         _initialPackage = writer.ReserveStatePackage(0, 0, "initialState");
         _outgoing.Writer.TryWrite(new { type = "timelineSession", initialPackageId = _initialPackage });
         if (driverInitialization is not null)

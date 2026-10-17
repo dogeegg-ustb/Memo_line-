@@ -6,11 +6,14 @@ import sys
 import threading
 import uuid
 import os
+import tempfile
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from catalog import NAVIGATOR
 from csp_workspace_overlay import inspect
+from pipeline import analysis_workers, probe_numbers
 
 
 class SetupDialog:
@@ -57,9 +60,9 @@ class SetupDialog:
             tk.Entry(row,textvariable=variable,width=9).pack(side="left")
         tk.Checkbutton(self.window,text="启用面板边框闪烁",variable=self.flash).pack()
         row = tk.Frame(self.window); row.pack(pady=8)
-        tk.Label(row,text="同时解析任务数（每个核心始终串行）").pack(side="left")
-        tk.Spinbox(row,from_=1,to=4,textvariable=self.workers,width=4).pack(side="left")
-        tk.Label(self.window,text="立即冻结 CSP 窗口，在导航器中框选缩放和旋转数字。\n工作区 ROI 不变时自动沿用上次选区；也可主动重新框选。",
+        tk.Label(row,text=f"同时解析任务数（0 = 按 CPU 自动，本机为 {analysis_workers({})}；每个核心始终串行）").pack(side="left")
+        tk.Spinbox(row,from_=0,to=6,textvariable=self.workers,width=4).pack(side="left")
+        tk.Label(self.window,text="立即冻结 CSP 窗口，在导航器中框选缩放和旋转数字。\n上次选区仍能读出这两个数字时自动沿用；也可主动重新框选。",
                  wraplength=530).pack(pady=8)
         self.capture_button = tk.Button(self.window,text="开始（自动沿用有效数字选区）",command=self.begin)
         self.capture_button.pack(pady=8)
@@ -198,9 +201,11 @@ class SetupDialog:
                     dpi=int(user32.GetDpiForWindow(self.runtime.hwnd) or 96))
 
     def cached_roi(self):
-        cached = self.runtime.settings.get("navigatorOcrSelection", {})
-        roi = cached.get("roi")
-        if cached.get("layout") != self.selection_layout or not isinstance(roi, list) or len(roi) != 4:
+        # Whether the workspace layout matches the saved one does not matter: probe_cached reuses the
+        # selection whenever it still reads both numbers. Only a selection that cannot lie inside the
+        # current navigator panel is discarded up front.
+        roi = self.runtime.settings.get("navigatorOcrSelection", {}).get("roi")
+        if not isinstance(roi, list) or len(roi) != 4:
             return None
         if not all(type(v) is int for v in roi) or min(roi[2:]) < 32:
             return None
@@ -218,8 +223,8 @@ class SetupDialog:
             if not all(0 < n <= 1000000 for n in self.dimensions):
                 raise ValueError("画布像素宽高需为正整数")
             workers = int(self.workers.get())
-            if not 1 <= workers <= 4:
-                raise ValueError("同时解析任务数需为 1–4")
+            if not 0 <= workers <= 6:
+                raise ValueError("同时解析任务数需为 0–6（0 为按 CPU 自动）")
             if not self.runtime.engine.regions:
                 raise ValueError("尚未匹配 CSP 工作区；请打开 CSP 并保存工作区布局")
             if self.driver_choice.get() not in self.driver_choices:
@@ -255,9 +260,8 @@ class SetupDialog:
                 raise ValueError("无法将 CSP 窗口置于前台，请打开 CSP 后重试")
             roi = None if force_selection else self.cached_roi()
             if roi:
-                print("[Initialization] 工作区 ROI 未变，沿用上次导航器数字选区。",file=sys.stderr,flush=True)
-                self.window.destroy()
-                self.runtime.start_pipeline(self.dimensions,roi,self.clip.get())
+                # Give the hidden overlays time to leave the navigator before reading it.
+                self.runtime.root.after(150,lambda: self.probe_cached(roi))
             else:
                 self.runtime.root.after_idle(self.freeze)
         except Exception as ex:
@@ -266,6 +270,52 @@ class SetupDialog:
             self.window.deiconify()
             self.status.set(str(ex))
             messagebox.showerror("尚未开始截图",str(ex),parent=self.window)
+
+    def probe_cached(self, roi):
+        """Reuse the last digit selection when it still reads scale and rotation; otherwise select again."""
+        try:
+            if self.runtime.user32.GetForegroundWindow() != self.runtime.hwnd:
+                raise ValueError("CSP 窗口不在前台")
+            from PIL import Image
+            import mss
+            nav = tuple(self.runtime.engine.regions[NAVIGATOR])
+            x,y,w,h = nav
+            with mss.mss() as grabber:
+                pixels = grabber.grab(dict(left=x,top=y,width=w,height=h))
+            descriptor, name = tempfile.mkstemp(prefix="memoline-numbers-",suffix=".png")
+            os.close(descriptor)
+            frame = Path(name)
+            Image.frombytes("RGB",pixels.size,pixels.bgra,"raw","BGRX").save(frame)
+        except Exception as ex:
+            print("[Initialization] 无法试读上次数字选区："+str(ex)+"；改为重新框选。",file=sys.stderr,flush=True)
+            self.freeze()
+            return
+        print("[Initialization] 正在用上次导航器数字选区试读缩放和旋转……",file=sys.stderr,flush=True)
+        replies = queue.Queue()
+        def probe():
+            try:
+                replies.put(probe_numbers(frame,nav,roi,self.selection_layout["dpi"]))
+            except Exception as ex:
+                replies.put(dict(success=False,message=str(ex)))
+            finally:
+                frame.unlink(missing_ok=True)
+        def poll():
+            try:
+                result = replies.get_nowait()
+            except queue.Empty:
+                self.runtime.root.after(50,poll)
+                return
+            if result.get("success"):
+                print(f"[Initialization] 上次数字选区仍读出缩放 {result['scalePercent']:g}% 和旋转 {result['rotationDegrees']:g}°，直接沿用。",
+                      file=sys.stderr,flush=True)
+                self.window.destroy()
+                self.runtime.start_pipeline(self.dimensions,roi,self.clip.get())
+            else:
+                detail = result.get("message") or f"缩放 '{result.get('scaleRawText','')}'，旋转 '{result.get('rotationRawText','')}'"
+                print("[Initialization] 上次数字选区没有读出两个数字（"+detail+"），请重新框选。",file=sys.stderr,flush=True)
+                self.freeze()
+        threading.Thread(target=probe,daemon=True,name="setup-numbers-probe").start()
+        self.runtime.root.after(50,poll)
 
     def freeze(self):
         try:

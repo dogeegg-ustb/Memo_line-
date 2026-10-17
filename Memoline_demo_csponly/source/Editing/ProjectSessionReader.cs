@@ -100,7 +100,11 @@ internal static class ProjectSessionReader
             IsBoundary = packet.IsBoundary || terminalPackets.Contains(packet.PacketId)
         }).ToList();
         using (EditingProfiler.Stage("restore baselines")) RestoreBaselines(packets, token);
-        return snapshot with { Packets = packets };
+        // Sessions are read one after another; only the one being read stays decoded.
+        var loaded = snapshot with { Packets = packets };
+        EditingMemory.Park(loaded);
+        EditingMemory.Collect();
+        return loaded;
     }
 
     private static (SessionSnapshot Snapshot, HashSet<string> Terminal) ReadVerifiedSession(string bundle, string directory, CancellationToken token)

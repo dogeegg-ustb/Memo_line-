@@ -35,6 +35,7 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
     internal void Attach(MainWindow window)
     { _window = window;window.BeforeRecordingStop=StopEditingAsync; }
     public bool IsRecording => _window?.IsRecording == true;
+    public string RecycleRoot => RecycleBin.RootFor(_controller.ProjectRecording, _controller.WorkRoot);
     public EditSession? CurrentSession => _session;
 
     public async Task<EditSession> BeginEditSessionAsync(CancellationToken token)
@@ -43,7 +44,7 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         using var operation=CancellationTokenSource.CreateLinkedTokenSource(token);
         _activeOperation=operation;
         try { return await BeginEditSessionCoreAsync(operation.Token); }
-        finally { _activeOperation=null;_operationGate.Release(); }
+        finally { ReleaseEditingMemory();_activeOperation=null;_operationGate.Release(); }
     }
 
     private async Task<EditSession> BeginEditSessionCoreAsync(CancellationToken token)
@@ -67,7 +68,9 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         if (historyLoad is { IsCompleted: false }) _progress?.Invoke("正在读取工程中以前录制的笔画和图层图片…");
         var loaded = historyLoad is null ? null : await historyLoad.WaitAsync(token);
         var history = loaded?.Sessions ?? [];
-        var index = history.Count == 0 ? EditIndexBuilder.Build(snapshot) : ProjectEditIndex.Build(history, snapshot, loaded!.Indexes);
+        // Replaced layers join their originals through the project index, even within this one session.
+        var index = history.Count == 0 && !ProjectEditIndex.HasReplacements(snapshot) ? EditIndexBuilder.Build(snapshot)
+            : ProjectEditIndex.Build(history, snapshot, loaded?.Indexes);
         _controller.RegisterEditReplaySources(history.Where(s=>s.Frames.Any(f=>PacketReplay.J.Text(f,"kind")=="penBegin"))
             .Select(s=>s.MechanicalPath));
         JsonElement liveBrush=default;
@@ -88,6 +91,9 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
             Sources=history.Append(snapshot).ToDictionary(s=>s.SessionId),
             CanvasViewEvidence=feed.RequestedCanvasView,
             LiveBrushEvidence=liveBrush,Shortcuts=shortcuts,
+            LayerOrder=PacketReplay.J.Array(PacketReplay.J.Get(feed.Layers,"layers"))
+                .Select(l=>(Uuid:PacketReplay.J.Text(l,"uuid")??"",Name:PacketReplay.J.Text(l,"name")??""))
+                .Where(l=>l.Uuid.Length>0).ToArray(),
             BrushChoices=shortcuts.Nodes.Concat(shortcuts.Bindings.SelectMany(b=>b.Subtools??[]))
                 .Where(n=>n.Kind=="subtool"&&!n.Hidden).Select(n=>n.Name)
                 .Concat(shortcuts.Bindings.Where(b=>b.Id.StartsWith("tool_")).Select(b=>b.Name))
@@ -115,9 +121,7 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
             return _history=Task.Run(()=>
             {
                 var sources=ProjectSessionReader.ReadProjectCached(project);
-                var indexes=sources.ToDictionary(s=>s.SessionId,EditIndexBuilder.Build);
-                ProjectEditIndex.VerifyHistory(indexes.Values);
-                return new History(sources,indexes);
+                return new History(sources,ProjectEditIndex.BuildHistory(sources));
             });
         }
     }
@@ -207,8 +211,29 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         await _operationGate.WaitAsync(token);
         using var operation=CancellationTokenSource.CreateLinkedTokenSource(token);
         _activeOperation=operation;
-        try { return await ExecuteEditCoreAsync(request,undoLimitConfirmed,operation.Token); }
-        finally { _activeOperation=null;_operationGate.Release(); }
+        ReconstructionResult? result=null;
+        try { return result=await ExecuteEditCoreAsync(request,undoLimitConfirmed,operation.Token); }
+        finally
+        {
+            // The caller only reads the outcome; the reconstructed canvases stay readable but compressed.
+            if(result is not null)foreach(var image in result.Layers.Values)image.Park();
+            ReleaseEditingMemory();
+            _activeOperation=null;_operationGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Compresses the project history again (an edit restores what it reads) and returns freed canvases to
+    /// Windows. Without this the history alone holds two 139 MB canvases per layer and session until exit.
+    /// </summary>
+    private void ReleaseEditingMemory()
+    {
+        if(_history is { IsCompletedSuccessfully:true } history)
+        {
+            foreach(var source in history.Result.Sessions)EditingMemory.Park(source);
+            foreach(var index in history.Result.Indexes.Values)EditingMemory.Park(index);
+        }
+        EditingMemory.Compact();
     }
 
     private async Task<ReconstructionResult> ExecuteEditCoreAsync(EditRequest request, bool undoLimitConfirmed, CancellationToken token)
@@ -221,8 +246,10 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         var monitor=_window?.EditingMonitor ?? throw new InvalidOperationException("Recognizer 监听尚未就绪。");
         string mechanical=monitor.LiveFilePath ?? throw new InvalidDataException("没有可读取的机械流路径。");
         bool sameSession=monitor.SessionId==shown.LiveView.SessionId&&IsRecording;
-        if(!sameSession||await Task.Run(()=>EditingBoundaryCoordinator.HasPhysicalInput(
-               BehaviorRecognizer.Storage.Memoline.MemolineReader.Read(mechanical),shown.LiveView.BoundaryAppendId,ulong.MaxValue),token))
+        // Clean: nothing reached CSP since the boundary saved and read it, so its states and saved file still hold.
+        bool clean=sameSession&&!await Task.Run(()=>EditingBoundaryCoordinator.HasPhysicalInput(
+            BehaviorRecognizer.Storage.Memoline.MemolineReader.Read(mechanical),shown.LiveView.BoundaryAppendId,ulong.MaxValue),token);
+        if(!clean)
         {
             if(sameSession)await BeginEditSessionCoreAsync(token);
             if(!sameSession||!EditingBoundaryMatches(shown,_session!))
@@ -237,15 +264,15 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         var discreteReferences=new Dictionary<EditableStrokeKey,IReadOnlyDictionary<LayerKey,ImageRgba>>();
         if(request.Kind==EditKind.PreciseUndo)
         {
-            var undo=PreciseUndoSelector.Select(session.Index,session.CurrentLayer,request.Selection);
-            if(!undo.IsValid || !undo.Selected.Select(s=>s.Key).ToHashSet().SetEquals(request.Changes.Keys) ||
+            var undo=session.SelectPreciseUndo(request.Selection);
+            if(!undo.IsValid || undo.CurrentLayer!=request.CurrentLayer || !undo.Selected.Select(s=>s.Key).ToHashSet().SetEquals(request.Changes.Keys) ||
                 request.Changes.Values.Any(c=>!c.Delete))
                 return new(ReconstructionStatus.Failed,new Dictionary<LayerKey,ImageRgba>(),
                     [new(PlanIssueCode.NoSelection,"精确撤销闭包已改变或尚未确认扩展数量，请刷新并检查选择。")],new HashSet<DirtyImageKey>());
             var capacity=UndoCapacityPolicy.Check(undo.Selected.Count,session.VerifiedUndoCapacity,undoLimitConfirmed);
             if(!capacity.Allowed)return new(ReconstructionStatus.Failed,new Dictionary<LayerKey,ImageRgba>(),
                 [new(PlanIssueCode.NoSelection,capacity.Message)],new HashSet<DirtyImageKey>());
-            discrete[session.CurrentLayer!.Value]=undo.Selected.Select(s=>new ReplayEvent(s,null)).ToArray();
+            discrete[request.CurrentLayer!.Value]=undo.Selected.Select(s=>new ReplayEvent(s,null)).ToArray();
             foreach(var stroke in undo.Selected.Where(s=>new ReplayEvent(s,null).RequiresReferenceScene))
                 discreteReferences[stroke.Key]=HistoricalReferenceScene.BeforeStroke(session.Index,stroke);
         }
@@ -253,17 +280,28 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         _=new WindowsViewInput();
         bool needsReplay=plan.Layers.Any(l=>l.Segments.Any(s=>s.Kind==ReconstructionSegmentKind.Replay&&s.Events.Count>0) ||
             session.Index.Layers[l.Layer].UndoCheckpoints.Any(p=>p.Events.Count>0 && l.Groups.Any(g=>g.PacketId==p.PacketId)))||discrete.Count>0;
-        // Colour is best effort: without the RGB slider page, strokes replay in the current colour.
-        if(needsReplay&&!EventReplayRunner.StrictColor)
+        if(clean)
         {
-            try{await feed.RequestAsync(["colorInputState"],token);}catch(InvalidOperationException){}
-            if(RgbInputSnapshot.Parse(feed.ColorInput) is not { Slot:"main" })
-                _progress?.Invoke("提示：未检测到色彩滑块 RGB 页，重放将使用当前颜色。");
+            // The boundary already read layers, current layer, view, shortcuts and brush with nothing changed since;
+            // colours are read per stroke by the replay. Re-reading them all costs about 4 s of screen recognition.
+            _progress?.Invoke("画布自编辑边界以来未变化，沿用边界时读取的 CSP 状态…");
+            await feed.RequestAsync(["initializationConfiguration"],token);
         }
-        await feed.RequestAsync(["initializationConfiguration","shortcuts","canvasViewState","brushState","currentLayerState","colorState"],token);
+        else
+        {
+            // Colour is best effort: without the RGB slider page, strokes replay in the current colour.
+            if(needsReplay&&!EventReplayRunner.StrictColor)
+            {
+                try{await feed.RequestAsync(["colorInputState"],token);}catch(InvalidOperationException){}
+                if(RgbInputSnapshot.Parse(feed.ColorInput) is not { Slot:"main" })
+                    _progress?.Invoke("提示：未检测到色彩滑块 RGB 页，重放将使用当前颜色。");
+            }
+            await feed.RequestAsync(["initializationConfiguration","shortcuts","canvasViewState","brushState","currentLayerState","colorState"],token);
+        }
         string bridge=Path.Combine(AppContext.BaseDirectory,"clip-layer-bridge.exe");
         if(!File.Exists(bridge)) bridge=Path.Combine(DemoController.ResolveRuntimeDirectory(),"clip-layer-bridge.exe");
-        await using var actions=new WindowsCspEditingActions(_window!,feed,session,request,bridge,text=>{_window!.EditingStatus(text);_progress?.Invoke(text);});
+        await using var actions=new WindowsCspEditingActions(_window!,feed,session,request,bridge,text=>{_window!.EditingStatus(text);_progress?.Invoke(text);},
+            documentSaved:clean);
         using var journal=EditJournal.Open(_controller.WorkRoot);
         bool readsReferences=plan.Layers.SelectMany(l=>l.Segments).SelectMany(s=>s.Events)
             .Any(k=>new ReplayEvent(session.Index.Strokes[k],request.Changes.GetValueOrDefault(k)).RequiresReferenceScene)||discreteReferences.Count>0;
@@ -272,8 +310,40 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         var dimensions=involved.ToDictionary(key=>key,key=>session.Index.Layers[key].Current is { } current
             ?new CanvasSize(current.Width,current.Height):throw new InvalidDataException("参考图层缺少编辑边界捕获："+key.Uuid));
         var frozen=FrozenEditPlan.Create(session,plan);
-        var result=await _coordinator.ExecuteAsync(plan,p=>new CspEditTransaction(actions,journal,"edit-txn-"+Guid.NewGuid().ToString("N"),dimensions,frozen,discrete,
-            p.Layers.Where(l=>l.Untrusted.Count>0).Select(l=>l.Layer).ToHashSet(),discreteReferences),token);
+        // Every layer this edit may replace goes to the recycle bin first: the edit deletes it from CSP.
+        var replaceable=request.Kind==EditKind.PreciseUndo?[request.CurrentLayer!.Value]:plan.Layers.Select(l=>l.Layer).Where(dimensions.ContainsKey).ToArray();
+        var recycled=new List<(LayerKey Layer,RecycleEntry Entry,Task Image)>();
+        foreach(var key in replaceable)
+        {
+            if(session.Index.Layers[key].Current is not { } pixels)continue;
+            var properties=PacketReplay.J.Array(PacketReplay.J.Get(feed.Layers,"layers")).FirstOrDefault(l=>PacketReplay.J.Text(l,"uuid")==key.Uuid);
+            string name=PacketReplay.J.Text(properties,"name")??key.Uuid;
+            var (entry,image)=RecycleBin.Save(RecycleRoot,request.Kind,key,name,pixels,properties);
+            recycled.Add((key,entry,image));
+        }
+        ReconstructionResult? result=null;
+        try
+        {
+            result=await _coordinator.ExecuteAsync(plan,p=>new CspEditTransaction(actions,journal,"edit-txn-"+Guid.NewGuid().ToString("N"),dimensions,frozen,discrete,
+                p.Layers.Where(l=>l.Untrusted.Count>0).Select(l=>l.Layer).ToHashSet(),discreteReferences),token);
+        }
+        finally
+        {
+            foreach(var (key,entry,image) in recycled)
+            {
+                try{await image;}
+                catch(Exception error){_progress?.Invoke("回收箱图像保存失败："+error.Message);}
+                bool replaced=result?.Layers.ContainsKey(key)==true;
+                string outcome=result?.Status switch
+                {
+                    ReconstructionStatus.Executed or ReconstructionStatus.PixelVerified=>"executed",
+                    ReconstructionStatus.Cancelled or null=>"cancelled",_=>"failed"
+                };
+                // A layer the edit never touched was not deleted; it needs no recycled copy.
+                if(outcome=="executed"&&!replaced)RecycleBin.Delete(entry);
+                else RecycleBin.SetOutcome(entry,outcome);
+            }
+        }
         _session=null;
         return result;
     }
@@ -334,6 +404,7 @@ internal sealed class DemoEditingHost : IDemoEditingHost, IAsyncDisposable
         await WaitForIdleAsync();
         _session=null;
         LiveSessionReader.ReleaseLiveFrames();
+        ReleaseEditingMemory();
     }
     private async Task<LivePacketFeed> FeedAsync(CancellationToken token)
     {

@@ -14,6 +14,11 @@ internal static class EditingSelectionChecks
     {
         int checks=0;
         void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);checks++;}
+        void Pump(Func<bool> done,string what)
+        {
+            var until=DateTime.UtcNow.AddSeconds(10);
+            while(!done()){if(DateTime.UtcNow>until)throw new TimeoutException(what);Application.DoEvents();Thread.Sleep(1);}
+        }
         var size=new Size(10,10);
         var forward=CanvasSelectionGeometry.Polygon(size,CanvasSelectionGeometry.Rectangle(new(2,3),new(8,9)));
         var reverse=CanvasSelectionGeometry.Polygon(size,CanvasSelectionGeometry.Rectangle(new(8,9),new(2,3)));
@@ -77,8 +82,9 @@ internal static class EditingSelectionChecks
                 };
                 Invoke(panel,"SelectModeAsync",EditKind.EventEditing);
                 var model=Get<CanvasInteraction>(panel,"_interaction");
-                Check(host.Begins==1&&Get<TabControl>(panel,"_tabs").TabPages.Count==4,
-                    "Choosing event editing establishes its boundary and opens the image-first workflow.");
+                var tabs=Get<TabControl>(panel,"_tabs");var recycle=Get<TabPage>(panel,"_recyclePage");
+                Check(host.Begins==1&&tabs.TabPages.Count==5&&tabs.TabPages[0]==Get<TabPage>(panel,"_imagePage")&&tabs.TabPages[1]==recycle,
+                    "Choosing event editing establishes its boundary and opens the image-first workflow, with the recycle bin second.");
                 Check(Affinity(panel)==0&&Affinity(Get<EventSelectionOverlay>(panel,"_overlay"))==0,
                     "Once the boundary is ready the windows are capturable again, so the user's screenshots show them.");
                 createParams=(CreateParams)typeof(EditingPanel).GetProperty("CreateParams",Private)!.GetValue(panel)!;
@@ -133,6 +139,10 @@ internal static class EditingSelectionChecks
                 Check(execute.Enabled&&host.Request!.Changes.Keys.SequenceEqual(chosen.Image.Events),"Canvas sweep keys must reach the real planner and executable request.");
                 Check(host.Request!.CurrentLayer?.Uuid=="ink"&&host.Request.Changes.Keys.All(k=>session.Index.Strokes[k].Layer.Uuid=="other"),"Cross-layer event edits keep the independently verified actual current layer.");
                 Check(Get<TreeView>(panel,"_details").Nodes.Count>0,"A valid plan must expose actual reconstruction segments.");
+                tabs.SelectedTab=Get<TabPage>(panel,"_modifyPage");
+                Check(Get<EventSelectionOverlay?>(panel,"_overlay") is null&&Get<CanvasInteraction>(panel,"_interaction")==model&&
+                      model.SelectedEvents.SetEquals(chosen.Image.Events),
+                    "Opening the change page unfreezes CSP (so a brush can be chosen) and keeps the swept contacts.");
                 Get<CheckBox>(panel,"_delete").Checked=false;Get<CheckBox>(panel,"_changeBrush").Checked=true;
                 Get<ComboBox>(panel,"_brush").SelectedItem="Replacement";
                 using(var screenshot=new Bitmap(240,360))Invoke(panel,"AcceptBrushPanelAsync",new Rectangle(10,20,240,360),screenshot);
@@ -145,21 +155,26 @@ internal static class EditingSelectionChecks
                 Get<CheckBox>(panel,"_numberEnabled").Checked=true;Get<NumericUpDown>(panel,"_value").Value=12;
                 Invoke(panel,"PlanAsync",false);
                 Check(host.Request!.Changes.Values.Single().NumberValues["brush_size"]==12,"Numeric and subtool changes can be combined in one event override.");
-                Get<CheckBox>(panel,"_delete").Checked=true;
-                Invoke(panel,"SelectModeAsync",EditKind.PreciseUndo);model=Get<CanvasInteraction>(panel,"_interaction");model.SetRegion(region);
-                Invoke(panel,"PlanAsync",true);
-                var capacity=Get<CheckBox>(panel,"_undoCapacity");
-                Check(host.Request!.Kind==EditKind.PreciseUndo&&host.Request.Changes.Keys.All(k=>session.Index.Strokes[k].Layer.Uuid=="ink"),"Precise undo uses only the actual current layer, without image selection or sweeping.");
-                Check(Get<TabControl>(panel,"_tabs").TabPages.Count==1&&images.Items.Count==0&&model.ChosenImage is null,
-                    "Precise undo does not expose the event-editing image and sweep stages.");
-                Check(Get<Label>(panel,"_summary").Text.Contains("基础 1 笔")&&Get<Label>(panel,"_summary").Text.Contains("共 1 笔"),
-                    "Selecting a precise-undo region immediately exposes the actual current-layer contact and closure counts.");
-                Check(!execute.Enabled&&capacity.Enabled&&capacity.Text.Contains("至少为 6"),"Even one undo stroke requires a visible S+5 capacity confirmation.");
-                Check(Get<TreeView>(panel,"_details").Bottom<=capacity.Top&&capacity.Bottom<=capacity.Parent!.ClientSize.Height,
-                    "The undo capacity checkbox must remain visible below the plan, never hidden beneath its tree.");
-                capacity.Checked=true;Check(execute.Enabled,"Explicit capacity confirmation enables the reviewed undo plan.");
-                Invoke(panel,"BeginRegion");
-                Check(!execute.Enabled&&model.RegionSelection is null&&model.SelectedEvents.Count==0&&!capacity.Checked,"Reselecting resets all stale plan and capacity state.");
+                Get<CheckBox>(panel,"_delete").Checked=true;int plansBeforeUndo=host.Plans;
+                Invoke(panel,"SelectModeAsync",EditKind.PreciseUndo);model=Get<CanvasInteraction>(panel,"_interaction");
+                Check(tabs.TabPages.Count==2&&tabs.TabPages[1]==recycle&&images.Items.Count==0&&model.ChosenImage is null&&!execute.Visible,
+                    "Precise undo does not expose the event-editing image and sweep stages, nor a separate execute step.");
+                bool frameDuringRun=false,boxFixed=false;
+                host.DuringExecute=()=>
+                {
+                    frameDuringRun=Get<SelectionProgressFrame?>(panel,"_progressFrame") is { Visible: true };
+                    boxFixed=Get<EventSelectionOverlay?>(panel,"_overlay") is { InteractionEnabled: false };
+                };
+                model.SetRegion(region);
+                Pump(()=>host.Executed is not null&&!Get<bool>(panel,"_busy"),"Precise undo did not start by itself.");
+                Check(host.Executed!.Kind==EditKind.PreciseUndo&&host.Executed.Changes.Count>0&&
+                      host.Executed.Changes.Keys.All(k=>session.Index.Strokes[k].Layer.Uuid=="ink")&&host.Executed.Changes.Values.All(c=>c.Delete),
+                    "Releasing a precise-undo region runs it at once on the actual current layer, without image selection or sweeping.");
+                Check(host.CapacityConfirmed==true&&host.Plans==plansBeforeUndo,
+                    "Precise undo runs without a preview or an undo-capacity confirmation.");
+                Check(frameDuringRun&&boxFixed,"While precise undo runs, the region box is fixed and the progress frame surrounds it.");
+                Check(Get<SelectionProgressFrame?>(panel,"_progressFrame") is null&&Get<CanvasInteraction?>(panel,"_interaction") is null,
+                    "When precise undo ends, the progress frame and the selection disappear.");
                 Invoke(panel,"SelectModeAsync",EditKind.EventEditing);model=Get<CanvasInteraction>(panel,"_interaction");
                 model.SetRegion(region);model.SelectImage(chosen.Image.Key);model.SetSelectedEvents(chosen.Image.Events);
                 host.DelayedPlan=new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -225,6 +240,9 @@ internal static class EditingSelectionChecks
         internal TaskCompletionSource<ReconstructionPlan>? DelayedPlan{get;set;}
         internal TaskCompletionSource<EditSession>? DelayedBegin{get;set;}
         internal Exception? BeginError{get;set;}
+        internal EditRequest? Executed{get;private set;}
+        internal bool? CapacityConfirmed{get;private set;}
+        internal Action? DuringExecute{get;set;}
         internal FakeHost()
         {
             var ink=new LayerKey("selection",1,"ink");var other=new LayerKey("selection",1,"other");
@@ -251,7 +269,13 @@ internal static class EditingSelectionChecks
         {BeforeBegin?.Invoke();Begins++;return BeginError is { } error?Task.FromException<EditSession>(error):DelayedBegin?.Task.WaitAsync(token)??Task.FromResult(CurrentSession!);}
         public Task<ReconstructionPlan> PlanEditAsync(EditRequest request,CancellationToken token)
         {Request=request;Plans++;return DelayedPlan?.Task??Task.FromResult(ReconstructionPlanner.Build(CurrentSession!.Index,request));}
-        public Task<ReconstructionResult> ExecuteEditAsync(EditRequest request,bool undoLimitConfirmed,CancellationToken token)=>throw new InvalidOperationException("No CSP input in selection checks.");
+        public Task<ReconstructionResult> ExecuteEditAsync(EditRequest request,bool undoLimitConfirmed,CancellationToken token)
+        {
+            // Only the automatic precise undo may run here; event editing still waits for its explicit execute.
+            if(request.Kind!=EditKind.PreciseUndo)throw new InvalidOperationException("No CSP input in selection checks.");
+            Executed=request;CapacityConfirmed=undoLimitConfirmed;DuringExecute?.Invoke();
+            return Task.FromResult(new ReconstructionResult(ReconstructionStatus.Executed,new Dictionary<LayerKey,ImageRgba>(),[],new HashSet<DirtyImageKey>()));
+        }
         public Task<JsonElement> ReadCurrentCanvasViewAsync(CancellationToken token)=>Task.FromResult(CurrentSession!.CanvasViewEvidence);
         public Task<JsonElement> ConfirmBrushForEditingAsync(string name,CancellationToken token)=>Task.FromResult(BrushEvidence(name));
         public Task<JsonElement> CaptureBrushPanelAsync(Rectangle region,CancellationToken token){SelectedPanel=region;return Task.FromResult(BrushEvidence("Replacement"));}

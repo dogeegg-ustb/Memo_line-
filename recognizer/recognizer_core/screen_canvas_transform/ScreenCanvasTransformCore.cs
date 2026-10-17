@@ -121,6 +121,21 @@ public sealed class ScreenCanvasTransformCore : IDisposable
         CancellationToken cancellationToken = default)
         => ProcessInitializationAsync(input, calibrateOcr: true, cancellationToken);
 
+    /// <summary>Read the navigator numbers in one region with the same acceptance as initialization
+    /// calibration (both scale and rotation), without touching the current transform result.</summary>
+    public async Task<(bool Ok, NavigatorNumericReadingDto Numbers)> ProbeNumbersAsync(
+        Bitmap image, int originX, int originY, float dpiX, float dpiY, IntRect numbersRoi,
+        CancellationToken cancellationToken = default)
+    {
+        using var frame = ToArgb32(image);
+        using var session = new CaptureSession(Guid.NewGuid().ToString("N"), frame, originX, originY, dpiX, dpiY);
+        if (!session.TrySetRoi(RoiKind.OcrNumbers, numbersRoi, out string error))
+            throw new ArgumentException(error, nameof(numbersRoi));
+        var probe = await _pipeline.TryReadUserRegionAsync(session, session.CaptureToScreen(numbersRoi), cancellationToken)
+            .ConfigureAwait(false);
+        return (probe.Ok, probe.Numbers);
+    }
+
     private async Task<ScreenCanvasTransformCoreResult> ProcessInitializationAsync(
         ScreenCanvasTransformInput input,
         bool calibrateOcr,

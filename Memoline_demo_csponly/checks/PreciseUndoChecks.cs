@@ -132,6 +132,30 @@ internal static class PreciseUndoChecks
         Check(smallClosure.IsValid && smallClosure.BaseCount == 3 && smallClosure.ClosureCount == 1 && smallClosure.CountDisplay == "3 + 1",
             "Fewer-than-fifty selection with closure must show its actual base plus additions.");
 
+        // Cross-layer search, one target layer: the current layer, else the nearest layer in the stack with strokes there.
+        LayerKey Live(string uuid) => new(layer.SessionId, layer.Generation, uuid);
+        var (below, current, above, top) = (Live("b"), Live("a"), Live("c"), Live("d"));
+        var onCurrent = Stroke(current, 200, Mask(0)); var onBelow = Stroke(below, 201, Mask(5));
+        var onAbove = Stroke(above, 202, Mask(5)); var onTop = Stroke(top, 203, Mask(6));
+        var stacked = Index([Packet(current, "a", 10, Image(current, "a", "ia", Mask(0), [onCurrent])),
+            Packet(below, "b", 11, Image(below, "b", "ib", Mask(5), [onBelow])),
+            Packet(above, "c", 12, Image(above, "c", "ic", Mask(5), [onAbove])),
+            Packet(top, "d", 13, Image(top, "d", "id", Mask(6), [onTop]))], [onCurrent, onBelow, onAbove, onTop]);
+        string[] order = ["paper", "b", "a", "c", "d"];
+        Check(PreciseUndoSelector.SelectNearest(stacked, current, order, Mask(0, 5)) is { IsValid: true } own &&
+              own.CurrentLayer == current && own.Selected.Single().Key == onCurrent.Key,
+            "Strokes of the current layer in the region keep precise undo on the current layer only.");
+        Check(PreciseUndoSelector.SelectNearest(stacked, current, order, Mask(5)) is { IsValid: true } tie &&
+              tie.CurrentLayer == above && tie.Selected.Single().Key == onAbove.Key,
+            "Without current-layer strokes the nearest layer is undone, and only it; equally near, the layer above wins.");
+        Check(PreciseUndoSelector.SelectNearest(stacked, current, order, Mask(6)) is { IsValid: true } far &&
+              far.CurrentLayer == top && far.Selected.Single().Key == onTop.Key,
+            "A farther layer is used only when every nearer layer has no strokes in the region.");
+        Check(PreciseUndoSelector.SelectNearest(stacked, current, order, Mask(7)) is { IsValid: false } none && none.CurrentLayer == current,
+            "A region without strokes on any layer reports that on the current layer.");
+        Check(PreciseUndoSelector.SelectNearest(stacked, current, [], Mask(5)).CurrentLayer == current,
+            "Without the confirmed layer stack no other layer is guessed.");
+
         Console.WriteLine($"Precise undo checks passed: {checks}.");
         return checks;
     }

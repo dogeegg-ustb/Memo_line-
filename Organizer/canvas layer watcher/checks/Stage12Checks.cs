@@ -123,6 +123,38 @@ internal static class Stage12Checks
             "A fresh edit boundary includes previously captured layers so their dirty images remain editable across layers");
         check(next.All(r=>r.Operations.Length==0),"Repeated boundaries must not attribute already captured contacts to new packets");
         foreach (var request in next) state.Complete(request, true);
+
+        // 2026-10-16 live session: with the canvas ROI still unknown, the layer-panel click that
+        // left the paper layer counted as a contact on it and every later boundary failed.
+        var paper = new WatchState(); paper.Reset();
+        paper.Accept(Event("core.canvasViewState", "stateUpdated", 1, new { status = "changed", state = new
+        { canvasOriginScreenPx = new { x = 0, y = 0 }, ocrScalePercent = 100, ocrRotationDegrees = 0 } }));
+        paper.Accept(Event("core.clipState", "stateUpdated", 1, new { status = "changed", state = new { layers = new object[] {
+            new { id = 4, name = "纸张", type_raw = 1584, is_paper = true, uuid = "uuid-paper" },
+            new { id = 3, name = "图层 1", type_raw = 1, is_paper = false, uuid = "uuid-1" } } } }));
+        void PaperLayer(long ticks, string name) => paper.Accept(Event("core.currentLayerState", "stateUpdated", ticks,
+            new { status = "changed", state = name }));
+        PaperLayer(2, "图层1"); PaperLayer(3, "纸张");
+        paper.Accept(Event("mouse", "mouseDown", 4, new { button = "left", x = 2360, y = 1172 }, 4));
+        paper.Accept(Event("mouse", "mouseUp", 5, new { button = "left", x = 2360, y = 1172 }, 4));
+        PaperLayer(5, "图层1");
+        var paperBoundary = paper.ReserveEditBoundary("paper-1", paper.KnownLayersAt(10), 10);
+        check(paperBoundary is [{ LayerName: "图层 1", Layer.Uuid: "uuid-1" }],
+            "A contact made while the paper layer is selected adds no layer to the boundary");
+        foreach (var request in paperBoundary) paper.Complete(request, true);
+        PaperLayer(11, "纸张");
+        var onPaper = paper.ReserveEditBoundary("paper-2", paper.KnownLayersAt(12), 12);
+        check(onPaper is [{ LayerName: "图层 1", Operations.Length: 0 }],
+            "A boundary taken on the paper layer still refreshes previously captured layers");
+        foreach (var request in onPaper) paper.Complete(request, true);
+        var unseeded = new WatchState(); unseeded.Reset();
+        unseeded.Accept(Event("core.canvasViewState", "stateUpdated", 1, new { status = "changed", state = new
+        { canvasOriginScreenPx = new { x = 0, y = 0 }, ocrScalePercent = 100, ocrRotationDegrees = 0 } }));
+        unseeded.Accept(Event("core.clipState", "stateUpdated", 1, new { status = "changed", state = new { layers = new object[] {
+            new { id = 4, name = "纸张", type_raw = 1584, is_paper = true, uuid = "uuid-paper" } } } }));
+        unseeded.Accept(Event("core.currentLayerState", "stateUpdated", 2, new { status = "changed", state = "纸张" }));
+        try { unseeded.ReserveEditBoundary("paper-3", unseeded.KnownLayersAt(3), 3); throw new Exception("Paper-only boundary accepted"); }
+        catch (InvalidDataException error) { check(error.Message.Contains("是纸张"), "A boundary with only the paper layer names the paper layer"); }
         using var coordinator = new CaptureCoordinator();
         using var first = await coordinator.EnterAsync(CancellationToken.None);
         using var cancelled = new CancellationTokenSource(); cancelled.Cancel();

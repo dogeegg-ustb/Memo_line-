@@ -100,6 +100,24 @@ internal static partial class PacketChecks
         Check(StateHistory.At(history, 6).Layer == "图层 1", "Unrelated modules must retain their own last causally valid state.");
         var bad = history.Append(new HistorySlot(6, 9, "brushState", Json(new { status = "unknown", module = "brushState" }))).ToArray();
         Check(StateHistory.At(bad, 7).Brush is null, "Historical unknown brush state must invalidate preceding confirmation.");
+        var saved = StateHistory.Resolve([.. frames,
+            Json(new { kind = "penBegin", appendId = 10, eventId = 7, ticks = 100, data = new { } }),
+            Json(new { kind = "penBegin", appendId = 11, eventId = 8, ticks = 300, data = new { } }),
+            Json(new { kind = "coreStateUpdated", appendId = 12, eventId = 0, ticks = 400,
+                data = new { module = "currentLayerState", status = "changed", state = "图层 2", evidence = new { triggerTicks = 200 } } })]);
+        Check(StateHistory.At(saved, 7).Layer == "图层 1" && StateHistory.At(saved, 8).Layer == "图层 2",
+            "An observation without observedAfterEventId follows the last input before its trigger, not the session start.");
+        foreach (int clickTicks in new[] { 199, 201 })
+        {
+            var guarded = StateHistory.Resolve([.. frames,
+                Json(new { kind = "penBegin", appendId = 10, eventId = 7, ticks = 100, data = new { } }),
+                Json(new { kind = "mouseDown", appendId = 11, eventId = 8, ticks = clickTicks, data = new { } }),
+                Json(new { kind = "clipSaveRequest", appendId = 12, eventId = 0, ticks = 200, data = new { saveId = "guard", reason = "beforeLayerOperation" } }),
+                Json(new { kind = "coreStateUpdated", appendId = 13, eventId = 0, ticks = 400,
+                    data = new { module = "currentLayerState", status = "changed", state = "图层 2", evidence = new { saveId = "guard", triggerTicks = 200 } } })]);
+            Check(StateHistory.At(guarded, 7).Layer == "图层 1" && StateHistory.At(guarded, 8).Layer == "图层 2",
+                "A layer guard save describes the document before the click it intercepted, whichever thread stamped the click first.");
+        }
         Reject<InvalidDataException>(() => StateHistory.Resolve([Result("missing", 1, 3, Brush())]));
     }
 

@@ -262,10 +262,14 @@ internal sealed partial class MainWindow : Form
             var packet = await Task.Run(() => DiffViewPacket.Read(Path.Combine(update.PacketDirectory, "manifest.json")), token);
             await InvokeAsync(() =>
             {
-                    using var decoded = Image.FromFile(update.ImagePath); var bitmap = new Bitmap(decoded);
-                    _preview.Image = bitmap; _image?.Dispose(); _image = bitmap;
+                    // Only a reduced copy stays resident; actual size reads the saved layer again.
+                    using var decoded = Image.FromFile(update.ImagePath); var bitmap = Preview.Reduce(decoded);
+                    var size = decoded.Size; string path = update.ImagePath;
+                    _preview.CanvasBounds = new(Point.Empty, size); _preview.ImageBounds = null;
+                    _preview.Show(bitmap, bitmap.Size == size ? null : () => { using var full = Image.FromFile(path); return new Bitmap(full); });
+                    _image?.Dispose(); _image = bitmap;
                     using var metadata = JsonDocument.Parse(result.Metadata);
-                    _info.Text = $"{result.LayerName} · ID {J.Tick(metadata.RootElement, "layerId", 0)} · {bitmap.Width} × {bitmap.Height} px · 差异 {update.DiffImages} / 标签 {update.DirtyLabels}";
+                    _info.Text = $"{result.LayerName} · ID {J.Tick(metadata.RootElement, "layerId", 0)} · {size.Width} × {size.Height} px · 差异 {update.DiffImages} / 标签 {update.DirtyLabels}";
                     _diff.Display(packet); _views.SelectedTab = update.Baseline ? _layerPage : _diffPage;
             });
             Status(update.Baseline ? $"已保存「{result.LayerName}」并建立 after 基准；继续监听"

@@ -11,8 +11,9 @@ internal enum NativeUndoCommandState { Resolved, NoRecordedTarget, Blocked, Unkn
 // stroke can occupy one undo unit even when its recipe cannot be replayed.
 internal sealed record NativeUndoPenProof(ulong BeginAppendId, ulong OperationId, LayerKey? Layer,
     bool KnownUndoUnit, bool ReplayEligible);
+// A stroke target is its penBegin; any other unit's target starts at its first claimed input.
 internal sealed record NativeUndoTarget(ulong BeginAppendId, ulong OperationId, LayerKey? Layer,
-    bool KnownUndoUnit, bool ReplayEligible);
+    bool KnownUndoUnit, bool ReplayEligible, NativeUndoUnitKind Kind = NativeUndoUnitKind.Stroke, string? Description = null);
 internal sealed record NativeUndoPenEntry(ulong BeginAppendId, ulong BeginEventId, ulong OperationId,
     LayerKey? Layer, ulong? EndAppendId, bool ParticipatesInHistory, bool KnownUndoUnit, bool ReplayEligible,
     NativeUndoPenState State, ulong LastStateInputAppendId, ulong CausalPrefixStartAppendId, string? Reason);
@@ -21,9 +22,12 @@ internal sealed record NativeUndoCommandResolution(string Command, ulong InputAp
     ulong CausalPrefixEndAppendId, bool RequiresBoundaryPixelValidation, string? Reason);
 internal sealed record NativeUndoBarrier(ulong InputAppendId, ulong ResolutionAppendId, string Reason,
     IReadOnlyList<ulong> AffectedPenBeginAppendIds);
+internal sealed record NativeUndoUnitEntry(NativeUndoUnitProof Proof, NativeUndoPenState State,
+    ulong LastStateInputAppendId, string? Reason);
 internal sealed record NativeUndoTimelineResult(string SessionId, ulong BoundaryAppendId,
     IReadOnlyDictionary<ulong, NativeUndoPenEntry> Pens, IReadOnlyList<NativeUndoCommandResolution> Commands,
-    IReadOnlyList<NativeUndoBarrier> Barriers, bool InitialHistoryKnownEmpty, int? VerifiedUndoCapacity)
+    IReadOnlyList<NativeUndoBarrier> Barriers, bool InitialHistoryKnownEmpty, int? VerifiedUndoCapacity,
+    IReadOnlyList<NativeUndoUnitEntry> Units)
 {
     // Hook delivery and a saved shortcut mapping are not a CSP application ack.
     // The caller must compare the resulting effective history with its immutable
@@ -34,32 +38,53 @@ internal sealed record NativeUndoTimelineResult(string SessionId, ulong Boundary
 
 /// <summary>
 /// Derives a single session's document-wide undo history without changing native
-/// bytes. An unknown interval discards stack knowledge; a later confirmed stroke
-/// can establish a new local suffix. It never imports another session's stack.
+/// bytes. The stack holds undo units: pen strokes, and the layer property changes and
+/// macro operations that <see cref="INativeUndoUnitDetector"/>s prove. An unknown
+/// interval discards stack knowledge; a later confirmed unit can establish a new local
+/// suffix. It never imports another session's stack.
 /// </summary>
 internal static class NativeUndoTimeline
 {
     internal static NativeUndoTimelineResult Build(SessionSnapshot session,
         IEnumerable<NativeUndoPenProof> penProofs, int? verifiedUndoCapacity = null,
-        bool initialHistoryKnownEmpty = false)
-        => new Resolver(session, penProofs, verifiedUndoCapacity, initialHistoryKnownEmpty).Resolve();
+        bool initialHistoryKnownEmpty = false, IReadOnlyList<INativeUndoUnitDetector>? detectors = null)
+        => new Resolver(session, penProofs, verifiedUndoCapacity, initialHistoryKnownEmpty,
+            detectors ?? NativeUndoUnitDetectors.Default).Resolve();
+
+    private abstract class Unit(NativeUndoPenState state, ulong lastInput, string? reason)
+    {
+        internal NativeUndoPenState State = state;
+        internal ulong LastInput = lastInput;
+        internal string? Reason = reason;
+        internal abstract bool Known { get; }
+        internal abstract NativeUndoTarget Target { get; }
+    }
 
     private sealed class Pen(ulong append, ulong eventId, ulong operation, NativeUndoPenProof? proof,
-        bool participates, bool navigation, ulong prefix)
+        bool participates, bool navigation, bool layerPanel, ulong prefix)
+        : Unit(participates ? NativeUndoPenState.Unknown : NativeUndoPenState.Active, append,
+            participates ? "contactNotCompleted" : navigation ? "navigationContact" : "confirmedPanelContact")
     {
         internal readonly ulong Begin = append, EventId = eventId, Operation = operation;
         internal readonly NativeUndoPenProof? Proof = proof;
-        internal readonly bool Participates = participates, Navigation = navigation;
+        internal readonly bool Participates = participates, Navigation = navigation, LayerPanel = layerPanel;
         internal readonly ulong Prefix = prefix;
         internal ulong? End;
         internal bool Invalid;
-        internal NativeUndoPenState State = participates ? NativeUndoPenState.Unknown : NativeUndoPenState.Active;
-        internal ulong LastInput = append;
-        internal string? Reason = participates ? "contactNotCompleted" : navigation ? "navigationContact" : "confirmedPanelContact";
-        internal bool Known => End is not null && !Invalid && Participates && Proof?.KnownUndoUnit == true;
-        internal NativeUndoTarget Target => new(Begin, Operation, Proof?.Layer, Known, Known && Proof?.ReplayEligible == true);
+        internal override bool Known => End is not null && !Invalid && Participates && Proof?.KnownUndoUnit == true;
+        internal override NativeUndoTarget Target => new(Begin, Operation, Proof?.Layer, Known, Known && Proof?.ReplayEligible == true);
         internal NativeUndoPenEntry Freeze() => new(Begin, EventId, Operation, Proof?.Layer, End,
             Participates, Known, Known && Proof?.ReplayEligible == true, State, LastInput, Prefix, Reason);
+    }
+
+    // Proven by a detector, so always a known unit; nothing about it is replayable.
+    private sealed class DocumentUnit(NativeUndoUnitProof proof)
+        : Unit(NativeUndoPenState.Active, proof.LastInputAppendId, null)
+    {
+        internal readonly NativeUndoUnitProof Proof = proof;
+        internal override bool Known => true;
+        internal override NativeUndoTarget Target => new(Proof.FirstInputAppendId, 0, Proof.Layer, true, false, Proof.Kind, Proof.Description);
+        internal NativeUndoUnitEntry Freeze() => new(Proof, State, LastInput, Reason);
     }
 
     private sealed record Shortcut(JsonElement Result, JsonElement[] Matches)
@@ -76,7 +101,10 @@ internal static class NativeUndoTimeline
         private readonly Dictionary<ulong, List<Shortcut>> _shortcuts = [];
         private readonly Dictionary<ulong, Shortcut> _orphanShortcuts = [];
         private readonly Dictionary<ulong, Pen> _pens = [], _contacts = [];
-        private readonly List<Pen> _undo = [], _redo = [];
+        private readonly List<Unit> _undo = [], _redo = [];
+        private readonly Dictionary<ulong, DocumentUnit> _unitStarts = [];
+        private readonly List<DocumentUnit> _units = [];
+        private DocumentUnit? _claiming;
         private readonly List<NativeUndoCommandResolution> _commands = [];
         private readonly List<NativeUndoBarrier> _barriers = [];
         private readonly int? _capacity;
@@ -85,7 +113,8 @@ internal static class NativeUndoTimeline
         private ulong _prefix = 1;
         private PanelRegionMap _regions = PanelRegionMap.Unavailable();
 
-        internal Resolver(SessionSnapshot session, IEnumerable<NativeUndoPenProof> proofs, int? capacity, bool initialEmpty)
+        internal Resolver(SessionSnapshot session, IEnumerable<NativeUndoPenProof> proofs, int? capacity, bool initialEmpty,
+            IReadOnlyList<INativeUndoUnitDetector> detectors)
         {
             ArgumentNullException.ThrowIfNull(session);
             ArgumentNullException.ThrowIfNull(proofs);
@@ -104,6 +133,27 @@ internal static class NativeUndoTimeline
                 proof.Layer is { } layer && layer.SessionId != session.SessionId))
                 throw new InvalidDataException("Undo-unit proof belongs to a different native session or identity.");
             PrepareShortcuts();
+            PrepareUnits(detectors);
+        }
+
+        // A unit's claim must start and end on recorded hardware inputs, must not overlap another
+        // claim and must not swallow an undo or redo; otherwise its inputs keep their own meaning.
+        private void PrepareUnits(IReadOnlyList<INativeUndoUnitDetector> detectors)
+        {
+            var hardware = _frames.Where(frame => Text(frame, "path") == "hardware" && !RecorderTagged(Get(frame, "data")))
+                .Select(frame => U64(frame, "appendId")).ToHashSet();
+            ulong claimedUntil = 0;
+            foreach (var proof in detectors.SelectMany(detector => detector.Detect(_session, _frames, _history))
+                .OrderBy(proof => proof.FirstInputAppendId).ThenBy(proof => proof.LastInputAppendId))
+            {
+                if (proof.Kind == NativeUndoUnitKind.Stroke || proof.FirstInputAppendId > proof.LastInputAppendId ||
+                    !hardware.Contains(proof.FirstInputAppendId) || !hardware.Contains(proof.LastInputAppendId) ||
+                    proof.FirstInputAppendId <= claimedUntil || proof.Layer is { } layer && layer.SessionId != _session.SessionId ||
+                    _shortcuts.Any(item => item.Key >= proof.FirstInputAppendId && item.Key <= proof.LastInputAppendId &&
+                        item.Value.Any(shortcut => shortcut.Matches.Any(match => Text(match, "command") is "undo" or "redo")))) continue;
+                _unitStarts.Add(proof.FirstInputAppendId, new DocumentUnit(proof));
+                claimedUntil = proof.LastInputAppendId;
+            }
         }
 
         private void PrepareShortcuts()
@@ -144,6 +194,7 @@ internal static class NativeUndoTimeline
                         prefix, append, false, "shortcutNativeReferenceUnknown"));
                 }
                 if (RecorderTagged(data) || Text(frame, "path") == "program") continue;
+                if (Text(frame, "path") == "hardware" && Claim(append)) continue;
                 if (Text(frame, "path") == "hardware")
                 {
                     switch (kind)
@@ -162,7 +213,13 @@ internal static class NativeUndoTimeline
                 }
                 else if (kind == "penInterrupted") InterruptPen(frame);
                 else if (kind is "editingActionCompleted" or "documentMutation" or "documentChanged")
-                    Barrier(append, append, "documentMutationOutsideKnownPenUnits");
+                    Barrier(append, append, "documentMutationOutsideKnownUnits");
+                // A failed or cancelled transaction records no editing action, yet may have left
+                // CSP operations (a new layer, a paste) on the native stack.
+                else if (kind == "editTransactionEnded" && Text(data, "outcome") != "executed")
+                    Barrier(append, append, "editTransactionLeftUnknownChanges");
+                else if (kind == "saveGuardResult" && Get(data, "released").ValueKind == JsonValueKind.False)
+                    Barrier(append, append, "guardedInputNotReleased");
             }
             foreach (var pen in _contacts.Values.Where(pen => pen.Participates).ToArray())
             {
@@ -170,7 +227,25 @@ internal static class NativeUndoTimeline
                 Barrier(pen.Begin, _session.BoundaryAppendId, "canvasContactNotCompletedAtBoundary");
             }
             return new(_session.SessionId, _session.BoundaryAppendId, _pens.ToDictionary(item => item.Key, item => item.Value.Freeze()),
-                _commands.ToArray(), _barriers.ToArray(), _initialEmpty, _capacity);
+                _commands.ToArray(), _barriers.ToArray(), _initialEmpty, _capacity, _units.Select(unit => unit.Freeze()).ToArray());
+        }
+
+        // Inputs inside a proven unit's claim are that unit; it joins the stack at its last input (a
+        // view-state claim joins nothing).
+        // A claim reached during an open canvas contact is not trusted and its inputs are read normally.
+        private bool Claim(ulong append)
+        {
+            if (_claiming is null && _unitStarts.TryGetValue(append, out var starting) &&
+                !_contacts.Values.Any(pen => pen.Participates)) _claiming = starting;
+            if (_claiming is not { } unit) return false;
+            if (append == unit.Proof.LastInputAppendId)
+            {
+                _claiming = null;
+                if (unit.Proof.Kind == NativeUndoUnitKind.ViewState) return true;
+                _units.Add(unit);
+                PushUndo(unit); _redo.Clear(); _unknownRedoBottom = false;
+            }
+            return true;
         }
 
         private void BeginPen(JsonElement frame)
@@ -186,7 +261,8 @@ internal static class NativeUndoTimeline
                 throw new InvalidDataException("Undo-unit proof operationId differs from its native penBegin.");
             bool matchedCanvas = location is { Status: "matched", Region: "canvasViewport" };
             if (!matchedCanvas && proof is not null) proof = proof with { KnownUndoUnit = false, ReplayEligible = false };
-            var pen = new Pen(append, eventId, operation, proof, !outside && !navigation, navigation, _prefix);
+            var pen = new Pen(append, eventId, operation, proof, !outside && !navigation, navigation,
+                location is { Status: "matched", Region: "layers" }, _prefix);
             if (_contacts.Values.Any(contact => contact.Participates) || _contacts.ContainsKey(operation))
             {
                 pen.Invalid = true;
@@ -200,6 +276,9 @@ internal static class NativeUndoTimeline
             ulong append = U64(frame, "appendId");
             if (!_contacts.Remove(Operation(frame), out var pen)) { Barrier(append, append, "penEndWithoutNativeBegin"); return; }
             pen.End = append;
+            // A layer panel tap can change a layer (properties, creation, deletion), which CSP stacks
+            // like a stroke. Unless a detector proved and claimed it, the stack is no longer known.
+            if (pen.LayerPanel) { Barrier(pen.Begin, append, "layerPanelContactUnproven"); return; }
             if (!pen.Participates) return;
             if (pen.Invalid) { pen.State = NativeUndoPenState.Unknown; pen.Reason ??= "contactCrossesUnknownInterval"; return; }
             pen.State = NativeUndoPenState.Active; pen.LastInput = append;
@@ -230,7 +309,10 @@ internal static class NativeUndoTimeline
             var matches = result?.Matches ?? [];
             string command = matches.Length == 1 ? Text(matches[0], "command") ?? "unknown" : "ambiguous";
             ulong resolutionAppend = result?.Append ?? append;
-            if (Get(data, "guardIntercepted").ValueKind == JsonValueKind.True || Long(data, "nextHookResult") is not null and not 0)
+            // The save guard releases an intercepted key to CSP right after its save; the replay carries
+            // the Recorder tag and is not recorded again, so the key counts at its recorded position. A
+            // cancelled release is a barrier of its own (saveGuardResult). Only another hook blocks.
+            if (Long(data, "nextHookResult") is not null and not 0)
             {
                 if (matches.Any(match => Text(match, "command") is "undo" or "redo"))
                     _commands.Add(new(command, append, resolutionAppend, NativeUndoCommandState.Blocked, null,
@@ -278,20 +360,20 @@ internal static class NativeUndoTimeline
                     _prefix, input, false, "verifiedRecordedStackEmpty"));
                 return;
             }
-            var pen = stack[^1];
-            if (!pen.Known)
-            { UnknownCommand(command, input, resolution, "undoRedoTargetsOpaqueUndoUnit", pen.Target); return; }
+            var unit = stack[^1];
+            if (!unit.Known)
+            { UnknownCommand(command, input, resolution, "undoRedoTargetsOpaqueUndoUnit", unit.Target); return; }
             stack.RemoveAt(stack.Count - 1);
-            pen.State = command == "undo" ? NativeUndoPenState.Undone : NativeUndoPenState.Active;
-            pen.LastInput = input; pen.Reason = null;
-            if (command == "undo") _redo.Add(pen); else PushUndo(pen);
-            _commands.Add(new(command, input, resolution, NativeUndoCommandState.Resolved, pen.Target,
+            unit.State = command == "undo" ? NativeUndoPenState.Undone : NativeUndoPenState.Active;
+            unit.LastInput = input; unit.Reason = null;
+            if (command == "undo") _redo.Add(unit); else PushUndo(unit);
+            _commands.Add(new(command, input, resolution, NativeUndoCommandState.Resolved, unit.Target,
                 _prefix, input, true, _capacity is null ? "undoCapacityUnverifiedRequiresBoundaryPixels" : null));
         }
 
-        private void PushUndo(Pen pen)
+        private void PushUndo(Unit unit)
         {
-            _undo.Add(pen);
+            _undo.Add(unit);
             if (_capacity is { } capacity)
             {
                 if (_undo.Count > capacity) _undo.RemoveRange(0, _undo.Count - capacity);
@@ -423,6 +505,7 @@ internal static class NativeUndoTimeline
                 pen.State = NativeUndoPenState.Unknown; pen.LastInput = input; pen.Reason = reason;
                 if (pen.End is null) pen.Invalid = true;
             }
+            foreach (var unit in _units) { unit.State = NativeUndoPenState.Unknown; unit.LastInput = input; unit.Reason = reason; }
             _barriers.Add(new(input, resolution, reason, affected));
             _undo.Clear(); _redo.Clear(); _unknownUndoBottom = _unknownRedoBottom = true;
             // A delayed resolution proves an earlier input. Its publication must

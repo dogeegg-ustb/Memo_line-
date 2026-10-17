@@ -9,7 +9,9 @@ internal static class EffectiveUndoHistory
 {
     internal static EditIndex Apply(SessionSnapshot session, EditIndex index, NativeUndoTimelineResult timeline)
     {
-        var resolved = timeline.Commands.Where(c => c.State == NativeUndoCommandState.Resolved && c.Target is not null).ToArray();
+        // Undoing a layer property change or a macro operation leaves every stroke as it was.
+        var resolved = timeline.Commands.Where(c => c.State == NativeUndoCommandState.Resolved &&
+            c.Target is { Kind: NativeUndoUnitKind.Stroke }).ToArray();
         if (resolved.Length == 0) return index;
         var strokes = index.Strokes.ToDictionary();
         foreach (var key in strokes.Keys.ToArray())

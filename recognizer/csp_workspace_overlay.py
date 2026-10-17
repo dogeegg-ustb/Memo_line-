@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
 import json
+import math
 import os
 import queue
 import sqlite3
@@ -16,6 +18,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+from collections import Counter
 from ctypes import wintypes
 from pathlib import Path
 from tkinter import messagebox
@@ -71,27 +74,191 @@ def live_placement(hwnd: int) -> tuple[bool, tuple[int, int, int, int]]:
 
 def saved_placement(tree: dict) -> tuple[bool, tuple[int, int, int, int], float]:
     rect = tree["dockplacementmainframerect"]
-    ratio = tree["dockplacementmainframexscale"]
-    dpi = 96 * ratio["numerator"] / ratio["denominator"]
+    dpi = 96 * _ratio(tree["dockplacementmainframexscale"])
     return bool(tree["dockplacementmainframemaximize"]), (
         rect["left"], rect["top"], rect["right"], rect["bottom"]
     ), dpi
 
 
-def panel_rectangles(tree: dict, client: tuple[int, int, int, int]) -> dict[str, tuple[int, int, int, int]]:
-    """Convert saved dock sizes to screen boxes; borders are visual candidates."""
+def _ratio(value: dict) -> float:
+    return value["numerator"] / value["denominator"]
+
+
+def _half_up(value: float) -> int:
+    # CSP rounds rescaled sizes half up: 345 at 150% becomes 403 at 175%.
+    return math.floor(value + 0.5)
+
+
+def same_restore_rect(saved: tuple[int, int, int, int], live: tuple[int, int, int, int], ratio: float) -> bool:
+    """CSP keeps the restore origin and rescales only its size with the DPI."""
+    if abs(ratio - 1) < 1e-6:
+        return saved == live
+    return (saved[:2] == live[:2]
+            and abs(_half_up((saved[2] - saved[0]) * ratio) - (live[2] - live[0])) <= 2
+            and abs(_half_up((saved[3] - saved[1]) * ratio) - (live[3] - live[1])) <= 2)
+
+
+class _Scaler:
+    """Saved dock sizes are physical pixels at the DPI ratio stored beside each size."""
+
+    def __init__(self, tree: dict, live_scale: float | None):
+        self.saved = _ratio(tree["dockplacementmainframeyscale"])
+        self.live = live_scale or self.saved
+        self.converted = abs(self.live - self.saved) > 1e-6
+
+    def size(self, place: dict, axis: str) -> int:
+        stored = place.get(f"dockplacebase{axis}scale")
+        saved = _ratio(stored) if stored else self.saved
+        return _half_up(place["dockplacebasesize"]["width" if axis == "x" else "height"] * self.live / saved)
+
+    def logical(self, value: float) -> int:
+        return _half_up(value * self.live)
+
+
+# Menu bar plus command bar above the dock columns, in 96-DPI pixels. Measured
+# 72 px at 150% and 84 px at 175%; only used when the saved stack overflows.
+CHROME_HEIGHT_96 = 48
+# Collapse bar above each side column's stack, in 96-DPI pixels (35 px at 175%).
+COLUMN_HEADER_96 = 20
+BOUNDARY_TOLERANCE = 3
+MIN_SQUEEZED_HEIGHT = 20
+SQUEEZE_RETRY_SECONDS = 3
+
+
+class WindowSnapshot:
+    """One PrintWindow render of the CSP window; works while CSP is covered."""
+
+    def __init__(self, hwnd: int):
+        user32, gdi32 = ctypes.WinDLL("user32"), ctypes.WinDLL("gdi32")
+        user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+        user32.GetWindowDC.argtypes = [wintypes.HWND]
+        user32.GetWindowDC.restype = wintypes.HDC
+        user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
+        user32.PrintWindow.argtypes = [wintypes.HWND, wintypes.HDC, wintypes.UINT]
+        gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
+        gdi32.CreateCompatibleDC.restype = wintypes.HDC
+        gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
+        gdi32.CreateCompatibleBitmap.restype = wintypes.HBITMAP
+        gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
+        gdi32.SelectObject.restype = wintypes.HGDIOBJ
+        gdi32.GetDIBits.argtypes = [wintypes.HDC, wintypes.HBITMAP, wintypes.UINT, wintypes.UINT,
+                                    ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT]
+        gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+        gdi32.DeleteDC.argtypes = [wintypes.HDC]
+        rect = wintypes.RECT()
+        if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+            raise OSError("GetWindowRect 失败")
+        self.left, self.top = rect.left, rect.top
+        self.width, self.height = rect.right - rect.left, rect.bottom - rect.top
+        window_dc = user32.GetWindowDC(hwnd)
+        memory_dc = gdi32.CreateCompatibleDC(window_dc)
+        bitmap = gdi32.CreateCompatibleBitmap(window_dc, self.width, self.height)
+        previous = gdi32.SelectObject(memory_dc, bitmap)
+        try:
+            # PW_RENDERFULLCONTENT renders CSP's own pixels, never covering windows.
+            if not user32.PrintWindow(hwnd, memory_dc, 2):
+                raise OSError("PrintWindow 失败")
+            gdi32.SelectObject(memory_dc, previous)
+            header = (ctypes.c_uint32 * 10)()
+            header[0], header[1], header[2] = 40, self.width, ctypes.c_uint32(-self.height).value
+            header[3] = 1 | (32 << 16)
+            self.pixels = ctypes.create_string_buffer(self.width * self.height * 4)
+            if gdi32.GetDIBits(memory_dc, bitmap, 0, self.height, self.pixels, header, 0) != self.height:
+                raise OSError("GetDIBits 失败")
+        finally:
+            gdi32.DeleteObject(bitmap)
+            gdi32.DeleteDC(memory_dc)
+            user32.ReleaseDC(hwnd, window_dc)
+        self.pixels = bytearray(self.pixels.raw)
+        self.pixels[3::4] = bytes(len(self.pixels) // 4)
+
+    def row(self, x0: int, x1: int, y: int) -> bytes:
+        """BGR0 pixels of screen row ``y`` between ``x0`` and ``x1``."""
+        bx0, bx1, by = x0 - self.left, x1 - self.left, y - self.top
+        if not (0 <= by < self.height and 0 <= bx0 < bx1 <= self.width):
+            return b""
+        start = (by * self.width + bx0) * 4
+        return bytes(self.pixels[start:start + (bx1 - bx0) * 4])
+
+
+def _dominant(row: bytes) -> tuple[bytes, int]:
+    color, count = Counter(row[i:i + 4] for i in range(0, len(row), 4)).most_common(1)[0]
+    return color, count
+
+
+def _find_boundary(snapshot, x0: int, x1: int, expected: int) -> tuple[int, bytes] | None:
+    """A booth starts with a full-width uniform separator row above a header of another color."""
+    for y in sorted(range(expected - BOUNDARY_TOLERANCE, expected + BOUNDARY_TOLERANCE + 1),
+                    key=lambda value: abs(value - expected)):
+        row = snapshot.row(x0, x1, y)
+        if not row or row != row[:4] * (len(row) // 4) or snapshot.row(x0, x1, y - 1) == row:
+            continue
+        below = y + 1
+        while below < y + 4 and snapshot.row(x0, x1, below) == row:
+            below += 1
+        header = snapshot.row(x0, x1, below)
+        if not header:
+            continue
+        color, count = _dominant(header)
+        if color != row[:4] and count >= 0.9 * (len(header) // 4):
+            return y, row[:4]
+    return None
+
+
+def _squeezed_stack(label: str, heights: list[int], top: int, bottom: int,
+                    column_x: int, column_width: int, snapshot_factory) -> list[tuple[int, int]]:
+    """CSP keeps every booth but one at its saved height; the pixels decide which one shrank."""
+    if snapshot_factory is None:
+        raise ValueError(f"{label}面板总高 {sum(heights)} px 超出可用高度 {bottom - top} px")
+    snapshot = snapshot_factory()
+    x0, x1 = column_x + 4, column_x + column_width - 4
+    matches = {}
+    for squeezed in range(len(heights)):
+        tops = [top + sum(heights[:i]) if i <= squeezed else bottom - sum(heights[i:])
+                for i in range(len(heights))]
+        ends = tops[1:] + [bottom]
+        if ends[squeezed] - tops[squeezed] < MIN_SQUEEZED_HEIGHT:
+            continue
+        found = [_find_boundary(snapshot, x0, x1, expected) for expected in tops]
+        if all(found) and len({separator for _, separator in found}) == 1:
+            measured = tuple(y for y, _ in found)
+            matches[measured] = squeezed
+    if len(matches) != 1:
+        raise ValueError(
+            f"{label}面板总高 {sum(heights)} px 超出可用高度 {bottom - top} px，"
+            f"截图中{'找不到' if not matches else '有多种'}符合“仅一个面板被压缩”的分界，"
+            "请在 CSP 调整面板高度后保存工作区")
+    tops = list(next(iter(matches)))
+    return [(y, end - y) for y, end in zip(tops, tops[1:] + [bottom])]
+
+
+def panel_rectangles(tree: dict, client: tuple[int, int, int, int], live_scale: float | None = None,
+                     snapshot_factory=None) -> dict[str, tuple[int, int, int, int]]:
+    """Convert saved dock sizes to screen boxes; borders are visual candidates.
+
+    ``live_scale`` is the window's DPI / 96. Saved sizes are rescaled to it the
+    way CSP does. When a rescaled side stack no longer fits, CSP shrinks one
+    booth; ``snapshot_factory`` supplies the window pixels that identify it.
+    """
     x, y, width, height = client
+    scaler = _Scaler(tree, live_scale)
     root = tree["dockplacementpalette"]["mainframe"]["dock"]
     groups = root["subviews"]["_items"]
-    widths = [entry["dockplacebasesize"]["width"] for entry in root["dockplaces"]["_items"]]
+    places = root["dockplaces"]["_items"]
+    widths = [scaler.size(entry, "x") for entry in places]
     if len(widths) != 5 or sum(widths) <= 0:
         raise ValueError("不支持当前停靠列结构")
-    # The saved widths are physical pixels. Reject a different live layout.
     if abs(sum(widths) - width) > 2:
-        raise ValueError(f"停靠宽度不一致：配置 {sum(widths)}，客户区 {width}")
+        # The saved widths are physical pixels. Reject a different live layout,
+        # unless the DPI changed: then only the canvas column takes up the rest.
+        if not scaler.converted:
+            raise ValueError(f"停靠宽度不一致：配置 {sum(widths)}，客户区 {width}")
+        widths[2] = width - (sum(widths) - widths[2])
+        if widths[2] < 10:
+            raise ValueError(f"换算到当前缩放后侧栏总宽超出客户区：{sum(widths) - widths[2]} / {width}")
 
     def sizes(dock: dict) -> list[int]:
-        return [entry["dockplacebasesize"]["height"] for entry in dock["dockplaces"]["_items"]]
+        return [scaler.size(entry, "y") for entry in dock["dockplaces"]["_items"]]
 
     def kinds(booth: dict) -> set[str]:
         return {entry.get("_type", "") for entry in booth["subviews"]["_items"]}
@@ -114,57 +281,82 @@ def panel_rectangles(tree: dict, client: tuple[int, int, int, int]) -> dict[str,
     left_heights, right_heights = sizes(left_dock), sizes(right_dock)
     if len(left_heights) != 3 or len(right_heights) != 3:
         raise ValueError("不支持当前面板堆叠结构")
+    col_x = [x]
+    for column_width in widths:
+        col_x.append(col_x[-1] + column_width)
+    column_heights = sizes(root)
+    bottom = y + height
+    # The saved column height is the live dock height while the layout fits.
+    # After a DPI change it is only rescaled, so the dock then starts below
+    # the menu and command bars.
+    chrome = scaler.logical(CHROME_HEIGHT_96) if tree.get("dockplacementcommandbarvisible") == 1 else None
+    dock_height = max(column_heights)
+    if chrome is not None and dock_height > height - chrome + 2:
+        dock_height = height - chrome
+    elif chrome is None and scaler.converted and dock_height > height:
+        raise ValueError("命令栏隐藏时无法推算缩放后的停靠区顶部，请在 CSP 保存工作区")
+    dock_top = bottom - dock_height
+
+    # The collapse bar is the saved column height minus its stack. An overflowing
+    # stack makes that remainder negative, so it is taken from a column that fits.
+    remainders = [column_heights[c] - sum(h) for c, h in ((1, left_heights), (4, right_heights))
+                  if column_heights[c] - sum(h) > 0]
+    column_header = remainders[0] if remainders else scaler.logical(COLUMN_HEADER_96)
+
+    def stack(label: str, column: int, heights: list[int]) -> list[tuple[int, int]]:
+        # Side stacks are bottom aligned in the CSP dock area, below the column's collapse bar.
+        header = column_heights[column] - sum(heights)
+        if header <= 0:
+            header = column_header
+        if sum(heights) <= bottom - (dock_top + header) + 2:
+            tops = [bottom - sum(heights[i:]) for i in range(len(heights))]
+            return list(zip(tops, heights))
+        return _squeezed_stack(label, heights, dock_top + header, bottom,
+                               col_x[column], widths[column], snapshot_factory)
+
+    stacks = {1: stack("左栏", 1, left_heights), 4: stack("右栏", 4, right_heights)}
     # Locate the selected color tenant from the saved configuration, not its
     # localized title or an assumed tab index. All color tabs share one booth.
     color_kinds = {"palettekindcolorcircle", "palettekindcolorset", "palettekindcolorslider",
                    "palettekindmix", "palettekindcolorhistory", "palettekindcolorguide", "palettekindcolorblend"}
     color_slots = []
-    for column, container, booths, heights in (
-        (1, groups[1], left_booths, left_heights),
-        (4, groups[4], right_booths, right_heights),
-    ):
+    for column, container, booths in ((1, groups[1], left_booths), (4, groups[4], right_booths)):
         for index, booth in enumerate(booths):
             tabs = booth["subviews"]["_items"]
             selected = booth.get("currentindex", -1)
             if (container.get("visible") and booth.get("visible") and
                     0 <= selected < len(tabs) and tabs[selected].get("_type") in color_kinds):
-                color_slots.append((column, index, heights))
+                color_slots.append((column, index))
     if len(color_slots) != 1:
         raise ValueError("需要一个可见且已选中色彩标签的停靠区域")
-    col_x = [x]
-    for saved_width in widths:
-        col_x.append(col_x[-1] + saved_width)
-    # Side stacks are bottom aligned in the CSP dock area. The central canvas
-    # has no palettekind node; the area above the saved timeline is its candidate.
-    left_top = y + height - sum(left_heights)
-    right_top = y + height - sum(right_heights)
-    dock_height = max(entry["dockplacebasesize"]["height"] for entry in root["dockplaces"]["_items"])
-    canvas_top = y + height - dock_height
+    left, right = stacks[1], stacks[4]
+    # The central canvas has no palettekind node; the area above the saved
+    # timeline is its candidate.
     center = groups[2]
     timeline = center["subviews"]["_items"][-1]
     timeline_height = sizes(center)[-1] if timeline.get("visible") else 0
     result = {
-        "笔刷属性": (col_x[1], left_top + left_heights[0], widths[1], left_heights[1]),
-        "画布视口": (col_x[2], canvas_top, widths[2], height - (canvas_top - y) - timeline_height),
-        "导航器": (col_x[4], right_top, widths[4], right_heights[0]),
-        "图层": (col_x[4], right_top + right_heights[0] + right_heights[1], widths[4], right_heights[2]),
+        "笔刷属性": (col_x[1], left[1][0], widths[1], left[1][1]),
+        "画布视口": (col_x[2], dock_top, widths[2], bottom - dock_top - timeline_height),
+        "导航器": (col_x[4], right[0][0], widths[4], right[0][1]),
+        "图层": (col_x[4], right[2][0], widths[4], right[2][1]),
     }
     group_booth = left_booths[0]
     group_tabs = group_booth["subviews"]["_items"]
     group_selected = group_booth.get("currentindex", -1)
     if group_booth.get("visible") and 0 <= group_selected < len(group_tabs) and group_tabs[group_selected].get("_type") in {"palettekindsubtool", "palettekindtoolgroup"}:
-        result["工具组"] = (col_x[1], left_top, widths[1], left_heights[0])
+        result["工具组"] = (col_x[1], left[0][0], widths[1], left[0][1])
     tool_dock = groups[0]["subviews"]["_items"][0]
     tool_booths = tool_dock["subviews"]["_items"]
     if groups[0].get("visible") and any(
             booth.get("visible") and 0 <= booth.get("currentindex", -1) < len(booth["subviews"]["_items"])
             and booth["subviews"]["_items"][booth["currentindex"]].get("_type") == "palettekindtool"
             for booth in tool_booths):
-        tool_height = root["dockplaces"]["_items"][0]["dockplacebasesize"]["height"]
-        result["工具栏"] = (col_x[0], y + height - tool_height, widths[0], tool_height)
-    color_column, color_index, color_heights = color_slots[0]
-    result["色彩"] = (col_x[color_column], y + height - sum(color_heights) + sum(color_heights[:color_index]),
-                      widths[color_column], color_heights[color_index])
+        tool_top = max(bottom - column_heights[0], dock_top)
+        result["工具栏"] = (col_x[0], tool_top, widths[0], bottom - tool_top)
+    color_column, color_index = color_slots[0]
+    color_top, color_height = stacks[color_column][color_index]
+    result["色彩"] = (col_x[color_column], color_top, widths[color_column], color_height)
     # Both readers inspect the same booth; fresh pixels decide which tab is
     # visible. The alias keeps geometry stable when the user manually changes
     # color palettes and never treats a saved selection as live input proof.
@@ -173,6 +365,40 @@ def panel_rectangles(tree: dict, client: tuple[int, int, int, int]) -> dict[str,
            for rx, ry, w, h in result.values()):
         raise ValueError("解析出的面板区域超出 CSP 客户区")
     return result
+
+
+# Squeezed layouts need a window render; polling callers reuse its verdict
+# until the window, its DPI or the saved dock changes.
+_SQUEEZE_CACHE: dict[tuple, tuple[dict | None, str | None, float]] = {}
+
+
+def _live_regions(tree: dict, client: tuple[int, int, int, int], hwnd: int, dpi: float) -> dict:
+    key = (hwnd, client, dpi, hashlib.sha1(json.dumps(tree, sort_keys=True).encode()).hexdigest())
+    cached = _SQUEEZE_CACHE.get(key)
+    if cached:
+        regions, error, stamp = cached
+        if regions is not None:
+            return dict(regions)
+        if time.monotonic() - stamp < SQUEEZE_RETRY_SECONDS:
+            raise ValueError(error)
+    snapshots = []
+
+    def snapshot_factory():
+        if not snapshots:
+            snapshots.append(WindowSnapshot(hwnd))
+        return snapshots[0]
+
+    try:
+        regions = panel_rectangles(tree, client, dpi / 96, snapshot_factory)
+    except ValueError as exc:
+        if snapshots:
+            _SQUEEZE_CACHE[key] = (None, str(exc), time.monotonic())
+        raise
+    if snapshots:
+        if len(_SQUEEZE_CACHE) > 32:
+            _SQUEEZE_CACHE.clear()
+        _SQUEEZE_CACHE[key] = (regions, None, 0.0)
+    return dict(regions)
 
 
 def inspect(path: Path, hwnd: int | None = None) -> tuple[int, dict]:
@@ -186,10 +412,10 @@ def inspect(path: Path, hwnd: int | None = None) -> tuple[int, dict]:
     actual_max, actual_rect = live_placement(window.hwnd)
     if saved_max != actual_max:
         raise ValueError(f"最大化状态不一致：配置 {int(saved_max)}，窗口 {int(actual_max)}")
-    if saved_rect != actual_rect:
-        raise ValueError(f"窗口还原矩形不一致：配置 {saved_rect}，窗口 {actual_rect}")
-    if abs(saved_dpi - window.dpi) > 1:
-        raise ValueError(f"DPI 不一致：配置 {saved_dpi:g}，窗口 {window.dpi:g}")
+    # The live DPI is Windows' effective display scale for CSP's monitor.
+    if not same_restore_rect(saved_rect, actual_rect, window.dpi / saved_dpi):
+        raise ValueError(f"窗口还原矩形不一致：配置 {saved_rect}（DPI {saved_dpi:g}），"
+                         f"窗口 {actual_rect}（DPI {window.dpi:g}）")
     client = window.client_rect.to_list()
     return window.hwnd, {
         "status": "match",
@@ -197,8 +423,10 @@ def inspect(path: Path, hwnd: int | None = None) -> tuple[int, dict]:
         "hwnd": window.hwnd,
         "maximized": actual_max,
         "saved_restore_rect": saved_rect,
+        "saved_dpi": saved_dpi,
+        "dpi": window.dpi,
         "client_rect": client,
-        "regions": panel_rectangles(tree, tuple(client)),
+        "regions": _live_regions(tree, tuple(client), window.hwnd, window.dpi),
     }
 
 

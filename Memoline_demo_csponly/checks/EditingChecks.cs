@@ -53,6 +53,20 @@ internal static class EditingChecks
         Check(before.Bytes.AsSpan().SequenceEqual(new byte[] { 1, 2, 3, 255, 200, 0, 0, 255 }),
             "Historical seed is reconstructed from before patches.");
         Check(timeline.VerifyRoundTrip(), "Reverse then forward patches equal the boundary capture byte for byte.");
+        var pixels = Enumerable.Range(0, 64 * 48 * 4).Select(i => (byte)(i * 7 % 251)).ToArray();
+        var parked = new ImageRgba(64, 48, pixels.ToArray());
+        var twin = new ImageRgba(64, 48, pixels.ToArray());
+        parked.Park();
+        Check(parked.IsParked && parked.SamePixels(twin) && twin.SamePixels(parked),
+            "A parked image compares by digest without being restored.");
+        var copied = parked.Copy();
+        Check(parked.IsParked && copied.Bytes.AsSpan().SequenceEqual(pixels), "Copying a parked image leaves it compressed.");
+        Check(parked.Bytes.AsSpan().SequenceEqual(pixels) && !parked.IsParked, "Reading a parked image restores identical pixels.");
+        parked.Bytes[0] ^= 1; parked.Park();
+        Check(!parked.SamePixels(twin) && parked.Bytes[0] == (pixels[0] ^ 1),
+            "A write after restoring is kept when the image is parked again.");
+        var stored = twin.ParkedCopy();
+        Check(stored.IsParked && !twin.IsParked && stored.SamePixels(twin), "A parked copy leaves its source decoded.");
         var conflict = patch with { Key = new(layer, "p1", "i2"), Now = new(1, 1, new byte[] { 0, 0, 0, 255 }) };
         try { ImageCompositor.ValidateGroup([patch, conflict], 2, 1); }
         catch (InvalidDataException) { checks++; goto overlapChecked; }

@@ -122,11 +122,12 @@ public sealed class RecorderInputControlServer : IAsyncDisposable
                                     break;
                                 case "recordEditingAction":
                                     RequireEditCapture();
-                                    ValidateOptions(request, "command", "transactionId", "editKind", "changes");
+                                    ValidateOptions(request, "command", "transactionId", "editKind", "changes", "layerReplacements");
                                     string actionId = ReadIdentity(request, "transactionId");
                                     string editKind = ReadIdentity(request, "editKind");
                                     if (editKind is not ("eventEditing" or "preciseUndo")) throw new ArgumentException("Unknown editing action.");
-                                    var action = await _capture!.RecordEditingActionAsync(actionId,editKind,request.GetProperty("changes"),_stop.Token);
+                                    var action = await _capture!.RecordEditingActionAsync(actionId,editKind,request.GetProperty("changes"),_stop.Token,
+                                        request.TryGetProperty("layerReplacements", out var replacements) ? replacements : default);
                                     await _recording!.FlushAsync(cancellationToken: _stop.Token);
                                     response = new { success = true, sessionId = _recording.SessionId, transactionId = actionId, appendId = action.AppendId };
                                     break;

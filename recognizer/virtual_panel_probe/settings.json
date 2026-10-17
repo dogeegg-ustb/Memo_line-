@@ -1,0 +1,21 @@
+{
+  "virtualHardwareIds": [
+    "Root\\MttVDD"
+  ],
+  "matchMainScale": true,
+  "detachOnExit": true,
+  "detachDelaySeconds": 5.0,
+  "virtualMinimumSize": null,
+  "virtualScreenAllowedProcesses": [
+    "CLIPStudioPaint.exe",
+    "CLIPStudioPaintVer1.exe",
+    "CLIPStudioPaintVer2.exe"
+  ],
+  "wallpaperBackdrop": true,
+  "pipeName": "MemoLine.PanelStash",
+  "cornerThresholdPx": 32,
+  "edgeDrawer": true,
+  "edgeHoverPx": 2,
+  "edgeDwellMs": 150,
+  "stashGapPx": 8
+}

@@ -19,6 +19,7 @@ internal interface IDemoEditingHost
     Task<JsonElement> CaptureBrushPanelAsync(Rectangle region,CancellationToken token)
         => throw new NotSupportedException("识别器尚不支持截图笔刷属性选区。");
     void SetProgressObserver(Action<string>? observer) { }
+    string? RecycleRoot => null;
     void ReportEditingError(string operation,Exception error) { }
 }
 
@@ -70,7 +71,10 @@ internal sealed class EditingPanel : Form
     private readonly NumericUpDown _value=new(){Minimum=-100000,Maximum=100000,DecimalPlaces=3,Width=100};
     private readonly CheckBox _changeBrush=new(){Text="使用选取的笔刷属性",AutoSize=true};
     private readonly ComboBox _brush=new(){Width=220,DropDownStyle=ComboBoxStyle.DropDownList};
-    private readonly Button _confirmBrush=new(){Text="更换笔刷 / 属性",AutoSize=true};
+    // Direct: CSP already shows the target brush, so the panel is framed on a fresh screenshot at once.
+    private readonly Button _confirmBrush=new(){Text="截图笔刷属性面板…",AutoSize=true};
+    // The frozen canvas covers CSP; switching brushes first needs it out of the way.
+    private readonly Button _switchBrush=new(){Text="先去 CSP 换笔刷…",AutoSize=true};
     private readonly PictureBox _brushPreview=new(){Width=340,Height=180,SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.FromArgb(45,45,45),Visible=false};
     private readonly Label _help=new(){Dock=DockStyle.Top,Height=105,Padding=new(8)};
     private readonly FlowLayoutPanel _modeBar=new(){Dock=DockStyle.Top,AutoSize=true,Padding=new(6)};
@@ -79,7 +83,17 @@ internal sealed class EditingPanel : Form
     private readonly FlowLayoutPanel _brushCaptureBar=new(){Dock=DockStyle.Top,AutoSize=true,Padding=new(6),Visible=false};
     private readonly Button _captureBrush=new(){Text="截取并框选属性面板",AutoSize=true};
     private readonly Button _cancelBrush=new(){Text="返回画布选择",AutoSize=true};
-    private readonly TabPage _imagePage=new("2 · 脏矩阵图片"),_eventPage=new("3 · 整笔"),_modifyPage=new("修改"),_planPage=new("执行方案");
+    private readonly TabPage _imagePage=new("2 · 脏矩阵图片"),_eventPage=new("3 · 整笔"),_modifyPage=new("修改"),_planPage=new("执行方案"),_recyclePage=new("回收箱");
+    private readonly ListView _recycleList=new(){Dock=DockStyle.Fill,View=View.LargeIcon,MultiSelect=false,ShowItemToolTips=true};
+    private readonly ImageList _recycleThumbs=new(){ImageSize=new(96,96),ColorDepth=ColorDepth.Depth32Bit};
+    private readonly ListView _recycleProperties=new(){Dock=DockStyle.Fill,View=View.Details,FullRowSelect=true,HeaderStyle=ColumnHeaderStyle.Nonclickable};
+    private readonly Button _recycleCopy=new(){Text="复制图像到剪贴板",AutoSize=true,Enabled=false};
+    private readonly Button _recycleOpen=new(){Text="打开文件夹",AutoSize=true,Enabled=false};
+    private readonly Button _recycleRefresh=new(){Text="刷新",AutoSize=true};
+    private readonly Button _chooseRecycle=new(){Text="回收箱",AutoSize=true};
+    private SelectionProgressFrame? _progressFrame;
+    // Precise undo starts by itself once a region exists; set while that region waits for the boundary.
+    private bool _autoUndoPending;
     private readonly CheckBox _undoCapacity=new(){Text="预览撤销方案后确认 CSP 撤销容量",Height=64,Enabled=false};
     private readonly FlowLayoutPanel _tools=new(){Dock=DockStyle.Top,AutoSize=true,Padding=new(6)};
     private readonly FlowLayoutPanel _options=new(){Dock=DockStyle.Top,AutoSize=true,Padding=new(6),FlowDirection=FlowDirection.TopDown,WrapContents=false};
@@ -89,7 +103,10 @@ internal sealed class EditingPanel : Form
     {
         _host=host;_overlayFactory=overlayFactory??(model=>new EventSelectionOverlay(model));
         _host.SetProgressObserver(text=>{if(!IsDisposed&&IsHandleCreated)BeginInvoke(()=>
-        {if(_busy)_status.Text=text;else if(_preparing)_status.Text="画布已冻结，可以直接选范围。后台："+text+"（再次按 Alt+M 可取消）";});});
+        {
+            ReportProgress(text);
+            if(_busy)_status.Text=text;else if(_preparing)_status.Text=(_autoUndoPending?"选区已固定，编辑边界就绪后自动精确撤销。后台：":"画布已冻结，可以直接选范围。后台：")+text+"（再次按 Alt+M 可取消）";
+        });});
         Text="Memoline · 画布事件编辑";Size=new(470,850);MinimumSize=new(420,720);
         StartPosition=FormStartPosition.Manual;TopMost=true;KeyPreview=true;ShowInTaskbar=false;
         KeyDown+=(_,e)=>{if(e.KeyCode==Keys.Escape){if(_busy)_operation?.Cancel();else if(_choosingBrush)FinishBrushChoice();else CloseSelection();e.Handled=true;}};
@@ -99,14 +116,30 @@ internal sealed class EditingPanel : Form
         foreach(var (page,control) in new (TabPage,Control)[]{(_imagePage,_images),(_eventPage,_events),(_modifyPage,_options),(_planPage,_details)})
         {page.AutoScroll=true;page.Controls.Add(control);_tabs.TabPages.Add(page);}
         var numberRow=new FlowLayoutPanel{AutoSize=true};numberRow.Controls.AddRange([_numberEnabled,_property,_value]);
-        var brushRow=new FlowLayoutPanel{AutoSize=true};brushRow.Controls.AddRange([_changeBrush,_brush,_confirmBrush]);
-        _options.Controls.AddRange([_delete,numberRow,brushRow,_brushPreview]);
+        var brushRow=new FlowLayoutPanel{AutoSize=true};brushRow.Controls.AddRange([_changeBrush,_brush]);
+        var brushCaptureRow=new FlowLayoutPanel{AutoSize=true};brushCaptureRow.Controls.AddRange([_confirmBrush,_switchBrush]);
+        _options.Controls.AddRange([_delete,numberRow,brushRow,brushCaptureRow,_brushPreview]);
+        _recycleList.LargeImageList=_recycleThumbs;
+        _recycleProperties.Columns.Add("属性",130);_recycleProperties.Columns.Add("值",260);
+        var recycleButtons=new FlowLayoutPanel{Dock=DockStyle.Bottom,AutoSize=true};recycleButtons.Controls.AddRange([_recycleCopy,_recycleOpen,_recycleRefresh]);
+        var recycleSplit=new SplitContainer{Dock=DockStyle.Fill,Orientation=Orientation.Horizontal};
+        recycleSplit.Panel1.Controls.Add(_recycleList);recycleSplit.Panel2.Controls.Add(_recycleProperties);
+        _recyclePage.Controls.Add(recycleSplit);_recyclePage.Controls.Add(recycleButtons);
+        _recycleList.SelectedIndexChanged+=(_,_)=>ShowRecycleEntry();_recycleRefresh.Click+=(_,_)=>RefreshRecycle();
+        _recycleCopy.Click+=(_,_)=>CopyRecycledImage();
+        _recycleOpen.Click+=(_,_)=>{if(SelectedRecycleEntry() is { } entry)System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe",entry.Directory){UseShellExecute=true});};
+        _tabs.Selected+=(_,e)=>
+        {
+            if(e.TabPage==_recyclePage)RefreshRecycle();
+            // Choosing what to change no longer needs the frozen canvas; CSP must be usable to pick a brush.
+            else if(e.TabPage==_modifyPage)Unfreeze();
+        };
         _undoCapacity.Visible=false;_details.Dock=DockStyle.None;_planPage.Controls.Add(_undoCapacity);
         void LayoutPlan(){int width=_planPage.ClientSize.Width,height=_planPage.ClientSize.Height,confirmation=_undoCapacity.Visible?_undoCapacity.Height:0;
             _details.Bounds=new(0,0,width,Math.Max(1,height-confirmation));_undoCapacity.Bounds=new(0,Math.Max(0,height-confirmation),width,64);}
         _planPage.Layout+=(_,_)=>LayoutPlan();_undoCapacity.VisibleChanged+=(_,_)=>LayoutPlan();
         _actions.Controls.AddRange([_refresh,_eventPlan,_undoPlan,_execute,_cancel,_close]);
-        _modeBar.Controls.AddRange([_chooseUndo,_chooseEdit]);_brushCaptureBar.Controls.AddRange([_captureBrush,_cancelBrush]);
+        _modeBar.Controls.AddRange([_chooseUndo,_chooseEdit,_chooseRecycle]);_chooseRecycle.Click+=(_,_)=>ShowRecycleOnly();_brushCaptureBar.Controls.AddRange([_captureBrush,_cancelBrush]);
         foreach(var control in new Control[]{_tabs,_summary,_tools,_brushCaptureBar,_modeBar,_help,_status,_actions}){control.Dock=DockStyle.None;Controls.Add(control);}
         _status.TextChanged+=(_,_)=>PerformLayout();_status.FontChanged+=(_,_)=>PerformLayout();
         _chooseEdit.Click+=async(_,_)=>await SelectModeAsync(EditKind.EventEditing);_chooseUndo.Click+=async(_,_)=>await SelectModeAsync(EditKind.PreciseUndo);
@@ -114,7 +147,8 @@ internal sealed class EditingPanel : Form
         _refresh.Click+=async(_,_)=>await BeginAsync();_close.Click+=(_,_)=>CloseSelection();
         _eventPlan.Click+=async(_,_)=>await PlanAsync(false);_undoPlan.Click+=async(_,_)=>await PlanAsync(true);
         _execute.Click+=async(_,_)=>await ExecuteAsync();_cancel.Click+=(_,_)=>_operation?.Cancel();
-        _images.SelectedIndexChanged+=(_,_)=>ChooseImage();_newRegion.Click+=(_,_)=>BeginRegion();
+        _images.SelectedIndexChanged+=(_,_)=>ChooseImage();
+        _newRegion.Click+=async(_,_)=>{if(_overlay is null&&!_busy&&!_preparing)await BeginAsync();else BeginRegion();};
         _rectangle.CheckedChanged+=(_,_)=>{if(_rectangle.Checked)BeginRegion();};
         _lasso.CheckedChanged+=(_,_)=>{if(_lasso.Checked)BeginRegion();};
         _clear.Click+=(_,_)=>_interaction?.SetSelectedEvents([]);
@@ -124,7 +158,7 @@ internal sealed class EditingPanel : Form
         _property.SelectedIndexChanged+=(_,_)=>{InvalidatePlan();if(_parameterAvailability?.Numbers.FirstOrDefault(n=>n.Key==_property.Text) is { } number)
             _value.Value=(decimal)Math.Clamp(number.RecordedValue,(double)_value.Minimum,(double)_value.Maximum);};_value.ValueChanged+=(_,_)=>InvalidatePlan();
         _brush.SelectedIndexChanged+=(_,_)=>{InvalidatePlan();UpdateParameters();};
-        _confirmBrush.Click+=(_,_)=>BeginBrushChoice();_undoCapacity.CheckedChanged+=(_,_)=>UpdateExecutionAvailability();
+        _confirmBrush.Click+=async(_,_)=>await ConfirmBrushAsync();_switchBrush.Click+=(_,_)=>BeginBrushChoice();_undoCapacity.CheckedChanged+=(_,_)=>UpdateExecutionAvailability();
         FormClosing+=(_,e)=>{e.Cancel=true;if(_busy)_operation?.Cancel();else CloseSelection();};
         ShowWelcome();UpdateOptions();UpdateSummary();
     }
@@ -189,7 +223,7 @@ internal sealed class EditingPanel : Form
         _help.Text="选择本次要使用的功能。\r\n精确撤销：在当前图层选区，按历史路径恢复。\r\n事件编辑：选脏矩阵图片，再扫选整笔修改。";
         _tabs.Visible=_tools.Visible=_summary.Visible=false;_modeBar.Visible=true;
         _refresh.Visible=_eventPlan.Visible=_undoPlan.Visible=_execute.Visible=false;
-        _cancel.Visible=false;_chooseEdit.Enabled=_chooseUndo.Enabled=_host.IsRecording;
+        _cancel.Visible=false;_chooseEdit.Enabled=_chooseUndo.Enabled=_host.IsRecording;_chooseRecycle.Enabled=_host.RecycleRoot is not null;
         _status.Text=_host.IsRecording?"按下功能按钮后冻结 CSP 画布。":"当前没有正在录制的会话。";
     }
     private async Task SelectModeAsync(EditKind mode)
@@ -204,11 +238,11 @@ internal sealed class EditingPanel : Form
         bool undo=_mode==EditKind.PreciseUndo;
         _help.Height=undo?85:125;_summary.Height=undo?70:52;_modeBar.Visible=true;
         MinimumSize=new(420,undo?680:720);Size=new(470,850);_tabs.TabPages.Clear();
-        if(!undo)_tabs.TabPages.AddRange([_imagePage,_eventPage,_modifyPage]);_tabs.TabPages.Add(_planPage);
-        _help.Text=undo?"在冻结的 CSP 画布上框选或圈选范围。\r\n只处理当前用户所在图层。\r\n预览按路径计算的笔画及闭包，再确认撤销容量。":
+        if(!undo)_tabs.TabPages.AddRange([_imagePage,_recyclePage,_eventPage,_modifyPage,_planPage]);else _tabs.TabPages.AddRange([_planPage,_recyclePage]);
+        _help.Text=undo?"在冻结的 CSP 画布上框选或圈选范围。\r\n只处理当前用户所在图层，松手即自动精确撤销。\r\n原图层存入「回收箱」。":
             "1 · 在冻结的 CSP 画布上框选或圈选范围。\r\n2 · 从跨层图片列表选择一张脏矩阵。\r\n3 · 沿附近白线扫选整笔。\r\n    更换笔刷，或让这些事件不再发生。";
         _tabs.Visible=_tools.Visible=_summary.Visible=true;_refresh.Visible=_execute.Visible=true;
-        _eventPlan.Visible=!undo;_undoPlan.Visible=undo;_clear.Visible=!undo;
+        _eventPlan.Visible=!undo;_undoPlan.Visible=false;_execute.Visible=!undo;_clear.Visible=!undo;
     }
     private async Task BeginAsync()
     {
@@ -248,6 +282,12 @@ internal sealed class EditingPanel : Form
             _host.ReportEditingError("无法进入画布选择",error);_status.Text="无法进入画布选择："+error.Message;CloseOverlay();_interaction=null;_shown=null;
         }
         finally{if(!IsDisposed&&attempt==_beginAttempt){Preparing(false);UpdateSummary();Show();if(!KeepCspForeground)Activate();}}
+        if(!IsDisposed&&attempt==_beginAttempt&&_autoUndoPending)
+        {
+            _autoUndoPending=false;
+            if(_shown is not null&&_interaction?.RegionSelection is not null)await AutoPreciseUndoAsync();
+            else CloseProgressFrame();
+        }
     }
     private void Preparing(bool preparing)
     {
@@ -273,7 +313,7 @@ internal sealed class EditingPanel : Form
     {
         _mode??=EditKind.EventEditing;ConfigureWorkflow();
         _interaction=overlay.Model;_overlay=overlay;overlay.KeepTargetForeground=_preparing;_preciseSummary=null;
-        _interaction.RegionChanged+=(_,_)=>RefreshCandidates();_interaction.SelectionChanged+=(_,_)=>SelectionChanged();
+        _interaction.RegionChanged+=(_,_)=>{RefreshCandidates();RequestAutoUndo();};_interaction.SelectionChanged+=(_,_)=>SelectionChanged();
         _overlay.TargetInvalidated+=(_,_)=>{if(_preparing)_operation?.Cancel();InvalidatePlan();CloseOverlay();_interaction=null;_shown=null;_status.Text="CSP 窗口已移动或关闭，请重新冻结画布后选择。";};
         _overlay.EscapeRequested+=(_,_)=>CloseSelection();
     }
@@ -290,7 +330,7 @@ internal sealed class EditingPanel : Form
     {
         if(_overlay is null)return;
         InvalidatePlan();_overlay.ClearSelection();_overlay.Mode=_lasso.Checked?EventSelectionMode.RegionLasso:EventSelectionMode.RegionRectangle;
-        _tabs.SelectedIndex=0;_status.Text=_mode==EditKind.PreciseUndo?"在冻结画布上选范围，然后预览当前图层的精确撤销方案。":"在冻结画布上选范围，然后从跨层图片列表选择一张脏矩阵。";
+        _tabs.SelectedIndex=0;_status.Text=_mode==EditKind.PreciseUndo?"在冻结画布上选范围，松手后立即对当前图层精确撤销。":"在冻结画布上选范围，然后从跨层图片列表选择一张脏矩阵。";
     }
     private void RefreshCandidates()
     {
@@ -353,12 +393,12 @@ internal sealed class EditingPanel : Form
             _preciseSummary=null;
             if(_interaction.RegionSelection is { } region&&_shown is { } session)
             {
-                var undo=PreciseUndoSelector.Select(session.Index,session.CurrentLayer,region);
+                var undo=session.SelectPreciseUndo(region);
                 if(undo.IsValid)
                 {
-                    var layer=session.Index.Layers[session.CurrentLayer!.Value];
-                    string name=CanvasAffineTransform.Text(CanvasAffineTransform.Get(layer.Packets.LastOrDefault()?.NowDescriptor??default,"layer"),"name")??layer.Layer.Uuid;
-                    _preciseSummary=$"当前层「{name}」\r\n基础 {undo.BaseCount} 笔 + 闭包 {undo.ClosureCount} 笔，共 {undo.Selected.Count} 笔。";
+                    string name=session.LayerName(undo.CurrentLayer!.Value);
+                    _preciseSummary=(undo.CurrentLayer==session.CurrentLayer?$"当前层「{name}」":$"当前层在选区内没有笔画，改为最近的「{name}」")+
+                        $"\r\n基础 {undo.BaseCount} 笔 + 闭包 {undo.ClosureCount} 笔，共 {undo.Selected.Count} 笔。";
                     _overlay?.ShowPreciseUndo(undo.Selected.Select(s=>s.Key));
                 }
                 else _preciseSummary=string.Join("；",undo.Issues.Select(issue=>issue.Message));
@@ -383,7 +423,7 @@ internal sealed class EditingPanel : Form
         _numberEnabled.Enabled=_changeBrush.Enabled=!_busy&&!_delete.Checked;
         _property.Enabled=_value.Enabled=!_busy&&!_delete.Checked&&_numberEnabled.Checked;
         _brush.Enabled=false;
-        _confirmBrush.Enabled=!_busy&&!_preparing&&_interaction?.SelectedEvents.Count>0;
+        _confirmBrush.Enabled=_switchBrush.Enabled=!_busy&&!_preparing&&_interaction?.SelectedEvents.Count>0;
     }
     private void UpdateParameters()
     {
@@ -421,16 +461,27 @@ internal sealed class EditingPanel : Form
         if(_interaction is not { } model)return;
         try
         {
-            Hide();using var picker=_overlayFactory(model);picker.Mode=EventSelectionMode.BrushPanelRectangle;
+            if(model.SelectedEvents.Count==0){_status.Text="请先扫选要更换笔刷的整笔事件。";return;}
+            // The new picker freezes the screen again: the frozen canvas must not cover CSP's panels.
+            Hide();Owner=null;_overlay?.Hide();
+            await Task.Delay(150); // Let the compositor drop both windows before the screen is frozen.
+            using var picker=_overlayFactory(model);picker.Mode=EventSelectionMode.BrushPanelRectangle;
             Rectangle region=default;Bitmap? screenshot=null;
             picker.BrushPanelSelected+=rectangle=>{region=rectangle;screenshot=picker.CropScreenRegion(rectangle);picker.DialogResult=DialogResult.OK;picker.Close();};
             picker.EscapeRequested+=(_,_)=>{picker.DialogResult=DialogResult.Cancel;picker.Close();};
             picker.TargetInvalidated+=(_,_)=>{picker.DialogResult=DialogResult.Cancel;picker.Close();};
             if(picker.ShowDialog()==DialogResult.OK&&screenshot is not null)
             {using(screenshot)await AcceptBrushPanelAsync(region,screenshot);}
-            else{_status.Text="已取消笔刷属性截图选择。";FinishBrushChoice();}
+            else{_status.Text="已取消笔刷属性截图选择。";EndBrushPick();}
         }
-        catch(Exception error){_status.Text="无法截取笔刷属性面板："+error.Message;FinishBrushChoice();}
+        catch(Exception error){_status.Text="无法截取笔刷属性面板："+error.Message;EndBrushPick();}
+    }
+    // The direct path never entered the brush-choice layout, so it must not restore that layout's saved bounds.
+    private void EndBrushPick()
+    {
+        if(IsDisposed)return;
+        if(_choosingBrush)FinishBrushChoice();
+        else{if(_overlay is not null){_overlay.Show();Owner=_overlay;}Show();if(!KeepCspForeground)Activate();}
     }
     private async Task AcceptBrushPanelAsync(Rectangle region,Bitmap screenshot)
     {
@@ -439,9 +490,9 @@ internal sealed class EditingPanel : Form
         {
             Owner=null;_overlay?.Hide();_status.Text="正在识别所选截图范围内的笔刷属性…";
             var evidence=await _host.CaptureBrushPanelAsync(region,_operation.Token);
-            var current=await _host.ReadCurrentCanvasViewAsync(_operation.Token);
-            var transform=new CanvasAffineTransform(current,_shown!.LiveView.SessionId,_interaction!.Transform.CanvasSize);
-            if(new PointF[]{new(0,0),new(transform.CanvasSize.Width,0),new(0,transform.CanvasSize.Height)}.Any(point=>
+            // A frozen selection must still match CSP's view; once unfrozen the canvas-space selection does not depend on it.
+            if(_overlay is not null&&await _host.ReadCurrentCanvasViewAsync(_operation.Token) is var current&&
+               new CanvasAffineTransform(current,_shown!.LiveView.SessionId,_interaction!.Transform.CanvasSize) is var transform&&new PointF[]{new(0,0),new(transform.CanvasSize.Width,0),new(0,transform.CanvasSize.Height)}.Any(point=>
                 {var a=transform.CanvasToScreen(point);var b=_interaction.Transform.CanvasToScreen(point);return Math.Abs(a.X-b.X)>.25||Math.Abs(a.Y-b.Y)>.25;}))
             {CloseOverlay();_interaction=null;_shown=null;throw new InvalidDataException("选择笔刷期间画布视图发生变化，请重新冻结画布并选择。");}
             var brush=BrushSnapshot.Parse(evidence,live:true)??throw new InvalidDataException("截图内未确认完整笔刷属性。");
@@ -451,7 +502,7 @@ internal sealed class EditingPanel : Form
             UpdateParameters();_status.Text=$"已从所选属性截图确认「{brush.Name}」。执行时仍会逐项读回校验。";
         }
         catch(Exception error){_status.Text="无法采用笔刷属性："+error.Message;}
-        finally{if(!IsDisposed){Busy(false);if(_choosingBrush)FinishBrushChoice();else{if(_overlay is not null){_overlay.Show();Owner=_overlay;}Show();if(!KeepCspForeground)Activate();}}}
+        finally{if(!IsDisposed){Busy(false);EndBrushPick();}}
     }
     private void UpdateExecutionAvailability()=>_execute.Enabled=!_busy&&!_preparing&&_pending is { } request &&
         (request.Kind!=EditKind.PreciseUndo||UndoCapacityPolicy.Check(request.Changes.Count,_shown?.VerifiedUndoCapacity,_undoCapacity.Checked).Allowed);
@@ -476,17 +527,16 @@ internal sealed class EditingPanel : Form
             IReadOnlyDictionary<EditableStrokeKey,EventChange> changes;string detail;
             if(preciseUndo)
             {
-                var undo=PreciseUndoSelector.Select(session.Index,session.CurrentLayer,selection);
+                var undo=session.SelectPreciseUndo(selection);
                 if(!undo.IsValid)throw new InvalidOperationException(string.Join("；",undo.Issues.Select(i=>i.Message)));
                 changes=undo.Selected.ToDictionary(s=>s.Key,_=>new EventChange(Delete:true));
-                var current=session.Index.Layers[session.CurrentLayer!.Value];
-                string name=CanvasAffineTransform.Text(CanvasAffineTransform.Get(current.Packets.LastOrDefault()?.NowDescriptor??default,"layer"),"name")??current.Layer.Uuid;
-                detail=$"当前层「{name}」撤销：基础 {undo.BaseCount} 笔 + 叠放闭包 {undo.ClosureCount} 笔 = {undo.Selected.Count} 笔。";
-                _overlay!.ShowPreciseUndo(undo.Selected.Select(s=>s.Key));
+                string name=session.LayerName(undo.CurrentLayer!.Value);
+                detail=$"图层「{name}」撤销：基础 {undo.BaseCount} 笔 + 叠放闭包 {undo.ClosureCount} 笔 = {undo.Selected.Count} 笔。";
+                _overlay?.ShowPreciseUndo(undo.Selected.Select(s=>s.Key));
             }
             else
             {
-                _overlay!.ShowEventSelection();
+                _overlay?.ShowEventSelection();
                 if(model.ChosenImage is null||model.SelectedEvents.Count==0)throw new InvalidOperationException("请选择单张脏矩阵，然后在画布上扫选整笔。");
                 if(!_delete.Checked&&!_numberEnabled.Checked&&!_changeBrush.Checked)throw new InvalidOperationException("请选择数字参数修改或更换子工具。");
                 if(!_delete.Checked&&_numberEnabled.Checked&&_property.SelectedItem is null)throw new InvalidOperationException("所选笔画没有共同可修改的数字参数。");
@@ -538,7 +588,11 @@ internal sealed class EditingPanel : Form
     private async Task ExecuteAsync()
     {
         if(_pending is not { } request||!_execute.Enabled)return;
-        bool capacityConfirmed=_undoCapacity.Checked;Busy(true);_operation?.Dispose();_operation=new();var bounds=Bounds;var minimum=MinimumSize;
+        await RunExecutionAsync(request,_undoCapacity.Checked);
+    }
+    private async Task RunExecutionAsync(EditRequest request,bool capacityConfirmed)
+    {
+        Busy(true);_operation?.Dispose();_operation=new();var bounds=Bounds;var minimum=MinimumSize;
         try
         {
             Owner=null;_overlay?.Hide();_tabs.Visible=_tools.Visible=_summary.Visible=_options.Visible=false;
@@ -546,18 +600,113 @@ internal sealed class EditingPanel : Form
             MinimumSize=new(340,140);Size=new(620,230);var area=Screen.FromPoint(Cursor.Position).WorkingArea;Location=new(area.Left,area.Bottom-Height);Show();BringToFront();
             _status.Text="正在复现。再次按 Alt+M 可取消；此时面板不接收点击，以免挡住 CSP。";
             var result=await _host.ExecuteEditAsync(request,capacityConfirmed,_operation.Token);
-            _status.Text=result.Status is ReconstructionStatus.Executed or ReconstructionStatus.PixelVerified?
-                "已完成，正常录制已恢复。下一次编辑请重新冻结画布。":"复现已停止："+string.Join("；",result.Issues.Select(i=>i.Message));
+            bool done=result.Status is ReconstructionStatus.Executed or ReconstructionStatus.PixelVerified;
+            if(done)_progressFrame?.Complete();
+            _status.Text=done?"已完成，原图层已存入「回收箱」，正常录制已恢复。下一次编辑请再按 Alt+M。":"复现已停止："+string.Join("；",result.Issues.Select(i=>i.Message));
         }
         catch(OperationCanceledException){_status.Text="已取消复现，正常录制已恢复。";}
         catch(Exception error){_status.Text="编辑失败："+error.Message;}
         finally
         {
+            if(_progressFrame is not null){await Task.Delay(250);CloseProgressFrame();}
             CloseOverlay();_shown=null;_interaction=null;InvalidatePlan();
             if(!IsDisposed){MinimumSize=minimum;ConfigureWorkflow();Bounds=bounds;_options.Visible=true;Busy(false);Show();if(!KeepCspForeground)Activate();}
         }
     }
     private void CloseOverlay(){Owner=null;_overlay?.Dispose();_overlay=null;ApplyStyles();}
+    /// <summary>Keeps the chosen strokes and plan inputs but gives CSP back to the user (to pick a brush).</summary>
+    private void Unfreeze()
+    {
+        if(_overlay is null||_busy||_preparing||_mode!=EditKind.EventEditing)return;
+        CloseOverlay();UpdateCaptureExclusion();
+        _status.Text=_interaction?.SelectedEvents.Count>0
+            ?$"已解冻 CSP：可在 CSP 中切换笔刷和属性。已选的 {_interaction.SelectedEvents.Count} 笔保留；需要改选请点「重选范围」重新冻结。"
+            :"已解冻 CSP。尚未扫选整笔；请点「重选范围」重新冻结后再选。";
+    }
+    private void RequestAutoUndo()
+    {
+        if(_mode!=EditKind.PreciseUndo||_busy||_interaction?.RegionSelection is null||_interaction.ScreenPolygon is not { Count: >=3 } polygon)return;
+        if(_overlay is not null)_overlay.InteractionEnabled=false; // The box is fixed from here on.
+        _progressFrame??=new SelectionProgressFrame(polygon);_progressFrame.Show();_progressFrame.Progress=.03;
+        if(_preparing||_shown is null){_autoUndoPending=true;_status.Text="选区已固定，编辑边界就绪后自动精确撤销…（再次按 Alt+M 可取消）";return;}
+        BeginInvoke(async()=>await AutoPreciseUndoAsync());
+    }
+    private async Task AutoPreciseUndoAsync()
+    {
+        if(_busy||_shown is not { } session||_interaction?.RegionSelection is not { } region){CloseProgressFrame();return;}
+        var undo=session.SelectPreciseUndo(region.Clone());
+        if(!undo.IsValid)
+        {
+            CloseProgressFrame();if(_overlay is not null)_overlay.InteractionEnabled=true;BeginRegion();
+            _status.Text="无法精确撤销："+string.Join("；",undo.Issues.Select(i=>i.Message))+" 请重新框选。";return;
+        }
+        // The target is the layer the selection found strokes on: the current one, or the nearest that has some.
+        var request=new EditRequest(EditKind.PreciseUndo,undo.CurrentLayer,region.Clone(),undo.Selected.ToDictionary(s=>s.Key,_=>new EventChange(Delete:true)));
+        if(undo.CurrentLayer!=session.CurrentLayer)_status.Text=$"当前图层在选区内没有笔画，精确撤销最近的图层「{session.LayerName(undo.CurrentLayer!.Value)}」…";
+        if(_progressFrame is not null)_progressFrame.Progress=.08;
+        // No preview and no undo-capacity confirmation: the user chose to run precise undo directly.
+        await RunExecutionAsync(request,capacityConfirmed:true);
+    }
+    private void ReportProgress(string text)
+    {
+        if(_progressFrame is not { } frame)return;
+        var replay=System.Text.RegularExpressions.Regex.Match(text,@"重放事件 (\d+)/(\d+)");
+        if(replay.Success&&int.Parse(replay.Groups[2].Value) is > 0 and var total)frame.Progress=.55+.35*int.Parse(replay.Groups[1].Value)/total;
+        else if(text.Contains("粘贴"))frame.Progress=.3;
+        else if(text.Contains("保存")||text.Contains("切换图层"))frame.Progress=Math.Max(frame.Progress,.15);
+    }
+    private void CloseProgressFrame(){_progressFrame?.Close();_progressFrame?.Dispose();_progressFrame=null;}
+    private void ShowRecycleOnly()
+    {
+        _mode=null;CloseOverlay();_tabs.TabPages.Clear();_tabs.TabPages.Add(_recyclePage);
+        _tabs.Visible=true;_tools.Visible=_summary.Visible=false;MinimumSize=new(420,560);Size=new(470,760);
+        _help.Text="事件编辑和精确撤销替换掉的原图层。\r\n选中一项查看图层属性；复制图像后在 CSP 按 Ctrl+V，会粘贴到原位置。";
+        _refresh.Visible=_eventPlan.Visible=_undoPlan.Visible=_execute.Visible=false;RefreshRecycle();Show();
+    }
+    private void RefreshRecycle()
+    {
+        _recycleList.Items.Clear();foreach(Image image in _recycleThumbs.Images)image.Dispose();_recycleThumbs.Images.Clear();_recycleProperties.Items.Clear();
+        _recycleCopy.Enabled=_recycleOpen.Enabled=false;
+        if(_host.RecycleRoot is not { } root)return;
+        foreach(var entry in RecycleBin.List(root))
+        {
+            int index=-1;
+            try
+            {
+                if(File.Exists(entry.ImagePath))
+                {
+                    using var stream=File.OpenRead(entry.ImagePath);using var full=Image.FromStream(stream,false,false);
+                    var thumb=new Bitmap(96,96);using(var g=Graphics.FromImage(thumb))
+                    {
+                        for(int y=0;y<96;y+=8)for(int x=0;x<96;x+=8){using var b=new SolidBrush(((x+y)/8)%2==0?Color.White:Color.FromArgb(225,225,225));g.FillRectangle(b,x,y,8,8);}
+                        float scale=Math.Min(96f/full.Width,96f/full.Height);g.DrawImage(full,(96-full.Width*scale)/2,(96-full.Height*scale)/2,full.Width*scale,full.Height*scale);
+                    }
+                    _recycleThumbs.Images.Add(thumb);index=_recycleThumbs.Images.Count-1;
+                }
+            }
+            catch(Exception error)when(error is IOException or ArgumentException or OutOfMemoryException){}
+            _recycleList.Items.Add(new ListViewItem($"{entry.LayerName}\r\n{entry.Created:MM-dd HH:mm} · {entry.KindDisplay}"){Tag=entry,ImageIndex=index,ToolTipText=entry.OutcomeDisplay});
+        }
+    }
+    private RecycleEntry? SelectedRecycleEntry()=>_recycleList.SelectedItems.Count==1?_recycleList.SelectedItems[0].Tag as RecycleEntry:null;
+    private void ShowRecycleEntry()
+    {
+        _recycleProperties.Items.Clear();var entry=SelectedRecycleEntry();
+        _recycleCopy.Enabled=entry is not null&&File.Exists(entry.ImagePath);_recycleOpen.Enabled=entry is not null;
+        if(entry is null)return;
+        foreach(var (name,value) in RecycleBin.DescribeProperties(entry))_recycleProperties.Items.Add(new ListViewItem([name,value]));
+    }
+    private void CopyRecycledImage()
+    {
+        if(SelectedRecycleEntry() is not { } entry)return;
+        try
+        {
+            var image=RecycleBin.LoadImage(entry);
+            DirtyMatrixPaster.ClipboardImageCodec.SetImage(image.Width,image.Height,image.Bytes);
+            _status.Text=$"已复制「{entry.LayerName}」的完整画布图像。在 CSP 中按 Ctrl+V，会作为新图层粘贴在原位置。";
+        }
+        catch(Exception error){_status.Text="无法复制回收箱图像："+error.Message;}
+    }
     private void CloseSelection(){if(_preparing)_operation?.Cancel();CloseOverlay();_shown=null;_interaction=null;InvalidatePlan();Hide();}
     internal void RenderSmoke(string directory)
     {

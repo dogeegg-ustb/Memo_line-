@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <utility>
 
 namespace wb {
@@ -79,10 +80,11 @@ DetectionOutput WorkspaceBorderDetector::Detect(const DetectionInput& in) const 
     std::vector<BackgroundModel> accepted_models;
     std::vector<GrownBackground> accepted_grown;
     bool any_grown = false;
+    const BarrierThresholds coarse_barriers = ComputeBarrierThresholds(coarse_feat, work_grow, cfg_);
 
     for (size_t mi = 0; mi < models.size(); ++mi) {
       const auto& model = models[mi];
-      auto sim = BuildSimilarity(coarse_feat, model, work_grow, cfg_);
+      auto sim = BuildSimilarity(coarse_feat, model, work_grow, cfg_, coarse_barriers);
       GrownBackground grown;
       if (!GrowBackground(seeds, model.seed_ids, sim, work_grow, cfg_, grown)) continue;
       any_grown = true;
@@ -160,6 +162,7 @@ DetectionOutput WorkspaceBorderDetector::Detect(const DetectionInput& in) const 
     FeatureMaps full_feat = ExtractFeatures(full_bgr, cfg_, dpi_scale, &grow_roi);
     std::vector<GrownBackground> full_grown(accepted_models.size());
     std::vector<bool> grow_attempted(accepted_models.size(), false);
+    std::optional<BarrierThresholds> full_barriers;
     std::vector<Hypothesis> attempted;
     DetectionOutput first_failure;
     bool have_failure = false;
@@ -211,7 +214,8 @@ DetectionOutput WorkspaceBorderDetector::Detect(const DetectionInput& in) const 
       ImageU8* grown_ptr = nullptr;
       if (!grow_attempted[model_index]) {
         grow_attempted[model_index] = true;
-        auto sim = BuildSimilarity(full_feat, refine_model, grow_roi, cfg_);
+        if (!full_barriers) full_barriers = ComputeBarrierThresholds(full_feat, grow_roi, cfg_);
+        auto sim = BuildSimilarity(full_feat, refine_model, grow_roi, cfg_, *full_barriers);
         auto full_seeds = SampleBackgroundSeeds(full_feat, user_roi, cfg_, dpi_scale);
         // Coarse seed IDs do not identify the same samples at full resolution.
         std::vector<int> full_ids;

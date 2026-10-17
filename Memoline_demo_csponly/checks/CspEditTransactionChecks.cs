@@ -74,7 +74,8 @@ internal static class CspEditTransactionChecks
             catch (CspEditingException error)
             {
                 Check(error.Issue.Code == expected, "Failure code: " + error.Issue);
-                Check(!f.Actions.Calls.Contains("delete"), "Failure must preserve all unknown or uncommitted layers.");
+                Check(f.Actions.Deleted.All(u => f.Dimensions.Keys.Any(k => k.Uuid == u)),
+                    "Failure must preserve all unknown or uncommitted layers; only a replaced original can be gone.");
                 Check(f.Actions.Calls.Contains("release") && f.Actions.Calls.Contains("end:failed"), "Failure must release inputs and end native transaction as failed.");
                 Check(!f.Actions.CaptureRequestsPaused && f.Actions.Calls.Contains("coordinator:release"), "Failure must restore capture pause and release its coordinator.");
                 return error;
@@ -96,12 +97,17 @@ internal static class CspEditTransactionChecks
                 "Flush passes concentrated replay overrides and full samples in appendId order.");
             var final = await f.Transaction.InstallReproductionLayerAsync(Original, actual, CancellationToken.None);
             await f.Transaction.CompleteAsync(CancellationToken.None);
-            Check(final.Bytes.AsSpan().SequenceEqual(actual.Bytes) && f.Actions.Layers.Count == 2 && f.Actions.Baselines.Count == 1,
+            Check(final.Bytes.AsSpan().SequenceEqual(actual.Bytes) && f.Actions.Layers.Count == 1 && f.Actions.Baselines.Count == 1,
                 "Final F is retained and its actual exported PNG is registered as a baseline.");
+            Check(f.Actions.Layers.Single().Uuid != Original.Uuid && f.Actions.Deleted.Last() == Original.Uuid &&
+                  f.Actions.Replacements.SequenceEqual([(Original.Uuid, f.Actions.Layers.Single().Uuid)]),
+                "Final F replaces the original: the original is deleted and F is reported as standing for it.");
             var journal = EditJournal.Recover(f.Directory);
             Check(journal.ActiveTransactionId is null && journal.HasReplayed && journal.Records.Last().Data.GetProperty("outcome").GetString() == "Executed",
                 "One transaction finishes with durable replay evidence and Executed outcome.");
             Check(journal.Records.FindKind("checkpoint") < journal.Records.FindKind("workLayerDeleted") &&
+                  journal.Records.FindKind("workLayerDeleted") < journal.Records.FindKind("originalDeleted") &&
+                  journal.Records.FindKind("originalDeleted") < journal.Records.FindKind("reproductionInstalled") &&
                   journal.Records.FindKind("reproductionInstalled") < journal.Records.FindKind("transactionEnded"),
                 "Journal actions follow checkpoint/delete and final/end ordering.");
             Check(f.Actions.Calls.IndexOf("begin") < f.Actions.Calls.IndexOf("pause:True") &&
@@ -116,8 +122,11 @@ internal static class CspEditTransactionChecks
             await f.Transaction.CompleteAsync(CancellationToken.None);
             Check(f.Actions.Replays.Single().Mode == ReplayMode.Discrete && f.Actions.Replays.Single().Events.All(e => e.Change is null),
                 "Precise undo replays original parameters discretely on final F.");
-            Check(final.Bytes[0] == 90 && f.Actions.Calls.All(c => c != "delete") && f.Actions.Baselines.Single().Png.SequenceEqual(f.Actions.LastExport!.Png),
+            Check(final.Bytes[0] == 90 && f.Actions.Baselines.Single().Png.SequenceEqual(f.Actions.LastExport!.Png),
                 "Discrete final capture, not the pre-replay seed, is retained and registered.");
+            Check(f.Actions.Deleted.SequenceEqual([Original.Uuid]) && !f.Actions.Calls.Contains("hide") &&
+                  f.Actions.Calls.IndexOf("delete") < f.Actions.Calls.IndexOf("replay:Discrete"),
+                "The original is deleted, never hidden first, before the undone strokes replay: they stay on top of CSP's undo stack.");
         }
         await using (var f = Create("discrete-reverted-first", discrete: true))
         {
@@ -173,6 +182,8 @@ internal static class CspEditTransactionChecks
             await f.Transaction.CompleteAsync(CancellationToken.None);
             Check(f.Actions.Baselines.Count == 2 && f.Actions.Calls.Count(c => c == "begin") == 1 && f.Actions.Calls.Count(c => c == "end:executed") == 1,
                 "A multi-layer request holds one native transaction and records both hidden original UUIDs.");
+            Check(f.Actions.Replacements.Count == 2 && f.Actions.Layers.Count == 2 && f.Actions.Layers.All(l => l.Uuid.StartsWith("new-", StringComparison.Ordinal)),
+                "Each original of a multi-layer request is replaced by its own reproduction.");
         }
         await using(var f=Create("multi-layer-incomplete",twoLayers:true))
         {
@@ -202,7 +213,7 @@ internal static class CspEditTransactionChecks
             await f.Transaction.CompleteAsync(CancellationToken.None);
             Check(f.Actions.Calls.Count(c => c == "save:refresh") >= 2,
                 "Retries after a stale save must ask for a new save rather than the remembered inspection.");
-            Check(f.Actions.Layers.Count == 2 && f.Actions.Calls.Contains("end:executed"),
+            Check(f.Actions.Layers.Count == 1 && f.Actions.Calls.Contains("end:executed"),
                 "A save that still shows the document before a paste or delete is retried instead of failing the structure check.");
         }
         await using (var f = Create("paste-multiple"))
@@ -211,6 +222,25 @@ internal static class CspEditTransactionChecks
             await f.Transaction.BeginAsync(CancellationToken.None);
             await Fails(f, PlanIssueCode.LayerIdentityUnconfirmed, async () => await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None));
             Check(!f.Actions.Calls.Any(c => c.StartsWith("export:", StringComparison.Ordinal)), "Ambiguous paste structure must stop before exporting an assumed T.");
+        }
+        await using (var f = Create("paste-ignored-once"))
+        {
+            f.Actions.IgnorePastes = 1;
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
+            await f.Transaction.CompleteAsync(CancellationToken.None);
+            Check(f.Actions.Calls.Count(c => c == "paste") == 2 && f.Actions.Calls.Count(c => c == "clipboard") == 2 &&
+                f.Actions.Layers.Count == 1 && f.Actions.Statuses.Any(t => t.Contains("再次粘贴")),
+                "A paste CSP ignored (structure unchanged over every save) is rewritten to the clipboard and pasted once more.");
+        }
+        await using (var f = Create("paste-ignored"))
+        {
+            f.Actions.IgnorePastes = int.MaxValue;
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            var error = await Fails(f, PlanIssueCode.LayerIdentityUnconfirmed, async () => await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None));
+            Check(f.Actions.Calls.Count(c => c == "paste") == CspEditTransaction.PasteAttempts && error.Message.Contains("没有执行粘贴") &&
+                !f.Actions.Calls.Any(c => c.StartsWith("export:", StringComparison.Ordinal)),
+                "A paste CSP keeps ignoring is reported as such, not as a structure mismatch, and stops before any export.");
         }
         await using (var f = Create("changed-current"))
         {
@@ -275,7 +305,8 @@ internal static class CspEditTransactionChecks
             f.Actions.ThrowBaseline = true;
             await f.Transaction.BeginAsync(CancellationToken.None);
             await Fails(f, PlanIssueCode.CaptureMismatch, async () => await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None));
-            Check(f.Actions.Layers.Count == 2, "A final layer survives baseline-registration failure.");
+            Check(f.Actions.Layers.Count == 1 && f.Actions.Layers[0].Uuid.StartsWith("new-", StringComparison.Ordinal),
+                "A final layer survives baseline-registration failure.");
         }
         await using (var f = Create("shortcuts"))
         {
@@ -287,7 +318,8 @@ internal static class CspEditTransactionChecks
         {
             f.Actions.BadEyeEvidence = true;
             await f.Transaction.BeginAsync(CancellationToken.None);
-            await Fails(f, PlanIssueCode.LayerIdentityUnconfirmed, async () => await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None));
+            await Fails(f, PlanIssueCode.LayerIdentityUnconfirmed, async () =>
+                await f.Transaction.FlushAsync(Original, Seed(), [Stroke()], new Dictionary<LayerKey, ImageRgba>(), CancellationToken.None));
             Check(!f.Actions.Calls.Contains("paste"), "Eye fallback without same-frame selected-row evidence cannot paste.");
         }
         await using (var f = Create("partial-export"))
@@ -341,6 +373,8 @@ internal static class CspEditTransactionChecks
         internal readonly List<(ReplayMode Mode, IReadOnlyList<ReplayEvent> Events)> Replays = [];
         internal readonly List<IReadOnlyDictionary<LayerKey, ImageRgba>> ReferenceScenes = [];
         internal readonly List<LayerExportEvidence> Baselines = [];
+        internal readonly List<string> Deleted = [];
+        internal readonly List<(string Replaced, string Reproduction)> Replacements = [];
         private bool _paused;
         private string _current = Original.Uuid;
         private ImageRgba? _clipboard;
@@ -349,7 +383,8 @@ internal static class CspEditTransactionChecks
         internal bool PhysicalDuringReplay, ThrowEnd, ThrowRelease, BadEyeEvidence, ThrowBaseline;
         internal Action? DuringReplay;
         internal bool ShortcutsAvailable = true, FullCanvas = true, DeletionHadDurableCheckpoint;
-        internal int NewLayersOnPaste = 1, StaleSaves;
+        internal int NewLayersOnPaste = 1, StaleSaves, IgnorePastes;
+        internal readonly List<string> Statuses = [];
         private CspLayerEvidence[]? _stale;
         private int _staleLeft;
         internal LayerExportEvidence? LastExport;
@@ -388,7 +423,9 @@ internal static class CspEditTransactionChecks
         public Task SetClipboardImageAsync(ImageRgba image, CancellationToken token) { Calls.Add("clipboard"); _clipboard = image.Copy(); return Task.CompletedTask; }
         public Task PasteAsync(CancellationToken token)
         {
-            Calls.Add("paste"); Mutating(); int originalIndex = Layers.FindIndex(l => l.Uuid == _current);
+            Calls.Add("paste");
+            if (IgnorePastes > 0) { IgnorePastes--; return Task.CompletedTask; } // CSP dropped the shortcut.
+            Mutating(); int originalIndex = Layers.FindIndex(l => l.Uuid == _current);
             for (int n = 0; n < NewLayersOnPaste; n++)
             {
                 string uuid = "new-" + ++_pastes; var layer = new CspLayerEvidence(uuid, "Work " + _pastes, true, false, true);
@@ -413,11 +450,17 @@ internal static class CspEditTransactionChecks
         }
         public Task DeleteLayerAsync(CancellationToken token)
         {
-            Calls.Add("delete"); Mutating(); DeletionHadDurableCheckpoint = journal.Snapshot.LastCheckpoint?.WorkLayerUuid == _current;
-            Layers.RemoveAll(l => l.Uuid == _current); _current = Original.Uuid; return Task.CompletedTask;
+            Calls.Add("delete"); Mutating(); Deleted.Add(_current);
+            if (_current.StartsWith("new-", StringComparison.Ordinal))
+                DeletionHadDurableCheckpoint = journal.Snapshot.LastCheckpoint?.WorkLayerUuid == _current;
+            // CSP selects the layer that takes the deleted row, or the one above when it was the bottom row.
+            int index = Layers.FindIndex(l => l.Uuid == _current); Layers.RemoveAt(index);
+            _current = Layers[Math.Min(index, Layers.Count - 1)].Uuid; return Task.CompletedTask;
         }
         public Task RegisterBaselineAsync(LayerExportEvidence capture, CancellationToken token)
         { Calls.Add("baseline"); if (ThrowBaseline) throw new IOException("Baseline failed"); Baselines.Add(capture); return Task.CompletedTask; }
+        public void Status(string text) => Statuses.Add(text);
+        public void LayerReplaced(string replacedUuid, string reproductionUuid) => Replacements.Add((replacedUuid, reproductionUuid));
         public void ReleaseInputs() { Calls.Add("release"); if (ThrowRelease) throw new IOException("Release cleanup fault"); }
         private sealed class Lease(List<string> calls) : IAsyncDisposable
         { public ValueTask DisposeAsync() { calls.Add("coordinator:release"); return ValueTask.CompletedTask; } }
