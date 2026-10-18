@@ -17,9 +17,17 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
     private readonly Action<object> _notify;
     private readonly ILayerSaveGuardBackend? _backend;
     private readonly object _sync = new();
-    private sealed record Buffered(Input Input, bool SaveFirst, long Ticks, int Modifiers, bool ExactReplay);
+    private sealed record Buffered(Input Input, bool SaveFirst, long Ticks, int Modifiers, bool ExactReplay, bool SaveAfter = false);
     private sealed record SaveDiagnostic(Buffered Original, bool Controlled, string SaveId,
-        bool Released, long ReleasedTicks, long? DispatchedTicks, string? Error, RecorderClipSaveRequest? ExternalRequest = null);
+        bool Released, long ReleasedTicks, long? DispatchedTicks, string? Error, RecorderClipSaveRequest? ExternalRequest = null,
+        bool AfterOperation = false, string? Skipped = null);
+    // The save before a layer operation shows the document as it was; only a save after it shows a layer the
+    // operation created (still empty) or selected. It follows the release of the guarded left button or key,
+    // once CSP has had a moment to apply the operation, unless the click opened a menu or popup a save would disturb.
+    internal static readonly TimeSpan AfterOperationSettle = TimeSpan.FromMilliseconds(40);
+    private bool _awaitingLeftUp;
+    private int _awaitingKeyUp = -1;
+    private IReadOnlySet<nint>? _windowsBeforeOperation;
     private sealed record OneShotSave(RecorderClipSaveRequest Request, long Ticks, CancellationToken Cancellation,
         TaskCompletionSource<RecorderClipSaveResult> Completion);
     private OneShotSave? _oneShot;
@@ -267,11 +275,14 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
         {
             bool trigger = config.Controlled ? available && !_busy
                 : !modifier && down && !Held(91) && !Held(92) && config.Keys.Contains((vk,mods)) && available;
-            if (!trigger && !(config.Controlled && available && _busy) && !_blockedKeys.Contains(vk)) return false;
+            bool after = false;
+            if (!config.Controlled && !down && vk == _awaitingKeyUp) { after = available; _awaitingKeyUp = -1; }
+            if (!trigger && !after && !(config.Controlled && available && _busy) && !_blockedKeys.Contains(vk)) return false;
             if (down) _blockedKeys.Add(vk);
+            if (trigger && !config.Controlled) { _awaitingKeyUp = vk; _awaitingLeftUp = false; }
             var input = new Input { Type=1, Union=new() { Keyboard=new() { Vk=(ushort)vk, Scan=(ushort)scan,
                 Flags=(extended?1u:0u)|(down?0u:2u), Extra=WindowsInputHooks.RecorderInputTag } } };
-            return Buffer(input,trigger,config,mods,ticks);
+            return Buffer(input,trigger,config,mods,ticks,after);
         }
     }
 
@@ -292,12 +303,15 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
             bool trigger = config.Controlled ? available && !_busy
                 : click && available && x>=config.Region[0] && y>=config.Region[1] &&
                     x<config.Region[0]+config.Region[2] && y<config.Region[1]+config.Region[3];
+            bool after = false;
+            if (!config.Controlled && message==0x202 && _awaitingLeftUp) { after = available; _awaitingLeftUp = false; }
             // Automatic policy only holds a guarded button's continuation.
-            if (!trigger && !(config.Controlled && available && _busy) && !(message==0x200 && _blockedMouseButtons!=0) && (_blockedMouseButtons&button)==0) return false;
+            if (!trigger && !after && !(config.Controlled && available && _busy) && !(message==0x200 && _blockedMouseButtons!=0) && (_blockedMouseButtons&button)==0) return false;
             uint flags = message switch { 0x200=>1,0x201=>2,0x202=>4,0x204=>8,0x205=>16,
                 0x207=>32,0x208=>64,0x20B=>128,0x20C=>256,0x20A=>0x800,0x20E=>0x1000,_=>0 };
             if (flags==0) return false;
             if (click) _blockedMouseButtons|=button;
+            if (trigger && !config.Controlled) { _awaitingLeftUp = message==0x201; _awaitingKeyUp = -1; }
             int left=GetSystemMetric(76), top=GetSystemMetric(77);
             int width=GetSystemMetric(78), height=GetSystemMetric(79);
             var input = new Input { Type=0, Union=new() { Mouse=new() {
@@ -305,16 +319,16 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
                 Data=message is 0x20B or 0x20C ? data>>16
                     : message is 0x20A or 0x20E ? unchecked((uint)(int)(short)(data>>16)) : 0,
                 Flags=flags|1|0x8000|0x4000, Extra=WindowsInputHooks.RecorderInputTag } } };
-            return Buffer(input,trigger,config,0,ticks);
+            return Buffer(input,trigger,config,0,ticks,after);
         }
     }
 
-    private bool Buffer(Input input, bool trigger, Configuration config, int modifiers, long ticks)
+    private bool Buffer(Input input, bool trigger, Configuration config, int modifiers, long ticks, bool saveAfter = false)
     {
         lock (_sync)
         {
-            if (_closed || (!_busy && !trigger)) return false;
-            _pending.Add(new(input,trigger,ticks,modifiers,config.Controlled));
+            if (_closed || (!_busy && !trigger && !saveAfter)) return false;
+            _pending.Add(new(input,trigger,ticks,modifiers,config.Controlled,saveAfter));
             if (!_busy)
             {
                 _busy=true;
@@ -381,6 +395,8 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
                 if (_pending.Count==0) { _busy=false; _blockedKeys.Clear(); _blockedMouseButtons=0; return; }
                 int next=_pending.FindIndex(1,v=>v.SaveFirst);
                 int count=next<0?_pending.Count:next;
+                int after=_pending.FindIndex(v=>v.SaveAfter);
+                if (after>=0 && after<count) count=after+1;
                 batch=_pending.Take(count).ToArray();
                 _pending.RemoveRange(0,count);
             }
@@ -392,6 +408,7 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
             if (save)
             {
                 _notify(new { type="guardStarted",ticks,saveId });
+                if (!config.Controlled) _windowsBeforeOperation = VisibleTopLevelWindows(hwnd);
                 try
                 {
                     if (!ReadyFor(config))
@@ -433,8 +450,46 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
                 // from delaying the next batch of hardware input too.
                 _diagnostics.Writer.TryWrite(new(batch[0],config.Controlled,saveId!,released,releasedTicks,dispatchedTicks,error));
             }
+            if (released && batch[^1].SaveAfter) await SaveAfterOperationAsync(config, hwnd, batch[^1]);
         }
     }
+
+    private async Task SaveAfterOperationAsync(Configuration config, nint hwnd, Buffered release)
+    {
+        await Task.Delay(AfterOperationSettle);
+        string? skipped = null;
+        // A guarded input queued meanwhile is saved before anyway, and that save shows this operation.
+        lock (_sync) if (_pending.Count > 0 && _pending[0].SaveFirst) skipped = "nextGuardedInputSavesFirst";
+        if (skipped is null && (ForegroundWindow != hwnd || !(_backend?.IsCspForeground ?? CspWindowProbe.IsCspForeground())))
+            skipped = "cspLostForeground";
+        if (skipped is null && (_backend?.InModalUi(hwnd) ?? CspWindowProbe.InModalUi(hwnd))) skipped = "cspInMenuOrCapture";
+        if (skipped is null && _windowsBeforeOperation is { } before && VisibleTopLevelWindows(hwnd).Except(before).Any())
+            skipped = "cspPopupOpened";
+        if (skipped is null && !ReadyFor(config)) skipped = "saveWorkerUnavailable";
+        string saveId = Guid.NewGuid().ToString("N");
+        if (skipped is not null)
+        {
+            _diagnostics.Writer.TryWrite(new(release, false, saveId, false, _writer.NowTicks, null, null, AfterOperation: true, Skipped: skipped));
+            return;
+        }
+        // The file shows the document as CSP saves it, after this point, so this is the save's trigger time.
+        long ticks = _writer.NowTicks;
+        _notify(new { type="guardStarted",ticks,saveId });
+        string? error = null; long? dispatchedTicks = null;
+        try
+        {
+            if (_backend is not null) await _backend.DispatchSaveAsync(hwnd);
+            else DispatchSaveInProcess(hwnd);
+            dispatchedTicks = _writer.NowTicks;
+        }
+        catch (Exception ex) { error = ex.Message; }
+        long releasedTicks = _writer.NowTicks;
+        _notify(new { type="guardReleased",ticks=releasedTicks,saveTicks=ticks,saveId,released=true,error });
+        _diagnostics.Writer.TryWrite(new(release with { Ticks = ticks }, false, saveId, true, releasedTicks, dispatchedTicks, error, AfterOperation: true));
+    }
+
+    private IReadOnlySet<nint> VisibleTopLevelWindows(nint hwnd)
+        => _backend?.VisibleTopLevelWindows(hwnd) ?? CspWindowProbe.VisibleTopLevelWindows(hwnd);
 
     private async Task WriteDiagnosticsAsync()
     {
@@ -456,9 +511,14 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
             }
             var original = result.Original;
             long ticks = original.Ticks;
+            if (result.Skipped is { } skipped)
+            {
+                _writer.AppendState("clipSaveSkipped",ticks,[],new { reason="afterLayerOperation", skipped },"immediate");
+                continue;
+            }
             _writer.AppendState("clipSaveRequest",ticks,[],new { saveId=result.SaveId,
-                reason=result.Controlled?"beforeControlledInput":"beforeLayerOperation", confirmation="requestOnly",
-                releasePolicy="afterSaveInputDispatch", interceptedInput=new { type=original.Input.Type,
+                reason=result.AfterOperation?"afterLayerOperation":result.Controlled?"beforeControlledInput":"beforeLayerOperation", confirmation="requestOnly",
+                releasePolicy=result.AfterOperation?"afterOperationRelease":"afterSaveInputDispatch", interceptedInput=new { type=original.Input.Type,
                     vk=original.Input.Type==1?(int?)original.Input.Union.Keyboard.Vk:null,modifiers=original.Modifiers } },"immediate");
             string inputLabel = original.Input.Type==1 ? $"vk={original.Input.Union.Keyboard.Vk}" : "鼠标／滚轮";
             Console.WriteLine($"[输入保存保护] {inputLabel} 保存已派发={result.DispatchedTicks is not null} 原指令已释放={result.Released} {result.Error}");

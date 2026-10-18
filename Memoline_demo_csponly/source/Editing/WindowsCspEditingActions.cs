@@ -72,7 +72,11 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
         // These requests occur after native persistence has resumed.
         using var refresh=new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try { await _feed.RequestAsync(["brushState","colorState","currentLayerState","canvasViewState","clipState"],refresh.Token); }
-        catch(Exception error) { _status("复现已结束，后续状态将在下一次操作时重新确认："+error.Message); }
+        catch(Exception error) { _status("复现已结束，后续状态将在下一次操作时重新确认："+error.Message); return; }
+        if(_expectedFinalLayer is { } expected)
+            _status(_feed.Layer is { } shown && LayerMapping.SameName(expected,shown)
+                ? $"已回到原来所在的图层「{expected}」。"
+                : $"提示：结束时确认的当前图层是「{_feed.Layer}」，不是原来所在的图层「{expected}」，请在 CSP 中手动切回。");
     }
     public async Task<IAsyncDisposable> AcquireCaptureCoordinatorAsync(CancellationToken token)
         => new AsyncLease(await _window.CaptureCoordinator.EnterAsync(token));
@@ -105,7 +109,7 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
     {
         _feed.EnsureConnected(); _input.EnsureTarget();
         if (_monitor.SessionId!=_session.LiveView.SessionId) throw new InvalidDataException("录制会话已改变。");
-        // Each save costs a CLIP write plus clipState/currentLayerState requests (~4.6 s). Without any input or
+        // Each save costs a CLIP write plus a clipState request (~2–3 s). Without any input or
         // pen replay from Memoline since the last one, the document is still the one inspected: physical input
         // aborts the transaction. The saved snapshot that exports read from stays the same as well.
         long inputs=WindowsViewInput.SentInputs;
@@ -137,12 +141,11 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
         await _feed.RequestAsync(["clipState"],token,saveId);
         if(PacketReplay.J.Text(_feed.LayersEvidence,"saveId")!=saveId)
             throw new InvalidDataException("主动请求的图层结构不属于本次保存。");
-        // The OCR layer name is only a fallback (see ReadCurrentLayerAsync); a hidden or unreadable
-        // selected row must not stop the structural confirmation. The replay and layer navigation still
-        // read the current layer from it, so it is refreshed only when the saved selection is not the
-        // layer it already names (after a paste, delete or navigation).
-        if(SavedCurrentLayer() is not { } selected || _feed.Layer is not { } named || !LayerMapping.SameName(selected.Name,named))
-            try{await _feed.RequestAsync(["currentLayerState"],token);}catch(InvalidOperationException){}
+        // The replay and the panel-confirmed navigation read the current layer from the feed. The saved
+        // selection is that layer, so the feed takes it from the save; panel OCR older than this save is
+        // stale and ignored. The layer panel is read only when the save names no selected layer.
+        if(SavedCurrentLayer() is { } selected) _feed.ConfirmLayer(selected.Name);
+        else try{await _feed.RequestAsync(["currentLayerState"],token);}catch(InvalidOperationException){}
         _inspection=new(_monitor.SessionId,_monitor.Generation,true,rows.Select(r=>new CspLayerEvidence(
             CanvasLayerWatcher.J.Text(r,"uuid")!,CanvasLayerWatcher.J.Text(r,"name") ?? "",
             CanvasLayerWatcher.J.Get(r,"isRaster").ValueKind==JsonValueKind.True,
@@ -181,25 +184,31 @@ internal sealed class WindowsCspEditingActions : ICspEditingActions, IAsyncDispo
             await Task.Delay(100,token);
         }
     }
-    public async Task<CspCurrentLayerEvidence> ReadLiveCurrentLayerAsync(CancellationToken token)
-    {
-        await _feed.RequestAsync(["currentLayerState"],token);
-        string name=_feed.Layer ?? throw new InvalidOperationException("当前图层状态不可用。");
-        // OCR drops spaces ("图层1" for "图层 1"): the row maps to its UUID through the saved structure, and the
-        // saved name is what the transaction compares.
-        var matches=_layers.Values.Where(l=>LayerMapping.SameName(l.Name,name)).ToArray();
-        return matches is [var match]?new(match.Name,true,match.Uuid):new(name,false,null);
-    }
     public void LayerReplaced(string replacedUuid,string reproductionUuid)=>_replacements.Add((replacedUuid,reproductionUuid));
+    // Set when the return to the user's layer was planned from the structure; the state refresh at the
+    // end of the native transaction reads the panel once and confirms it.
+    private string? _expectedFinalLayer;
     public async Task ReturnToUserLayerAsync(CancellationToken token)
     {
         if(_session.CurrentLayer is not { } user||_request.CurrentLayer==user)return;
         // The user's own layer was not replaced: its UUID still names it in the saved structure.
         if(!_layers.TryGetValue(user.Uuid,out var layer)){_status("提示：未在 CSP 中找到原来所在的图层，保持在复现层。");return;}
-        try{await NavigateToLayerAsync(layer.Name,token);_status($"已回到原来所在的图层「{layer.Name}」。");}
+        try
+        {
+            // The capture save after the replay is the latest structure and names the selected layer.
+            if(_inspection is { } inspection && SavedCurrentLayer()?.Uuid is { } from &&
+               LayerNavigation.Steps(inspection.Layers,from,user.Uuid) is { } steps)
+            {
+                for(int i=0;i<Math.Abs(steps);i++) await SelectAdjacentLayerAsync(steps<0,token);
+                _expectedFinalLayer=layer.Name;
+            }
+            else{await NavigateToLayerAsync(layer.Name,token);_status($"已回到原来所在的图层「{layer.Name}」。");}
+        }
         catch(Exception error)when(error is not OperationCanceledException)
         {_status($"提示：未能切回图层「{layer.Name}」：{error.Message}");}
     }
+    public Task SelectAdjacentLayerAsync(bool upper,CancellationToken token)
+        =>ShortcutAsync(upper?"layerselectupperlayer":"layerselectlowerlayer",token);
     private static string Revision(string path)
     {
         using var stream=File.OpenRead(path);

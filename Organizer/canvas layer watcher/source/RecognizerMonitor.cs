@@ -9,6 +9,7 @@ internal sealed class RecognizerMonitor
 {
     internal readonly record struct BaselineMarker(string SessionId, ulong AppendId, long PenBeginCount);
     internal readonly record struct MonitorConfiguration(string SessionId, Size PixelSize, string ControlPipe, long Generation);
+    internal sealed record CreatedLayers(string SessionId, Size PixelSize, LayerAppearance Appearance);
     private sealed record Endpoint(string PipeName, int ProcessId);
     private readonly WatchState _state;
     private readonly RecognitionEvidence _evidence = new();
@@ -20,6 +21,10 @@ internal sealed class RecognizerMonitor
     public event Action<ViewportObservation>? ViewportObserved;
     public event Action<ViewportObservation>? RecordingEndObserved;
     public event Action<RecorderRealtimeEvent>? MessageReceived;
+    /// <summary>Raised under the monitor lock; handlers only queue work and must call <see cref="ReleaseRetention"/>.</summary>
+    public event Action<CreatedLayers>? LayersCreated;
+    // Evidence after a new layer's first save is kept until its baseline is seeded, so its first diff has its inputs.
+    private readonly List<long> _retentionFloors = [];
     private readonly bool _requireConfirmedViewChange;
     private bool _captureRequestsPaused;
     public RecognizerMonitor(bool requireConfirmedViewChange = false)
@@ -28,7 +33,14 @@ internal sealed class RecognizerMonitor
         _state = new(requireConfirmedViewChange);
         _state.Diagnostic += text => Diagnostic?.Invoke(text);
         _state.ViewportObserved += observation => ViewportObserved?.Invoke(observation);
+        _state.LayerAppeared += appearance =>
+        {
+            if (_pixelSize is not { } pixels || string.IsNullOrEmpty(_session) || LayersCreated is null) return;
+            _retentionFloors.Add(appearance.TriggerTicks);
+            LayersCreated(new(_session, pixels, appearance));
+        };
     }
+    public void ReleaseRetention(long triggerTicks) { lock (_sync) _retentionFloors.Remove(triggerTicks); }
     public bool CaptureRequestsPaused
     {
         get { lock (_sync) return _captureRequestsPaused; }
@@ -60,7 +72,8 @@ internal sealed class RecognizerMonitor
         {
             _state.Complete(request, success);
             if (success && request.Generation == _state.Generation)
-                _evidence.Trim(Math.Clamp(evidenceRetentionTicks ?? request.TriggerTicks, 0, request.TriggerTicks));
+                _evidence.Trim(Math.Clamp(Math.Min(evidenceRetentionTicks ?? request.TriggerTicks,
+                    _retentionFloors.DefaultIfEmpty(long.MaxValue).Min()), 0, request.TriggerTicks));
         }
     }
     public string? ClipPath { get { lock (_sync) return _clipPath; } }
@@ -186,7 +199,7 @@ internal sealed class RecognizerMonitor
                 lock (_sync)
                 {
                     _state.Reset(); _clipPath = null; _liveFilePath = null; _pixelSize = null; _session = "";
-                    _lastAppendId = 0; _penBeginCount = 0;
+                    _lastAppendId = 0; _penBeginCount = 0; _retentionFloors.Clear();
                     foreach (var boundary in _editBoundaries.Values) boundary.TrySetException(new IOException("Recognizer 会话已重连"));
                     _editBoundaries.Clear();
                     _controlPipe = selected.ProcessId > 0 ? RecorderControlClient.PipeNameFor(selected.ProcessId) : null;

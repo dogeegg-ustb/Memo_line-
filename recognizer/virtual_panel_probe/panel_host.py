@@ -1,6 +1,8 @@
 """Stash chosen CSP floating palettes on a virtual screen and serve them to other programs.
 
     py -3 recognizer/virtual_panel_probe/panel_host.py                control window + interface
+    py -3 recognizer/virtual_panel_probe/panel_host.py --embedded --parent-pid N
+                                                                      no control window; exits with process N (Memoline)
     py -3 recognizer/virtual_panel_probe/panel_host.py --diagnose     monitors, virtual displays, CSP windows
     py -3 recognizer/virtual_panel_probe/panel_host.py --restore-all  bring palettes back, detach the virtual screens
     py -3 recognizer/virtual_panel_probe/panel_host.py --query listWindows
@@ -24,11 +26,12 @@ from pathlib import Path
 from tkinter import ttk
 
 import paths  # noqa: F401
+import history_size
 import virtual_display
 from api import SCHEMA_VERSION, AlreadyRunning, PipeClient, PipeServer
 from capture import capture
 from csp_panel_validator.window_service import enable_per_monitor_dpi_awareness
-from csp_windows import CspWindow, csp_windows, is_window, root_at, window_pid
+from csp_windows import CspWindow, csp_windows, is_window, resize_window, root_at, window_pid
 from edge_drawer import EdgeDrawer, cursor
 from guard import Guard
 from stash import StashManager, bring_back, fits, is_hidden, physical_screen, stash_area
@@ -50,6 +53,7 @@ DEFAULTS = dict(
     edgeHoverPx=2,
     edgeDwellMs=150,
     stashGapPx=8,
+    historyFullHeight=True,
 )
 SIDES = {"left": "左侧", "right": "右侧"}
 CORNERS = {"top-left": "左上角", "bottom-left": "左下角", "top-right": "右上角", "bottom-right": "右下角",
@@ -64,7 +68,10 @@ CALL_TIMEOUT = 5.0
 FORMATS = ("png", "bgrx")
 SELECTOR = ("hwnd", "kind")
 OPTIONS = {"getStatus": (), "listWindows": ("stashedOnly",), "captureWindow": (*SELECTOR, "format"),
-           "stashWindow": (*SELECTOR, "side"), "restoreWindow": SELECTOR}
+           "stashWindow": (*SELECTOR, "side"), "restoreWindow": SELECTOR, "shutdown": ()}
+HISTORY = history_size.HISTORY_KIND
+# A stretched History palette that CSP keeps at another height is not fought over.
+MAX_RESIZES = 3
 USER32 = ctypes.WinDLL("user32")
 USER32.GetAsyncKeyState.restype = ctypes.c_short
 
@@ -106,8 +113,14 @@ class Pending:
 
 
 class Host:
-    def __init__(self, settings: dict):
+    def __init__(self, settings: dict, embedded: bool = False, parent_pid: int | None = None):
         self.settings = settings
+        self.embedded, self.parent_pid = embedded, parent_pid
+        self.next_parent_check = 0.0
+        # Remembered palettes are stashed automatically once per window; a failure is not retried in a loop.
+        self.auto_tried: set[int] = set()
+        self.history_rows: dict[int, tuple[int, int]] = {}
+        self.history_resizes: dict[int, int] = {}
         # First: a second instance stops here (AlreadyRunning) before touching the log or any window.
         self.server = PipeServer(settings["pipeName"], self.handle_request, self.log)
         self.hardware = tuple(settings["virtualHardwareIds"])
@@ -136,6 +149,9 @@ class Host:
         self.stash = StashManager(HERE / "state.json", settings["cornerThresholdPx"], settings["stashGapPx"], self.log)
         self.guard = Guard(self.root, settings["virtualScreenAllowedProcesses"], self.log)
         self.build_ui()
+        if embedded:
+            # Memoline owns the session: no control window, only the edge drawer and the interface.
+            self.root.withdraw()
         self.drawer = EdgeDrawer(self.root, self.px, lambda: [m for m in self.screens if not m.virtual],
                                  lambda side: len(self.stash.on_side(side, self.windows)), self.drawer_items,
                                  self.bring_from_drawer, lambda: self.drawer_enabled.get() and not self.closing,
@@ -305,6 +321,12 @@ class Host:
                 except queue.Empty:
                     break
             self.poll_buttons(now)
+            if self.parent_pid and now >= self.next_parent_check:
+                self.next_parent_check = now + 1.0
+                if not process_alive(self.parent_pid):
+                    self.log("Memoline 已退出，取回面板并关闭")
+                    self.close()
+                    return
             if now >= self.next_refresh:
                 self.refresh()
             self.drain_thumbnails()
@@ -377,6 +399,8 @@ class Host:
             self.previews.pop(hwnd, None)
         self.windows = tracked
         self.stash.maintain(tracked, self.screens)
+        self.fit_history()
+        self.stash_remembered()
         self.detach_when_idle(now)
         self.keep_virtual_screen_private()
         self.update_rows()
@@ -421,19 +445,28 @@ class Host:
             self.stash.end_press()  # stashing is off, or a modal CSP dialog is open
             return
         for window, corner, prior in self.stash.dropped(list(self.windows.values()), self.screens):
+            if not self.labels[window.hwnd].kinds:
+                # Only palettes Memoline can name are stashed: an unknown one could not be read anyway.
+                self.log(f"{self.name(window.hwnd)} 认不出是哪个面板，不收纳（可在控制窗口指定名称）")
+                continue
             self.request_stash(window, corner, prior)
         if last:
             self.stash.end_press()
 
     def stash_window(self, window: CspWindow, corner: str, prior=None, side: str | None = None) -> bool:
-        if not self.stash.stash(window, self.screens, self.windows, prior, corner, side):
+        label = self.labels.get(window.hwnd)
+        if not self.stash.stash(window, self.screens, self.windows, prior, corner, side, label.kinds if label else ()):
             return False
+        self.fit_history()
         side = self.stash.records[window.hwnd].side
         self.log(f"已收纳 {self.name(window.hwnd)}（{CORNERS.get(corner, corner)} → {SIDES[side]}）")
         self.root.after(700, self.request_thumbnail, window.hwnd)
         return True
 
-    def restore(self, hwnd: int) -> bool:
+    def restore(self, hwnd: int, forget: bool = True) -> bool:
+        """`forget`: the user took it back, so it is not stashed again when Memoline restarts."""
+        if forget and hwnd in self.labels:
+            self.stash.forget(self.labels[hwnd].kinds)
         if hwnd in self.stash.records:
             restored = self.stash.restore(hwnd, self.screens, self.windows.get(hwnd))
             self.log(f"已取回 {self.name(hwnd)}")
@@ -445,7 +478,12 @@ class Host:
             return True
         return False
 
-    def restore_everything(self) -> int:
+    def restore_everything(self, forget: bool = True) -> int:
+        """`forget=False` on exit: the palettes come back for CSP's sake but are stashed again next start."""
+        if forget:
+            for hwnd in list(self.stash.records):
+                if hwnd in self.labels:
+                    self.stash.forget(self.labels[hwnd].kinds)
         # Before restore_all: afterwards the restored windows look like hidden windows with no record.
         others = [w for h, w in self.windows.items() if h not in self.stash.records and is_hidden(w, self.screens)]
         count = self.stash.restore_all(self.screens, self.windows)
@@ -463,6 +501,71 @@ class Host:
             if not any(is_hidden(w, self.screens) for w in floating):
                 return
             time.sleep(0.05)
+
+    # ---------- remembered palettes and the History palette's height ----------
+    def stash_remembered(self) -> None:
+        """Palettes the user stashed before (this run or an earlier one) go back as soon as CSP shows them."""
+        if (not self.stash.remembered or self.closing or self.main is None or not self.main.enabled
+                or self.any_button or self.display_busy):
+            return
+        for hwnd, window in self.windows.items():
+            if hwnd in self.stash.records or hwnd in self.pending or hwnd in self.auto_tried:
+                continue
+            side = self.stash.remembered_side(self.labels[hwnd].kinds)
+            if side is None:
+                continue
+            self.auto_tried.add(hwnd)
+            self.log(f"{self.name(hwnd)} 上次收纳在{SIDES[side]}，自动收纳")
+            self.request_stash(window, "remembered", side=side)
+
+    def is_history(self, hwnd: int) -> bool:
+        label = self.labels.get(hwnd)
+        return bool(label) and (label.kinds == (HISTORY,) or label.current == HISTORY)
+
+    def history_height(self, window: CspWindow) -> int | None:
+        """Height at which the History palette lists the opening row and every undo step."""
+        if not self.settings["historyFullHeight"] or not self.is_history(window.hwnd):
+            return None
+        rows = self.history_rows.get(window.hwnd)
+        if rows is None:
+            try:
+                rows = history_size.measure(capture(window.hwnd, window.bounds).image())
+            except Exception as ex:
+                self.log(f"测量历史面板行高失败：{ex!r}")
+            if rows is not None:
+                self.history_rows[window.hwnd] = rows
+        if rows is None:
+            monitor = monitor_at(self.screens, *window.center)
+            rows = history_size.estimate(monitor.dpi if monitor else 96)
+        steps, _ = history_size.undo_count()
+        return history_size.target_height(*rows, steps)
+
+    def planned_size(self, window: CspWindow) -> tuple[int, int]:
+        height = self.history_height(window)
+        return (window.size[0], max(window.size[1], height)) if height else window.size
+
+    def fit_history(self) -> None:
+        """Stretch a stashed History palette to its full height (no taller than the virtual screen)."""
+        area = stash_area(self.screens)
+        if area is None or self.display_busy:
+            return
+        for record in self.stash.records.values():
+            window = self.windows.get(record.hwnd)
+            if window is None or not is_hidden(window, self.screens):
+                continue
+            target = self.history_height(window)
+            if target is None:
+                continue
+            target = min(target, area[3] - area[1] - 2 * self.settings["stashGapPx"])
+            if abs(window.size[1] - target) <= 2 or self.history_resizes.get(record.hwnd, 0) >= MAX_RESIZES:
+                continue
+            self.history_resizes[record.hwnd] = self.history_resizes.get(record.hwnd, 0) + 1
+            if record.size is None:
+                record.size = window.size
+                self.stash.save()
+            steps, source = history_size.undo_count()
+            self.log(f"历史面板拉到 {target} 像素高（撤销次数 {steps}，来自 {source}）")
+            resize_window(window, window.size[0], target)
 
     # ---------- virtual screen: attached only while something is stashed ----------
     def request_stash(self, window: CspWindow, corner: str, prior=None, side: str | None = None,
@@ -482,15 +585,15 @@ class Host:
             self.provide_again = True
             return
         incoming = [self.windows[h] for h in self.pending if h in self.windows]
-        sizes, gap = self.stash.sizes(self.windows, incoming), self.settings["stashGapPx"]
+        stashed = [self.windows[r.hwnd] for r in self.stash.ordered(self.windows)]
+        sizes, gap = [self.planned_size(w) for w in stashed + incoming], self.settings["stashGapPx"]
         area = stash_area(self.screens)
         if area and fits(sizes, area[2] - area[0], area[3] - area[1], gap):
             self.flush_pending()
             return
-        # Room to spare from the start: every later resize stalls the desktop for about a second,
-        # while unused area costs next to nothing.
-        main = physical_screen(self.screens)
-        least = tuple(self.settings["virtualMinimumSize"] or (main.width, main.height))
+        # As wide as the widest palette and as tall as the History palette listing every undo step
+        # (or the tallest palette); the smallest driver mode that holds that wins.
+        least = tuple(self.settings["virtualMinimumSize"] or (0, 0))
 
         def roomy(size):
             return size[0] >= least[0] and size[1] >= least[1] and fits(sizes, *size, gap)
@@ -631,6 +734,8 @@ class Host:
 
     def bring_from_drawer(self, hwnd: int, side: str, monitor, y: int) -> None:
         window = self.windows.get(hwnd)
+        if hwnd in self.labels:
+            self.stash.forget(self.labels[hwnd].kinds)
         if window is not None and self.stash.bring_here(hwnd, self.screens, window, monitor, side, y, self.px(16)):
             self.log(f"已从{SIDES[side]}抽屉带回 {self.name(hwnd)}")
             self.root.after(300, self.refresh)
@@ -678,6 +783,10 @@ class Host:
             data = shot.png() if image_format == "png" else shot.bgrx
             return dict(window=info, format=image_format, width=shot.width, height=shot.height, rect=list(shot.rect),
                         capturedAt=shot.captured_at, data=base64.b64encode(data).decode("ascii"))
+        if command == "shutdown":
+            # Answer first; the Tk thread then brings every palette back and exits.
+            self.calls.put(lambda: self.root.after(50, self.close))
+            return dict(closing=True)
         if command == "stashWindow":
             side = request.get("side")
             if side not in (None, *SIDES):
@@ -749,7 +858,8 @@ class Host:
                                         error=self.virtual_error,
                                         monitors=[dict(device=m.device, rect=list(m.rect), dpi=m.dpi) for m in virtual]),
                     windows=len(self.windows), stashed=len(self.stash.on_side("left", self.windows))
-                    + len(self.stash.on_side("right", self.windows)))
+                    + len(self.stash.on_side("right", self.windows)),
+                    remembered=[dict(entry) for entry in self.stash.remembered])
 
     def api_stash(self, request: dict, side: str | None, waiter) -> int:
         hwnd = self.lookup(request)
@@ -768,7 +878,7 @@ class Host:
             return
         try:
             self.refresh()
-            self.restore_everything()
+            self.restore_everything(forget=False)
             self.guard.hide()
             if self.settings["detachOnExit"]:
                 self.wait_until_off_virtual()
@@ -788,6 +898,21 @@ class Host:
             self.root.mainloop()
         finally:
             self.close()
+
+
+def process_alive(pid: int) -> bool:
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return False
+    try:
+        code = ctypes.c_ulong()
+        return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259  # STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def diagnose(settings: dict) -> dict:
@@ -852,6 +977,8 @@ def main() -> int:
     parser.add_argument("--restore-all", action="store_true", help="把虚拟屏上的 CSP 浮动窗口移回物理屏并断开虚拟屏")
     parser.add_argument("--query", metavar="REQUEST", help="向正在运行的程序发一个接口请求：命令名或完整 JSON")
     parser.add_argument("--out", help="与 --query 一起用：把返回的图像数据写入这个文件")
+    parser.add_argument("--embedded", action="store_true", help="由 Memoline 启动：不显示控制窗口")
+    parser.add_argument("--parent-pid", type=int, help="这个进程退出时取回面板并关闭")
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding=None if sys.stdout.isatty() else "utf-8", errors="replace")
     # Before any window or monitor query: every rectangle here is physical pixels.
@@ -866,7 +993,7 @@ def main() -> int:
     if args.query:
         return query(settings, args.query, args.out)
     try:
-        host = Host(settings)
+        host = Host(settings, embedded=args.embedded, parent_pid=args.parent_pid)
     except AlreadyRunning as ex:
         print(ex)
         return 1

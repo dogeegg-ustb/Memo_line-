@@ -44,6 +44,11 @@ def semantic_state(module, result):
         state["transform"] = {k:snapshot.get(k) for k in ("canvasPixelWidth","canvasPixelHeight","scaleReference",
             "cumulativeRelativeScale","rotationDegrees","scaleGeometryEstimate","matrices")}
         return state
+    if module == "historyState":
+        if not isinstance(result,dict) or result.get("status") != "ok":
+            return None
+        return dict(rows=[dict(text=row["text"],undone=row["undone"]) for row in result["rows"]],
+                    currentIndex=result["currentIndex"])
     if module == "clipState" and isinstance(result,dict):
         return {k:v for k,v in result.items() if k != "source"}
     return result

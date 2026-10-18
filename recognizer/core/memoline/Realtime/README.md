@@ -138,6 +138,7 @@ OTD 单个笔点字段：
 | `core.currentLayerState` / `currentLayerState` | 当前唯一选中图层的名称字符串；识别不到时为 null，状态为 unknown |
 | `core.colorState` / `colorState` | `kind`（色彩/透明等类型）、`rgb`、`hex` |
 | `core.canvasViewState` / `canvasViewState` | `canvasOriginScreenPx`、`ocrScalePercent`、`ocrRotationDegrees`；`transform` 内含 `canvasPixelWidth/Height`、`scaleReference`、`cumulativeRelativeScale`、`rotationDegrees`、`scaleGeometryEstimate`；`rawResult` 另保留屏幕 ROI、视口边界、完整变换快照、置信度和失败阶段 |
+| `core.historyState` / `historyState` | 撤销或重做后读到的 CSP 历史记录面板：`rows[]`（`text` 行文字、`undone` 是否已撤销），`currentIndex` 当前行（第 0 行是文档打开时的状态）。`evidence` 含 `relatedEventIds`（这一串撤销/重做按键）、`commands`、`observedAfterEventId` 和截图 `screenshotIds`。面板经面板收纳程序读取，读不到或读数不完整时 `status=error` |
 | `core.clipState` / `clipState` | `.clip` 的 `canvas`（`width_raw/height_raw/unit_raw/resolution/current_layer_id`）、`layer_count`、`unlinked_layer_count`、`layers[]`。图层含 id/parent_id/depth/name、透明度、可见性/有效可见性、混合模式、剪贴/锁定/文件夹/蒙版、偏移、选择和 UUID 等可读取元数据 |
 
 每条核心消息 `data` 的公共字段：

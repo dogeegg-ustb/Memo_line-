@@ -37,6 +37,8 @@ internal sealed record View(double X, double Y, double Scale, double Rotation)
         || Math.Abs(Scale - other.Scale) >= .01 || Math.Abs(Math.IEEERemainder(Rotation - other.Rotation, 360)) >= .01;
 }
 
+/// <summary>Layers a saved CLIP shows for the first time in this session, with that save's own copy.</summary>
+internal sealed record LayerAppearance(long Generation, long TriggerTicks, string SnapshotPath, IReadOnlyList<LayerReference> Layers);
 internal sealed record CaptureContext(string SessionId, Size PixelSize, string ControlPipe, FrozenEvidence Evidence);
 internal sealed record ViewportObservation(RecorderRealtimeEvent Message, long TriggerTicks, int Changed,
     bool IsBaseline, bool HasEditingInput);
@@ -61,7 +63,12 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
     private readonly Dictionary<long, long> _strokeLast = [];
     private readonly HashSet<long> _canvasStrokeOperations = [];
     private readonly Dictionary<string, long> _capturedLayers = new(StringComparer.Ordinal);
+    // Boundary refreshes follow layer identity: a captured layer that was deleted stays gone even when
+    // CSP later gives another layer its name (a paste becomes the next free "图层 1").
+    private readonly HashSet<string> _capturedLayerUuids = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<long> _pendingBoundaryLayers = [];
+    // Every layer UUID any CLIP state of this session has listed; null until the first one arrives.
+    private HashSet<string>? _knownLayerUuids;
     private long _lastEditBoundaryTicks = -1;
     private long? _mouseOperation, _penOperation;
     private View? _view;
@@ -72,6 +79,7 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
     private Rectangle? _canvasArea;
     public event Action<string>? Diagnostic;
     public event Action<ViewportObservation>? ViewportObserved;
+    public event Action<LayerAppearance>? LayerAppeared;
     public bool InContact => _penContact || _mouseContact;
     public void SetCanvasArea(Rectangle area) => _canvasArea = area;
     public bool HasCanvasArea => _canvasArea is not null;
@@ -81,7 +89,8 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
     public void Reset()
     {
         Generation++; _layers.Clear(); _clipLayers.Clear(); _paperLayers.Clear(); _dirty.Clear(); _lastDirty.Clear(); _view = null;
-        _strokeBegins.Clear(); _strokeLast.Clear(); _canvasStrokeOperations.Clear(); _capturedLayers.Clear(); _pendingBoundaryLayers.Clear(); _lastEditBoundaryTicks = -1;
+        _strokeBegins.Clear(); _strokeLast.Clear(); _canvasStrokeOperations.Clear(); _capturedLayers.Clear(); _capturedLayerUuids.Clear(); _pendingBoundaryLayers.Clear(); _lastEditBoundaryTicks = -1;
+        _knownLayerUuids = null;
         _mouseOperation = _penOperation = null;
         _viewTicks = _evidenceTicks = _completedTriggerTicks = -1;
         _reserved = _penContact = _mouseContact = false; _penEditable = true; _canvasArea = null;
@@ -178,6 +187,7 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
                 while (_clipLayers.Count > 64) _clipLayers.Remove(_clipLayers.First().Key);
                 while (_paperLayers.Count > 64) _paperLayers.Remove(_paperLayers.First().Key);
                 Diagnostic?.Invoke($"图层属性核心：ticks={ticks}，图层数={_clipLayers[ticks].Length}，snapshot={message.IsSnapshot}");
+                ObserveLayerUuids(message, ticks, _clipLayers[ticks], _paperLayers[ticks]);
             }
             return null;
         }
@@ -214,6 +224,26 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         if (requireConfirmedViewChange && message.AppendId == 0) return Skip("原生记录未收录该观测（编辑事务内），只更新视口状态");
         if (_reserved) return Skip("已有保存任务，合并本次变化");
         return Reserve(message, ticks, view, pending: false);
+    }
+    // A layer that appears in a save made after the recording baseline has no proven starting pixels yet.
+    // The save that first lists it is exactly such a proof, provided the recorder kept that save's file;
+    // a save taken right after a layer operation shows a new layer before anything is drawn on it.
+    private void ObserveLayerUuids(RecorderRealtimeEvent message, long ticks, LayerReference[] layers, string[] paper)
+    {
+        var uuids = layers.Select(layer => layer.Uuid).OfType<string>().Where(uuid => uuid.Length > 0);
+        if (_knownLayerUuids is null) { _knownLayerUuids = new(uuids, StringComparer.OrdinalIgnoreCase); return; }
+        var appeared = layers.Where(layer => layer.Uuid is { Length: > 0 } uuid && _knownLayerUuids.Add(uuid)
+            && !paper.Contains(LayerMapping.Compact(layer.Name), StringComparer.Ordinal)).ToArray();
+        if (appeared.Length == 0) return;
+        string names = string.Join("、", appeared.Select(layer => $"{layer.Name}({layer.Uuid})"));
+        // States read inside a Memoline edit transaction are not in the native file; that transaction
+        // registers its own reproduction baseline.
+        if (message.IsSnapshot || message.AppendId == 0 || J.ObservationClock(message) != "triggerTicks")
+        { Diagnostic?.Invoke($"新图层 {names} 出现在不可作为基线的状态中（snapshot={message.IsSnapshot}，appendId={message.AppendId}）"); return; }
+        if (J.Text(J.Get(message.Data, "rawResult"), "snapshotPath") is not { Length: > 0 } snapshot)
+        { Diagnostic?.Invoke($"新图层 {names} 的保存没有留存 CLIP 副本，无法建立基线"); return; }
+        Diagnostic?.Invoke($"新图层 {names} 首次出现在 triggerTicks={ticks} 的保存中，以该保存建立基线");
+        LayerAppeared?.Invoke(new(Generation, ticks, snapshot, appeared));
     }
     public CaptureRequest? ReserveRecordingEnd(RecorderRealtimeEvent message)
     {
@@ -258,10 +288,10 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         if (!Paper(LayerMapping.Compact(current))) touched.Add(LayerMapping.Compact(current), []);
         // Previous captures have consumed their contact tracking. They still
         // need fresh full-layer pixels at this boundary for cross-layer selection.
-        foreach(string captured in _capturedLayers.Keys)
+        foreach(string captured in _capturedLayerUuids)
         {
-            var matches=layers.Where(layer=>LayerMapping.Compact(layer.Name)==captured).ToArray();
-            if(matches.Length==1&&!string.IsNullOrWhiteSpace(matches[0].Uuid))touched.TryAdd(captured,[]);
+            var matches=layers.Where(layer=>string.Equals(layer.Uuid,captured,StringComparison.OrdinalIgnoreCase)).ToArray();
+            if(matches.Length==1)touched.TryAdd(LayerMapping.Compact(matches[0].Name),[]);
         }
         var contacts = final ? _strokeBegins.Where(pair => pair.Value <= triggerTicks && _canvasStrokeOperations.Contains(pair.Key))
             .Concat(_dirty.Where(pair => pair.Value <= triggerTicks && !_strokeBegins.ContainsKey(pair.Key)))
@@ -347,6 +377,7 @@ internal sealed class WatchState(bool requireConfirmedViewChange = false)
         {
             string layerKey = LayerMapping.Compact(request.LayerName);
             _capturedLayers[layerKey] = Math.Max(_capturedLayers.GetValueOrDefault(layerKey, -1), request.TriggerTicks);
+            if (request.Layer is { Uuid: { Length: > 0 } uuid }) _capturedLayerUuids.Add(uuid);
             foreach (long operation in _strokeBegins.Where(pair => pair.Value <= request.TriggerTicks
                 && _strokeLast.GetValueOrDefault(pair.Key, pair.Value) <= request.TriggerTicks
                 && LayerMapping.SameName(_layers.LastOrDefault(layer => layer.Key <= pair.Value).Value, request.LayerName))

@@ -200,6 +200,19 @@ internal sealed class LivePacketFeed : IPacketStateFeed, IAsyncDisposable
             if (module == "subtoolState") _subtoolCaptureBarrier = _subtools?.CaptureId;
         }
     }
+    /// <summary>Takes the current layer from a confirmed save instead of the layer panel. Panel captures
+    /// taken before now describe the document before that save and are ignored.</summary>
+    internal void ConfirmLayer(string name)
+    {
+        EnsureConnected();
+        var origin = View.ClockOriginTicks ?? throw new IOException("实时接口缺少会话时钟。");
+        lock (_sync)
+        {
+            _barriers["currentLayerState"] = Stopwatch.GetTimestamp() - origin;
+            if (_layer == name) return;
+            _layer = name; _revision++; _moduleRevisions["currentLayerState"] = _revision; Pulse();
+        }
+    }
     internal void Apply(RecorderRealtimeEvent message)
     {
         if (message.Channel == "system")

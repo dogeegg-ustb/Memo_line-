@@ -55,6 +55,35 @@ public static class CspWindowProbe
         return IsCspWindow(window);
     }
 
+    /// <summary>Visible top-level windows of the process that owns <paramref name="window"/>: a dropdown or
+    /// menu opened by a click appears here as a window that was not there before the click.</summary>
+    public static IReadOnlySet<nint> VisibleTopLevelWindows(nint window)
+    {
+        var result = new HashSet<nint>();
+        if (window == 0) return result;
+        Native.GetWindowThreadProcessId(window, out var owner);
+        if (owner == 0) return result;
+        Native.EnumWindows((candidate, _) =>
+        {
+            if (Native.IsWindowVisible(candidate) && Native.GetWindowThreadProcessId(candidate, out var id) != 0 && id == owner)
+                result.Add(candidate);
+            return true;
+        }, 0);
+        return result;
+    }
+
+    /// <summary>The window's UI thread is inside a menu loop, a move/size loop or holds mouse capture.</summary>
+    public static bool InModalUi(nint window)
+    {
+        if (window == 0) return false;
+        uint thread = Native.GetWindowThreadProcessId(window, out _);
+        var info = new GuiThreadInfo { Size = Marshal.SizeOf<GuiThreadInfo>() };
+        if (thread == 0 || !Native.GetGUIThreadInfo(thread, ref info)) return false;
+        const uint InMoveSize = 0x2, InMenuMode = 0x4, SystemMenuMode = 0x8, PopupMenuMode = 0x10;
+        return (info.Flags & (InMoveSize | InMenuMode | SystemMenuMode | PopupMenuMode)) != 0
+            || info.Capture != 0 || info.MenuOwner != 0 || info.MoveSize != 0;
+    }
+
     private static bool IsCspWindow(nint window)
     {
         if (window == 0) return false;
@@ -83,8 +112,20 @@ public static class CspWindowProbe
     [StructLayout(LayoutKind.Sequential)]
     public struct ScreenPoint { public int X; public int Y; }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GuiThreadInfo
+    {
+        public int Size; public uint Flags;
+        public nint Active, Focus, Capture, MenuOwner, MoveSize, Caret;
+        public int CaretLeft, CaretTop, CaretRight, CaretBottom;
+    }
+
     private static class Native
     {
+        public delegate bool EnumWindowsProc(nint window, nint parameter);
+        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static extern bool EnumWindows(EnumWindowsProc callback, nint parameter);
+        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static extern bool IsWindowVisible(nint window);
+        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static extern bool GetGUIThreadInfo(uint thread, ref GuiThreadInfo info);
         [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(nint context);
         [DllImport("user32.dll")] public static extern nint GetForegroundWindow();
         [DllImport("user32.dll")] public static extern bool SetForegroundWindow(nint window);

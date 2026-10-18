@@ -52,6 +52,16 @@ internal sealed class SnapshotHistory
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { }
     }
+    /// <summary>recordingStart: the save that opens the recording; layerCreated: the first save that lists a
+    /// layer created during it; reproduction: the layer an edit installed.</summary>
+    internal static bool TrustedBaselineSource(string? source) => source is "recordingStart" or "createdEmpty" or "layerCreated" or "reproduction";
+
+    /// <summary>The layer already has a snapshot (a baseline or a capture) in this session's history.</summary>
+    public bool HasLayer(string uuid, string session, long generation)
+        => _layerStacks.Values.SelectMany(pair => new[] { pair.After, pair.Now }).OfType<LayerSnapshot>()
+            .Any(snapshot => snapshot.SessionId == session && snapshot.Generation == generation
+                && string.Equals(snapshot.Layer.Uuid, uuid, StringComparison.OrdinalIgnoreCase));
+
     private static bool SameLayer(LayerReference a, LayerReference b)
         => a.Uuid is { Length: > 0 } && b.Uuid is { Length: > 0 } ? a.Uuid.Equals(b.Uuid, StringComparison.OrdinalIgnoreCase)
             : a.Id == b.Id;
@@ -75,7 +85,7 @@ internal sealed class SnapshotHistory
             if (snapshot.Layer.Id <= 0 || snapshot.Width <= 0 || snapshot.Height <= 0 || snapshot.TriggerTicks < 0)
                 throw new InvalidDataException("baseline 缺少有效的图层、尺寸或 triggerTicks");
             if (string.IsNullOrWhiteSpace(snapshot.Layer.Uuid) || string.IsNullOrWhiteSpace(snapshot.SessionId)
-                || snapshot.BaselineSource is not ("recordingStart" or "createdEmpty" or "reproduction"))
+                || !TrustedBaselineSource(snapshot.BaselineSource))
                 throw new InvalidDataException("baseline 缺少已确认的 UUID、会话或来源");
             if (!layerIds.Add(snapshot.Layer.Id)) throw new InvalidDataException("baseline 图层重复");
             string source = Path.GetFullPath(seed.FullPngPath);
@@ -182,7 +192,7 @@ internal sealed class SnapshotHistory
         }
         manifests.Sort((a, b) => a.SortTicks.CompareTo(b.SortTicks));
         var baselines = _baselines.Values.Where(snapshot => string.Equals(snapshot.Layer.Uuid, layerUuid, StringComparison.OrdinalIgnoreCase)
-            && snapshot.BaselineSource is "recordingStart" or "createdEmpty" or "reproduction").ToDictionary(snapshot => snapshot.Id, StringComparer.Ordinal);
+            && TrustedBaselineSource(snapshot.BaselineSource)).ToDictionary(snapshot => snapshot.Id, StringComparer.Ordinal);
         var baselineIds = baselines.Keys.ToHashSet(StringComparer.Ordinal);
         if (baselineIds.Count == 0)
             return new(false, manifests.FirstOrDefault().Directory, null, null, "layer has no proven baseline", "NoBaseline");

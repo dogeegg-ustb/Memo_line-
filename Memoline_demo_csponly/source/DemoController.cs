@@ -24,7 +24,8 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
     private DateTime _recorderStartedUtc;
     private RecorderSetupPanel? _inputs;
     private readonly bool _renderOnly;
-    private string RecorderRoot => Path.Combine(_base, "Recognizer");
+    internal bool RenderOnly => _renderOnly;
+    internal string RecorderRoot => Path.Combine(_base, "Recognizer");
     public string Title => "Memoline · CSP 聚集事件记录";
     public string SettingsPath => Path.Combine(_base, "demo-settings.json");
     public string OutputDirectory => Path.Combine(_base, "recordings");

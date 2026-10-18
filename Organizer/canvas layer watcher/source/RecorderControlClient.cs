@@ -92,7 +92,12 @@ internal sealed class RecorderControlClient(string pipeName, Action<string>? dia
         bool activateCsp = false)
     {
         string id = "viewport-" + Guid.NewGuid().ToString("N");
-        var response = await SendAsync(new { command = "requestClipSave", expectedClipPath, requestId = id, triggerTicks, activateCsp }, token);
+        JsonElement response;
+        // The recorder's own saves around a layer operation keep its save worker busy for a few dozen milliseconds.
+        for (int attempt = 0; ; attempt++)
+            try { response = await SendAsync(new { command = "requestClipSave", expectedClipPath, requestId = id, triggerTicks, activateCsp }, token); break; }
+            catch (IOException error) when (attempt < 40 && error.Message.Contains("busy", StringComparison.OrdinalIgnoreCase))
+            { await Task.Delay(25, token); }
         if (J.Text(response, "requestId") != id || J.Get(response, "saveInputDispatched").ValueKind != JsonValueKind.True
             || J.Tick(response, "saveInputDispatchedTicks", -1) < 0)
             throw new InvalidDataException("Recognizer 未确认本次保存输入已派发");

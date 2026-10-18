@@ -188,6 +188,14 @@ def _build_core(module):
     raise ValueError(module)
 
 
+def build_history_core():
+    """History palette reader with its own OCR engine (it runs on the history thread, not the analysis pool)."""
+    with _build_lock:
+        from rapidocr import RapidOCR
+        from recognizer_core.history_state import HistoryStateCore
+        return HistoryStateCore(ocr_engine=RapidOCR(params=OCR_PARAMS))
+
+
 _prepared = {}
 _preparing = {module: threading.Lock() for module in PREPARED_MODULES}
 
@@ -275,6 +283,8 @@ class Pipeline:
         self.evidence_thread.start()
         self.capture_thread.start()
         self.dispatch_thread.start()
+        from history_reader import HistoryReader
+        self.history = HistoryReader(self, settings)
 
     def record(self, kind, ticks, refs, data, path="immediate"):
         self.emit(dict(type="state", kind=kind, ticks=ticks, relatedEventIds=list(refs), data=data, path=path))
@@ -892,8 +902,15 @@ class Pipeline:
             self.transform_ready = False
             raise RuntimeError("画布核心进程已退出") from None
 
+    def request_history(self, ticks, event_id, command):
+        """Undo or redo reached CSP: read the History palette once the keyboard is quiet."""
+        if not self.closing:
+            self.history.request(ticks, event_id, command)
+
     def close(self):
         self.closing = True
+        if getattr(self, "history", None) is not None:
+            self.history.close()
         self.capture_queue.put(None)
         self.capture_thread.join()
         self.evidence_queue.put(None)

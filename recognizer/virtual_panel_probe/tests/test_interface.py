@@ -153,6 +153,9 @@ class HostRequestTests(unittest.TestCase):
         host.display_job = sync_job
         host.hardware = tuple(host.settings["virtualHardwareIds"])
         host.settings["virtualMinimumSize"] = None
+        host.settings["historyFullHeight"] = False
+        host.history_rows, host.history_resizes, host.auto_tried = {}, {}, set()
+        host.any_button = False
         host.main = None
         host.root = FakeRoot()
         host.workspace = Workspace()
@@ -234,8 +237,8 @@ class HostRequestTests(unittest.TestCase):
             return SMALL, ["接入虚拟屏", "1536×960"]
         self.patch("provide", provide)
         window = self.request("stashWindow", kind="历史记录")["window"]
-        # Room to spare: at least the main screen's size, although one 300x500 palette fits on 1536x960.
-        self.assertEqual(asked, [(False, True, True)])
+        # Only as large as the palettes need: one 300x500 palette fits on 1536x960.
+        self.assertEqual(asked, [(True, True, True)])
         self.assertTrue(window["stashed"] and window["onVirtualScreen"] is False)  # the fake window did not move
         self.assertEqual(self.moves[-1], (11, 2568, 1608))
         self.assertEqual(self.host.virtual_devices, {SMALL.device})

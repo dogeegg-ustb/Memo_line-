@@ -152,6 +152,6 @@ v4 索引新增 `projectPath`（CLIP 完整路径）和 `previousSessions[]`。�
 
 新 watcher manifest 保持 `schema=dirty-matrix-image-diff/v1`，新增 `comparison=fullResolution/v2`：搜索预测不限制像素比较范围，所有格子沿用 `Different` 判据逐像素比较；两侧都完全透明时忽略隐藏 RGB，任一侧非零则比较全部 RGBA。`images[]` 中每张图片才是编辑用的脏矩阵；`afterImage`、`nowImage/image`、`maskImage`、`bounds`、`labelIds` 共同描述它。mask 标记处整体替换 RGBA，包括 alpha=0 和隐藏 RGB。
 
-快照 descriptor 带 `sessionId`、`generation`、图层 UUID、尺寸和 `baselineSource`。可信来源为 `recordingStart`、`createdEmpty`、`reproduction`；普通首次捕获不自动获得录制起点的可信性。历史链需检查相邻 `after.id == previous.now.id`、图层身份、代次、会话和尺寸；旧的粗略比较仍可读取，但不能声明可编辑。宿主在安装并捕获最终复现层后显式注册 `reproduction` baseline。
+快照 descriptor 带 `sessionId`、`generation`、图层 UUID、尺寸和 `baselineSource`。可信来源为 `recordingStart`、`createdEmpty`、`layerCreated`、`reproduction`；普通首次捕获不自动获得录制起点的可信性。`layerCreated` 是录制中新出现的图层：取第一次列出它的那次保存（录制器在 spool 里留存的 .clip 副本）导出整层，`triggerTicks` 为该保存的触发时间；录制器在图层面板左键操作或图层命令键松开后补存一次（`clipSaveRequest.reason=afterLayerOperation`，打开了弹出窗口或菜单时跳过并记 `clipSaveSkipped`），所以新建图层在下笔前就有这样的保存。历史链需检查相邻 `after.id == previous.now.id`、图层身份、代次、会话和尺寸；旧的粗略比较仍可读取，但不能声明可编辑。宿主在安装并捕获最终复现层后显式注册 `reproduction` baseline。
 
 `LiveSessionReader` 读取刷盘后的指定 appendId 前缀，不要求 footer；包、图像路径、mask 数量和双向标签引用有独立校验。PNG 必须有合法首个 IHDR、正确尺寸、8 位 RGBA 色彩类型及合法压缩/过滤/交错方法，拒绝灰度、RGB 和索引图被解码器隐式转换。最新接入状态及实机限制见 [整合说明](docs/architecture/RGB_LIVE_EDITING_CONTINUATION.md)。

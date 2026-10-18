@@ -49,6 +49,16 @@ internal static class Stage12Checks
             "stage12", evidence.Snapshot, () => true, CancellationToken.None);
         check(!reproduction.Baseline && reproduction.DiffImages == 1 && seeded.VerifyChain("reproduction-stage12").Valid,
             "The first capture after reproduction baseline is a valid diff");
+        var createdLayer = new LayerReference(9, "图层 1", "created-stage12");
+        var createdMetadata = JsonSerializer.SerializeToElement(new { width = 32, height = 32, fullCanvas = true, layerId = 9, layerUuid = createdLayer.Uuid });
+        check(!seeded.HasLayer(createdLayer.Uuid!, "stage12", 1), "A layer created during the recording has no snapshot yet");
+        seeded.SeedBaselines([new(new("baseline-created", "external", "stage12", 1, 40, "", 32, 32, createdLayer, createdMetadata, [], 40, "layerCreated"), Png("created"))]);
+        check(seeded.HasLayer(createdLayer.Uuid!, "stage12", 1) && !seeded.HasLayer(createdLayer.Uuid!, "other-session", 1),
+            "A seeded new-layer baseline belongs to its own session only");
+        var created = seeded.Advance(new(Png("created-next", true), createdMetadata.GetRawText(), createdLayer.Name, 50, result.ControlResponse),
+            request with { Ticks = 50, LayerName = createdLayer.Name, Layer = createdLayer }, "stage12", evidence.Snapshot, () => true, CancellationToken.None);
+        check(!created.Baseline && created.DiffImages == 1 && seeded.VerifyChain(createdLayer.Uuid!).Valid,
+            "Strokes drawn on a new layer after its first save become a diff against that save");
         Console.WriteLine("STAGE 1/2 artifacts: " + root);
     }
 
@@ -147,6 +157,14 @@ internal static class Stage12Checks
         check(onPaper is [{ LayerName: "图层 1", Operations.Length: 0 }],
             "A boundary taken on the paper layer still refreshes previously captured layers");
         foreach (var request in onPaper) paper.Complete(request, true);
+        // 2026-10-17 live session: an edit replaced the captured 图层 1 by 图层 2, then a paste
+        // became a new 图层 1. The next boundary must not refresh that unrelated layer by name.
+        PaperLayer(13, "图层2");
+        LayerReference[] replaced = [new(14, "图层 2", "uuid-2"), new(15, "图层 1", "uuid-paste")];
+        var afterEdit = paper.ReserveEditBoundary("paper-4", replaced, 14);
+        check(afterEdit is [{ LayerName: "图层 2", Layer.Uuid: "uuid-2" }],
+            "A captured layer that was deleted is not revived through another layer with its name");
+        foreach (var request in afterEdit) paper.Complete(request, true);
         var unseeded = new WatchState(); unseeded.Reset();
         unseeded.Accept(Event("core.canvasViewState", "stateUpdated", 1, new { status = "changed", state = new
         { canvasOriginScreenPx = new { x = 0, y = 0 }, ocrScalePercent = 100, ocrRotationDegrees = 0 } }));
@@ -155,6 +173,28 @@ internal static class Stage12Checks
         unseeded.Accept(Event("core.currentLayerState", "stateUpdated", 2, new { status = "changed", state = "纸张" }));
         try { unseeded.ReserveEditBoundary("paper-3", unseeded.KnownLayersAt(3), 3); throw new Exception("Paper-only boundary accepted"); }
         catch (InvalidDataException error) { check(error.Message.Contains("是纸张"), "A boundary with only the paper layer names the paper layer"); }
+        // 2026-10-18 live session: 图层 1 was created during the recording and only captured at the next
+        // Alt+M, after 19 strokes, so none of them could be undone. The save that first lists it is its baseline.
+        var appearing = new WatchState(); appearing.Reset();
+        var appearances = new List<LayerAppearance>();
+        appearing.LayerAppeared += appearances.Add;
+        void Clip(long ticks, ulong appendId, string? snapshotPath, params object[] layers)
+            => appearing.Accept(new(1, "created", ticks, "core.clipState", "stateUpdated", false, appendId, 0, ticks, ticks, ticks, null, null, null,
+                JsonSerializer.SerializeToElement(new { status = "changed", state = new { layers },
+                    rawResult = new { snapshotPath }, evidence = new { triggerTicks = ticks } })));
+        object Raster(int id, string name, string uuid) => new { id, name, type_raw = 1, uuid };
+        object PaperRow = new { id = 4, name = "纸张", type_raw = 1584, is_paper = true, uuid = "uuid-paper" };
+        Clip(1, 1, "s1.clip", PaperRow, Raster(14, "图层 2", "uuid-old"));
+        check(appearances.Count == 0, "Layers listed by the first CLIP state are covered by the recording baseline");
+        Clip(5, 0, "edit.clip", PaperRow, Raster(17, "图层 1", "uuid-reproduction"));
+        check(appearances.Count == 0, "A layer first listed inside an edit transaction is left to its reproduction baseline");
+        Clip(9, 9, "s9.clip", PaperRow, Raster(14, "图层 2", "uuid-old"), Raster(19, "图层 1", "uuid-new"));
+        check(appearances is [{ TriggerTicks: 9, SnapshotPath: "s9.clip", Layers: [{ Id: 19, Uuid: "uuid-new" }] }],
+            "The first save listing a new layer becomes its baseline, at that save's trigger time");
+        Clip(12, 12, "s12.clip", PaperRow, Raster(14, "图层 2", "uuid-old"), Raster(19, "图层 1", "uuid-new"));
+        check(appearances.Count == 1, "A layer is seeded from the first save that lists it only");
+        Clip(15, 15, null, PaperRow, Raster(20, "图层 3", "uuid-unsaved"));
+        check(appearances.Count == 1, "A save whose file the recorder did not keep cannot be a baseline");
         using var coordinator = new CaptureCoordinator();
         using var first = await coordinator.EnterAsync(CancellationToken.None);
         using var cancelled = new CancellationTokenSource(); cancelled.Cancel();

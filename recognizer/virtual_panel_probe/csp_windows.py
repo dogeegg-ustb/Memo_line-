@@ -15,7 +15,7 @@ CSP_EXES = {"clipstudiopaint.exe", "clipstudiopaintver1.exe", "clipstudiopaintve
 # System popups that share the CSP process but are never palettes.
 IGNORED_CLASSES = {"#32768", "tooltips_class32", "SysShadow", "IME", "MSCTFIME UI", "Default IME"}
 GW_OWNER, GA_ROOT = 4, 2
-SWP_NOSIZE, SWP_NOZORDER, SWP_NOACTIVATE, SWP_ASYNCWINDOWPOS = 0x1, 0x4, 0x10, 0x4000
+SWP_NOSIZE, SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE, SWP_ASYNCWINDOWPOS = 0x1, 0x2, 0x4, 0x10, 0x4000
 
 for name in ("IsWindow", "IsWindowVisible", "IsIconic", "IsWindowEnabled"):
     getattr(USER32, name).argtypes = [wintypes.HWND]
@@ -123,6 +123,15 @@ def foreground() -> int:
 
 def is_window(hwnd: int) -> bool:
     return bool(USER32.IsWindow(hwnd))
+
+
+def resize_window(window: CspWindow, width: int, height: int) -> None:
+    """Give the visible frame this size, keeping its top-left; asynchronous, never activates CSP."""
+    extra_w = (window.rect[2] - window.rect[0]) - window.size[0]
+    extra_h = (window.rect[3] - window.rect[1]) - window.size[1]
+    if not USER32.SetWindowPos(window.hwnd, None, 0, 0, width + extra_w, height + extra_h,
+                               SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS):
+        raise ctypes.WinError(ctypes.get_last_error())
 
 
 def move_window(window: CspWindow, left: int, top: int) -> None:

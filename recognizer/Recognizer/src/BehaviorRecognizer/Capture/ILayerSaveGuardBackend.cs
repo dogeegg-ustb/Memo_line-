@@ -14,4 +14,6 @@ internal interface ILayerSaveGuardBackend
     Task InitializeSaveWorkerAsync(string executable);
     Task DispatchSaveAsync(nint hwnd);
     uint ReplayInputs(LayerSaveGuard.Input[] inputs);
+    IReadOnlySet<nint> VisibleTopLevelWindows(nint hwnd) => new HashSet<nint>();
+    bool InModalUi(nint hwnd) => false;
 }

@@ -291,6 +291,7 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
         "colorInputState" => "色彩滑块输入状态",
         "canvasViewState" => "画布视图状态",
         "clipState" => "Clip 文档结构",
+        "historyState" => "历史记录面板",
         _ => module ?? "状态模块"
     };
 

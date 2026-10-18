@@ -286,28 +286,30 @@ def panel_rectangles(tree: dict, client: tuple[int, int, int, int], live_scale: 
         col_x.append(col_x[-1] + column_width)
     column_heights = sizes(root)
     bottom = y + height
-    # The saved column height is the live dock height while the layout fits.
-    # After a DPI change it is only rescaled, so the dock then starts below
-    # the menu and command bars.
+    # The dock starts below the menu and command bars. The saved column height
+    # can be stale (seen live: 1227 px saved for a 1455 px dock), so it is only
+    # used when the command bar is hidden and the chrome height is unknown.
     chrome = scaler.logical(CHROME_HEIGHT_96) if tree.get("dockplacementcommandbarvisible") == 1 else None
-    dock_height = max(column_heights)
-    if chrome is not None and dock_height > height - chrome + 2:
+    if chrome is not None:
         dock_height = height - chrome
-    elif chrome is None and scaler.converted and dock_height > height:
-        raise ValueError("命令栏隐藏时无法推算缩放后的停靠区顶部，请在 CSP 保存工作区")
+    else:
+        dock_height = max(column_heights)
+        if scaler.converted and dock_height > height:
+            raise ValueError("命令栏隐藏时无法推算缩放后的停靠区顶部，请在 CSP 保存工作区")
     dock_top = bottom - dock_height
 
-    # The collapse bar is the saved column height minus its stack. An overflowing
-    # stack makes that remainder negative, so it is taken from a column that fits.
-    remainders = [column_heights[c] - sum(h) for c, h in ((1, left_heights), (4, right_heights))
-                  if column_heights[c] - sum(h) > 0]
+    def saved_header(column: int, heights: list[int]) -> int | None:
+        # The collapse bar is the saved column height minus its stack, but only
+        # while that saved height is the live dock height and the stack fits.
+        remainder = column_heights[column] - sum(heights)
+        return remainder if abs(column_heights[column] - dock_height) <= 2 and remainder > 0 else None
+
+    remainders = [r for r in (saved_header(1, left_heights), saved_header(4, right_heights)) if r]
     column_header = remainders[0] if remainders else scaler.logical(COLUMN_HEADER_96)
 
     def stack(label: str, column: int, heights: list[int]) -> list[tuple[int, int]]:
         # Side stacks are bottom aligned in the CSP dock area, below the column's collapse bar.
-        header = column_heights[column] - sum(heights)
-        if header <= 0:
-            header = column_header
+        header = saved_header(column, heights) or column_header
         if sum(heights) <= bottom - (dock_top + header) + 2:
             tops = [bottom - sum(heights[i:]) for i in range(len(heights))]
             return list(zip(tops, heights))
@@ -352,8 +354,8 @@ def panel_rectangles(tree: dict, client: tuple[int, int, int, int], live_scale: 
             booth.get("visible") and 0 <= booth.get("currentindex", -1) < len(booth["subviews"]["_items"])
             and booth["subviews"]["_items"][booth["currentindex"]].get("_type") == "palettekindtool"
             for booth in tool_booths):
-        tool_top = max(bottom - column_heights[0], dock_top)
-        result["工具栏"] = (col_x[0], tool_top, widths[0], bottom - tool_top)
+        # The tool column spans the whole dock; its saved height can be stale.
+        result["工具栏"] = (col_x[0], dock_top, widths[0], dock_height)
     color_column, color_index = color_slots[0]
     color_top, color_height = stacks[color_column][color_index]
     result["色彩"] = (col_x[color_column], color_top, widths[color_column], color_height)

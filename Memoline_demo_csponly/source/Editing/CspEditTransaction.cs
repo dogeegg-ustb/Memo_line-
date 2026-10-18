@@ -27,10 +27,11 @@ internal interface ICspEditingActions
     // refresh: save again even when no input was sent since the last inspection (CSP may have
     // been too busy to apply the previous action when that save ran).
     Task<CspLayerInspection> SaveAndInspectAsync(CancellationToken token, bool refresh = false);
+    // Panel-confirmed navigation (reads the layer panel after every step); the fallback when a path crosses folders.
     Task NavigateToLayerAsync(string name, CancellationToken token);
+    // One press of CSP's select-upper/lower-layer shortcut, unconfirmed: the next save proves where it landed.
+    Task SelectAdjacentLayerAsync(bool upper, CancellationToken token);
     Task<CspCurrentLayerEvidence> ReadCurrentLayerAsync(CancellationToken token);
-    // Reads the selected layer from the screen now, not from the last save: used around the deletion of an original.
-    Task<CspCurrentLayerEvidence> ReadLiveCurrentLayerAsync(CancellationToken token) => ReadCurrentLayerAsync(token);
     Task<CspHideEvidence> HideLayerAsync(CspLayerEvidence layer, CancellationToken token);
     // False when CSP has no show/hide-layer shortcut: the original stays visible under the reproduction.
     bool CanHideLayer => true;
@@ -49,6 +50,26 @@ internal interface ICspEditingActions
     void LayerReplaced(string replacedUuid, string reproductionUuid) { }
     // Precise undo may work on a layer other than the user's: select the user's layer again before the end.
     Task ReturnToUserLayerAsync(CancellationToken token) => Task.CompletedTask;
+}
+
+/// <summary>Plans select-upper/lower-layer presses from a saved structure (top row first) without reading the panel.</summary>
+internal static class LayerNavigation
+{
+    /// <summary>Signed presses from one layer to another, negative going up; null when a row on the way is a
+    /// folder (expanded or collapsed changes what a press reaches) or lies in another folder.</summary>
+    internal static int? Steps(IReadOnlyList<CspLayerEvidence> layers, string fromUuid, string toUuid)
+    {
+        int from = Index(layers, fromUuid), to = Index(layers, toUuid);
+        if (from < 0 || to < 0) return null;
+        for (int i = Math.Min(from, to); i <= Math.Max(from, to); i++)
+            if (layers[i].IsFolder || layers[i].ParentUuid != layers[from].ParentUuid) return null;
+        return to - from;
+    }
+    private static int Index(IReadOnlyList<CspLayerEvidence> layers, string uuid)
+    {
+        for (int i = 0; i < layers.Count; i++) if (layers[i].Uuid == uuid) return i;
+        return -1;
+    }
 }
 
 internal sealed class CspEditingException(PlanIssue issue, Exception? inner = null,
@@ -134,7 +155,7 @@ internal sealed class CspEditTransaction : IEditingTransaction
         if (replay.Any(ReadsReferences))
             await _actions.VerifyReferenceSceneAsync(layer, replay, ReplayMode.Concentrated, referenceLayers, ct);
         var (original, before) = await OriginalAsync(layer, hide: true, ct);
-        var work = await PasteAsync(layer, original, before, seed, ct);
+        var (work, _) = await PasteAsync(layer, original, before, seed, ct);
         if (replay.Count > 0) await ReplayAsync(work, replay, ReplayMode.Concentrated, referenceLayers, ct);
         var captured = await CaptureAsync(layer, original, work, ct);
         EditJournalCheckpoint checkpoint;
@@ -173,10 +194,10 @@ internal sealed class CspEditTransaction : IEditingTransaction
         if (_installed.Contains(layer)) throw Error(PlanIssueCode.LayerIdentityUnconfirmed, "同一原图层不能重复安装复现层。");
         // No hiding: the original is deleted right after the paste, so hiding it would only cost another save.
         var (original, before) = await OriginalAsync(layer, hide: false, ct);
-        var final = await PasteAsync(layer, original, before, expected, ct);
+        var (final, pasted) = await PasteAsync(layer, original, before, expected, ct);
         // The reproduction replaces the original (kept in the recycle bin). Deleting it before the replay keeps the
         // replayed strokes on top of CSP's undo stack, so its own undo still steps back through exactly them.
-        await DeleteOriginalAsync(layer, original, final, ct);
+        await DeleteOriginalAsync(layer, original, final, pasted, ct);
         // Event replay is the last step, after the pasted state. The contacts the snapshot reverted come first,
         // concentrated (they only rebuild pixels); the undone strokes come last, discrete, so CSP's own undo
         // steps back through exactly them.
@@ -228,8 +249,15 @@ internal sealed class CspEditTransaction : IEditingTransaction
         if (!_sizes.ContainsKey(layer)) throw Error(PlanIssueCode.LayerIdentityUnconfirmed, "图层不属于冻结的请求。");
         var inspection = await InspectAsync(layer, ct);
         var original = RequireLayer(inspection, layer.Uuid);
-        await _actions.NavigateToLayerAsync(original.Name, ct);
-        inspection = await InspectAsync(layer, ct); original = RequireLayer(inspection, original.Uuid, original.Name);
+        // The saved document names the selected layer. Only a different one needs a move, planned from the
+        // same structure; the save after it proves where it landed.
+        var current = await _actions.ReadCurrentLayerAsync(ct);
+        if (!current.Confirmed || current.Uuid != original.Uuid)
+        {
+            await SelectLayerAsync(inspection, current, original, ct);
+            inspection = await InspectSelectedAsync(layer, original.Uuid, ct);
+        }
+        original = RequireLayer(inspection, original.Uuid, original.Name);
         await ConfirmAsync(inspection, original, ct);
         if (hide && !_skipHide && !_hidden.Contains(layer))
         {
@@ -250,8 +278,8 @@ internal sealed class CspEditTransaction : IEditingTransaction
 
     internal const int PasteAttempts = 2;
 
-    private async Task<CspLayerEvidence> PasteAsync(LayerKey layer, CspLayerEvidence original, CspLayerInspection before,
-        ImageRgba image, CancellationToken ct)
+    private async Task<(CspLayerEvidence Work, CspLayerInspection Pasted)> PasteAsync(LayerKey layer, CspLayerEvidence original,
+        CspLayerInspection before, ImageRgba image, CancellationToken ct)
     {
         CspLayerInspection after;
         for (int attempt = 1; ; attempt++)
@@ -285,33 +313,71 @@ internal sealed class CspEditTransaction : IEditingTransaction
         var captured = LayerCapture.Read(await _actions.ExportLayerAsync(layer with { Uuid = work.Uuid }, ct),
             layer with { Uuid = work.Uuid }, _sizes[layer]);
         if (!captured.Pixels.Bytes.AsSpan().SequenceEqual(image.Bytes)) throw Error(PlanIssueCode.PasteNotExact, "新层导出 RGBA 与粘贴的完整画布逐字节不相等。");
-        return work;
+        return (work, after);
     }
 
     /// <summary>
-    /// The pasted reproduction sits directly above the original and is selected. Steps down to the original,
-    /// confirms it on screen by its unique name, deletes it, and returns to the reproduction. The next save
-    /// (the capture) proves structurally that exactly the original disappeared.
+    /// Runs on the structure alone, then proves it with one save. The paste's save showed the selected
+    /// reproduction directly above the original in the same folder, so one "select lower layer" reaches the
+    /// original. After the delete CSP selects the row that takes the deleted one (the layer below), or the one
+    /// above when the original was the bottom row; one "select upper layer" from that row is planned too. A
+    /// wrong prediction is only a selection: it is corrected from the same save before anything is drawn.
     /// </summary>
-    private async Task DeleteOriginalAsync(LayerKey layer, CspLayerEvidence original, CspLayerEvidence work, CancellationToken ct)
+    private async Task DeleteOriginalAsync(LayerKey layer, CspLayerEvidence original, CspLayerEvidence work,
+        CspLayerInspection pasted, CancellationToken ct)
     {
-        await _actions.NavigateToLayerAsync(original.Name, ct);
-        var current = await _actions.ReadLiveCurrentLayerAsync(ct);
-        if (!current.Confirmed || current.Uuid != original.Uuid)
-            throw Error(PlanIssueCode.LayerIdentityUnconfirmed,
-                $"删除前未能确认当前层是原层「{original.Name}」（识别为「{current.Name}」），已停止，未删除任何图层。");
+        int index = pasted.Layers.ToList().FindIndex(l => l.Uuid == original.Uuid);
+        if (LayerNavigation.Steps(pasted.Layers, work.Uuid, original.Uuid) != 1)
+            throw Error(PlanIssueCode.LayerIdentityUnconfirmed, $"复现层「{work.Name}」不在原层「{original.Name}」正上方，已停止，未删除任何图层。");
+        await _actions.SelectAdjacentLayerAsync(upper: false, ct);
         ct.ThrowIfCancellationRequested();
         _journal.OriginalDeleted(original.Uuid, work.Uuid);
         await _actions.DeleteLayerAsync(ct);
         _deleted.Add(layer);
-        current = await _actions.ReadLiveCurrentLayerAsync(ct);
+        var remaining = pasted.Layers.Where(l => l.Uuid != original.Uuid).ToArray();
+        if (index + 1 < pasted.Layers.Count && LayerNavigation.Steps(remaining, pasted.Layers[index + 1].Uuid, work.Uuid) == -1)
+            await _actions.SelectAdjacentLayerAsync(upper: true, ct);
+        var after = await InspectChangedAsync(layer, pasted, ct);
+        string Order(CspLayerInspection inspection) => string.Join(" / ", inspection.Layers.Select(l => l.Name));
+        var missing = pasted.Layers.Where(l => after.Layers.All(a => a.Uuid != l.Uuid)).ToArray();
+        if (missing.Length == 0)
+            throw Error(PlanIssueCode.LayerIdentityUnconfirmed, $"已删除的原层「{original.Name}」仍在 CSP 中。");
+        if (missing is not [var gone] || gone.Uuid != original.Uuid)
+            throw Error(PlanIssueCode.LayerIdentityUnconfirmed, $"删除的不是原层「{original.Name}」，而是「{string.Join("、", missing.Select(l => l.Name))}」：" +
+                $"选择原层的快捷键没有按预期生效。请在 CSP 中按一次 Ctrl+Z 撤销这次删除。删除后：{Order(after)}。");
+        if (!after.Layers.SequenceEqual(remaining))
+            throw Error(PlanIssueCode.LayerIdentityUnconfirmed, $"删除期间其他图层的结构或显示状态发生了变化。删除前：{Order(pasted)}；删除后：{Order(after)}。");
+        var current = await _actions.ReadCurrentLayerAsync(ct);
         if (!current.Confirmed || current.Uuid != work.Uuid)
         {
-            await _actions.NavigateToLayerAsync(work.Name, ct);
-            current = await _actions.ReadLiveCurrentLayerAsync(ct);
+            _actions.Status($"删除原层后当前层是「{current.Name}」，按图层结构切回复现层「{work.Name}」…");
+            await SelectLayerAsync(after, current, work, ct);
+            after = await InspectSelectedAsync(layer, work.Uuid, ct);
+            current = await _actions.ReadCurrentLayerAsync(ct);
         }
+        RequireLayer(after, work.Uuid, work.Name);
         if (!current.Confirmed || current.Uuid != work.Uuid)
             throw Error(PlanIssueCode.LayerIdentityUnconfirmed, $"删除原层后未能回到复现层「{work.Name}」。");
+    }
+
+    // Planned presses when the saved structure allows it; the panel-confirmed navigation otherwise.
+    private async Task SelectLayerAsync(CspLayerInspection inspection, CspCurrentLayerEvidence current, CspLayerEvidence target, CancellationToken ct)
+    {
+        if (current is { Confirmed: true, Uuid: { } from } && LayerNavigation.Steps(inspection.Layers, from, target.Uuid) is { } steps)
+            for (int i = 0; i < Math.Abs(steps); i++) await _actions.SelectAdjacentLayerAsync(upper: steps < 0, ct);
+        else await _actions.NavigateToLayerAsync(target.Name, ct);
+    }
+
+    // Saves after a selection move. CSP may still be busy with the shortcut when the save arrives, so a
+    // save naming another layer is repeated a few times before the caller's check decides.
+    private async Task<CspLayerInspection> InspectSelectedAsync(LayerKey layer, string uuid, CancellationToken ct)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            var inspection = await InspectAsync(layer, ct, refresh: attempt > 0);
+            if (attempt >= 3 || (await _actions.ReadCurrentLayerAsync(ct)).Uuid == uuid) return inspection;
+            await Task.Delay(300, ct);
+        }
     }
 
     private async Task<CapturedLayer> CaptureAsync(LayerKey layer, CspLayerEvidence original, CspLayerEvidence work, CancellationToken ct)

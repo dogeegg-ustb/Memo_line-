@@ -10,7 +10,7 @@ internal enum NativeUndoCommandState { Resolved, NoRecordedTarget, Blocked, Unkn
 // Undo-unit evidence and replay eligibility are different. A confirmed eraser
 // stroke can occupy one undo unit even when its recipe cannot be replayed.
 internal sealed record NativeUndoPenProof(ulong BeginAppendId, ulong OperationId, LayerKey? Layer,
-    bool KnownUndoUnit, bool ReplayEligible);
+    bool KnownUndoUnit, bool ReplayEligible, string? BrushName = null);
 // A stroke target is its penBegin; any other unit's target starts at its first claimed input.
 internal sealed record NativeUndoTarget(ulong BeginAppendId, ulong OperationId, LayerKey? Layer,
     bool KnownUndoUnit, bool ReplayEligible, NativeUndoUnitKind Kind = NativeUndoUnitKind.Stroke, string? Description = null);
@@ -24,10 +24,13 @@ internal sealed record NativeUndoBarrier(ulong InputAppendId, ulong ResolutionAp
     IReadOnlyList<ulong> AffectedPenBeginAppendIds);
 internal sealed record NativeUndoUnitEntry(NativeUndoUnitProof Proof, NativeUndoPenState State,
     ulong LastStateInputAppendId, string? Reason);
+/// <summary>One reading of CSP's History palette and whether it could be matched to the recorded units.</summary>
+internal sealed record NativeUndoHistoryReading(ulong AppendId, ulong AppliedAtAppendId, bool Accepted, string Reason,
+    int RowCount, int UndoneRows, IReadOnlyList<ulong> AlignedUnits);
 internal sealed record NativeUndoTimelineResult(string SessionId, ulong BoundaryAppendId,
     IReadOnlyDictionary<ulong, NativeUndoPenEntry> Pens, IReadOnlyList<NativeUndoCommandResolution> Commands,
     IReadOnlyList<NativeUndoBarrier> Barriers, bool InitialHistoryKnownEmpty, int? VerifiedUndoCapacity,
-    IReadOnlyList<NativeUndoUnitEntry> Units)
+    IReadOnlyList<NativeUndoUnitEntry> Units, IReadOnlyList<NativeUndoHistoryReading>? HistoryReadings = null)
 {
     // Hook delivery and a saved shortcut mapping are not a CSP application ack.
     // The caller must compare the resulting effective history with its immutable
@@ -42,6 +45,14 @@ internal sealed record NativeUndoTimelineResult(string SessionId, ulong Boundary
 /// macro operations that <see cref="INativeUndoUnitDetector"/>s prove. An unknown
 /// interval discards stack knowledge; a later confirmed unit can establish a new local
 /// suffix. It never imports another session's stack.
+/// <para>
+/// After undo/redo the recorder reads CSP's History palette (module historyState): one row per
+/// undo unit, the undone ones dimmed. A reading is matched to the recorded units from the newest
+/// row back. Row texts are tool paths that OCR may spell in another script than the brush state,
+/// so only their pattern is compared: two rows read alike exactly when their strokes used the same
+/// brush. Accepted readings set the units' states and the stacks, and give each undo/redo of the
+/// burst the unit it moved, even after an unknown command made the stack unknown.
+/// </para>
 /// </summary>
 internal static class NativeUndoTimeline
 {
@@ -56,8 +67,13 @@ internal static class NativeUndoTimeline
         internal NativeUndoPenState State = state;
         internal ulong LastInput = lastInput;
         internal string? Reason = reason;
+        // Interval between inputs that may have added History rows nobody recorded.
+        internal int Epoch;
         internal abstract bool Known { get; }
         internal abstract NativeUndoTarget Target { get; }
+        // What its History row is compared by; null matches any row.
+        internal abstract string? HistoryKey { get; }
+        internal abstract ulong Id { get; }
     }
 
     private sealed class Pen(ulong append, ulong eventId, ulong operation, NativeUndoPenProof? proof,
@@ -73,6 +89,8 @@ internal static class NativeUndoTimeline
         internal bool Invalid;
         internal override bool Known => End is not null && !Invalid && Participates && Proof?.KnownUndoUnit == true;
         internal override NativeUndoTarget Target => new(Begin, Operation, Proof?.Layer, Known, Known && Proof?.ReplayEligible == true);
+        internal override string? HistoryKey => Proof?.BrushName is { Length: > 0 } brush ? "stroke:" + brush.Trim() : null;
+        internal override ulong Id => Begin;
         internal NativeUndoPenEntry Freeze() => new(Begin, EventId, Operation, Proof?.Layer, End,
             Participates, Known, Known && Proof?.ReplayEligible == true, State, LastInput, Prefix, Reason);
     }
@@ -84,6 +102,8 @@ internal static class NativeUndoTimeline
         internal readonly NativeUndoUnitProof Proof = proof;
         internal override bool Known => true;
         internal override NativeUndoTarget Target => new(Proof.FirstInputAppendId, 0, Proof.Layer, true, false, Proof.Kind, Proof.Description);
+        internal override string? HistoryKey => $"unit:{Proof.Kind}:{Proof.Description}";
+        internal override ulong Id => Proof.FirstInputAppendId;
         internal NativeUndoUnitEntry Freeze() => new(Proof, State, LastInput, Reason);
     }
 
@@ -111,6 +131,13 @@ internal static class NativeUndoTimeline
         private readonly bool _initialEmpty;
         private bool _unknownUndoBottom, _unknownRedoBottom;
         private ulong _prefix = 1;
+        // Every unit CSP still lists, oldest first: pushed units minus the redo entries a new unit discarded.
+        private readonly List<Unit> _chronology = [];
+        private int _epoch;
+        private ulong _lastPush;
+        private readonly Dictionary<ulong, List<HistoryReading>> _readings = [];
+        private readonly Dictionary<ulong, ulong> _eventAppends = [];
+        private readonly List<NativeUndoHistoryReading> _historyReadings = [];
         private PanelRegionMap _regions = PanelRegionMap.Unavailable();
 
         internal Resolver(SessionSnapshot session, IEnumerable<NativeUndoPenProof> proofs, int? capacity, bool initialEmpty,
@@ -134,7 +161,116 @@ internal static class NativeUndoTimeline
                 throw new InvalidDataException("Undo-unit proof belongs to a different native session or identity.");
             PrepareShortcuts();
             PrepareUnits(detectors);
+            PrepareHistoryReadings();
         }
+
+        private sealed record HistoryReading(ulong Append, ulong After, (string Text, bool Undone)[] Rows, int Current, ulong[] Inputs);
+
+        // A reading is applied right after the last input the recorder had seen when it captured the palette.
+        private void PrepareHistoryReadings()
+        {
+            foreach (var frame in _frames.Where(frame => Text(frame, "path") == "hardware" && U64(frame, "eventId") > 0))
+                _eventAppends.TryAdd(U64(frame, "eventId"), U64(frame, "appendId"));
+            foreach (var frame in _frames.Where(frame => Text(frame, "kind") == "coreStateUpdated"))
+            {
+                var data = Get(frame, "data");
+                if (Text(data, "module") != "historyState" || Text(data, "status") is not ("changed" or "unchanged")) continue;
+                var state = Get(data, "state");
+                var evidence = Get(data, "evidence");
+                var rows = Array(Get(state, "rows")).Select(row => (Text(row, "text") ?? "", Get(row, "undone").ValueKind == JsonValueKind.True)).ToArray();
+                if (rows.Length == 0 || Long(state, "currentIndex") is not { } current || current < 0 || current >= rows.Length) continue;
+                if (Get(evidence, "observedAfterEventId").ValueKind != JsonValueKind.Number ||
+                    !_eventAppends.TryGetValue(U64(evidence, "observedAfterEventId"), out ulong after)) continue;
+                var inputs = Array(Get(evidence, "relatedEventIds")).Select(Unsigned)
+                    .Select(id => _eventAppends.TryGetValue(id, out ulong append) ? append : 0).Where(append => append > 0).ToArray();
+                if (!_readings.TryGetValue(after, out var list)) _readings.Add(after, list = []);
+                list.Add(new(U64(frame, "appendId"), after, rows, (int)current, inputs));
+            }
+        }
+
+        // An undo or redo moves the current row but adds none; every other barrier may have added one
+        // (an interrupted contact is usually still committed by CSP).
+        private static bool MayAddRows(string reason) => reason is not ("undoRedoDuringCanvasContact" or
+            "undoRedoReachesUnrecordedHistory" or "undoRedoTargetsOpaqueUndoUnit" or "canvasContactNotCompletedAtBoundary");
+
+        private void ApplyReadings(ulong append)
+        {
+            if (!_readings.TryGetValue(append, out var readings)) return;
+            foreach (var reading in readings.OrderBy(reading => reading.Append)) ApplyReading(reading);
+        }
+
+        private void ApplyReading(HistoryReading reading)
+        {
+            var rows = reading.Rows.Skip(1).ToArray(); // the first row is the document's opening state
+            int active = reading.Current, undone = rows.Length - active;
+            void Report(bool accepted, string reason, IReadOnlyList<Unit> aligned)
+                => _historyReadings.Add(new(reading.Append, reading.After, accepted, reason, rows.Length, undone,
+                    aligned.Select(unit => unit.Id).ToArray()));
+            if (rows.Skip(active).Any(row => !row.Undone) || rows.Take(active).Any(row => row.Undone))
+            { Report(false, "rowsNotAnUndoSuffix", []); return; }
+            if (_contacts.Values.Any(pen => pen.Participates)) { Report(false, "readDuringCanvasContact", []); return; }
+            // Newest row against the newest unit, back while the units are of this epoch (nothing unrecorded
+            // could have added a row among or after them) and the same-name pattern holds. Older rows (history
+            // from before the recording, or before an unknown input) stay unmatched.
+            var aligned = new List<(Unit Unit, (string Text, bool Undone) Row)>();
+            for (int i = rows.Length - 1, j = _chronology.Count - 1; i >= 0 && j >= 0; i--, j--)
+            {
+                var unit = _chronology[j];
+                if (unit.Epoch != _epoch) break;
+                if (aligned.Any(pair => pair.Unit.HistoryKey is { } key && unit.HistoryKey is { } other &&
+                    key == other != (pair.Row.Text == rows[i].Text))) break;
+                aligned.Add((unit, rows[i]));
+            }
+            if (aligned.Count == 0) { Report(false, "newestRowNotRecorded", []); return; }
+            aligned.Reverse();
+            // Row-level stacks: unmatched rows are units nobody recorded (null).
+            var slots = new Unit?[rows.Length];
+            for (int k = 0; k < aligned.Count; k++) slots[rows.Length - aligned.Count + k] = aligned[k].Unit;
+            foreach (var (unit, row) in aligned)
+            {
+                unit.State = row.Undone ? NativeUndoPenState.Undone : NativeUndoPenState.Active;
+                unit.LastInput = reading.After; unit.Reason = null;
+            }
+            var window = aligned.Select(pair => pair.Unit).ToHashSet();
+            _undo.Clear(); _redo.Clear();
+            _undo.AddRange(slots.Take(active).OfType<Unit>());
+            _unknownUndoBottom = slots.Take(active).Any(slot => slot is null);
+            // The next redo takes the earliest undone row; if nobody recorded it, the redo stack is unknown.
+            if (slots.Skip(active).Any(slot => slot is null)) _unknownRedoBottom = true;
+            else { _redo.AddRange(slots.Skip(active).Reverse().OfType<Unit>()); _unknownRedoBottom = false; }
+            ResolveBurst(reading, slots, active);
+            Report(true, "matched", aligned.Select(pair => pair.Unit).ToArray());
+        }
+
+        // Each undo/redo of the read burst moved one row; replaying the burst backwards from the read rows
+        // names it. Only when no unit was added since the burst began.
+        private void ResolveBurst(HistoryReading reading, Unit?[] slots, int active)
+        {
+            var inputs = reading.Inputs.ToHashSet();
+            var burst = _commands.Select((command, index) => (command, index))
+                .Where(item => inputs.Contains(item.command.InputAppendId) && item.command.Command is "undo" or "redo"
+                    && item.command.State != NativeUndoCommandState.Blocked).ToArray();
+            if (burst.Length == 0 || _lastPush > burst.Min(item => item.command.InputAppendId)) return;
+            var undo = slots.Take(active).ToList();
+            var redo = slots.Skip(active).Reverse().ToList();
+            foreach (var (command, index) in burst.OrderByDescending(item => item.command.InputAppendId))
+            {
+                var (from, to) = command.Command == "undo" ? (redo, undo) : (undo, redo);
+                if (from.Count == 0)
+                {
+                    // The panel lists every row down to the opening state: there was nothing to move.
+                    _commands[index] = command with { State = NativeUndoCommandState.NoRecordedTarget, Target = null,
+                        Reason = "historyPanelNothingToMove" };
+                    continue;
+                }
+                var unit = from[^1]; from.RemoveAt(from.Count - 1); to.Add(unit);
+                _commands[index] = unit is null
+                    ? command with { State = NativeUndoCommandState.Unknown, Target = null, Reason = "historyPanelRowNotRecorded" }
+                    : command with { State = NativeUndoCommandState.Resolved, Target = unit.Target,
+                        RequiresBoundaryPixelValidation = true, Reason = "historyPanel" };
+            }
+        }
+
 
         // A unit's claim must start and end on recorded hardware inputs, must not overlap another
         // claim and must not swallow an undo or redo; otherwise its inputs keep their own meaning.
@@ -193,8 +329,8 @@ internal static class NativeUndoTimeline
                     _commands.Add(new(command, 0, append, NativeUndoCommandState.Unknown, null,
                         prefix, append, false, "shortcutNativeReferenceUnknown"));
                 }
-                if (RecorderTagged(data) || Text(frame, "path") == "program") continue;
-                if (Text(frame, "path") == "hardware" && Claim(append)) continue;
+                if (RecorderTagged(data) || Text(frame, "path") == "program") { ApplyReadings(append); continue; }
+                if (Text(frame, "path") == "hardware" && Claim(append)) { ApplyReadings(append); continue; }
                 if (Text(frame, "path") == "hardware")
                 {
                     switch (kind)
@@ -220,6 +356,7 @@ internal static class NativeUndoTimeline
                     Barrier(append, append, "editTransactionLeftUnknownChanges");
                 else if (kind == "saveGuardResult" && Get(data, "released").ValueKind == JsonValueKind.False)
                     Barrier(append, append, "guardedInputNotReleased");
+                ApplyReadings(append);
             }
             foreach (var pen in _contacts.Values.Where(pen => pen.Participates).ToArray())
             {
@@ -227,7 +364,8 @@ internal static class NativeUndoTimeline
                 Barrier(pen.Begin, _session.BoundaryAppendId, "canvasContactNotCompletedAtBoundary");
             }
             return new(_session.SessionId, _session.BoundaryAppendId, _pens.ToDictionary(item => item.Key, item => item.Value.Freeze()),
-                _commands.ToArray(), _barriers.ToArray(), _initialEmpty, _capacity, _units.Select(unit => unit.Freeze()).ToArray());
+                _commands.ToArray(), _barriers.ToArray(), _initialEmpty, _capacity, _units.Select(unit => unit.Freeze()).ToArray(),
+                _historyReadings.ToArray());
         }
 
         // Inputs inside a proven unit's claim are that unit; it joins the stack at its last input (a
@@ -243,7 +381,7 @@ internal static class NativeUndoTimeline
                 _claiming = null;
                 if (unit.Proof.Kind == NativeUndoUnitKind.ViewState) return true;
                 _units.Add(unit);
-                PushUndo(unit); _redo.Clear(); _unknownRedoBottom = false;
+                PushNew(unit, append);
             }
             return true;
         }
@@ -280,12 +418,13 @@ internal static class NativeUndoTimeline
             // like a stroke. Unless a detector proved and claimed it, the stack is no longer known.
             if (pen.LayerPanel) { Barrier(pen.Begin, append, "layerPanelContactUnproven"); return; }
             if (!pen.Participates) return;
-            if (pen.Invalid) { pen.State = NativeUndoPenState.Unknown; pen.Reason ??= "contactCrossesUnknownInterval"; return; }
+            // CSP still lists it, but it is on no recorded stack: the rows after it can no longer be matched across it.
+            if (pen.Invalid) { pen.State = NativeUndoPenState.Unknown; pen.Reason ??= "contactCrossesUnknownInterval"; _epoch++; return; }
             pen.State = NativeUndoPenState.Active; pen.LastInput = append;
             pen.Reason = pen.Known ? null : "opaqueCanvasUndoUnit";
             // Every possible drawing contact occupies a stack position. It must
             // never disappear merely because it failed replay qualification.
-            PushUndo(pen); _redo.Clear(); _unknownRedoBottom = false;
+            PushNew(pen, append);
         }
 
         private void InterruptPen(JsonElement frame)
@@ -369,6 +508,14 @@ internal static class NativeUndoTimeline
             if (command == "undo") _redo.Add(unit); else PushUndo(unit);
             _commands.Add(new(command, input, resolution, NativeUndoCommandState.Resolved, unit.Target,
                 _prefix, input, true, _capacity is null ? "undoCapacityUnverifiedRequiresBoundaryPixels" : null));
+        }
+
+        // A new unit discards the redo entries: CSP drops their History rows too.
+        private void PushNew(Unit unit, ulong append)
+        {
+            foreach (var discarded in _redo) _chronology.Remove(discarded);
+            unit.Epoch = _epoch; _chronology.Add(unit); _lastPush = append;
+            PushUndo(unit); _redo.Clear(); _unknownRedoBottom = false;
         }
 
         private void PushUndo(Unit unit)
@@ -508,6 +655,7 @@ internal static class NativeUndoTimeline
             foreach (var unit in _units) { unit.State = NativeUndoPenState.Unknown; unit.LastInput = input; unit.Reason = reason; }
             _barriers.Add(new(input, resolution, reason, affected));
             _undo.Clear(); _redo.Clear(); _unknownUndoBottom = _unknownRedoBottom = true;
+            if (MayAddRows(reason)) _epoch++;
             // A delayed resolution proves an earlier input. Its publication must
             // not move that input's causal boundary past intervening strokes.
             _prefix = (input > 0 ? input : resolution) + 1;

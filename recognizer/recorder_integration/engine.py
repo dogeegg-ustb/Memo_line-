@@ -22,6 +22,8 @@ class UpdateEngine:
         self.pointer_view_without_key = set()
         self.pointer_targets = set()
         self.pointer_refs = set()
+        # Set by the runtime: called with (event, "undo" | "redo") for every undo or redo shortcut.
+        self.on_history = None
 
     def record(self, kind, data, ticks=None, refs=()):
         self.emit(dict(type="state", kind=kind, ticks=self.ticks if ticks is None else ticks,
@@ -171,6 +173,9 @@ class UpdateEngine:
                            if "pointerTargets" in m else m for m in matches]
                 self.record("shortcutResolved", dict(matches=matches,
                     resolution="matched" if matches else "unmapped", shortcutMatchPending=False), evt["ticks"], [evt["eventId"]])
+                history = [m["command"] for m in matches if m.get("command") in ("undo", "redo")]
+                if history and self.on_history is not None:
+                    self.on_history(evt, history[0])
                 targets = {p for m in matches for p in m["targets"]}
                 if self.pointer_operations:
                     self.pointer_targets.update(targets)

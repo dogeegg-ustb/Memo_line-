@@ -77,6 +77,8 @@ class Runtime:
         self.initialization_configuration = None
         self.catalog = Catalog()
         self.engine = UpdateEngine(self.catalog, self.on_state)
+        self.engine.on_history = lambda evt, command: self.pipeline and self.pipeline.request_history(
+            evt["ticks"], evt["eventId"], command)
         self.engine.record("shortcutConfiguration", self.catalog.snapshot(), 0)
         self.path = Path(os.environ["MEMOLINE_CSP_DOCK"]) if os.environ.get("MEMOLINE_CSP_DOCK") else find_dock_file()
         self.user32 = ctypes.WinDLL("user32", use_last_error=True)

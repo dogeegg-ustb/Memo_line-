@@ -306,6 +306,59 @@ internal static class NativeUndoTimelineChecks
         Check(result.Units.Count == 0 && State(result, macroInk) == NativeUndoPenState.Unknown,
             "A claim that would swallow an Undo input is rejected.");
 
+        // History palette readings (module historyState) after undo/redo.
+        var confirm = new Fixture(); ulong c1 = confirm.Pen("A"), c2 = confirm.Pen("A"), c3 = confirm.Pen("A");
+        ulong ck1 = confirm.CommandKey("undo"), ck2 = confirm.CommandKey("undo");
+        confirm.History(["插画", "沾水筆/沾水筆/G筆", "沾水筆/沾水筆/G筆", "沾水筆/沾水筆/G筆"], 1, ck1, ck2); result = confirm.Resolve();
+        Check(State(result, c1) == NativeUndoPenState.Active && State(result, c2) == NativeUndoPenState.Undone &&
+            State(result, c3) == NativeUndoPenState.Undone && result.HistoryReadings is [{ Accepted: true, UndoneRows: 2 }],
+            "A History reading that agrees with the recorded stack confirms which strokes are undone.");
+        Check(result.Commands.Select(command => (command.State, command.Target?.BeginAppendId, command.Reason)).SequenceEqual(
+            [(NativeUndoCommandState.Resolved, (ulong?)c3, "historyPanel"), (NativeUndoCommandState.Resolved, (ulong?)c2, "historyPanel")]),
+            "Each undo of the burst is named by replaying the burst backwards from the read rows.");
+
+        var prior = new Fixture(); ulong r1 = prior.Pen("A"), r2 = prior.Pen("A"), r3 = prior.Pen("A");
+        var priorKeys = Enumerable.Range(0, 4).Select(_ => prior.CommandKey("undo")).ToArray();
+        result = prior.Resolve();
+        Check(State(result, r1) == NativeUndoPenState.Unknown && result.Commands[^1].Reason == "undoRedoReachesUnrecordedHistory",
+            "Without a reading, an undo past the recording's start makes every stroke unknown.");
+        prior.History(["插画", "铅笔/铅笔/铅笔", "沾水筆/沾水筆/G筆", "沾水筆/沾水筆/G筆", "沾水筆/沾水筆/G筆"], 0, priorKeys);
+        result = prior.Resolve();
+        Check(State(result, r1) == NativeUndoPenState.Undone && State(result, r2) == NativeUndoPenState.Undone &&
+            State(result, r3) == NativeUndoPenState.Undone,
+            "The reading restores the recorded strokes' states after an undo reached history from before the recording.");
+        Check(result.Commands.Select(command => command.Target?.BeginAppendId).SequenceEqual([r3, r2, r1, null]) &&
+            result.Commands[^1] is { State: NativeUndoCommandState.Unknown, Reason: "historyPanelRowNotRecorded" },
+            "The undo that reached the unrecorded row is not credited to a recorded stroke.");
+
+        var unrecorded = new Fixture(); ulong unrecordedInk = unrecorded.Pen("A");
+        unrecorded.Add("mouseDown", new { x = 20, y = 20, button = "left" }, hardware: true);
+        ulong uk = unrecorded.CommandKey("undo");
+        unrecorded.History(["插画", "沾水筆/沾水筆/G筆", "新建栅格图层"], 1, uk); result = unrecorded.Resolve();
+        Check(State(result, unrecordedInk) == NativeUndoPenState.Unknown && result.HistoryReadings is [{ Accepted: false, Reason: "newestRowNotRecorded" }],
+            "After an input that may have added an unrecorded row, the rows are not matched to older strokes.");
+
+        var pattern = new Fixture(); ulong pen = pattern.Pen("A", brush: "G笔"), pencil = pattern.Pen("A", brush: "铅笔");
+        ulong pk = pattern.CommandKey("undo");
+        pattern.History(["插画", "铅笔/铅笔/铅笔", "铅笔/铅笔/铅笔"], 1, pk); result = pattern.Resolve();
+        Check(result.HistoryReadings is [{ Accepted: true, AlignedUnits: [var only] }] && only == pencil &&
+            State(result, pencil) == NativeUndoPenState.Undone && State(result, pen) == NativeUndoPenState.Active,
+            "Two rows read alike only for strokes of one brush: matching stops where the pattern breaks.");
+
+        var redoRead = new Fixture(); ulong d1 = redoRead.Pen("A"), d2 = redoRead.Pen("A");
+        redoRead.Command("undo"); redoRead.Command("undo"); ulong dk = redoRead.CommandKey("redo");
+        redoRead.History(["插画", "沾水筆/沾水筆/G筆", "沾水筆/沾水筆/G筆"], 1, dk); result = redoRead.Resolve();
+        Check(State(result, d1) == NativeUndoPenState.Active && State(result, d2) == NativeUndoPenState.Undone &&
+            result.Commands[^1] is { State: NativeUndoCommandState.Resolved, Reason: "historyPanel" } redone && redone.Target?.BeginAppendId == d1,
+            "A redo is matched like an undo: it brought back the earliest undone stroke.");
+
+        var newer = new Fixture(); ulong dropped = newer.Pen("A"); ulong nk = newer.CommandKey("undo"); ulong kept = newer.Pen("A");
+        newer.History(["插画", "沾水筆/沾水筆/G筆"], 1, nk); result = newer.Resolve();
+        Check(result.HistoryReadings is [{ Accepted: true, AlignedUnits: [var newest] }] && newest == kept &&
+            State(result, dropped) == NativeUndoPenState.Undone && result.Commands.Single() is { State: NativeUndoCommandState.Resolved } undoneFirst &&
+            undoneFirst.Reason != "historyPanel" && undoneFirst.Target?.BeginAppendId == dropped,
+            "A stroke drawn after the undo discards the undone row; the reading matches the new stroke and leaves the undo as resolved.");
+
         var immutable = new Fixture(); immutable.Pen("A"); immutable.Command("undo");
         string before = string.Join("\n", immutable.Frames.Select(frame => frame.GetRawText())); immutable.Resolve();
         Check(before == string.Join("\n", immutable.Frames.Select(frame => frame.GetRawText())), "Timeline derivation never edits the original native frames.");
@@ -331,21 +384,31 @@ internal static class NativeUndoTimelineChecks
             Frames.Add(frame); return frame;
         }
         internal (ulong Begin, ulong Operation) Begin(string layer, bool known = true, bool replayEligible = true,
-            string region = "canvasViewport", string status = "matched", int[]? heldKeys = null)
+            string region = "canvasViewport", string status = "matched", int[]? heldKeys = null, string? brush = "G笔")
         {
             var frame = Add("penBegin", new { inCsp = true, injected = false, heldKeys = heldKeys ?? [],
                 penDownLocation = new PenDownLocation(region, region, 20, 20, "windowsCursor", status) }, hardware: true);
             ulong begin = frame.GetProperty("appendId").GetUInt64(), operation = frame.GetProperty("eventId").GetUInt64();
-            Proofs.Add(new(begin, operation, new("undo-fixture", layer == "A" ? 1 : 2, layer), known, replayEligible));
+            Proofs.Add(new(begin, operation, new("undo-fixture", layer == "A" ? 1 : 2, layer), known, replayEligible, brush));
             return (begin, operation);
         }
         internal void End((ulong Begin, ulong Operation) contact)
             => Add("penEnd", new { inCsp = true, injected = false, reason = "penUp" }, hardware: true, operation: contact.Operation);
         internal ulong Pen(string layer, bool known = true, bool replayEligible = true, string region = "canvasViewport",
-            string status = "matched", int[]? heldKeys = null)
+            string status = "matched", int[]? heldKeys = null, string? brush = "G笔")
         {
-            var contact = Begin(layer, known, replayEligible, region, status, heldKeys); End(contact); return contact.Begin;
+            var contact = Begin(layer, known, replayEligible, region, status, heldKeys, brush); End(contact); return contact.Begin;
         }
+        /// <summary>An undo/redo key; returns its native event id.</summary>
+        internal ulong CommandKey(string command)
+        {
+            var key = Key(); ResolveShortcut(key, [command]); return key.GetProperty("eventId").GetUInt64();
+        }
+        // The recorder's History palette reading, captured after the latest input (rows after `current` dimmed).
+        internal void History(string[] texts, int current, params ulong[] keys)
+            => Add("coreStateUpdated", new { module = "historyState", status = "changed",
+                state = new { rows = texts.Select((text, index) => new { text, undone = index > current }).ToArray(), currentIndex = current },
+                evidence = new { observedAfterEventId = _event, relatedEventIds = keys, causalAmbiguous = false } });
         internal JsonElement Key(long? hookResult = 0, bool guard = false, bool injected = false, bool tagged = false)
         {
             var data = new Dictionary<string, object?> { ["vk"] = 90, ["heldKeys"] = new[] { 17, 90 },

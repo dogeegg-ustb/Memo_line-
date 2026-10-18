@@ -165,6 +165,14 @@ internal sealed partial class MainWindow : Form
                     _captureTasks.Add(HandleCaptureAsync(monitor, clip, bridge, request, token));
                 }
             };
+            monitor.LayersCreated += created =>
+            {
+                lock (_captureTasks)
+                {
+                    _captureTasks.RemoveWhere(t => t.IsCompleted);
+                    _captureTasks.Add(SeedCreatedLayersAsync(monitor, bridge, created, token));
+                }
+            };
             monitor.CaptureRequestsPaused = true;
             _monitorTask = RunMonitorAsync(monitor, _endpoint.Text.Trim(), clip, token);
             var configuration = await monitor.WaitForConfigurationAsync(validation.Token);
@@ -235,6 +243,58 @@ internal sealed partial class MainWindow : Form
             cancellation => SaveCapture.CaptureBaselineAsync(clip, bridge, control, configuration.PixelSize,
                 CurrentSession, () => monitor.InContact, Status, cancellation),
             () => reader.ReadAvailable(maxRecords: 1), Commit, Status, token);
+    }
+    // The recorder keeps each parsed save, so a new layer's baseline is exported from the very save that first
+    // listed it, not from a later one that may already hold strokes. Failing leaves the layer as before: its
+    // first boundary capture becomes its baseline and earlier strokes on it are not editable.
+    private async Task SeedCreatedLayersAsync(RecognizerMonitor monitor, string bridge,
+        RecognizerMonitor.CreatedLayers created, CancellationToken token)
+    {
+        var appearance = created.Appearance;
+        var pngs = new List<string>();
+        bool acquired = false;
+        try
+        {
+            await CaptureCoordinator.WaitAsync(token); acquired = true;
+            var history = _history ?? throw new InvalidOperationException("图层快照历史尚未建立");
+            if (monitor.SessionId != created.SessionId || monitor.Generation != appearance.Generation) return;
+            var layers = appearance.Layers.Where(layer => !history.HasLayer(layer.Uuid!, created.SessionId, appearance.Generation)).ToArray();
+            if (layers.Length == 0) return;
+            if (!File.Exists(appearance.SnapshotPath)) throw new FileNotFoundException("保存副本已不存在", appearance.SnapshotPath);
+            var seeds = new List<BaselineSeed>(layers.Length);
+            foreach (var layer in layers)
+            {
+                string png = Path.Combine(history.Root, "created-" + Guid.NewGuid().ToString("N") + ".png");
+                pngs.Add(png);
+                string metadata = await Bridge.RunAsync(bridge, ["export-id", appearance.SnapshotPath,
+                    layer.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), png,
+                    created.PixelSize.Width.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    created.PixelSize.Height.ToString(System.Globalization.CultureInfo.InvariantCulture)], token);
+                using var parsed = JsonDocument.Parse(metadata);
+                var root = parsed.RootElement;
+                if (J.Get(root, "fullCanvas").ValueKind != JsonValueKind.True
+                    || J.Tick(root, "width", 0) != created.PixelSize.Width || J.Tick(root, "height", 0) != created.PixelSize.Height
+                    || J.Tick(root, "layerId", 0) != layer.Id
+                    || !string.Equals(J.Text(root, "layerUuid"), layer.Uuid, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException($"新图层「{layer.Name}」的导出尺寸或身份与保存不一致");
+                string id = "baseline-" + appearance.TriggerTicks.ToString("D20", System.Globalization.CultureInfo.InvariantCulture)
+                    + "-" + layer.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..8];
+                seeds.Add(new(new LayerSnapshot(id, history.Root, created.SessionId, appearance.Generation, appearance.TriggerTicks,
+                    string.Empty, created.PixelSize.Width, created.PixelSize.Height, layer, root.Clone(), [],
+                    appearance.TriggerTicks, "layerCreated"), png));
+            }
+            if (monitor.SessionId != created.SessionId || monitor.Generation != appearance.Generation) return;
+            history.SeedBaselines(seeds);
+            WriteLog($"新图层基线已建立：{string.Join("、", layers.Select(l => $"{l.Name}({l.Uuid})"))}，triggerTicks={appearance.TriggerTicks}，source={appearance.SnapshotPath}");
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception ex) { WriteLog("新图层基线未建立：" + ex.Message); }
+        finally
+        {
+            foreach (string png in pngs) SaveCapture.TryDelete(png);
+            monitor.ReleaseRetention(appearance.TriggerTicks);
+            if (acquired) CaptureCoordinator.Release();
+        }
     }
     private async Task HandleCaptureAsync(RecognizerMonitor monitor, string clip, string bridge, CaptureRequest request, CancellationToken token)
     {

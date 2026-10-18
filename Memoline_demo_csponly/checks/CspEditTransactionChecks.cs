@@ -128,6 +128,70 @@ internal static class CspEditTransactionChecks
                   f.Actions.Calls.IndexOf("delete") < f.Actions.Calls.IndexOf("replay:Discrete"),
                 "The original is deleted, never hidden first, before the undone strokes replay: they stay on top of CSP's undo stack.");
         }
+        await using (var f = Create("offline-delete", discrete: true))
+        {
+            f.Actions.Layers.Add(new("below", "Below", true, false, true));
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
+            await f.Transaction.CompleteAsync(CancellationToken.None);
+            var calls = f.Actions.Calls;
+            int delete = calls.IndexOf("delete");
+            Check(!calls.Any(c => c.StartsWith("navigate:", StringComparison.Ordinal)) &&
+                  calls.LastIndexOf("select:down", delete) > calls.IndexOf("paste") && calls.IndexOf("select:up", delete) > delete &&
+                  calls.IndexOf("select:up", delete) < calls.IndexOf("replay:Discrete") && f.Actions.Current == f.Actions.Layers[0].Uuid &&
+                  f.Actions.Deleted.SequenceEqual([Original.Uuid]),
+                "Deleting the original is planned from the saved structure: one select-lower, delete, one select-upper back from the row that took its place, no panel navigation.");
+        }
+        await using (var f = Create("offline-delete-misprediction", discrete: true))
+        {
+            f.Actions.Layers.Insert(0, new("top", "Top", true, false, true));
+            f.Actions.Layers.Add(new("below", "Below", true, false, true));
+            f.Actions.DeleteSelectsAbove = true;
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
+            await f.Transaction.CompleteAsync(CancellationToken.None);
+            var reproduction = f.Actions.Layers.Single(l => l.Uuid.StartsWith("new-", StringComparison.Ordinal));
+            int replay = f.Actions.Calls.IndexOf("replay:Discrete");
+            Check(f.Actions.Current == reproduction.Uuid && f.Actions.Calls.LastIndexOf("select:down", replay) > f.Actions.Calls.IndexOf("select:up") &&
+                  f.Actions.Statuses.Any(s => s.Contains("按图层结构切回")) && !f.Actions.Calls.Any(c => c.StartsWith("navigate:", StringComparison.Ordinal)),
+                "A wrong post-delete selection is only a selection: the save shows it and a planned move returns to the reproduction before the replay.");
+        }
+        await using (var f = Create("offline-start-elsewhere", discrete: true))
+        {
+            f.Actions.Layers.Insert(0, new("top", "Top", true, false, true));
+            f.Actions.Current = "top";
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            Check(f.Actions.Current == Original.Uuid && f.Actions.Calls.Contains("select:down") &&
+                  !f.Actions.Calls.Any(c => c.StartsWith("navigate:", StringComparison.Ordinal)),
+                "Reaching the original from another layer of the same folder is planned from the saved structure.");
+            await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
+            await f.Transaction.CompleteAsync(CancellationToken.None);
+        }
+        await using (var f = Create("offline-folder-fallback", discrete: true))
+        {
+            f.Actions.Layers.Insert(0, new("folder", "Folder", false, true, true));
+            f.Actions.Current = "folder";
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            Check(f.Actions.Calls.Contains("navigate:Ink") && !f.Actions.Calls.Contains("select:down"),
+                "A path through a folder row (expanded or collapsed) falls back to panel-confirmed navigation.");
+        }
+        await using (var f = Create("offline-dropped-select", discrete: true))
+        {
+            f.Actions.DropSelects = 1;
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            try
+            {
+                await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
+                throw new InvalidOperationException("A dropped select-lower shortcut was not detected.");
+            }
+            catch (CspEditingException error)
+            {
+                Check(error.Issue.Code == PlanIssueCode.LayerIdentityUnconfirmed && error.Message.Contains("Ctrl+Z") &&
+                      f.Actions.Layers.Any(l => l.Uuid == Original.Uuid) && !f.Actions.Calls.Contains("replay:Discrete") &&
+                      f.Actions.Calls.Contains("end:failed"),
+                    "When the select-lower shortcut is lost the reproduction is deleted instead: the next save shows it, the original is intact and nothing is drawn.");
+            }
+        }
         await using (var f = Create("discrete-reverted-first", discrete: true))
         {
             // The reverted contact is newer than the undone stroke, yet it replays first: the undone strokes
@@ -406,6 +470,16 @@ internal static class CspEditTransactionChecks
         private void Mutating() { _stale = Layers.ToArray(); _staleLeft = StaleSaves; }
         public Task NavigateToLayerAsync(string name, CancellationToken token)
         { Calls.Add("navigate:" + name); _current = Layers.Single(l => l.Name == name).Uuid; return Task.CompletedTask; }
+        internal string Current { get => _current; set => _current = value; }
+        internal bool DeleteSelectsAbove;
+        internal int DropSelects;
+        public Task SelectAdjacentLayerAsync(bool upper, CancellationToken token)
+        {
+            Calls.Add(upper ? "select:up" : "select:down");
+            if (DropSelects > 0) { DropSelects--; return Task.CompletedTask; } // CSP dropped the shortcut.
+            int i = Layers.FindIndex(l => l.Uuid == _current);
+            _current = Layers[Math.Clamp(i + (upper ? -1 : 1), 0, Layers.Count - 1)].Uuid; return Task.CompletedTask;
+        }
         public Task<CspCurrentLayerEvidence> ReadCurrentLayerAsync(CancellationToken token)
         {
             Calls.Add("current");
@@ -455,7 +529,7 @@ internal static class CspEditTransactionChecks
                 DeletionHadDurableCheckpoint = journal.Snapshot.LastCheckpoint?.WorkLayerUuid == _current;
             // CSP selects the layer that takes the deleted row, or the one above when it was the bottom row.
             int index = Layers.FindIndex(l => l.Uuid == _current); Layers.RemoveAt(index);
-            _current = Layers[Math.Min(index, Layers.Count - 1)].Uuid; return Task.CompletedTask;
+            _current = Layers[DeleteSelectsAbove && index > 0 ? index - 1 : Math.Min(index, Layers.Count - 1)].Uuid; return Task.CompletedTask;
         }
         public Task RegisterBaselineAsync(LayerExportEvidence capture, CancellationToken token)
         { Calls.Add("baseline"); if (ThrowBaseline) throw new IOException("Baseline failed"); Baselines.Add(capture); return Task.CompletedTask; }

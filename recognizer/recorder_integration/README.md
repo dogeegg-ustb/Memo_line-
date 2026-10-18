@@ -129,6 +129,17 @@ CSP 的导航器可能晚于画布重绘。现在持续保存真实完整帧，�
 
 核心成功补全的导航器视口红框以 4 屏幕像素宽的红色常驻覆盖层显示，使用四个 CornerCapture 加上 ScreenCoordinateOriginScreenPx 得到真实屏幕位置，保留旋转形状。未走红框补全路径或分析失败时清除旧框；屏幕外部分裁去，边框不抢焦点、不拦截输入，并在所有截图前隐藏。
 
+## 历史记录面板
+
+只在撤销（`undo`）和重做（`redo`）快捷键之后读取。连续按键在键盘静止 `historyQuietMs`（默认 250ms）后只读一次，这一次的 `relatedEventIds` 列出整串按键。面板不按屏幕区域截图，而是通过面板收纳程序的接口（`panelStashPipe`，默认 `MemoLine.PanelStash`）请求 `captureWindow kind=palettekindhistory`：历史面板要先拖成浮动窗口，通常已收纳在虚拟屏上。读取逻辑在 `recognizer_core/history_state`：
+
+- 按一像素的深色分隔线切行，行距取等距分隔线的中位数；只有一行时用高亮行的高度。
+- 高亮（偏蓝背景）的行是当前状态，第 0 行是文档打开时的状态。深色主题下文字亮度低于 175 的行是已撤销的行（实测正常行约 200，已撤销约 146）。
+- 每行只做文字识别、不做检测（一行就是一个条目，检测会把 `G筆` 切成重叠的框）。同样字形的行只识别一次，所以几百行同一工具的笔画也只识别一两次。
+- 已撤销的行必须正好是当前行之后的全部行，最后一行之下还有字时说明面板被截断；这两种情况不作为确认状态。
+
+截图以 `screenshotBlob` 写入（`panel=历史记录`，`captureBackend=PanelStash.PrintWindow`），结果以独立观测 `coreStateUpdated module=historyState` 发布。面板收纳程序没有运行或没有浮动的历史面板时，记录 `captureUnavailable` 并发布 `status=error`。
+
 ## 实时核心结果
 
 每个解析核心完成后，Pipeline 立即写出 `coreStateUpdated`，包含 module、packageId、initial、status、语义状态、原始结果和证据；整个因果状态包仍按原有规则等待全部结果再完成。保存后的 Clip 解析也发布独立更新。Recognizer 将这些结果分发到 5 个核心频道；完整接入方式见 [实时状态接口](../core/memoline/Realtime/README.md)。

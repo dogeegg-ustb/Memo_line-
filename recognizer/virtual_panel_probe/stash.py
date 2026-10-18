@@ -2,7 +2,11 @@
 
 CSP docks a palette dropped on a screen's left/right edge, so the gesture is corner to corner:
 a top-left / bottom-left corner lists the palette in the left drawer, top-right / bottom-right in
-the right one. All stashed palettes share one virtual screen, which is only as large as they need.
+the right one. All stashed palettes share one virtual screen, stacked against its left edge, so it
+is as wide as the widest of them; it is as tall as the History palette showing every undo step.
+
+Stashed palette kinds are remembered across runs: when Memoline starts again, or CSP opens a
+remembered palette later, it goes straight back to the virtual screen.
 """
 from __future__ import annotations
 
@@ -11,7 +15,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from csp_windows import CspWindow, describe, is_window, move_window
+from csp_windows import CspWindow, describe, is_window, move_window, resize_window
 from virtual_display import Monitor, monitor_at
 
 MAX_RELAYOUTS = 5
@@ -29,6 +33,8 @@ class StashRecord:
     corner: str = ""
     slot: tuple[int, int] | None = None
     relayouts: int = 0
+    kinds: tuple[str, ...] = ()
+    size: tuple[int, int] | None = None  # visible-frame size before a stash-time resize (the History palette)
 
 
 def corner_of(bounds, monitor: Monitor, threshold: int) -> str | None:
@@ -47,32 +53,23 @@ def stash_area(screens: list[Monitor]) -> tuple[int, int, int, int] | None:
 
 
 def pack(sizes, area, gap) -> list[tuple[int, int]]:
-    """Column shelves from the area's top-left; windows keep their size. Overflow cascades from the start."""
-    x, y, column, result, offset = area[0] + gap, area[1] + gap, 0, [], 0
+    """One column against the area's left edge, in order; windows keep their size.
+
+    Once the column is full the rest overlap from the bottom up: covered palettes keep rendering and
+    are still read whole (PrintWindow), and nobody looks at the virtual screen.
+    """
+    x, y, result = area[0] + gap, area[1] + gap, []
     for width, height in sizes:
-        top = area[1] + gap + offset
-        if y > top and y + height > area[3] - gap:
-            x, y, column = x + column + gap, top, 0
-            if x + width > area[2] - gap:
-                offset += 24
-                x, y = area[0] + gap + offset, area[1] + gap + offset
+        if y > area[1] + gap and y + height > area[3] - gap:
+            y = max(area[1] + gap, area[3] - gap - height)
         result.append((x, y))
         y += height + gap
-        column = max(column, width)
     return result
 
 
 def fits(sizes, width: int, height: int, gap: int) -> bool:
-    """Whether `pack` places every window inside a width x height screen without cascading."""
-    x, y, column = gap, gap, 0
-    for w, h in sizes:
-        if y > gap and y + h > height - gap:
-            x, y, column = x + column + gap, gap, 0
-        if x + w > width - gap or y + h > height - gap:
-            return False
-        y += h + gap
-        column = max(column, w)
-    return True
+    """Whether a width x height screen holds every window whole (they may overlap one another)."""
+    return all(w + 2 * gap <= width and h + 2 * gap <= height for w, h in sizes)
 
 
 def physical_screen(screens: list[Monitor]) -> Monitor:
@@ -85,17 +82,29 @@ def is_hidden(window: CspWindow, screens: list[Monitor]) -> bool:
     return bool(monitor and monitor.virtual)
 
 
-def size_on(window: CspWindow, screens, target: Monitor) -> tuple[int, int]:
+def size_on(window: CspWindow, screens, target: Monitor, size: tuple[int, int] | None = None) -> tuple[int, int]:
     """CSP is per-monitor DPI aware: it rescales a palette when it lands on another monitor."""
     current = monitor_at(screens, *window.center)
     ratio = target.dpi / current.dpi if current else 1.0
-    return round(window.size[0] * ratio), round(window.size[1] * ratio)
+    width, height = size or window.size
+    return round(width * ratio), round(height * ratio)
+
+
+def unstretch(window: CspWindow, record: StashRecord | None) -> tuple[int, int] | None:
+    """Give a palette stretched on the virtual screen (the History) its own size back before it leaves."""
+    if record is None or record.size is None:
+        return None
+    if tuple(window.size) != tuple(record.size):
+        resize_window(window, *record.size)
+    return record.size
 
 
 class StashManager:
     def __init__(self, state_path: Path, corner: int, gap: int, log):
         self.state_path, self.corner, self.gap, self.log = state_path, corner, gap, log
         self.records: dict[int, StashRecord] = {}
+        # Palettes the user keeps stashed, by their tabs: {"kinds": [...], "side": "left"}. Survives restarts.
+        self.remembered: list[dict] = []
         self.press_bounds: dict[int, tuple] | None = None
         self.press_id = 0
 
@@ -137,11 +146,10 @@ class StashManager:
 
     def sizes(self, windows: dict[int, CspWindow], extra=()) -> list[tuple[int, int]]:
         """Sizes in layout order: the stashed palettes, then `extra` windows about to be stashed."""
-        records = sorted((r for r in self.records.values() if r.hwnd in windows), key=lambda r: r.stashed_at)
-        return [windows[r.hwnd].size for r in records] + [w.size for w in extra]
+        return [windows[r.hwnd].size for r in self.ordered(windows)] + [w.size for w in extra]
 
     def stash(self, window: CspWindow, screens, windows: dict[int, CspWindow], prior=None, corner="",
-              side: str | None = None) -> bool:
+              side: str | None = None, kinds: tuple[str, ...] = ()) -> bool:
         if stash_area(screens) is None:
             self.log("没有可用的虚拟显示器，未收纳", hwnd=window.hwnd)
             return False
@@ -149,17 +157,45 @@ class StashManager:
         monitor = monitor_at(screens, (origin[0] + origin[2]) / 2, (origin[1] + origin[3]) / 2)
         if monitor is None or monitor.virtual:
             monitor = physical_screen(screens)
-        self.records[window.hwnd] = StashRecord(window.hwnd, window.pid, (origin[0], origin[1]), monitor.device,
-                                                side or self.side_for(window, screens, corner), time.time(), corner)
+        record = StashRecord(window.hwnd, window.pid, (origin[0], origin[1]), monitor.device,
+                             side or self.side_for(window, screens, corner), time.time(), corner, kinds=tuple(kinds))
+        self.records[window.hwnd] = record
+        self.remember(record)
         self.layout(windows, screens)
         self.save()
         return True
+
+    # ---------- remembered palettes ----------
+    def remember(self, record: StashRecord) -> None:
+        if not record.kinds:
+            return
+        self.remembered = [r for r in self.remembered if not set(r["kinds"]) & set(record.kinds)]
+        self.remembered.append(dict(kinds=list(record.kinds), side=record.side))
+
+    def forget(self, kinds) -> None:
+        """The user took the palette back: it is not stashed again on the next start."""
+        kinds = set(kinds)
+        if kinds:
+            self.remembered = [r for r in self.remembered if not set(r["kinds"]) & kinds]
+            self.save()
+
+    def remembered_side(self, kinds) -> str | None:
+        """Side of the remembered entry this window belongs to (the same set of tabs), if any."""
+        for entry in self.remembered:
+            if kinds and set(entry["kinds"]) == set(kinds):
+                return entry["side"]
+        return None
+
+    def ordered(self, windows: dict[int, CspWindow]) -> list[StashRecord]:
+        """Layout order: the History palette first (it takes the full height), then by stash time."""
+        return sorted((r for r in self.records.values() if r.hwnd in windows),
+                      key=lambda r: ("palettekindhistory" not in r.kinds, r.stashed_at))
 
     def layout(self, windows: dict[int, CspWindow], screens) -> None:
         area = stash_area(screens)
         if area is None:
             return
-        records = sorted((r for r in self.records.values() if r.hwnd in windows), key=lambda r: r.stashed_at)
+        records = self.ordered(windows)
         for record, slot in zip(records, pack([windows[r.hwnd].size for r in records], area, self.gap)):
             window = windows[record.hwnd]
             if slot != record.slot:
@@ -193,7 +229,7 @@ class StashManager:
             return False
         monitor = next((m for m in screens if m.device == record.origin_device and not m.virtual), None)
         monitor = monitor or physical_screen(screens)
-        width, height = size_on(window, screens, monitor)
+        width, height = size_on(window, screens, monitor, unstretch(window, record))
         work = monitor.work
         x = min(max(record.origin[0], work[0]), max(work[0], work[2] - width))
         y = min(max(record.origin[1], work[1]), max(work[1], work[3] - height))
@@ -206,10 +242,11 @@ class StashManager:
 
         It is kept clear of the corner zone so the next small drag does not stash it again.
         """
-        if self.records.pop(hwnd, None) is None:
+        record = self.records.pop(hwnd, None)
+        if record is None:
             return False
         self.save()
-        width, height = size_on(window, screens, monitor)
+        width, height = size_on(window, screens, monitor, unstretch(window, record))
         work, inset = monitor.work, self.corner + margin
         x = work[0] + inset if side == "left" else work[2] - width - inset
         x = min(max(x, work[0]), max(work[0], work[2] - width))
@@ -224,7 +261,7 @@ class StashManager:
         return count
 
     def save(self) -> None:
-        data = dict(savedAt=time.time(), records=[asdict(r) for r in self.records.values()])
+        data = dict(savedAt=time.time(), records=[asdict(r) for r in self.records.values()], remembered=self.remembered)
         self.state_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def load(self) -> list[StashRecord]:
@@ -232,7 +269,10 @@ class StashManager:
             data = json.loads(self.state_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return []
-        return [StashRecord(**{**r, "origin": tuple(r["origin"]), "slot": None}) for r in data.get("records", [])]
+        self.remembered = [dict(kinds=list(r["kinds"]), side=r["side"]) for r in data.get("remembered", [])
+                           if isinstance(r, dict) and r.get("kinds") and r.get("side") in SIDES]
+        return [StashRecord(**{**r, "origin": tuple(r["origin"]), "slot": None, "kinds": tuple(r.get("kinds", ())),
+                               "size": tuple(r["size"]) if r.get("size") else None}) for r in data.get("records", [])]
 
 
 def bring_back(window: CspWindow, screens, index: int = 0) -> None:

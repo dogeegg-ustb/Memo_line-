@@ -8,6 +8,7 @@ internal sealed class DemoApplicationContext : ApplicationContext
     private readonly MainWindow _window;
     private readonly NotifyIcon _tray;
     private readonly GlobalHotkey _hotkey;
+    private readonly PanelStashProcess? _stash;
     private EditingPanel? _panel;
     private bool _closing;
 
@@ -25,6 +26,7 @@ internal sealed class DemoApplicationContext : ApplicationContext
         _window.Show();
         _hotkey = new GlobalHotkey(_window);
         _hotkey.Pressed += (_, _) => ShowPanel();
+        _stash = controller.RenderOnly ? null : PanelStashProcess.Start(controller.RecorderRoot, _window.EditingStatus);
     }
 
     private void ShowWindow() { _window.Show(); _window.WindowState = FormWindowState.Normal; _window.Activate(); }
@@ -48,6 +50,8 @@ internal sealed class DemoApplicationContext : ApplicationContext
         await _editing.WaitForIdleAsync();
         await _window.StopRecordingAsync();
         await _editing.DisposeAsync();
+        // After recording stopped: the recorder no longer reads palettes through it.
+        if (_stash is not null) await _stash.DisposeAsync();
         _window.FormClosing -= WindowClosing;
         _window.HideOnClose=false;
         _window.Close();

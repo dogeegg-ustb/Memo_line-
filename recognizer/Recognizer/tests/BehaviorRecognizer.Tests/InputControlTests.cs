@@ -496,5 +496,9 @@ public sealed partial class InputControlTests
             foreach (var input in inputs) Replayed.Enqueue(input);
             return (uint)inputs.Length;
         }
+        public HashSet<nint> Windows { get; set; } = [1];
+        public bool ModalUi { get; set; }
+        public IReadOnlySet<nint> VisibleTopLevelWindows(nint hwnd) => Windows;
+        public bool InModalUi(nint hwnd) => ModalUi;
     }
 }

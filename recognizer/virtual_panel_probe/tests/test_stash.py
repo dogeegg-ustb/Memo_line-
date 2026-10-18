@@ -48,19 +48,22 @@ class CornerTests(unittest.TestCase):
 
 
 class PackTests(unittest.TestCase):
-    def test_pack_wraps_into_columns(self):
+    def test_pack_stacks_against_the_left_edge(self):
+        # 1920x1080 area: the second palette no longer fits below the first and overlaps it from the
+        # bottom up; the third overlaps too.
         positions = stash.pack([(300, 600), (200, 500), (250, 300)], VIRTUAL.rect, 8)
-        self.assertEqual(positions, [(2568, 1608), (2876, 1608), (2876, 2116)])
+        self.assertEqual(positions, [(2568, 1608), (2568, 2172), (2568, 2372)])
+        self.assertEqual(stash.pack([(300, 400), (200, 500)], VIRTUAL.rect, 8), [(2568, 1608), (2568, 2016)])
 
     def test_pack_overflow_stays_inside_the_area(self):
         positions = stash.pack([(400, 1000)] * 4, HALF, 8)
-        self.assertEqual(positions, [(2568, 1608), (2976, 1608), (2592, 1632), (3000, 1632)])
+        self.assertEqual(positions, [(2568, 1608), (2568, 1672), (2568, 1672), (2568, 1672)])
 
     def test_fits(self):
-        self.assertTrue(stash.fits([(300, 600), (300, 600)], 316, 1224, 8))  # stacked: 8+600+8+600+8
-        self.assertFalse(stash.fits([(300, 600), (300, 600)], 316, 1220, 8))  # needs a second column
-        self.assertTrue(stash.fits([(300, 600), (300, 600)], 624, 1000, 8))  # two columns: 8+300+8+300+8
-        self.assertFalse(stash.fits([(300, 600), (300, 600)], 620, 1000, 8))
+        # Every palette whole on the screen; they may overlap one another.
+        self.assertTrue(stash.fits([(300, 600), (300, 600)], 316, 616, 8))
+        self.assertFalse(stash.fits([(300, 600), (300, 600)], 315, 616, 8))  # wider than the screen
+        self.assertFalse(stash.fits([(300, 600)], 316, 615, 8))
         self.assertFalse(stash.fits([(300, 1200)], 1920, 1080, 8))  # taller than the screen
         self.assertTrue(stash.fits([], 1024, 768, 8))
 
@@ -84,7 +87,9 @@ class ModeTests(unittest.TestCase):
         self.assertEqual(choose_mode(MODES, small, 100), (1024, 768))
         self.assertEqual(choose_mode(MODES, small, 150), (1536, 960))  # 1024x768 cannot be 150 %
         many = lambda size: stash.fits([(450, 1000)] * 9, *size, 8)  # noqa: E731
-        self.assertEqual(choose_mode(MODES, many, 150), (3840, 2160))
+        self.assertEqual(choose_mode(MODES, many, 150), (1920, 1080))  # they overlap on one column
+        history = lambda size: stash.fits([(300, 5675)], *size, 8)  # noqa: E731
+        self.assertEqual(choose_mode(MODES + [(1536, 6144)], history, 150), (1536, 6144))
 
     def test_scale_wins_when_nothing_fits(self):
         huge = lambda size: False  # noqa: E731

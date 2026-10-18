@@ -64,7 +64,7 @@ Recognizer 已移除 CSP 文档标题／文件名匹配校验。请选择当前 
 本轮写入的 manifest 字段如下：
 
 - `schema="dirty-matrix-image-diff/v1"`，新增 `comparison="fullResolution/v2"`；`kind` 为 `baseline` 或 `diff`。
-- `after`／`now` 包含 `id`、`sessionId`、`generation`、`triggerTicks`、`saveDispatchedTicks`、`savedTicks`、`width`、`height`、`layer`、`rasterMetadata`、`recognizerStates` 和 `baselineSource`。未证明的首捕获 `now=null`、`baselineSource=null`；已登记来源为 `recordingStart`、`createdEmpty` 或 `reproduction`，后续快照继承来源。顶层也写入 `baselineSource`。当前 bridge 无法证明新层来自空层创建，因此不会自动赋予 `createdEmpty`。
+- `after`／`now` 包含 `id`、`sessionId`、`generation`、`triggerTicks`、`saveDispatchedTicks`、`savedTicks`、`width`、`height`、`layer`、`rasterMetadata`、`recognizerStates` 和 `baselineSource`。未证明的首捕获 `now=null`、`baselineSource=null`；已登记来源为 `recordingStart`、`createdEmpty`、`layerCreated` 或 `reproduction`，后续快照继承来源。顶层也写入 `baselineSource`。当前 bridge 无法证明新层来自空层创建，因此不会自动赋予 `createdEmpty`；录制中新出现的图层以第一次列出它的保存（录制器留存的副本）登记为 `layerCreated`。
 - `search.tileSize=64`、`outsideDownsampleFactor=0`、`coarseWidth=0`、`coarseHeight=0`、`coarseComparedPixels=0`，`outsideInspection="full-resolution every pixel"`；同时写入 `warnings`、`fullResolutionComparedPixels` 和 `changedPixels`。没有 diff 的首快照，其比较计数为零。
 - `capture` 保留 `triggerTicks`、`ticks`、`timeSource`、`triggerKind`、`viewPending`、图层映射信息、`view`、`operations`、`saveDispatchedTicks` 和 `controlResponse`；多层边界请求使用 `triggerKind="editBoundary"`，每层包共享该边界的 `triggerTicks`。
 - `images[]` 包含 `id`、`bounds`、`changedPixels`、`afterImage`、`nowImage`、`maskImage`、`differenceImage`、`labelIds` 和 `image`；`image` 等于 `nowImage`。`canvasPreviewImage="canvas-preview.png"` 是最长边 1600 像素的显示缩略图。

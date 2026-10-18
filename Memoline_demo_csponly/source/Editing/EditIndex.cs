@@ -50,7 +50,7 @@ internal static class EditIndexBuilder
                 UsableAt(history, controlFrames, "brushState", beginEvent, beginAppend, Ticks(begin)) &&
                 J.Text(location, "region") == "canvasViewport" && J.Text(location, "status") == "matched" &&
                 !transactions.Any(t => t.Begin <= endAppend && t.End >= beginAppend);
-            undoProofs.Add(new(beginAppend, operation, layer, undoUnit, false));
+            undoProofs.Add(new(beginAppend, operation, layer, undoUnit, false, state.Brush?.Name));
             bool valid = end.ValueKind == JsonValueKind.Object && layer is not null && classification.Eligible && state.Brush is not null &&
                 UsableAt(history, controlFrames, "brushState", beginEvent, beginAppend, Ticks(begin)) && state.View is not null &&
                 UsableAt(history, controlFrames, "canvasViewState", beginEvent, beginAppend, Ticks(begin)) &&
@@ -321,7 +321,7 @@ internal static class EditIndexBuilder
         var diffs = packets.Where(p => !p.IsRecordingBaseline).ToArray();
         if (diffs.Length == 0) { issues.Add(new(PlanIssueCode.NoBaseline, "图层没有可重建的差异链。")); return issues; }
         var first = diffs[0];
-        if (first.BaselineSource is not ("recordingStart" or "createdEmpty" or "reproduction")) issues.Add(new(PlanIssueCode.NoBaseline, "首个差异包没有可信的 baseline。"));
+        if (first.BaselineSource is not ("recordingStart" or "createdEmpty" or "layerCreated" or "reproduction")) issues.Add(new(PlanIssueCode.NoBaseline, "首个差异包没有可信的 baseline。"));
         if (diffs.Any(p => !p.FullResolution)) issues.Add(new(PlanIssueCode.ChainLossy, "旧录制没有使用全分辨率比较。"));
         for (int i = 0; i < diffs.Length; i++)
         {

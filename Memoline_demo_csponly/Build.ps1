@@ -46,6 +46,8 @@ if (-not $SkipChecks) {
     $pythonPrefix = @(if (-not $env:MEMOLINE_PYTHON) { '-3' })
     $null | & $checkPython @pythonPrefix -m unittest discover -s (Join-Path $repository 'recognizer/recorder_integration/tests') -p 'test_*.py' -v
     if ($LASTEXITCODE -ne 0) { throw 'Python integration checks failed' }
+    $null | & $checkPython @pythonPrefix -m unittest discover -s (Join-Path $repository 'recognizer/virtual_panel_probe/tests') -p 'test_*.py' -v
+    if ($LASTEXITCODE -ne 0) { throw 'Panel stash checks failed' }
     Push-Location -LiteralPath $repository
     try {
         $null | & $checkPython @pythonPrefix -m unittest CSP_Shortcut_Manager/test_csp_shortcuts.py CSP_Shortcut_Manager/test_csp_shortcut_writer.py
@@ -103,7 +105,7 @@ foreach ($file in Get-ChildItem -LiteralPath (Join-Path $repository 'recognizer/
     Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $integrationOutput $file.Name) -Force
 }
 Copy-Item -LiteralPath (Join-Path $repository 'recognizer/csp_workspace_overlay.py') -Destination (Join-Path $integrationOutput 'csp_workspace_overlay.py') -Force
-foreach ($module in @('color_input_state','panel_state','layer_state','color_state')) {
+foreach ($module in @('color_input_state','panel_state','layer_state','color_state','history_state')) {
     $moduleRoot = Join-Path $repository "recognizer/recognizer_core/$module"
     $moduleOutput = Join-Path $integrationOutput "recognizer_core/$module"
     New-Item -ItemType Directory -Path $moduleOutput -Force | Out-Null
@@ -114,6 +116,19 @@ foreach ($module in @('color_input_state','panel_state','layer_state','color_sta
         Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
     }
 }
+# The panel stash runs beside the integration (Memoline starts it); its settings.json and state.json
+# (the palettes the user keeps stashed) stay as they are on a rebuild.
+$stashSource = Join-Path $repository 'recognizer/virtual_panel_probe'
+$stashOutput = Join-Path $integrationOutput 'panel_stash'
+New-Item -ItemType Directory -Path (Join-Path $stashOutput 'vdd') -Force | Out-Null
+foreach ($file in Get-ChildItem -LiteralPath $stashSource -File -Filter '*.py') {
+    Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $stashOutput $file.Name) -Force
+}
+Copy-Item -LiteralPath (Join-Path $stashSource 'README.md') -Destination (Join-Path $stashOutput 'README.md') -Force
+foreach ($file in Get-ChildItem -LiteralPath (Join-Path $stashSource 'vdd') -File) {
+    Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $stashOutput "vdd/$($file.Name)") -Force
+}
+Copy-Item -LiteralPath (Join-Path $repository 'recognizer/csp_workspace_layout.py') -Destination (Join-Path $integrationOutput 'csp_workspace_layout.py') -Force
 # Compile the native recorder as well. The package supplies Python/native
 # dependencies; source changes must never silently run an older recorder DLL.
 $recorderStage = Join-Path $PSScriptRoot '.stage/recognizer'

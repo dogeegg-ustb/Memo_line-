@@ -72,6 +72,15 @@ class WorkspaceGeometryTests(unittest.TestCase):
         self.assertEqual(regions["图层"], (2278, 819, 282, 708))
         self.assertEqual(regions["画布视口"], (410, 72, 1847, 1455))
 
+    def test_stale_saved_column_height_does_not_fake_an_overflow(self):
+        # Seen live: CSP saved 1227 px columns for the 1455 px dock of a 2560x1527 client.
+        tree = dock_tree()
+        root = tree["dockplacementpalette"]["mainframe"]["dock"]
+        for index in (0, 1, 4):
+            root["dockplaces"]["_items"][index]["dockplacebasesize"]["height"] = 1227
+        self.assertEqual(panel_rectangles(tree, (0, 0, 2560, 1527), 1.5, None),
+                         panel_rectangles(dock_tree(), (0, 0, 2560, 1527), 1.5, None))
+
     def test_rescaled_overflow_uses_the_one_squeezed_booth_seen_in_pixels(self):
         # 175% on the same screen: CSP rescales every size by 7/6, the canvas
         # column takes the leftover width, and one booth per column shrinks.
