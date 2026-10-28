@@ -109,7 +109,7 @@ internal sealed partial class MainWindow : Form
         }
         _layerPage.Controls.Add(_preview); _diffPage.Controls.Add(_diff); _views.TabPages.AddRange([_layerPage, _diffPage]);
         _diff.Error += Status; _diff.PacketOpened += () => { _views.SelectedTab = _diffPage; _info.Text = "正在查看已保存的差异包"; };
-        _start.Click += async (_, _) => await (_startingTask = StartAsync()); _stop.Click += async (_, _) => await StopAsync();
+        _start.Click += async (_, _) => await (_startingTask = StartAsync()); _stop.Click += async (_, _) => await StopAsync(mayContinue: true);
         layout.Controls.Add(paths, 0, 0); layout.Controls.Add(buttons, 0, 1); layout.Controls.Add(_status, 0, 2);
         layout.Controls.Add(_views, 0, 3); layout.Controls.Add(_info, 0, 4); Controls.Add(layout);
         try { var saved = JsonSerializer.Deserialize<Settings>(File.ReadAllText(_settingsPath)); _clip.Text = saved?.Clip ?? ""; _endpoint.Text = saved?.Endpoint ?? ""; } catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { }
@@ -171,6 +171,14 @@ internal sealed partial class MainWindow : Form
                 {
                     _captureTasks.RemoveWhere(t => t.IsCompleted);
                     _captureTasks.Add(SeedCreatedLayersAsync(monitor, bridge, created, token));
+                }
+            };
+            monitor.LayersVanished += vanished =>
+            {
+                lock (_captureTasks)
+                {
+                    _captureTasks.RemoveWhere(t => t.IsCompleted);
+                    _captureTasks.Add(DetectMergesAsync(monitor, bridge, vanished, token));
                 }
             };
             monitor.CaptureRequestsPaused = true;
@@ -239,14 +247,16 @@ internal sealed partial class MainWindow : Form
             }
             history.SeedBaselines(seeds);
         }
+        // The baseline save brings CSP to the front; if the user is looking at Memoline, let the recorder take it.
+        Native.AllowRecorderForeground(monitor.ControlProcessId);
         await RecordingBaselineInitialization.RunAsync(configuration.SessionId, Barrier,
             cancellation => SaveCapture.CaptureBaselineAsync(clip, bridge, control, configuration.PixelSize,
                 CurrentSession, () => monitor.InContact, Status, cancellation),
             () => reader.ReadAvailable(maxRecords: 1), Commit, Status, token);
     }
     // The recorder keeps each parsed save, so a new layer's baseline is exported from the very save that first
-    // listed it, not from a later one that may already hold strokes. Failing leaves the layer as before: its
-    // first boundary capture becomes its baseline and earlier strokes on it are not editable.
+    // listed it, not from a later one that may already hold strokes. Without such a save the layer starts empty.
+    // Failing leaves the layer as before: its first capture becomes its baseline.
     private async Task SeedCreatedLayersAsync(RecognizerMonitor monitor, string bridge,
         RecognizerMonitor.CreatedLayers created, CancellationToken token)
     {
@@ -260,32 +270,59 @@ internal sealed partial class MainWindow : Form
             if (monitor.SessionId != created.SessionId || monitor.Generation != appearance.Generation) return;
             var layers = appearance.Layers.Where(layer => !history.HasLayer(layer.Uuid!, created.SessionId, appearance.Generation)).ToArray();
             if (layers.Length == 0) return;
-            if (!File.Exists(appearance.SnapshotPath)) throw new FileNotFoundException("保存副本已不存在", appearance.SnapshotPath);
+            if (appearance.SnapshotPath is { } saved && !File.Exists(saved)) throw new FileNotFoundException("保存副本已不存在", saved);
             var seeds = new List<BaselineSeed>(layers.Length);
             foreach (var layer in layers)
             {
                 string png = Path.Combine(history.Root, "created-" + Guid.NewGuid().ToString("N") + ".png");
                 pngs.Add(png);
-                string metadata = await Bridge.RunAsync(bridge, ["export-id", appearance.SnapshotPath,
-                    layer.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), png,
-                    created.PixelSize.Width.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    created.PixelSize.Height.ToString(System.Globalization.CultureInfo.InvariantCulture)], token);
-                using var parsed = JsonDocument.Parse(metadata);
-                var root = parsed.RootElement;
-                if (J.Get(root, "fullCanvas").ValueKind != JsonValueKind.True
-                    || J.Tick(root, "width", 0) != created.PixelSize.Width || J.Tick(root, "height", 0) != created.PixelSize.Height
-                    || J.Tick(root, "layerId", 0) != layer.Id
-                    || !string.Equals(J.Text(root, "layerUuid"), layer.Uuid, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException($"新图层「{layer.Name}」的导出尺寸或身份与保存不一致");
+                JsonElement root;
+                if (appearance.SnapshotPath is null)
+                {
+                    using (var empty = new Bitmap(created.PixelSize.Width, created.PixelSize.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
+                    {
+                        using (var graphics = Graphics.FromImage(empty)) graphics.Clear(Color.Transparent);
+                        empty.Save(png, System.Drawing.Imaging.ImageFormat.Png);
+                    }
+                    root = JsonSerializer.SerializeToElement(new { width = created.PixelSize.Width, height = created.PixelSize.Height,
+                        fullCanvas = true, layerId = layer.Id, layerUuid = layer.Uuid, createdEmpty = true });
+                }
+                else
+                {
+                    string metadata = await Bridge.RunAsync(bridge, ["export-id", appearance.SnapshotPath,
+                        layer.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), png,
+                        created.PixelSize.Width.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        created.PixelSize.Height.ToString(System.Globalization.CultureInfo.InvariantCulture)], token);
+                    using var parsed = JsonDocument.Parse(metadata);
+                    root = parsed.RootElement.Clone();
+                    if (J.Get(root, "fullCanvas").ValueKind != JsonValueKind.True
+                        || J.Tick(root, "width", 0) != created.PixelSize.Width || J.Tick(root, "height", 0) != created.PixelSize.Height
+                        || J.Tick(root, "layerId", 0) != layer.Id
+                        || !string.Equals(J.Text(root, "layerUuid"), layer.Uuid, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException($"新图层「{layer.Name}」的导出尺寸或身份与保存不一致");
+                }
                 string id = "baseline-" + appearance.TriggerTicks.ToString("D20", System.Globalization.CultureInfo.InvariantCulture)
                     + "-" + layer.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..8];
                 seeds.Add(new(new LayerSnapshot(id, history.Root, created.SessionId, appearance.Generation, appearance.TriggerTicks,
-                    string.Empty, created.PixelSize.Width, created.PixelSize.Height, layer, root.Clone(), [],
-                    appearance.TriggerTicks, "layerCreated"), png));
+                    string.Empty, created.PixelSize.Width, created.PixelSize.Height, layer, root, [],
+                    appearance.TriggerTicks, appearance.SnapshotPath is null ? "createdEmpty" : "layerCreated"), png));
             }
             if (monitor.SessionId != created.SessionId || monitor.Generation != appearance.Generation) return;
+            // Pasting Memoline's recycle bin copy of a replaced layer brings that layer back: record which one.
+            var predecessors = new Dictionary<LayerReference, string>();
+            if (_host is not null && appearance.SnapshotPath is not null)
+                foreach (var seed in seeds)
+                    if (await _host.PredecessorOfCreatedLayerAsync(seed.Snapshot.Layer, seed.FullPngPath, token) is { } predecessor)
+                        predecessors[seed.Snapshot.Layer] = predecessor;
             history.SeedBaselines(seeds);
-            WriteLog($"新图层基线已建立：{string.Join("、", layers.Select(l => $"{l.Name}({l.Uuid})"))}，triggerTicks={appearance.TriggerTicks}，source={appearance.SnapshotPath}");
+            WriteLog($"新图层基线已建立：{string.Join("、", layers.Select(l => $"{l.Name}({l.Uuid})"))}，triggerTicks={appearance.TriggerTicks}，source={appearance.SnapshotPath ?? "空白画布"}");
+            if (predecessors.Count > 0 && monitor.ControlPipe is { } pipe)
+                foreach (var (layer, predecessor) in predecessors)
+                {
+                    await new RecorderControlClient(pipe, WriteLog).RecordLayerLineageAsync("recyclePaste", predecessor, layer.Uuid!,
+                        new { triggerTicks = appearance.TriggerTicks, layerName = layer.Name }, token);
+                    WriteLog($"新图层「{layer.Name}」({layer.Uuid}) 是回收站图层 {predecessor} 的粘贴，记为它的继任者");
+                }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception ex) { WriteLog("新图层基线未建立：" + ex.Message); }
@@ -293,6 +330,54 @@ internal sealed partial class MainWindow : Form
         {
             foreach (string png in pngs) SaveCapture.TryDelete(png);
             monitor.ReleaseRetention(appearance.TriggerTicks);
+            if (acquired) CaptureCoordinator.Release();
+        }
+    }
+    // A vanished layer whose pixels went into the layer next to it was merged: its events stay with that layer.
+    // Every other vanished layer was deleted by the user, which needs no record.
+    private async Task DetectMergesAsync(RecognizerMonitor monitor, string bridge, RecognizerMonitor.VanishedLayers vanished, CancellationToken token)
+    {
+        var vanishing = vanished.Vanishing;
+        var pngs = new List<string>();
+        bool acquired = false;
+        try
+        {
+            await CaptureCoordinator.WaitAsync(token); acquired = true;
+            if (monitor.SessionId != vanished.SessionId || monitor.Generation != vanishing.Generation || monitor.ControlPipe is not { } pipe) return;
+            if (!File.Exists(vanishing.BeforeSnapshot) || !File.Exists(vanishing.AfterSnapshot))
+            { WriteLog("图层消失前后的保存副本已不存在，按用户删除处理"); return; }
+            var root = _history?.Root ?? Path.GetTempPath();
+            async Task<string> Export(string clip, LayerReference layer)
+            {
+                string png = Path.Combine(root, "vanish-" + Guid.NewGuid().ToString("N") + ".png");
+                pngs.Add(png);
+                await Bridge.RunAsync(bridge, ["export-id", clip, layer.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), png,
+                    vanished.PixelSize.Width.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    vanished.PixelSize.Height.ToString(System.Globalization.CultureInfo.InvariantCulture)], token);
+                return png;
+            }
+            foreach (var layer in vanishing.Vanished)
+            {
+                LayerReference? target = null;
+                string? source = null;
+                foreach (var candidate in MergeDetection.Candidates(vanishing, layer))
+                {
+                    var after = vanishing.After.First(l => string.Equals(l.Uuid, candidate.Uuid, StringComparison.OrdinalIgnoreCase));
+                    source ??= await Export(vanishing.BeforeSnapshot, layer);
+                    string before = await Export(vanishing.BeforeSnapshot, candidate), now = await Export(vanishing.AfterSnapshot, after);
+                    if (await Task.Run(() => MergeDetection.MergedInto(source, before, now), token)) { target = after; break; }
+                }
+                if (target is null) { WriteLog($"图层「{layer.Name}」({layer.Uuid}) 被删除"); continue; }
+                await new RecorderControlClient(pipe, WriteLog).RecordLayerLineageAsync("merged", layer.Uuid!, target.Uuid!,
+                    new { triggerTicks = vanishing.TriggerTicks, layerName = layer.Name, targetName = target.Name }, token);
+                WriteLog($"图层「{layer.Name}」({layer.Uuid}) 已合并进「{target.Name}」({target.Uuid})，它的事件随该图层保留");
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception ex) { WriteLog("无法判断消失图层是否被合并，按删除处理：" + ex.Message); }
+        finally
+        {
+            foreach (string png in pngs) SaveCapture.TryDelete(png);
             if (acquired) CaptureCoordinator.Release();
         }
     }
@@ -335,7 +420,7 @@ internal sealed partial class MainWindow : Form
             Status(update.Baseline ? $"已保存「{result.LayerName}」并建立 after 基准；继续监听"
                 : $"已保存「{result.LayerName}」；生成 {update.DiffImages} 份图像差异，{update.DirtyLabels} 个影响范围标签；继续监听");
         }
-        catch (OperationCanceledException) { failure = "等待文件更新、读取超时或取消"; if (request.TriggerKind is "recordingEnd" or "recordingEndLayer") throw; if (!token.IsCancellationRequested) Status("等待文件更新或读取超时；保留上次图像，下次视图变化重试"); }
+        catch (OperationCanceledException) { failure = "等待文件更新、读取超时或取消"; if (request.TriggerKind is "recordingEnd" or "recordingEndLayer") throw; if (!token.IsCancellationRequested) Status($"等待文件更新或读取超时；保留上次图像，下次视图变化重试。若一直如此，请确认 CSP 打开的就是「{clip}」"); }
         catch (Exception ex) { failure = ex.Message; if (request.TriggerKind is "recordingEnd" or "recordingEndLayer") throw; Status("本次未完成：" + ex.Message + "；下次视图变化重试"); }
         finally
         {
@@ -348,14 +433,17 @@ internal sealed partial class MainWindow : Form
             }
         }
     }
-    private Task StopAsync()
-        => _stoppingTask is { IsCompleted: false } ? _stoppingTask : _stoppingTask = StopCoreAsync();
-    private async Task StopCoreAsync()
+    /// <param name="mayContinue">The Stop button: when CSP cannot be saved and read for the end, the user may keep
+    /// recording and stop again. Closing the window or the application always stops.</param>
+    private Task StopAsync(bool mayContinue = false)
+        => _stoppingTask is { IsCompleted: false } ? _stoppingTask : _stoppingTask = StopCoreAsync(mayContinue);
+    private async Task StopCoreAsync(bool mayContinue)
     {
         if (_stopping) return;
         if (_stopSource is null && _host?.HasPendingSeal != true) return;
         _stopping = true; _stop.Enabled = false; _start.Enabled = false;
         var stop = _stopSource;
+        bool continued = false;
         try
         {
             if(BeforeRecordingStop is { } finishEditing)await finishEditing();
@@ -376,6 +464,14 @@ internal sealed partial class MainWindow : Form
                     }
                     catch (Exception ex)
                     {
+                        // Stopping the recorder now makes the session unsealable for good; before the end marker
+                        // nothing is lost by recording on until CSP can be saved and read.
+                        if (mayContinue && ex is RecordingEndNotStartedException && KeepRecordingAfterFailedEnd(ex.Message))
+                        {
+                            monitor.CaptureRequestsPaused = false; continued = true;
+                            Status("末尾保存未完成，录制继续：" + ex.Message + "。回到 CSP 后再点「停止并封盘」。");
+                            return;
+                        }
                         _host.RecordingEndFailed(ex.Message);
                         WriteLog("末尾保存未完成；先停止原生录制，封盘完整性检查将保留可恢复文件：" + ex.Message);
                     }
@@ -397,17 +493,27 @@ internal sealed partial class MainWindow : Form
         catch (Exception ex) { Status("封盘未完成，原始记录与聚集文件已保留：" + ex.Message); }
         finally
         {
-            if (stop is not null)
+            if (continued) { _stop.Enabled = true; _stopping = false; }
+            else
             {
-                await stop.CancelAsync();
-                if (_monitorTask is not null) await _monitorTask;
-                stop.Dispose();
+                if (stop is not null)
+                {
+                    await stop.CancelAsync();
+                    if (_monitorTask is not null) await _monitorTask;
+                    stop.Dispose();
+                }
+                lock(_captureTasks)_captureTasks.Clear(); _stopSource = null; _monitor = null; _monitorTask = null;
+                _start.Enabled = true; _stop.Enabled = _host?.HasPendingSeal == true; _stopping = false;
+                foreach (var control in _configurationControls) control.Enabled = true;
             }
-            lock(_captureTasks)_captureTasks.Clear(); _stopSource = null; _monitor = null; _monitorTask = null;
-            _start.Enabled = true; _stop.Enabled = _host?.HasPendingSeal == true; _stopping = false;
-            foreach (var control in _configurationControls) control.Enabled = true;
         }
     }
+    private bool KeepRecordingAfterFailedEnd(string reason)
+        => !IsDisposed && MessageBox.Show(this,
+            "末尾保存没有完成，现在停止的话这次录制将无法封盘：\r\n" + reason
+            + "\r\n\r\n录制仍在继续。请回到 CSP（不要最小化），再点「停止并封盘」。"
+            + "\r\n\r\n「确定」继续录制；「取消」仍然停止（本次录制不能封盘，原始文件会保留）。",
+            Text, MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.OK;
     private void Ui(Action action)
     { if (IsDisposed || Disposing) return; if (InvokeRequired) BeginInvoke(action); else action(); }
     private void Status(string text) => Ui(() =>

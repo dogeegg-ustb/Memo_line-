@@ -20,7 +20,7 @@ internal static class AffineMatrixChecks
             => new(1, "affine", ticks, channel, kind, false, 0, (ulong)ticks, ticks, ticks, ticks,
                 operation, null, null, JsonSerializer.SerializeToElement(data));
         DirtyEvidence Stroke(JsonElement matrices, double x, double y, bool semantic = false, bool geometryFallback = false,
-            int publishedWidth = 512, bool legacy = false, bool nativeRotation = false)
+            int publishedWidth = 512, bool legacy = false, bool nativeRotation = false, double ocrScale = 50)
         {
             var evidence = new RecognitionEvidence(); evidence.Reset("affine", 1000, 0);
             evidence.Accept(Event("core.currentLayerState", "stateUpdated", 1, new { status = "changed", state = "Ink" }));
@@ -28,7 +28,7 @@ internal static class AffineMatrixChecks
             { name = "Pen", properties = new[] { new { key = "brush_size", value = 10, unit = "px" } } } }));
             evidence.Accept(Event("core.canvasViewState", "stateUpdated", 2, new { status = "changed", state = new
             {
-                canvasOriginScreenPx = new { x = -300, y = -200 }, ocrScalePercent = 50, ocrRotationDegrees = geometryFallback ? 0 : 90,
+                canvasOriginScreenPx = new { x = -300, y = -200 }, ocrScalePercent = ocrScale, ocrRotationDegrees = geometryFallback ? 0 : 90,
                 transform = new { canvasPixelWidth = publishedWidth, canvasPixelHeight = 256,
                     rotationDegrees = nativeRotation ? (double?)90 : geometryFallback ? (double?)0 : null,
                     matrices = semantic ? matrices : (JsonElement?)null }
@@ -41,6 +41,10 @@ internal static class AffineMatrixChecks
         var mapped = Stroke(published, -332, -184);
         check(mapped.Labels.Length == 1 && mapped.Labels[0].Coverage.Segments[0].Start == new PointD(32, 64),
             "Published raw matrices map negative screen origin and rotation to exact non-square canvas pixels");
+        // memolinetest13: the navigator digits read 6 for 18.6 % all session, and the screen-pixel padding swelled to 200 px.
+        var misread = Stroke(published, -332, -184, ocrScale: 6).Labels[0];
+        check(misread.CoverageSettings is { ZoomPercent: 50 } && misread.Coverage.Radius == mapped.Labels[0].Coverage.Radius,
+            "Coverage takes its zoom from the published affine, not from misread navigator digits");
         check(Stroke(published, -300, -200).Labels[0].Coverage.Segments[0].Start == new PointD(0, 0),
             "Published affine maps the negative screen origin to canvas zero");
         check(Stroke(published, -300, -184).Labels[0].Coverage.Segments[0].Start == new PointD(32, 0)

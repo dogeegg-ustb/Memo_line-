@@ -52,6 +52,7 @@ class EvidenceDebounceTests(unittest.TestCase):
         self.pipe.panel_activity = {}
         self.pipe.stop = threading.Event()
         self.pipe.closing = False
+        self.pipe.pointer_down, self.pipe.pointer_changed = False, float("-inf")
         self.pipe.active = set()
         self.pipe.capture_queue = queue.Queue()
         self.pipe.evidence_queue = queue.Queue()

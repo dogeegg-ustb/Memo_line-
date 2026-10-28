@@ -89,8 +89,7 @@ internal static class ActualUndoHistoryChecks
                 interaction.SetRegion(CanvasSelectionGeometry.Rectangle(interaction.Transform.CanvasToScreen(a), interaction.Transform.CanvasToScreen(b)));
                 var selection = interaction.RegionSelection!;
                 var undo = PreciseUndoSelector.Select(index, layer, selection);
-                var undoPlan = ReconstructionPlanner.Build(index, new(EditKind.PreciseUndo, layer, selection,
-                    undo.Selected.ToDictionary(s => s.Key, _ => new EventChange(Delete: true))));
+                var undoPlan = ReconstructionPlanner.Build(index, undo.Request(selection));
                 var candidate = interaction.Candidates.FirstOrDefault(c => stroke.Images.Contains(c.Image.Key) && c.CanSelect);
                 ReconstructionPlan? eventPlan = null;
                 if (candidate is not null)

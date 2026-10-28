@@ -10,5 +10,6 @@
   <ItemGroup>
     <ProjectReference Include="../source/PacketReplay.csproj" />
     <Compile Include="../../dirty matrix paster/source/ClipboardImageCodec.cs" Link="Paster/ClipboardImageCodec.cs" />
+    <Compile Include="../../../Organizer/canvas layer watcher/source/FastPng.cs" Link="Paster/FastPng.cs" />
   </ItemGroup>
 </Project>

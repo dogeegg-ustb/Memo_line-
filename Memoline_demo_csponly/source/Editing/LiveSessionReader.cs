@@ -57,7 +57,7 @@ internal static class LiveSessionReader
         if (packets.GroupBy(p => p.Layer).Any(g => g.OrderBy(p => p.TriggerTicks).First().Before is null))
         {
             var restored = packets.ToList();
-            ProjectSessionReader.RestoreBaselines(restored, token);
+            using (EditingProfiler.Stage("  restore baselines")) ProjectSessionReader.RestoreBaselines(restored, token);
             packets = restored;
         }
         IReadOnlyList<HistorySlot> history;
@@ -176,8 +176,42 @@ internal static class LiveSessionReader
             var current = LoadSnapshot(root, currentDescriptor, latest.CanvasWidth, latest.CanvasHeight, token);
             result[firstIndex] = first with { Before = before.GetAwaiter().GetResult() };
             result[index] = result[index] with { Current = current };
+            // The decoded PNGs behind both are garbage now; hand their 139 MB arrays back before the next layer.
+            EditingMemory.Collect();
         }
+        result.AddRange(SeededOnly(root, sessionId, boundaryTicks, result, token));
         return result.OrderBy(p => p.Layer.Uuid, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.TriggerTicks).ToArray();
+    }
+
+    /// <summary>
+    /// Layers seeded in this session (at recording start, or new ones) and not captured since: nothing was drawn on
+    /// them, so their seed is also their current pixels. A layer from an earlier session continues from it.
+    /// </summary>
+    private static IEnumerable<LayerPacket> SeededOnly(string root, string sessionId, long boundaryTicks,
+        IReadOnlyCollection<LayerPacket> packets, CancellationToken token)
+    {
+        string path = Path.Combine(root, "current.json");
+        if (!File.Exists(path)) return [];
+        CanvasLayerWatcher.SnapshotHistoryIndex? index;
+        try { index = JsonSerializer.Deserialize<CanvasLayerWatcher.SnapshotHistoryIndex>(File.ReadAllText(path), CanvasLayerWatcher.SnapshotHistory.Json); }
+        catch (Exception error) when (error is IOException or JsonException) { return []; }
+        var captured = packets.Select(p => p.Layer.Uuid).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var result = new List<LayerPacket>();
+        foreach (var seed in (index?.Baselines?.Values.AsEnumerable() ?? []).Where(s => s.SessionId == sessionId && s.TriggerTicks >= 0 &&
+                     s.TriggerTicks <= boundaryTicks && s.Layer.Uuid is { Length: > 0 } uuid && !captured.Contains(uuid))
+                     .GroupBy(s => s.Layer.Uuid!, StringComparer.OrdinalIgnoreCase).Select(g => g.MaxBy(s => s.TriggerTicks)!))
+        {
+            token.ThrowIfCancellationRequested();
+            var descriptor = JsonSerializer.SerializeToElement(new { id = seed.Id, sessionId, generation = seed.Generation,
+                triggerTicks = seed.TriggerTicks, baselineSource = seed.BaselineSource, width = seed.Width, height = seed.Height,
+                layer = new { id = seed.Layer.Id, name = seed.Layer.Name, uuid = seed.Layer.Uuid } });
+            if (LoadSnapshot(root, descriptor, seed.Width, seed.Height, token) is not { } pixels) continue;
+            result.Add(new(seed.Id, new(sessionId, seed.Generation, seed.Layer.Uuid!), seed.TriggerTicks, pixels,
+                pixels.DetachedParkedCopy(), [], IsRecordingBaseline: true, AfterSnapshotId: seed.Id, NowSnapshotId: seed.Id,
+                BaselineSource: seed.BaselineSource, CanvasWidth: seed.Width, CanvasHeight: seed.Height)
+            { AfterDescriptor = descriptor });
+        }
+        return result;
     }
 
     // Committed packets never change. Alt+M re-reads the same directory every time, so decoded
@@ -215,7 +249,12 @@ internal static class LiveSessionReader
             var descriptor = after.ValueKind == JsonValueKind.Object ? after : now;
             if (descriptor.ValueKind != JsonValueKind.Object) throw new InvalidDataException("差异包缺少 after/now descriptor。");
             string id = RequiredText(rootElement, "id");
-            var layer = ParseLayer(descriptor, sessionId);
+            // A Memoline-operation packet goes from the replaced layer's last pixels to its reproduction: it belongs to the reproduction.
+            var operation = Get(rootElement, "memolineOperation");
+            bool memolineOperation = Text(Get(rootElement, "capture"), "triggerKind") == "memolineOperation";
+            if (memolineOperation && (now.ValueKind != JsonValueKind.Object || Text(operation, "transactionId") is not { Length: > 0 }))
+                throw new InvalidDataException("记艺线操作包缺少复现层快照或事务身份。");
+            var layer = ParseLayer(memolineOperation ? now : descriptor, sessionId);
             long trigger = OptionalLong(now.ValueKind == JsonValueKind.Object ? now : descriptor, "triggerTicks", -1);
             if (trigger < 0) trigger = OptionalLong(descriptor, "triggerTicks", -1);
             if (trigger < 0) throw new InvalidDataException("差异包缺少 triggerTicks。");
@@ -230,10 +269,13 @@ internal static class LiveSessionReader
             var images = ReadImages(rootElement, packetDir, layer, id, width, height, labels, fullResolution, token);
             string? afterId = Text(after, "id"); string? nowId = Text(now, "id");
             bool baseline = Text(rootElement, "kind") == "baseline" || now.ValueKind != JsonValueKind.Object;
-            bool boundary = Text(Get(rootElement, "capture"), "triggerKind") is "editBoundary" or "recordingEndLayer";
+            // An operation packet's now is the reproduction installed whole: the layer as it is until something is drawn on it.
+            bool boundary = Text(Get(rootElement, "capture"), "triggerKind") is "editBoundary" or "recordingEndLayer" or "memolineOperation";
             return new(id, layer, trigger, null, null, images, boundary, baseline,
                 afterId, nowId, Text(after, "baselineSource") ?? Text(rootElement, "baselineSource"), width, height, fullResolution)
-            { Labels = labels, AfterDescriptor = after.Clone(), NowDescriptor = now.ValueKind == JsonValueKind.Object ? now.Clone() : default };
+            { Labels = labels, AfterDescriptor = after.Clone(), NowDescriptor = now.ValueKind == JsonValueKind.Object ? now.Clone() : default,
+                Operation = memolineOperation ? new(Text(operation, "transactionId")!, Text(operation, "editKind") ?? "",
+                    Text(operation, "replacedLayerUuid") ?? Text(Get(Get(rootElement, "capture"), "replacedLayer"), "uuid") ?? "") : null };
         }
     }
 
@@ -296,16 +338,18 @@ internal static class LiveSessionReader
         lock (SnapshotCache)
             if (SnapshotCache.TryGetValue(info.FullName, out var hit) && hit.Written == info.LastWriteTimeUtc &&
                 hit.Length == info.Length && hit.Image.Width == width && hit.Image.Height == height)
-                return hit.Image.Copy();
+                return hit.Image.DetachedParkedCopy();
         var image = LoadRgba(path, width, height);
-        // Kept compressed: a hit inflates in about 0.2 s instead of decoding the PNG again.
+        // Kept compressed: a hit inflates in about 0.2 s instead of decoding the PNG again. The caller gets
+        // it compressed too: a live read holds two full canvases per layer (139 MB each at 4961×7016),
+        // which used to stay inflated until the whole read was parked.
         var cached = image.ParkedCopy();
         lock (SnapshotCache)
         {
             if (SnapshotCache.Count >= SnapshotCacheLimit) SnapshotCache.Remove(SnapshotCache.Keys.First());
             SnapshotCache[info.FullName] = (info.LastWriteTimeUtc, info.Length, cached);
         }
-        return image;
+        return cached.DetachedParkedCopy();
     }
 
     private static ImageRgba LoadRgba(string path, int expectedWidth, int expectedHeight)

@@ -1,0 +1,1870 @@
+2026-10-18 20:11:30.427	boundary	states	1679 ms
+2026-10-18 20:11:34.048	boundary	saveAndCaptureLayers	3610 ms
+2026-10-18 20:11:34.577	boundary	readMechanical	528 ms
+2026-10-18 20:11:34.577	boundary	waitHistory	0 ms
+2026-10-18 20:11:34.739	boundary	brushState	26 ms
+2026-10-18 20:12:04.682	boundary	states	1506 ms
+2026-10-18 20:12:09.369	boundary	saveAndCaptureLayers	4617 ms
+2026-10-18 20:12:09.978	boundary	readMechanical	608 ms
+2026-10-18 20:12:09.978	boundary	waitHistory	0 ms
+2026-10-18 20:12:10.217	boundary	brushState	11 ms
+2026-10-18 20:12:10.910	execute	plan (clean boundary)	33 ms
+2026-10-18 20:12:11.763	edit-txn-706f9758630144008d0c1c87e40d3ab0	shortcuts	88 ms
+2026-10-18 20:12:11.865	edit-txn-706f9758630144008d0c1c87e40d3ab0	  bridgeInspect	58 ms
+2026-10-18 20:12:11.900	edit-txn-706f9758630144008d0c1c87e40d3ab0	  clipState	31 ms
+2026-10-18 20:12:11.905	edit-txn-706f9758630144008d0c1c87e40d3ab0	saveAndInspect	113 ms
+2026-10-18 20:12:15.378	edit-txn-706f9758630144008d0c1c87e40d3ab0	  saveSettled	1538 ms
+2026-10-18 20:12:15.436	edit-txn-706f9758630144008d0c1c87e40d3ab0	  bridgeInspect	57 ms
+2026-10-18 20:12:15.493	edit-txn-706f9758630144008d0c1c87e40d3ab0	  clipState	57 ms
+2026-10-18 20:12:15.495	edit-txn-706f9758630144008d0c1c87e40d3ab0	saveAndInspect	1656 ms
+2026-10-18 20:12:17.338	edit-txn-706f9758630144008d0c1c87e40d3ab0	  saveSettled	1526 ms
+2026-10-18 20:12:17.390	edit-txn-706f9758630144008d0c1c87e40d3ab0	  bridgeInspect	51 ms
+2026-10-18 20:12:17.417	edit-txn-706f9758630144008d0c1c87e40d3ab0	  clipState	26 ms
+2026-10-18 20:12:17.420	edit-txn-706f9758630144008d0c1c87e40d3ab0	saveAndInspect	1608 ms
+2026-10-18 20:12:17.657	edit-txn-706f9758630144008d0c1c87e40d3ab0	exportLayer	233 ms
+2026-10-18 20:12:19.705	edit-txn-706f9758630144008d0c1c87e40d3ab0	  saveSettled	1542 ms
+2026-10-18 20:12:19.764	edit-txn-706f9758630144008d0c1c87e40d3ab0	  bridgeInspect	58 ms
+2026-10-18 20:12:19.814	edit-txn-706f9758630144008d0c1c87e40d3ab0	  clipState	50 ms
+2026-10-18 20:12:19.817	edit-txn-706f9758630144008d0c1c87e40d3ab0	saveAndInspect	1654 ms
+2026-10-18 20:12:21.605	edit-txn-706f9758630144008d0c1c87e40d3ab0	replay 2 Discrete	1771 ms
+2026-10-18 20:12:23.066	edit-txn-706f9758630144008d0c1c87e40d3ab0	  saveSettled	1444 ms
+2026-10-18 20:12:23.119	edit-txn-706f9758630144008d0c1c87e40d3ab0	  bridgeInspect	53 ms
+2026-10-18 20:12:23.158	edit-txn-706f9758630144008d0c1c87e40d3ab0	  clipState	38 ms
+2026-10-18 20:12:23.160	edit-txn-706f9758630144008d0c1c87e40d3ab0	saveAndInspect	1539 ms
+2026-10-18 20:12:23.433	edit-txn-706f9758630144008d0c1c87e40d3ab0	exportLayer	271 ms
+2026-10-18 20:12:25.577	execute	transaction (precise undo)	14137 ms
+2026-10-18 20:12:28.947	edit-txn-706f9758630144008d0c1c87e40d3ab0	stateRefreshAfterEnd	3378 ms
+2026-10-18 20:12:48.404	boundary	states	1436 ms
+2026-10-18 20:12:54.178	boundary	saveAndCaptureLayers	5699 ms
+2026-10-18 20:12:54.771	boundary	readMechanical	593 ms
+2026-10-18 20:12:54.772	boundary	waitHistory	0 ms
+2026-10-18 20:12:54.995	boundary	brushState	9 ms
+2026-10-18 20:44:03.163	boundary	states	1576 ms
+2026-10-18 20:44:08.758	boundary	saveAndCaptureLayers	5514 ms
+2026-10-18 20:44:09.455	boundary	readMechanical	697 ms
+2026-10-18 20:44:09.456	boundary	waitHistory	0 ms
+2026-10-18 20:44:09.760	boundary	brushState	20 ms
+2026-10-18 20:44:09.808	boundary	savedStructure	46 ms
+2026-10-18 20:44:10.544	execute	plan (clean boundary)	30 ms
+2026-10-18 20:44:11.558	edit-txn-475de79e107c41e7b8509327dae0281a	shortcuts	137 ms
+2026-10-18 20:44:11.680	edit-txn-475de79e107c41e7b8509327dae0281a	  bridgeInspect	58 ms
+2026-10-18 20:44:11.726	edit-txn-475de79e107c41e7b8509327dae0281a	  clipState	40 ms
+2026-10-18 20:44:11.730	edit-txn-475de79e107c41e7b8509327dae0281a	saveAndInspect	125 ms
+2026-10-18 20:44:15.547	edit-txn-475de79e107c41e7b8509327dae0281a	  saveSettled	1561 ms
+2026-10-18 20:44:15.605	edit-txn-475de79e107c41e7b8509327dae0281a	  bridgeInspect	58 ms
+2026-10-18 20:44:15.636	edit-txn-475de79e107c41e7b8509327dae0281a	  clipState	30 ms
+2026-10-18 20:44:15.638	edit-txn-475de79e107c41e7b8509327dae0281a	saveAndInspect	1652 ms
+2026-10-18 20:44:16.836	edit-txn-475de79e107c41e7b8509327dae0281a	  saveSettled	893 ms
+2026-10-18 20:44:16.883	edit-txn-475de79e107c41e7b8509327dae0281a	  bridgeInspect	46 ms
+2026-10-18 20:44:16.943	edit-txn-475de79e107c41e7b8509327dae0281a	  clipState	59 ms
+2026-10-18 20:44:16.946	edit-txn-475de79e107c41e7b8509327dae0281a	saveAndInspect	1003 ms
+2026-10-18 20:44:17.182	edit-txn-475de79e107c41e7b8509327dae0281a	exportLayer	232 ms
+2026-10-18 20:44:19.337	edit-txn-475de79e107c41e7b8509327dae0281a	  saveSettled	1635 ms
+2026-10-18 20:44:19.384	edit-txn-475de79e107c41e7b8509327dae0281a	  bridgeInspect	46 ms
+2026-10-18 20:44:19.438	edit-txn-475de79e107c41e7b8509327dae0281a	  clipState	53 ms
+2026-10-18 20:44:19.440	edit-txn-475de79e107c41e7b8509327dae0281a	saveAndInspect	1738 ms
+2026-10-18 20:44:20.478	edit-txn-475de79e107c41e7b8509327dae0281a	replay 1 Discrete	1023 ms
+2026-10-18 20:44:21.955	edit-txn-475de79e107c41e7b8509327dae0281a	  saveSettled	1461 ms
+2026-10-18 20:44:22.001	edit-txn-475de79e107c41e7b8509327dae0281a	  bridgeInspect	46 ms
+2026-10-18 20:44:22.066	edit-txn-475de79e107c41e7b8509327dae0281a	  clipState	65 ms
+2026-10-18 20:44:22.068	edit-txn-475de79e107c41e7b8509327dae0281a	saveAndInspect	1575 ms
+2026-10-18 20:44:22.321	edit-txn-475de79e107c41e7b8509327dae0281a	exportLayer	251 ms
+2026-10-18 20:44:24.838	execute	transaction (precise undo)	13759 ms
+2026-10-18 20:44:27.733	edit-txn-475de79e107c41e7b8509327dae0281a	stateRefreshAfterEnd	2904 ms
+2026-10-18 20:45:18.651	boundary	states	1710 ms
+2026-10-18 20:45:20.277	boundary	saveAndCaptureLayers	1626 ms
+2026-10-18 20:45:33.562	boundary	states	1517 ms
+2026-10-18 20:45:38.434	boundary	saveAndCaptureLayers	4799 ms
+2026-10-18 20:45:39.442	boundary	readMechanical	1008 ms
+2026-10-18 20:45:39.443	boundary	waitHistory	0 ms
+2026-10-18 20:45:39.925	boundary	brushState	7 ms
+2026-10-18 20:45:39.974	boundary	savedStructure	49 ms
+2026-10-18 21:48:14.791	boundary	states	1509 ms
+2026-10-18 21:48:21.547	boundary	saveAndCaptureLayers	6667 ms
+2026-10-18 21:48:22.328	boundary	readMechanical	781 ms
+2026-10-18 21:48:22.329	boundary	waitHistory	0 ms
+2026-10-18 21:48:22.665	boundary	brushState	32 ms
+2026-10-18 21:48:22.715	boundary	savedStructure	47 ms
+2026-10-18 21:48:23.447	execute	plan (clean boundary)	31 ms
+2026-10-18 21:48:24.422	edit-txn-b8974c459a3b45f18622f414881363ac	shortcuts	98 ms
+2026-10-18 21:48:24.520	edit-txn-b8974c459a3b45f18622f414881363ac	  bridgeInspect	53 ms
+2026-10-18 21:48:24.562	edit-txn-b8974c459a3b45f18622f414881363ac	  clipState	36 ms
+2026-10-18 21:48:24.566	edit-txn-b8974c459a3b45f18622f414881363ac	saveAndInspect	114 ms
+2026-10-18 21:48:28.636	edit-txn-b8974c459a3b45f18622f414881363ac	  saveSettled	1536 ms
+2026-10-18 21:48:28.694	edit-txn-b8974c459a3b45f18622f414881363ac	  bridgeInspect	57 ms
+2026-10-18 21:48:28.730	edit-txn-b8974c459a3b45f18622f414881363ac	  clipState	35 ms
+2026-10-18 21:48:28.733	edit-txn-b8974c459a3b45f18622f414881363ac	saveAndInspect	1634 ms
+2026-10-18 21:48:30.027	edit-txn-b8974c459a3b45f18622f414881363ac	  saveSettled	978 ms
+2026-10-18 21:48:30.073	edit-txn-b8974c459a3b45f18622f414881363ac	  bridgeInspect	45 ms
+2026-10-18 21:48:30.123	edit-txn-b8974c459a3b45f18622f414881363ac	  clipState	50 ms
+2026-10-18 21:48:30.126	edit-txn-b8974c459a3b45f18622f414881363ac	saveAndInspect	1078 ms
+2026-10-18 21:48:30.314	edit-txn-b8974c459a3b45f18622f414881363ac	exportLayer	184 ms
+2026-10-18 21:48:32.411	edit-txn-b8974c459a3b45f18622f414881363ac	  saveSettled	1635 ms
+2026-10-18 21:48:32.456	edit-txn-b8974c459a3b45f18622f414881363ac	  bridgeInspect	45 ms
+2026-10-18 21:48:32.520	edit-txn-b8974c459a3b45f18622f414881363ac	  clipState	63 ms
+2026-10-18 21:48:32.522	edit-txn-b8974c459a3b45f18622f414881363ac	saveAndInspect	1746 ms
+2026-10-18 21:48:36.336	edit-txn-b8974c459a3b45f18622f414881363ac	replay 1 Discrete	3796 ms
+2026-10-18 21:48:37.823	edit-txn-b8974c459a3b45f18622f414881363ac	  saveSettled	1470 ms
+2026-10-18 21:48:37.872	edit-txn-b8974c459a3b45f18622f414881363ac	  bridgeInspect	49 ms
+2026-10-18 21:48:37.916	edit-txn-b8974c459a3b45f18622f414881363ac	  clipState	43 ms
+2026-10-18 21:48:37.919	edit-txn-b8974c459a3b45f18622f414881363ac	saveAndInspect	1567 ms
+2026-10-18 21:48:38.228	edit-txn-b8974c459a3b45f18622f414881363ac	exportLayer	308 ms
+2026-10-18 21:48:40.812	execute	transaction (precise undo)	16805 ms
+2026-10-18 21:48:43.708	edit-txn-b8974c459a3b45f18622f414881363ac	stateRefreshAfterEnd	2905 ms
+2026-10-18 21:49:15.241	boundary	states	1761 ms
+2026-10-18 21:49:20.674	boundary	saveAndCaptureLayers	5433 ms
+2026-10-18 21:49:21.422	boundary	readMechanical	747 ms
+2026-10-18 21:49:21.422	boundary	waitHistory	0 ms
+2026-10-18 21:49:24.238	boundary	brushState	2275 ms
+2026-10-18 21:49:24.295	boundary	savedStructure	56 ms
+2026-10-18 21:49:25.027	execute	plan (clean boundary)	1 ms
+2026-10-18 21:49:26.253	edit-txn-47e798dedb4a4944a7b794cd1974ff98	shortcuts	106 ms
+2026-10-18 21:49:26.318	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  bridgeInspect	44 ms
+2026-10-18 21:49:26.346	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  clipState	28 ms
+2026-10-18 21:49:26.349	edit-txn-47e798dedb4a4944a7b794cd1974ff98	saveAndInspect	82 ms
+2026-10-18 21:49:29.910	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  saveSettled	1546 ms
+2026-10-18 21:49:29.957	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  bridgeInspect	47 ms
+2026-10-18 21:49:29.995	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  clipState	37 ms
+2026-10-18 21:49:29.998	edit-txn-47e798dedb4a4944a7b794cd1974ff98	saveAndInspect	1635 ms
+2026-10-18 21:49:31.187	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  saveSettled	875 ms
+2026-10-18 21:49:31.233	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  bridgeInspect	46 ms
+2026-10-18 21:49:31.267	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  clipState	33 ms
+2026-10-18 21:49:31.269	edit-txn-47e798dedb4a4944a7b794cd1974ff98	saveAndInspect	958 ms
+2026-10-18 21:49:31.452	edit-txn-47e798dedb4a4944a7b794cd1974ff98	exportLayer	182 ms
+2026-10-18 21:49:33.785	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  saveSettled	1870 ms
+2026-10-18 21:49:33.842	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  bridgeInspect	57 ms
+2026-10-18 21:49:33.880	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  clipState	37 ms
+2026-10-18 21:49:33.883	edit-txn-47e798dedb4a4944a7b794cd1974ff98	saveAndInspect	1968 ms
+2026-10-18 21:49:37.285	edit-txn-47e798dedb4a4944a7b794cd1974ff98	replay 5 Discrete	3401 ms
+2026-10-18 21:49:38.781	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  saveSettled	1494 ms
+2026-10-18 21:49:38.827	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  bridgeInspect	45 ms
+2026-10-18 21:49:38.888	edit-txn-47e798dedb4a4944a7b794cd1974ff98	  clipState	61 ms
+2026-10-18 21:49:38.891	edit-txn-47e798dedb4a4944a7b794cd1974ff98	saveAndInspect	1604 ms
+2026-10-18 21:49:39.089	edit-txn-47e798dedb4a4944a7b794cd1974ff98	exportLayer	198 ms
+2026-10-18 21:49:41.129	execute	transaction (precise undo)	15269 ms
+2026-10-18 21:49:44.107	edit-txn-47e798dedb4a4944a7b794cd1974ff98	stateRefreshAfterEnd	2980 ms
+2026-10-19 21:08:09.294	boundary	states	1380 ms
+2026-10-19 21:08:13.123	boundary	saveAndCaptureLayers	3744 ms
+2026-10-19 21:08:14.505	boundary	readMechanical	1382 ms
+2026-10-19 21:08:14.506	boundary	waitHistory	0 ms
+2026-10-19 21:08:14.843	boundary	brushState	23 ms
+2026-10-19 21:08:14.890	boundary	savedStructure	44 ms
+2026-10-19 21:08:15.538	execute	plan (clean boundary)	26 ms
+2026-10-19 21:08:16.367	edit-txn-997d14edd1ee4d21a416db4420f5b535	shortcuts	91 ms
+2026-10-19 21:08:16.447	edit-txn-997d14edd1ee4d21a416db4420f5b535	  bridgeInspect	36 ms
+2026-10-19 21:08:16.474	edit-txn-997d14edd1ee4d21a416db4420f5b535	  clipState	23 ms
+2026-10-19 21:08:16.478	edit-txn-997d14edd1ee4d21a416db4420f5b535	saveAndInspect	81 ms
+2026-10-19 21:08:20.127	edit-txn-997d14edd1ee4d21a416db4420f5b535	  saveSettled	1537 ms
+2026-10-19 21:08:20.166	edit-txn-997d14edd1ee4d21a416db4420f5b535	  bridgeInspect	39 ms
+2026-10-19 21:08:20.190	edit-txn-997d14edd1ee4d21a416db4420f5b535	  clipState	23 ms
+2026-10-19 21:08:20.191	edit-txn-997d14edd1ee4d21a416db4420f5b535	saveAndInspect	1601 ms
+2026-10-19 21:08:22.037	edit-txn-997d14edd1ee4d21a416db4420f5b535	  saveSettled	1539 ms
+2026-10-19 21:08:22.074	edit-txn-997d14edd1ee4d21a416db4420f5b535	  bridgeInspect	37 ms
+2026-10-19 21:08:22.100	edit-txn-997d14edd1ee4d21a416db4420f5b535	  clipState	26 ms
+2026-10-19 21:08:22.103	edit-txn-997d14edd1ee4d21a416db4420f5b535	saveAndInspect	1605 ms
+2026-10-19 21:08:22.300	edit-txn-997d14edd1ee4d21a416db4420f5b535	exportLayer	194 ms
+2026-10-19 21:08:24.301	edit-txn-997d14edd1ee4d21a416db4420f5b535	  saveSettled	1531 ms
+2026-10-19 21:08:24.335	edit-txn-997d14edd1ee4d21a416db4420f5b535	  bridgeInspect	34 ms
+2026-10-19 21:08:24.393	edit-txn-997d14edd1ee4d21a416db4420f5b535	  clipState	58 ms
+2026-10-19 21:08:24.395	edit-txn-997d14edd1ee4d21a416db4420f5b535	saveAndInspect	1625 ms
+2026-10-19 21:08:30.890	edit-txn-997d14edd1ee4d21a416db4420f5b535	replay 3 Discrete	6482 ms
+2026-10-19 21:08:32.213	edit-txn-997d14edd1ee4d21a416db4420f5b535	  saveSettled	1309 ms
+2026-10-19 21:08:32.253	edit-txn-997d14edd1ee4d21a416db4420f5b535	  bridgeInspect	39 ms
+2026-10-19 21:08:32.276	edit-txn-997d14edd1ee4d21a416db4420f5b535	  clipState	23 ms
+2026-10-19 21:08:32.278	edit-txn-997d14edd1ee4d21a416db4420f5b535	saveAndInspect	1374 ms
+2026-10-19 21:08:32.542	edit-txn-997d14edd1ee4d21a416db4420f5b535	exportLayer	263 ms
+2026-10-19 21:08:34.725	execute	transaction (precise undo)	18638 ms
+2026-10-19 21:08:37.902	edit-txn-997d14edd1ee4d21a416db4420f5b535	stateRefreshAfterEnd	3184 ms
+2026-10-19 21:09:18.678	boundary	states	1274 ms
+2026-10-19 21:09:23.943	boundary	saveAndCaptureLayers	5191 ms
+2026-10-19 21:09:25.201	boundary	readMechanical	1258 ms
+2026-10-19 21:09:25.201	boundary	waitHistory	0 ms
+2026-10-19 21:09:26.163	boundary	brushState	5 ms
+2026-10-19 21:09:26.214	boundary	savedStructure	52 ms
+2026-10-19 21:09:26.711	execute	plan (clean boundary)	3 ms
+2026-10-19 21:09:27.547	edit-txn-64462d79ba58445c9836e2c792cb12e4	shortcuts	91 ms
+2026-10-19 21:09:27.602	edit-txn-64462d79ba58445c9836e2c792cb12e4	  bridgeInspect	37 ms
+2026-10-19 21:09:27.639	edit-txn-64462d79ba58445c9836e2c792cb12e4	  clipState	36 ms
+2026-10-19 21:09:27.641	edit-txn-64462d79ba58445c9836e2c792cb12e4	saveAndInspect	80 ms
+2026-10-19 21:09:29.221	edit-txn-64462d79ba58445c9836e2c792cb12e4	  saveSettled	1531 ms
+2026-10-19 21:09:29.262	edit-txn-64462d79ba58445c9836e2c792cb12e4	  bridgeInspect	41 ms
+2026-10-19 21:09:29.306	edit-txn-64462d79ba58445c9836e2c792cb12e4	  clipState	44 ms
+2026-10-19 21:09:29.308	edit-txn-64462d79ba58445c9836e2c792cb12e4	saveAndInspect	1619 ms
+2026-10-19 21:09:31.138	edit-txn-64462d79ba58445c9836e2c792cb12e4	  saveSettled	1524 ms
+2026-10-19 21:09:31.192	edit-txn-64462d79ba58445c9836e2c792cb12e4	  bridgeInspect	53 ms
+2026-10-19 21:09:31.217	edit-txn-64462d79ba58445c9836e2c792cb12e4	  clipState	25 ms
+2026-10-19 21:09:31.219	edit-txn-64462d79ba58445c9836e2c792cb12e4	saveAndInspect	1605 ms
+2026-10-19 21:09:33.058	edit-txn-64462d79ba58445c9836e2c792cb12e4	  saveSettled	1529 ms
+2026-10-19 21:09:33.102	edit-txn-64462d79ba58445c9836e2c792cb12e4	  bridgeInspect	44 ms
+2026-10-19 21:09:33.164	edit-txn-64462d79ba58445c9836e2c792cb12e4	  clipState	61 ms
+2026-10-19 21:09:33.166	edit-txn-64462d79ba58445c9836e2c792cb12e4	saveAndInspect	1638 ms
+2026-10-19 21:09:35.006	edit-txn-64462d79ba58445c9836e2c792cb12e4	  saveSettled	1531 ms
+2026-10-19 21:09:35.044	edit-txn-64462d79ba58445c9836e2c792cb12e4	  bridgeInspect	37 ms
+2026-10-19 21:09:35.070	edit-txn-64462d79ba58445c9836e2c792cb12e4	  clipState	26 ms
+2026-10-19 21:09:35.072	edit-txn-64462d79ba58445c9836e2c792cb12e4	saveAndInspect	1598 ms
+2026-10-19 21:09:35.084	execute	transaction (precise undo)	7711 ms
+2026-10-19 21:09:37.995	edit-txn-64462d79ba58445c9836e2c792cb12e4	stateRefreshAfterEnd	2917 ms
+2026-10-19 21:19:41.966	boundary	states	1391 ms
+2026-10-19 21:19:45.721	boundary	saveAndCaptureLayers	3755 ms
+2026-10-19 21:19:46.451	boundary	readMechanical	729 ms
+2026-10-19 21:19:46.451	boundary	waitHistory	0 ms
+2026-10-19 21:19:47.122	boundary	brushState	19 ms
+2026-10-19 21:19:47.168	boundary	savedStructure	46 ms
+2026-10-19 21:19:47.893	execute	plan (clean boundary)	3 ms
+2026-10-19 21:19:58.286	boundary	states	1363 ms
+2026-10-19 21:20:01.557	boundary	saveAndCaptureLayers	3269 ms
+2026-10-19 21:20:02.041	boundary	readMechanical	483 ms
+2026-10-19 21:20:25.724	boundary	states	1373 ms
+2026-10-19 21:20:29.671	boundary	saveAndCaptureLayers	3947 ms
+2026-10-19 21:20:30.445	boundary	readMechanical	774 ms
+2026-10-19 21:20:30.446	boundary	waitHistory	0 ms
+2026-10-19 21:20:33.131	boundary	brushState	1981 ms
+2026-10-19 21:20:33.187	boundary	savedStructure	56 ms
+2026-10-19 21:20:41.692	execute	plan (clean boundary)	1 ms
+2026-10-19 21:20:59.605	boundary	states	1319 ms
+2026-10-19 21:21:02.908	boundary	saveAndCaptureLayers	3234 ms
+2026-10-19 21:21:15.675	boundary	states	1271 ms
+2026-10-19 21:21:19.011	boundary	saveAndCaptureLayers	3256 ms
+2026-10-19 21:21:19.724	boundary	readMechanical	712 ms
+2026-10-19 21:21:19.724	boundary	waitHistory	0 ms
+2026-10-19 21:21:20.514	boundary	brushState	27 ms
+2026-10-19 21:21:20.560	boundary	savedStructure	46 ms
+2026-10-19 21:21:21.721	execute	plan (clean boundary)	0 ms
+2026-10-19 21:21:44.021	boundary	states	1407 ms
+2026-10-19 21:21:48.381	boundary	saveAndCaptureLayers	4282 ms
+2026-10-19 21:21:49.089	boundary	readMechanical	707 ms
+2026-10-19 21:21:49.089	boundary	waitHistory	0 ms
+2026-10-19 21:21:49.910	boundary	brushState	30 ms
+2026-10-19 21:21:49.958	boundary	savedStructure	48 ms
+2026-10-19 21:22:01.335	boundary	states	1326 ms
+2026-10-19 21:22:05.412	boundary	saveAndCaptureLayers	3997 ms
+2026-10-19 21:22:06.104	boundary	readMechanical	692 ms
+2026-10-19 21:22:06.105	boundary	waitHistory	0 ms
+2026-10-19 21:22:06.805	boundary	brushState	14 ms
+2026-10-19 21:22:06.858	boundary	savedStructure	52 ms
+2026-10-19 21:22:15.658	execute	plan (clean boundary)	0 ms
+2026-10-19 21:22:26.775	boundary	states	1424 ms
+2026-10-19 21:22:31.538	boundary	saveAndCaptureLayers	4695 ms
+2026-10-19 21:22:32.730	boundary	readMechanical	1191 ms
+2026-10-19 21:22:32.730	boundary	waitHistory	0 ms
+2026-10-19 21:22:34.182	boundary	brushState	27 ms
+2026-10-19 21:22:34.245	boundary	savedStructure	63 ms
+2026-10-19 21:22:35.898	execute	plan (clean boundary)	0 ms
+2026-10-19 21:22:36.485	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	shortcuts	99 ms
+2026-10-19 21:22:36.553	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  bridgeInspect	41 ms
+2026-10-19 21:22:36.579	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  clipState	26 ms
+2026-10-19 21:22:36.581	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	saveAndInspect	77 ms
+2026-10-19 21:22:38.170	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  saveSettled	1530 ms
+2026-10-19 21:22:38.210	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  bridgeInspect	40 ms
+2026-10-19 21:22:38.261	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  clipState	51 ms
+2026-10-19 21:22:38.264	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	saveAndInspect	1625 ms
+2026-10-19 21:22:40.097	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  saveSettled	1527 ms
+2026-10-19 21:22:40.138	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  bridgeInspect	40 ms
+2026-10-19 21:22:40.174	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  clipState	36 ms
+2026-10-19 21:22:40.177	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	saveAndInspect	1607 ms
+2026-10-19 21:22:42.019	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  saveSettled	1536 ms
+2026-10-19 21:22:42.070	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  bridgeInspect	50 ms
+2026-10-19 21:22:42.129	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  clipState	59 ms
+2026-10-19 21:22:42.132	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	saveAndInspect	1649 ms
+2026-10-19 21:22:43.961	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  saveSettled	1523 ms
+2026-10-19 21:22:43.999	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  bridgeInspect	37 ms
+2026-10-19 21:22:44.044	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	  clipState	44 ms
+2026-10-19 21:22:44.046	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	saveAndInspect	1608 ms
+2026-10-19 21:22:44.054	execute	transaction (precise undo)	7785 ms
+2026-10-19 21:22:46.485	edit-txn-02460eb7bc4d4239a055ee8e62d90fa4	stateRefreshAfterEnd	2433 ms
+2026-10-19 21:32:06.017	boundary	states	1341 ms
+2026-10-19 21:32:08.980	boundary	saveAndCaptureLayers	2956 ms
+2026-10-19 21:32:09.426	boundary	readMechanical	446 ms
+2026-10-19 21:32:09.427	boundary	waitHistory	0 ms
+2026-10-19 21:32:09.961	boundary	brushState	10 ms
+2026-10-19 21:32:10.005	boundary	savedStructure	42 ms
+2026-10-19 21:32:47.958	boundary	states	1271 ms
+2026-10-19 21:32:51.138	boundary	saveAndCaptureLayers	3115 ms
+2026-10-19 21:32:51.755	boundary	readMechanical	617 ms
+2026-10-19 21:32:51.755	boundary	waitHistory	0 ms
+2026-10-19 21:32:52.228	boundary	brushState	9 ms
+2026-10-19 21:32:52.274	boundary	savedStructure	46 ms
+2026-10-19 21:32:52.871	execute	plan (clean boundary)	9 ms
+2026-10-19 21:33:11.839	boundary	states	1427 ms
+2026-10-19 21:33:15.225	boundary	saveAndCaptureLayers	3307 ms
+2026-10-19 21:33:15.839	boundary	readMechanical	614 ms
+2026-10-19 21:33:15.840	boundary	waitHistory	0 ms
+2026-10-19 21:33:16.331	boundary	brushState	16 ms
+2026-10-19 21:33:16.383	boundary	savedStructure	52 ms
+2026-10-19 21:33:16.919	execute	plan (clean boundary)	0 ms
+2026-10-19 21:33:21.729	boundary	states	1309 ms
+2026-10-19 21:33:25.242	boundary	saveAndCaptureLayers	3443 ms
+2026-10-19 21:33:25.885	boundary	readMechanical	643 ms
+2026-10-19 21:33:25.886	boundary	waitHistory	0 ms
+2026-10-19 21:33:26.374	boundary	brushState	19 ms
+2026-10-19 21:33:26.420	boundary	savedStructure	46 ms
+2026-10-19 21:36:30.733	boundary	states	1423 ms
+2026-10-19 21:36:33.853	boundary	saveAndCaptureLayers	3120 ms
+2026-10-19 21:36:34.324	boundary	readMechanical	471 ms
+2026-10-19 21:36:34.324	boundary	waitHistory	0 ms
+2026-10-19 21:36:34.565	boundary	brushState	30 ms
+2026-10-19 21:36:34.617	boundary	savedStructure	51 ms
+2026-10-19 21:36:35.161	execute	plan (clean boundary)	16 ms
+2026-10-19 21:36:35.740	edit-txn-bf5a730d64b746f38df50a4d8300b240	shortcuts	116 ms
+2026-10-19 21:36:35.810	edit-txn-bf5a730d64b746f38df50a4d8300b240	  bridgeInspect	36 ms
+2026-10-19 21:36:35.878	edit-txn-bf5a730d64b746f38df50a4d8300b240	  clipState	66 ms
+2026-10-19 21:36:35.884	edit-txn-bf5a730d64b746f38df50a4d8300b240	saveAndInspect	121 ms
+2026-10-19 21:36:39.066	edit-txn-bf5a730d64b746f38df50a4d8300b240	  saveSettled	1526 ms
+2026-10-19 21:36:39.107	edit-txn-bf5a730d64b746f38df50a4d8300b240	  bridgeInspect	40 ms
+2026-10-19 21:36:39.130	edit-txn-bf5a730d64b746f38df50a4d8300b240	  clipState	22 ms
+2026-10-19 21:36:39.133	edit-txn-bf5a730d64b746f38df50a4d8300b240	saveAndInspect	1593 ms
+2026-10-19 21:36:40.967	edit-txn-bf5a730d64b746f38df50a4d8300b240	  saveSettled	1526 ms
+2026-10-19 21:36:41.016	edit-txn-bf5a730d64b746f38df50a4d8300b240	  bridgeInspect	49 ms
+2026-10-19 21:36:41.064	edit-txn-bf5a730d64b746f38df50a4d8300b240	  clipState	47 ms
+2026-10-19 21:36:41.067	edit-txn-bf5a730d64b746f38df50a4d8300b240	saveAndInspect	1627 ms
+2026-10-19 21:36:41.247	edit-txn-bf5a730d64b746f38df50a4d8300b240	exportLayer	176 ms
+2026-10-19 21:36:43.243	edit-txn-bf5a730d64b746f38df50a4d8300b240	  saveSettled	1529 ms
+2026-10-19 21:36:43.291	edit-txn-bf5a730d64b746f38df50a4d8300b240	  bridgeInspect	47 ms
+2026-10-19 21:36:43.333	edit-txn-bf5a730d64b746f38df50a4d8300b240	  clipState	42 ms
+2026-10-19 21:36:43.336	edit-txn-bf5a730d64b746f38df50a4d8300b240	saveAndInspect	1623 ms
+2026-10-19 21:36:48.754	edit-txn-bf5a730d64b746f38df50a4d8300b240	replay 7 Discrete	5402 ms
+2026-10-19 21:36:50.096	edit-txn-bf5a730d64b746f38df50a4d8300b240	  saveSettled	1334 ms
+2026-10-19 21:36:50.140	edit-txn-bf5a730d64b746f38df50a4d8300b240	  bridgeInspect	44 ms
+2026-10-19 21:36:50.204	edit-txn-bf5a730d64b746f38df50a4d8300b240	  clipState	64 ms
+2026-10-19 21:36:50.207	edit-txn-bf5a730d64b746f38df50a4d8300b240	saveAndInspect	1446 ms
+2026-10-19 21:36:50.413	edit-txn-bf5a730d64b746f38df50a4d8300b240	exportLayer	205 ms
+2026-10-19 21:36:52.504	execute	transaction (precise undo)	17005 ms
+2026-10-19 21:36:55.239	edit-txn-bf5a730d64b746f38df50a4d8300b240	stateRefreshAfterEnd	2742 ms
+2026-10-19 21:37:03.263	boundary	states	1806 ms
+2026-10-19 21:37:03.337	boundary	saveAndCaptureLayers	5 ms
+2026-10-19 21:37:08.454	boundary	states	1504 ms
+2026-10-19 21:37:08.458	boundary	saveAndCaptureLayers	3 ms
+2026-10-19 21:37:36.084	boundary	states	1577 ms
+2026-10-19 21:37:40.274	boundary	saveAndCaptureLayers	4110 ms
+2026-10-19 21:37:41.354	boundary	readMechanical	1079 ms
+2026-10-19 21:37:41.354	boundary	waitHistory	0 ms
+2026-10-19 21:37:41.904	boundary	brushState	15 ms
+2026-10-19 21:37:41.948	boundary	savedStructure	44 ms
+2026-10-19 21:37:42.568	execute	plan (clean boundary)	1 ms
+2026-10-19 21:37:43.214	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	shortcuts	78 ms
+2026-10-19 21:37:43.270	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  bridgeInspect	39 ms
+2026-10-19 21:37:43.303	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  clipState	33 ms
+2026-10-19 21:37:43.307	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	saveAndInspect	82 ms
+2026-10-19 21:37:46.659	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  saveSettled	1527 ms
+2026-10-19 21:37:46.699	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  bridgeInspect	40 ms
+2026-10-19 21:37:46.739	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  clipState	39 ms
+2026-10-19 21:37:46.743	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	saveAndInspect	1613 ms
+2026-10-19 21:37:48.577	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  saveSettled	1530 ms
+2026-10-19 21:37:48.614	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  bridgeInspect	37 ms
+2026-10-19 21:37:48.669	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  clipState	55 ms
+2026-10-19 21:37:48.674	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	saveAndInspect	1627 ms
+2026-10-19 21:37:48.891	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	exportLayer	216 ms
+2026-10-19 21:37:50.848	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  saveSettled	1524 ms
+2026-10-19 21:37:50.886	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  bridgeInspect	38 ms
+2026-10-19 21:37:50.939	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  clipState	52 ms
+2026-10-19 21:37:50.942	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	saveAndInspect	1620 ms
+2026-10-19 21:37:53.045	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	replay 6 Discrete	2102 ms
+2026-10-19 21:37:54.399	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  saveSettled	1351 ms
+2026-10-19 21:37:54.444	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  bridgeInspect	44 ms
+2026-10-19 21:37:54.478	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	  clipState	34 ms
+2026-10-19 21:37:54.482	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	saveAndInspect	1435 ms
+2026-10-19 21:37:54.706	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	exportLayer	223 ms
+2026-10-19 21:37:56.884	execute	transaction (precise undo)	13841 ms
+2026-10-19 21:37:59.746	edit-txn-ca2c356792d64c2e82fd5f4c45dce449	stateRefreshAfterEnd	2863 ms
+2026-10-19 21:38:18.338	boundary	states	1515 ms
+2026-10-19 21:38:22.291	boundary	saveAndCaptureLayers	3881 ms
+2026-10-19 21:38:23.826	boundary	readMechanical	1534 ms
+2026-10-19 21:38:23.826	boundary	waitHistory	0 ms
+2026-10-19 21:38:24.588	boundary	brushState	31 ms
+2026-10-19 21:38:24.635	boundary	savedStructure	46 ms
+2026-10-19 21:38:25.304	execute	plan (clean boundary)	0 ms
+2026-10-19 21:38:26.217	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	shortcuts	64 ms
+2026-10-19 21:38:26.275	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  bridgeInspect	38 ms
+2026-10-19 21:38:26.317	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  clipState	41 ms
+2026-10-19 21:38:26.320	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	saveAndInspect	90 ms
+2026-10-19 21:38:29.529	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  saveSettled	1525 ms
+2026-10-19 21:38:29.568	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  bridgeInspect	38 ms
+2026-10-19 21:38:29.605	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  clipState	37 ms
+2026-10-19 21:38:29.609	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	saveAndInspect	1606 ms
+2026-10-19 21:38:31.441	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  saveSettled	1522 ms
+2026-10-19 21:38:31.478	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  bridgeInspect	37 ms
+2026-10-19 21:38:31.528	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  clipState	49 ms
+2026-10-19 21:38:31.532	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	saveAndInspect	1614 ms
+2026-10-19 21:38:31.773	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	exportLayer	240 ms
+2026-10-19 21:38:33.763	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  saveSettled	1528 ms
+2026-10-19 21:38:33.806	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  bridgeInspect	43 ms
+2026-10-19 21:38:33.873	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  clipState	66 ms
+2026-10-19 21:38:33.876	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	saveAndInspect	1642 ms
+2026-10-19 21:38:37.747	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	replay 10 Discrete	3869 ms
+2026-10-19 21:38:39.115	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  saveSettled	1366 ms
+2026-10-19 21:38:39.197	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  bridgeInspect	81 ms
+2026-10-19 21:38:39.269	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	  clipState	71 ms
+2026-10-19 21:38:39.272	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	saveAndInspect	1523 ms
+2026-10-19 21:38:39.529	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	exportLayer	256 ms
+2026-10-19 21:38:41.652	execute	transaction (precise undo)	15606 ms
+2026-10-19 21:38:44.496	edit-txn-51c992e6c9f049d0bbb56c96ac23c2a3	stateRefreshAfterEnd	2845 ms
+2026-10-19 21:38:57.002	boundary	states	1530 ms
+2026-10-19 21:39:00.797	boundary	saveAndCaptureLayers	3795 ms
+2026-10-19 21:39:02.887	boundary	readMechanical	2090 ms
+2026-10-19 21:39:02.887	boundary	waitHistory	0 ms
+2026-10-19 21:39:04.007	boundary	brushState	28 ms
+2026-10-19 21:39:04.056	boundary	savedStructure	49 ms
+2026-10-19 21:39:19.607	boundary	states	1433 ms
+2026-10-19 21:39:24.171	boundary	saveAndCaptureLayers	4499 ms
+2026-10-19 21:39:26.176	boundary	readMechanical	2004 ms
+2026-10-19 21:39:26.176	boundary	waitHistory	0 ms
+2026-10-19 21:39:27.330	boundary	brushState	22 ms
+2026-10-19 21:39:27.379	boundary	savedStructure	49 ms
+2026-10-19 21:40:04.002	boundary	states	1688 ms
+2026-10-19 21:40:09.300	boundary	saveAndCaptureLayers	5298 ms
+2026-10-19 21:40:11.829	boundary	readMechanical	2528 ms
+2026-10-19 21:40:11.829	boundary	waitHistory	0 ms
+2026-10-19 21:40:13.261	boundary	brushState	10 ms
+2026-10-19 21:40:13.309	boundary	savedStructure	48 ms
+2026-10-19 21:40:14.706	execute	plan (clean boundary)	3 ms
+2026-10-19 21:40:15.959	edit-txn-278e103020f04614a4208252de1e3c62	shortcuts	97 ms
+2026-10-19 21:40:16.028	edit-txn-278e103020f04614a4208252de1e3c62	  bridgeInspect	51 ms
+2026-10-19 21:40:16.054	edit-txn-278e103020f04614a4208252de1e3c62	  clipState	26 ms
+2026-10-19 21:40:16.058	edit-txn-278e103020f04614a4208252de1e3c62	saveAndInspect	87 ms
+2026-10-19 21:40:17.639	edit-txn-278e103020f04614a4208252de1e3c62	  saveSettled	1525 ms
+2026-10-19 21:40:17.681	edit-txn-278e103020f04614a4208252de1e3c62	  bridgeInspect	41 ms
+2026-10-19 21:40:17.733	edit-txn-278e103020f04614a4208252de1e3c62	  clipState	52 ms
+2026-10-19 21:40:17.737	edit-txn-278e103020f04614a4208252de1e3c62	saveAndInspect	1624 ms
+2026-10-19 21:40:19.591	edit-txn-278e103020f04614a4208252de1e3c62	  saveSettled	1546 ms
+2026-10-19 21:40:19.628	edit-txn-278e103020f04614a4208252de1e3c62	  bridgeInspect	37 ms
+2026-10-19 21:40:19.654	edit-txn-278e103020f04614a4208252de1e3c62	  clipState	26 ms
+2026-10-19 21:40:19.658	edit-txn-278e103020f04614a4208252de1e3c62	saveAndInspect	1614 ms
+2026-10-19 21:40:21.514	edit-txn-278e103020f04614a4208252de1e3c62	  saveSettled	1549 ms
+2026-10-19 21:40:21.560	edit-txn-278e103020f04614a4208252de1e3c62	  bridgeInspect	47 ms
+2026-10-19 21:40:21.621	edit-txn-278e103020f04614a4208252de1e3c62	  clipState	60 ms
+2026-10-19 21:40:21.625	edit-txn-278e103020f04614a4208252de1e3c62	saveAndInspect	1661 ms
+2026-10-19 21:40:23.473	edit-txn-278e103020f04614a4208252de1e3c62	  saveSettled	1544 ms
+2026-10-19 21:40:23.508	edit-txn-278e103020f04614a4208252de1e3c62	  bridgeInspect	34 ms
+2026-10-19 21:40:23.531	edit-txn-278e103020f04614a4208252de1e3c62	  clipState	23 ms
+2026-10-19 21:40:23.535	edit-txn-278e103020f04614a4208252de1e3c62	saveAndInspect	1608 ms
+2026-10-19 21:40:23.545	execute	transaction (precise undo)	7799 ms
+2026-10-19 21:40:26.338	edit-txn-278e103020f04614a4208252de1e3c62	stateRefreshAfterEnd	2798 ms
+2026-10-19 21:43:56.033	boundary	states	1320 ms
+2026-10-19 21:43:58.504	boundary	saveAndCaptureLayers	2393 ms
+2026-10-20 14:40:15.454	boundary	states	1416 ms
+2026-10-20 14:40:18.991	boundary	saveAndCaptureLayers	3528 ms
+2026-10-20 14:40:19.511	boundary	readMechanical	520 ms
+2026-10-20 14:40:19.512	boundary	waitHistory	0 ms
+2026-10-20 14:40:19.907	boundary	brushState	40 ms
+2026-10-20 14:40:19.954	boundary	savedStructure	45 ms
+2026-10-20 14:40:36.934	boundary	states	1503 ms
+2026-10-20 14:40:41.806	boundary	saveAndCaptureLayers	4797 ms
+2026-10-20 14:40:43.006	boundary	readMechanical	1199 ms
+2026-10-20 14:40:43.007	boundary	waitHistory	0 ms
+2026-10-20 14:40:43.414	boundary	brushState	13 ms
+2026-10-20 14:40:43.461	boundary	savedStructure	47 ms
+2026-10-20 14:42:37.925	boundary	states	1263 ms
+2026-10-20 14:42:41.096	boundary	saveAndCaptureLayers	3096 ms
+2026-10-20 14:42:41.595	boundary	readMechanical	499 ms
+2026-10-20 14:42:41.595	boundary	waitHistory	0 ms
+2026-10-20 14:42:41.684	boundary	brushState	26 ms
+2026-10-20 14:42:41.734	boundary	savedStructure	47 ms
+2026-10-20 17:37:09.444	boundary	states	1499 ms
+2026-10-20 17:37:14.048	boundary	saveAndCaptureLayers	4522 ms
+2026-10-20 17:37:14.816	boundary	readMechanical	768 ms
+2026-10-20 17:37:14.817	boundary	waitHistory	0 ms
+2026-10-20 17:37:15.236	boundary	brushState	18 ms
+2026-10-20 17:37:15.281	boundary	savedStructure	43 ms
+2026-10-20 17:37:15.992	execute	plan (clean boundary)	29 ms
+2026-10-20 17:37:17.008	edit-txn-2513afa765454e659d03e0776ef85de3	shortcuts	105 ms
+2026-10-20 17:37:17.095	edit-txn-2513afa765454e659d03e0776ef85de3	  bridgeInspect	43 ms
+2026-10-20 17:37:17.149	edit-txn-2513afa765454e659d03e0776ef85de3	  clipState	49 ms
+2026-10-20 17:37:17.153	edit-txn-2513afa765454e659d03e0776ef85de3	saveAndInspect	117 ms
+2026-10-20 17:37:20.799	edit-txn-2513afa765454e659d03e0776ef85de3	  saveSettled	1522 ms
+2026-10-20 17:37:20.838	edit-txn-2513afa765454e659d03e0776ef85de3	  bridgeInspect	38 ms
+2026-10-20 17:37:20.862	edit-txn-2513afa765454e659d03e0776ef85de3	  clipState	24 ms
+2026-10-20 17:37:20.864	edit-txn-2513afa765454e659d03e0776ef85de3	saveAndInspect	1587 ms
+2026-10-20 17:37:22.714	edit-txn-2513afa765454e659d03e0776ef85de3	  saveSettled	1543 ms
+2026-10-20 17:37:22.756	edit-txn-2513afa765454e659d03e0776ef85de3	  bridgeInspect	41 ms
+2026-10-20 17:37:22.779	edit-txn-2513afa765454e659d03e0776ef85de3	  clipState	22 ms
+2026-10-20 17:37:22.781	edit-txn-2513afa765454e659d03e0776ef85de3	saveAndInspect	1610 ms
+2026-10-20 17:37:23.003	edit-txn-2513afa765454e659d03e0776ef85de3	exportLayer	219 ms
+2026-10-20 17:37:25.046	edit-txn-2513afa765454e659d03e0776ef85de3	  saveSettled	1526 ms
+2026-10-20 17:37:25.088	edit-txn-2513afa765454e659d03e0776ef85de3	  bridgeInspect	42 ms
+2026-10-20 17:37:25.141	edit-txn-2513afa765454e659d03e0776ef85de3	  clipState	52 ms
+2026-10-20 17:37:25.143	edit-txn-2513afa765454e659d03e0776ef85de3	saveAndInspect	1623 ms
+2026-10-20 17:37:25.532	edit-txn-2513afa765454e659d03e0776ef85de3	replay 1 Discrete	375 ms
+2026-10-20 17:37:26.869	edit-txn-2513afa765454e659d03e0776ef85de3	  saveSettled	1320 ms
+2026-10-20 17:37:26.910	edit-txn-2513afa765454e659d03e0776ef85de3	  bridgeInspect	41 ms
+2026-10-20 17:37:26.948	edit-txn-2513afa765454e659d03e0776ef85de3	  clipState	38 ms
+2026-10-20 17:37:26.950	edit-txn-2513afa765454e659d03e0776ef85de3	saveAndInspect	1401 ms
+2026-10-20 17:37:27.202	edit-txn-2513afa765454e659d03e0776ef85de3	exportLayer	250 ms
+2026-10-20 17:37:29.450	execute	transaction (precise undo)	12893 ms
+2026-10-20 17:37:32.318	edit-txn-2513afa765454e659d03e0776ef85de3	stateRefreshAfterEnd	2875 ms
+2026-10-20 17:38:33.532	boundary	states	2761 ms
+2026-10-20 17:38:39.479	boundary	saveAndCaptureLayers	5868 ms
+2026-10-20 17:38:42.004	boundary	readMechanical	2525 ms
+2026-10-20 17:38:42.005	boundary	waitHistory	0 ms
+2026-10-20 17:38:45.426	boundary	brushState	2201 ms
+2026-10-20 17:38:45.464	boundary	savedStructure	37 ms
+2026-10-20 17:38:58.596	boundary	states	1503 ms
+2026-10-20 17:39:02.580	boundary	saveAndCaptureLayers	3983 ms
+2026-10-20 17:39:05.034	boundary	readMechanical	2454 ms
+2026-10-20 17:39:05.035	boundary	waitHistory	0 ms
+2026-10-20 17:39:08.477	boundary	brushState	2156 ms
+2026-10-20 17:39:08.521	boundary	savedStructure	43 ms
+2026-10-20 17:39:08.700	execute	plan (boundary rebuilt)	5 ms
+2026-10-20 17:39:12.145	execute	states	2629 ms
+2026-10-20 17:39:12.927	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	shortcuts	111 ms
+2026-10-20 17:39:14.494	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  saveSettled	1545 ms
+2026-10-20 17:39:14.537	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  bridgeInspect	43 ms
+2026-10-20 17:39:14.588	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  clipState	51 ms
+2026-10-20 17:39:14.591	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	saveAndInspect	1642 ms
+2026-10-20 17:39:17.996	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  saveSettled	1530 ms
+2026-10-20 17:39:18.044	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  bridgeInspect	47 ms
+2026-10-20 17:39:18.101	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  clipState	57 ms
+2026-10-20 17:39:18.103	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	saveAndInspect	1638 ms
+2026-10-20 17:39:19.952	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  saveSettled	1542 ms
+2026-10-20 17:39:19.992	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  bridgeInspect	40 ms
+2026-10-20 17:39:20.016	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  clipState	23 ms
+2026-10-20 17:39:20.019	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	saveAndInspect	1609 ms
+2026-10-20 17:39:20.297	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	exportLayer	277 ms
+2026-10-20 17:39:22.394	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  saveSettled	1633 ms
+2026-10-20 17:39:22.434	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  bridgeInspect	40 ms
+2026-10-20 17:39:22.471	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  clipState	36 ms
+2026-10-20 17:39:22.473	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	saveAndInspect	1712 ms
+2026-10-20 17:39:23.124	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	replay 2 Discrete	648 ms
+2026-10-20 17:39:24.478	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  saveSettled	1353 ms
+2026-10-20 17:39:24.521	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  bridgeInspect	43 ms
+2026-10-20 17:39:24.576	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	  clipState	54 ms
+2026-10-20 17:39:24.578	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	saveAndInspect	1454 ms
+2026-10-20 17:39:24.879	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	exportLayer	300 ms
+2026-10-20 17:39:27.292	execute	transaction (precise undo)	14618 ms
+2026-10-20 17:39:30.325	edit-txn-ac922efcfe304fdeaaf30cc060fffdae	stateRefreshAfterEnd	3034 ms
+2026-10-20 17:39:39.347	boundary	states	5133 ms
+2026-10-20 17:39:43.463	boundary	saveAndCaptureLayers	4048 ms
+2026-10-20 17:39:46.126	boundary	readMechanical	2663 ms
+2026-10-20 17:39:46.127	boundary	waitHistory	0 ms
+2026-10-20 17:39:47.058	boundary	brushState	29 ms
+2026-10-20 17:39:47.110	boundary	savedStructure	52 ms
+2026-10-20 17:39:47.747	execute	plan (clean boundary)	0 ms
+2026-10-20 17:39:48.857	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	shortcuts	87 ms
+2026-10-20 17:39:48.923	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  bridgeInspect	43 ms
+2026-10-20 17:39:48.956	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  clipState	33 ms
+2026-10-20 17:39:48.958	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	saveAndInspect	85 ms
+2026-10-20 17:39:52.530	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  saveSettled	1533 ms
+2026-10-20 17:39:52.571	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  bridgeInspect	40 ms
+2026-10-20 17:39:52.646	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  clipState	75 ms
+2026-10-20 17:39:52.649	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	saveAndInspect	1653 ms
+2026-10-20 17:39:54.486	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  saveSettled	1525 ms
+2026-10-20 17:39:54.527	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  bridgeInspect	40 ms
+2026-10-20 17:39:54.551	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  clipState	24 ms
+2026-10-20 17:39:54.555	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	saveAndInspect	1594 ms
+2026-10-20 17:39:54.805	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	exportLayer	250 ms
+2026-10-20 17:39:56.997	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  saveSettled	1747 ms
+2026-10-20 17:39:57.043	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  bridgeInspect	45 ms
+2026-10-20 17:39:57.080	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  clipState	36 ms
+2026-10-20 17:39:57.082	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	saveAndInspect	1833 ms
+2026-10-20 17:40:00.420	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	replay 2 Discrete	3335 ms
+2026-10-20 17:40:01.777	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  saveSettled	1355 ms
+2026-10-20 17:40:01.818	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  bridgeInspect	41 ms
+2026-10-20 17:40:01.839	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	  clipState	21 ms
+2026-10-20 17:40:01.842	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	saveAndInspect	1421 ms
+2026-10-20 17:40:02.140	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	exportLayer	298 ms
+2026-10-20 17:40:04.398	execute	transaction (precise undo)	15728 ms
+2026-10-20 17:40:07.441	edit-txn-aa6ea79e9cee4fcfb8bade354e06c3f0	stateRefreshAfterEnd	3044 ms
+2026-10-20 17:41:16.134	boundary	states	1629 ms
+2026-10-20 17:41:16.193	boundary	saveAndCaptureLayers	58 ms
+2026-10-20 17:41:26.456	boundary	states	1561 ms
+2026-10-20 17:41:28.011	boundary	saveAndCaptureLayers	1555 ms
+2026-10-20 17:41:40.986	boundary	states	1671 ms
+2026-10-20 17:41:46.315	boundary	saveAndCaptureLayers	5245 ms
+2026-10-20 17:41:49.995	boundary	readMechanical	3680 ms
+2026-10-20 17:41:49.995	boundary	waitHistory	0 ms
+2026-10-20 17:41:51.138	boundary	brushState	30 ms
+2026-10-20 17:41:51.190	boundary	savedStructure	51 ms
+2026-10-20 17:42:54.970	boundary	states	1628 ms
+2026-10-20 17:43:00.894	boundary	saveAndCaptureLayers	5856 ms
+2026-10-20 17:43:04.653	boundary	readMechanical	3759 ms
+2026-10-20 17:43:04.654	boundary	waitHistory	0 ms
+2026-10-20 17:43:06.277	boundary	brushState	16 ms
+2026-10-20 17:43:06.323	boundary	savedStructure	46 ms
+2026-10-20 17:43:07.872	execute	plan (clean boundary)	0 ms
+2026-10-20 17:43:09.323	edit-txn-1699d622c6204069bd507c854b3d6953	shortcuts	103 ms
+2026-10-20 17:43:09.393	edit-txn-1699d622c6204069bd507c854b3d6953	  bridgeInspect	48 ms
+2026-10-20 17:43:09.420	edit-txn-1699d622c6204069bd507c854b3d6953	  clipState	27 ms
+2026-10-20 17:43:09.423	edit-txn-1699d622c6204069bd507c854b3d6953	saveAndInspect	85 ms
+2026-10-20 17:43:12.620	edit-txn-1699d622c6204069bd507c854b3d6953	  saveSettled	1527 ms
+2026-10-20 17:43:12.666	edit-txn-1699d622c6204069bd507c854b3d6953	  bridgeInspect	45 ms
+2026-10-20 17:43:12.700	edit-txn-1699d622c6204069bd507c854b3d6953	  clipState	34 ms
+2026-10-20 17:43:12.703	edit-txn-1699d622c6204069bd507c854b3d6953	saveAndInspect	1611 ms
+2026-10-20 17:43:14.547	edit-txn-1699d622c6204069bd507c854b3d6953	  saveSettled	1540 ms
+2026-10-20 17:43:14.589	edit-txn-1699d622c6204069bd507c854b3d6953	  bridgeInspect	42 ms
+2026-10-20 17:43:14.612	edit-txn-1699d622c6204069bd507c854b3d6953	  clipState	23 ms
+2026-10-20 17:43:14.615	edit-txn-1699d622c6204069bd507c854b3d6953	saveAndInspect	1610 ms
+2026-10-20 17:43:14.781	edit-txn-1699d622c6204069bd507c854b3d6953	exportLayer	165 ms
+2026-10-20 17:43:16.640	edit-txn-1699d622c6204069bd507c854b3d6953	  saveSettled	1421 ms
+2026-10-20 17:43:16.685	edit-txn-1699d622c6204069bd507c854b3d6953	  bridgeInspect	45 ms
+2026-10-20 17:43:16.721	edit-txn-1699d622c6204069bd507c854b3d6953	  clipState	36 ms
+2026-10-20 17:43:16.725	edit-txn-1699d622c6204069bd507c854b3d6953	saveAndInspect	1507 ms
+2026-10-20 17:43:28.685	edit-txn-1699d622c6204069bd507c854b3d6953	replay 3 Discrete	11958 ms
+2026-10-20 17:43:28.696	execute	transaction (precise undo)	19698 ms
+2026-10-20 17:43:31.541	edit-txn-1699d622c6204069bd507c854b3d6953	stateRefreshAfterEnd	2851 ms
+2026-10-20 20:43:53.831	boundary	states	1893 ms
+2026-10-20 20:43:57.734	boundary	saveAndCaptureLayers	3893 ms
+2026-10-20 20:44:21.244	boundary	states	1623 ms
+2026-10-20 20:44:26.940	boundary	saveAndCaptureLayers	5617 ms
+2026-10-20 20:44:30.796	boundary	readMechanical	3856 ms
+2026-10-20 20:44:30.797	boundary	waitHistory	0 ms
+2026-10-20 20:44:34.510	boundary	brushState	2089 ms
+2026-10-20 20:44:34.576	boundary	savedStructure	62 ms
+2026-10-20 20:44:36.147	execute	plan (clean boundary)	40 ms
+2026-10-20 20:44:37.094	edit-txn-b7423242e5b84efd82189b458fbde73d	shortcuts	112 ms
+2026-10-20 20:44:37.187	edit-txn-b7423242e5b84efd82189b458fbde73d	  bridgeInspect	45 ms
+2026-10-20 20:44:37.250	edit-txn-b7423242e5b84efd82189b458fbde73d	  clipState	59 ms
+2026-10-20 20:44:37.257	edit-txn-b7423242e5b84efd82189b458fbde73d	saveAndInspect	131 ms
+2026-10-20 20:44:41.080	edit-txn-b7423242e5b84efd82189b458fbde73d	  saveSettled	1530 ms
+2026-10-20 20:44:41.127	edit-txn-b7423242e5b84efd82189b458fbde73d	  bridgeInspect	47 ms
+2026-10-20 20:44:41.175	edit-txn-b7423242e5b84efd82189b458fbde73d	  clipState	48 ms
+2026-10-20 20:44:41.180	edit-txn-b7423242e5b84efd82189b458fbde73d	saveAndInspect	1631 ms
+2026-10-20 20:44:42.485	edit-txn-b7423242e5b84efd82189b458fbde73d	  saveSettled	997 ms
+2026-10-20 20:44:42.529	edit-txn-b7423242e5b84efd82189b458fbde73d	  bridgeInspect	44 ms
+2026-10-20 20:44:42.581	edit-txn-b7423242e5b84efd82189b458fbde73d	  clipState	52 ms
+2026-10-20 20:44:42.587	edit-txn-b7423242e5b84efd82189b458fbde73d	saveAndInspect	1100 ms
+2026-10-20 20:44:43.009	edit-txn-b7423242e5b84efd82189b458fbde73d	exportLayer	417 ms
+2026-10-20 20:44:45.428	edit-txn-b7423242e5b84efd82189b458fbde73d	  saveSettled	1852 ms
+2026-10-20 20:44:45.470	edit-txn-b7423242e5b84efd82189b458fbde73d	  bridgeInspect	41 ms
+2026-10-20 20:44:45.509	edit-txn-b7423242e5b84efd82189b458fbde73d	  clipState	39 ms
+2026-10-20 20:44:45.514	edit-txn-b7423242e5b84efd82189b458fbde73d	saveAndInspect	1938 ms
+2026-10-20 20:44:58.278	edit-txn-b7423242e5b84efd82189b458fbde73d	replay 17 Discrete	12748 ms
+2026-10-20 20:44:59.857	edit-txn-b7423242e5b84efd82189b458fbde73d	  saveSettled	1563 ms
+2026-10-20 20:44:59.905	edit-txn-b7423242e5b84efd82189b458fbde73d	  bridgeInspect	47 ms
+2026-10-20 20:44:59.955	edit-txn-b7423242e5b84efd82189b458fbde73d	  clipState	50 ms
+2026-10-20 20:44:59.960	edit-txn-b7423242e5b84efd82189b458fbde73d	saveAndInspect	1666 ms
+2026-10-20 20:45:00.367	edit-txn-b7423242e5b84efd82189b458fbde73d	exportLayer	406 ms
+2026-10-20 20:45:03.334	execute	transaction (precise undo)	26682 ms
+2026-10-20 20:45:06.754	edit-txn-b7423242e5b84efd82189b458fbde73d	stateRefreshAfterEnd	3430 ms
+2026-10-20 20:45:25.299	boundary	states	1901 ms
+2026-10-20 20:45:29.745	boundary	saveAndCaptureLayers	4445 ms
+2026-10-20 20:45:32.149	boundary	readMechanical	2404 ms
+2026-10-20 20:45:32.150	boundary	waitHistory	0 ms
+2026-10-20 20:45:33.773	boundary	brushState	34 ms
+2026-10-20 20:45:33.826	boundary	savedStructure	52 ms
+2026-10-20 20:45:34.967	execute	plan (clean boundary)	3 ms
+2026-10-21 11:50:17.388	boundary	states	2064 ms
+2026-10-21 11:50:22.680	boundary	saveAndCaptureLayers	5281 ms
+2026-10-21 11:50:28.586	boundary	states	1676 ms
+2026-10-21 11:51:10.359	boundary	states	1720 ms
+2026-10-21 11:51:17.024	boundary	states	1506 ms
+2026-10-21 11:51:21.928	boundary	saveAndCaptureLayers	4816 ms
+2026-10-21 11:51:23.348	boundary	readMechanical	1420 ms
+2026-10-21 11:51:23.383	boundary	savedStructure	32 ms
+2026-10-21 11:51:23.387	boundary	waitHistory	0 ms
+2026-10-21 11:51:23.927	boundary	brushState	14 ms
+2026-10-21 11:55:22.691	boundary	states	1764 ms
+2026-10-21 11:55:27.571	boundary	saveAndCaptureLayers	4870 ms
+2026-10-21 11:55:28.459	boundary	readMechanical	887 ms
+2026-10-21 11:55:28.518	boundary	savedStructure	57 ms
+2026-10-21 11:55:28.521	boundary	waitHistory	0 ms
+2026-10-21 11:55:29.059	boundary	brushState	24 ms
+2026-10-21 11:55:30.114	execute	plan (clean boundary)	31 ms
+2026-10-21 11:55:31.242	edit-txn-edf18d9fda394489a46b6b8bc47c7765	shortcuts	160 ms
+2026-10-21 11:55:31.375	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  bridgeInspect	57 ms
+2026-10-21 11:55:31.461	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  clipState	81 ms
+2026-10-21 11:55:31.465	edit-txn-edf18d9fda394489a46b6b8bc47c7765	saveAndInspect	165 ms
+2026-10-21 11:55:35.352	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  saveSettled	1542 ms
+2026-10-21 11:55:35.413	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  bridgeInspect	60 ms
+2026-10-21 11:55:35.481	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  clipState	68 ms
+2026-10-21 11:55:35.484	edit-txn-edf18d9fda394489a46b6b8bc47c7765	saveAndInspect	1674 ms
+2026-10-21 11:55:36.672	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  saveSettled	873 ms
+2026-10-21 11:55:36.726	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  bridgeInspect	54 ms
+2026-10-21 11:55:36.781	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  clipState	54 ms
+2026-10-21 11:55:36.783	edit-txn-edf18d9fda394489a46b6b8bc47c7765	saveAndInspect	985 ms
+2026-10-21 11:55:37.024	edit-txn-edf18d9fda394489a46b6b8bc47c7765	exportLayer	237 ms
+2026-10-21 11:55:39.627	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  saveSettled	1992 ms
+2026-10-21 11:55:39.677	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  bridgeInspect	49 ms
+2026-10-21 11:55:39.711	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  clipState	34 ms
+2026-10-21 11:55:39.714	edit-txn-edf18d9fda394489a46b6b8bc47c7765	saveAndInspect	2080 ms
+2026-10-21 11:55:50.591	edit-txn-edf18d9fda394489a46b6b8bc47c7765	replay 16 Discrete	10858 ms
+2026-10-21 11:55:52.220	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  saveSettled	1609 ms
+2026-10-21 11:55:52.275	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  bridgeInspect	55 ms
+2026-10-21 11:55:52.320	edit-txn-edf18d9fda394489a46b6b8bc47c7765	  clipState	44 ms
+2026-10-21 11:55:52.322	edit-txn-edf18d9fda394489a46b6b8bc47c7765	saveAndInspect	1712 ms
+2026-10-21 11:55:52.607	edit-txn-edf18d9fda394489a46b6b8bc47c7765	exportLayer	284 ms
+2026-10-21 11:55:56.253	execute	transaction (precise undo)	25575 ms
+2026-10-21 11:55:59.990	edit-txn-edf18d9fda394489a46b6b8bc47c7765	stateRefreshAfterEnd	3747 ms
+2026-10-21 11:59:52.892	boundary	states	1581 ms
+2026-10-21 11:59:56.200	boundary	saveAndCaptureLayers	3299 ms
+2026-10-21 11:59:56.823	boundary	readMechanical	623 ms
+2026-10-21 11:59:56.876	boundary	savedStructure	51 ms
+2026-10-21 11:59:56.879	boundary	waitHistory	0 ms
+2026-10-21 11:59:56.980	boundary	brushState	26 ms
+2026-10-22 21:27:54.639	history	advance (diff)	809 ms
+2026-10-22 21:27:55.117	history	aggregateCommit stateUpdated	460 ms
+2026-10-22 21:28:41.383	boundary	states	1683 ms
+2026-10-22 21:28:44.283	history	advance (diff)	873 ms
+2026-10-22 21:28:44.855	history	aggregateCommit editBoundary	568 ms
+2026-10-22 21:28:44.892	boundary	saveAndCaptureLayers	3508 ms
+2026-10-22 21:28:46.089	boundary	readMechanical	1197 ms
+2026-10-22 21:28:46.138	boundary	savedStructure	45 ms
+2026-10-22 21:28:46.143	boundary	waitHistory	0 ms
+2026-10-22 21:28:48.594	boundary	brushState	1839 ms
+2026-10-22 21:28:49.742	execute	plan (clean boundary)	31 ms
+2026-10-22 21:28:50.441	edit-txn-55ff9bcc921a4e398429f1d71df79548	shortcuts	134 ms
+2026-10-22 21:28:50.538	edit-txn-55ff9bcc921a4e398429f1d71df79548	  bridgeInspect	69 ms
+2026-10-22 21:28:50.594	edit-txn-55ff9bcc921a4e398429f1d71df79548	  clipState	49 ms
+2026-10-22 21:28:50.599	edit-txn-55ff9bcc921a4e398429f1d71df79548	saveAndInspect	144 ms
+2026-10-22 21:28:50.716	execute	composePreciseUndo	89 ms
+2026-10-22 21:28:50.888	edit-txn-55ff9bcc921a4e398429f1d71df79548	clipboard (PNG)	151 ms
+2026-10-22 21:28:53.559	edit-txn-55ff9bcc921a4e398429f1d71df79548	  saveSettled (modified)	2432 ms
+2026-10-22 21:28:53.629	edit-txn-55ff9bcc921a4e398429f1d71df79548	  bridgeInspect	70 ms
+2026-10-22 21:28:53.716	edit-txn-55ff9bcc921a4e398429f1d71df79548	  clipState	86 ms
+2026-10-22 21:28:53.718	edit-txn-55ff9bcc921a4e398429f1d71df79548	saveAndInspect	2591 ms
+2026-10-22 21:28:53.977	edit-txn-55ff9bcc921a4e398429f1d71df79548	exportLayer	251 ms
+2026-10-22 21:29:00.032	edit-txn-55ff9bcc921a4e398429f1d71df79548	replay 10 Discrete	5736 ms
+2026-10-22 21:29:00.777	edit-txn-55ff9bcc921a4e398429f1d71df79548	  saveSettled (modified)	726 ms
+2026-10-22 21:29:00.841	edit-txn-55ff9bcc921a4e398429f1d71df79548	  bridgeInspect	63 ms
+2026-10-22 21:29:00.938	edit-txn-55ff9bcc921a4e398429f1d71df79548	  clipState	96 ms
+2026-10-22 21:29:00.940	edit-txn-55ff9bcc921a4e398429f1d71df79548	saveAndInspect	890 ms
+2026-10-22 21:29:01.176	edit-txn-55ff9bcc921a4e398429f1d71df79548	exportLayer	233 ms
+2026-10-22 21:29:01.612	history	registerBaseline	26 ms
+2026-10-22 21:29:01.614	edit-txn-55ff9bcc921a4e398429f1d71df79548	registerBaseline	32 ms
+2026-10-22 21:29:02.387	history	recordOperation	701 ms
+2026-10-22 21:29:02.463	history	aggregateCommit memolineOperation	74 ms
+2026-10-22 21:29:02.465	edit-txn-55ff9bcc921a4e398429f1d71df79548	recordEditingAction+operationPacket	820 ms
+2026-10-22 21:29:02.479	execute	transaction (precise undo)	12299 ms
+2026-10-22 21:29:02.774	execute	releaseMemory	289 ms
+2026-10-22 21:29:05.762	edit-txn-55ff9bcc921a4e398429f1d71df79548	stateRefreshAfterEnd	3295 ms
+2026-10-22 21:29:25.301	boundary	states	1397 ms
+2026-10-22 21:29:26.255	boundary	saveAndCaptureLayers	953 ms
+2026-10-22 21:29:41.251	boundary	states	1495 ms
+2026-10-22 21:29:42.554	boundary	saveAndCaptureLayers	1184 ms
+2026-10-22 21:29:51.940	boundary	states	1371 ms
+2026-10-22 21:29:55.291	history	advance (diff)	539 ms
+2026-10-22 21:29:55.406	history	aggregateCommit editBoundary	112 ms
+2026-10-22 21:29:55.421	boundary	saveAndCaptureLayers	3391 ms
+2026-10-22 21:29:56.198	boundary	readMechanical	776 ms
+2026-10-22 21:29:56.230	boundary	savedStructure	32 ms
+2026-10-22 21:29:56.230	boundary	waitHistory	0 ms
+2026-10-22 21:29:58.540	boundary	brushState	1732 ms
+2026-10-22 21:30:38.719	history	advance (diff)	558 ms
+2026-10-22 21:30:38.722	history	aggregateCommit recordingEnd	0 ms
+2026-10-22 21:37:32.638	boundary	states	1755 ms
+2026-10-22 21:37:36.843	history	advance (diff)	574 ms
+2026-10-22 21:37:37.409	history	aggregateCommit editBoundary	564 ms
+2026-10-22 21:37:37.456	boundary	saveAndCaptureLayers	4807 ms
+2026-10-22 21:37:38.433	boundary	readMechanical	977 ms
+2026-10-22 21:37:38.472	boundary	savedStructure	36 ms
+2026-10-22 21:37:38.476	boundary	waitHistory	0 ms
+2026-10-22 21:37:41.045	boundary	brushState	1778 ms
+2026-10-22 21:38:10.268	boundary	states	1679 ms
+2026-10-22 21:38:12.931	history	advance (diff)	619 ms
+2026-10-22 21:38:13.026	history	aggregateCommit editBoundary	80 ms
+2026-10-22 21:38:13.048	boundary	saveAndCaptureLayers	2780 ms
+2026-10-22 21:38:14.324	boundary	readMechanical	1276 ms
+2026-10-22 21:38:14.387	boundary	savedStructure	63 ms
+2026-10-22 21:38:14.388	boundary	waitHistory	0 ms
+2026-10-22 21:38:17.104	boundary	brushState	1954 ms
+2026-10-22 21:38:50.382	history	advance (diff)	565 ms
+2026-10-22 21:38:50.383	history	aggregateCommit recordingEnd	0 ms
+2026-10-24 15:10:52.244	boundary	states	1560 ms
+2026-10-24 15:11:09.541	history	advance (diff)	952 ms
+2026-10-24 15:11:09.992	history	aggregateCommit editBoundary	446 ms
+2026-10-24 15:11:10.037	boundary	saveAndCaptureLayers	17792 ms
+2026-10-24 15:11:10.105	boundary	savedStructure	66 ms
+2026-10-24 15:11:11.395	boundary	readMechanical	1356 ms
+2026-10-24 15:11:11.398	boundary	waitHistory	0 ms
+2026-10-24 15:11:12.165	boundary	brushState	2056 ms
+2026-10-24 15:11:13.040	boundary	index	1641 ms
+2026-10-24 15:11:23.917	execute	plan (clean boundary)	30 ms
+2026-10-24 15:11:24.598	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	shortcuts	91 ms
+2026-10-24 15:11:24.681	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	  bridgeInspect	55 ms
+2026-10-24 15:11:24.732	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	  clipState	47 ms
+2026-10-24 15:11:24.738	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	saveAndInspect	126 ms
+2026-10-24 15:11:24.855	execute	composePreciseUndo	91 ms
+2026-10-24 15:11:26.049	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	currentLayerOcr	1178 ms
+2026-10-24 15:11:26.291	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	clipboard (PNG)	234 ms
+2026-10-24 15:11:31.494	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	  saveSettled (modified)	5028 ms
+2026-10-24 15:11:31.583	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	  bridgeInspect	88 ms
+2026-10-24 15:11:31.626	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	  clipState	43 ms
+2026-10-24 15:11:31.628	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	saveAndInspect	5162 ms
+2026-10-24 15:11:36.974	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	  saveSettled (modified)	5031 ms
+2026-10-24 15:11:37.021	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	  bridgeInspect	46 ms
+2026-10-24 15:11:37.102	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	  clipState	80 ms
+2026-10-24 15:11:37.104	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	saveAndInspect	5161 ms
+2026-10-24 15:11:42.436	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	  saveSettled (modified)	5014 ms
+2026-10-24 15:11:42.484	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	  bridgeInspect	48 ms
+2026-10-24 15:11:42.535	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	  clipState	50 ms
+2026-10-24 15:11:42.537	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	saveAndInspect	5117 ms
+2026-10-24 15:11:42.615	execute	transaction (precise undo)	18188 ms
+2026-10-24 15:11:42.730	execute	releaseMemory	110 ms
+2026-10-24 15:11:45.285	edit-txn-008315e5adf14fc7b7bfef2cdadb20ca	stateRefreshAfterEnd	2723 ms
+2026-10-24 15:12:01.908	boundary	states	4533 ms
+2026-10-24 15:12:08.201	history	advance (diff)	637 ms
+2026-10-24 15:12:08.261	history	aggregateCommit editBoundary	60 ms
+2026-10-24 15:12:08.301	boundary	saveAndCaptureLayers	6323 ms
+2026-10-24 15:12:08.357	boundary	savedStructure	55 ms
+2026-10-24 15:12:09.922	boundary	readMechanical	1620 ms
+2026-10-24 15:12:09.923	boundary	waitHistory	0 ms
+2026-10-24 15:12:10.566	boundary	brushState	2208 ms
+2026-10-24 15:12:11.303	boundary	index	1380 ms
+2026-10-24 15:13:18.644	boundary	states	1442 ms
+2026-10-24 15:13:25.771	history	advance (diff)	765 ms
+2026-10-24 15:13:26.105	history	aggregateCommit editBoundary	333 ms
+2026-10-24 15:13:26.966	history	advance (diff)	699 ms
+2026-10-24 15:13:27.056	history	aggregateCommit editBoundary	84 ms
+2026-10-24 15:13:27.113	boundary	saveAndCaptureLayers	8389 ms
+2026-10-24 15:13:27.144	boundary	savedStructure	31 ms
+2026-10-24 15:13:28.976	boundary	readMechanical	1863 ms
+2026-10-24 15:13:28.977	boundary	waitHistory	0 ms
+2026-10-24 15:13:29.268	boundary	brushState	2123 ms
+2026-10-24 15:13:30.523	boundary	index	1545 ms
+2026-10-24 15:13:50.752	history	advance (diff)	500 ms
+2026-10-24 15:13:50.753	history	aggregateCommit recordingEnd	0 ms
+2026-10-24 15:13:51.251	history	advance (diff)	497 ms
+2026-10-24 15:13:51.252	history	aggregateCommit recordingEndLayer	0 ms
+2026-10-24 15:24:35.746	boundary	states	1584 ms
+2026-10-24 15:24:39.337	history	advance (diff)	1000 ms
+2026-10-24 15:24:39.805	history	aggregateCommit editBoundary	465 ms
+2026-10-24 15:24:39.899	boundary	saveAndCaptureLayers	4152 ms
+2026-10-24 15:24:39.935	boundary	savedStructure	33 ms
+2026-10-24 15:24:40.977	boundary	readMechanical	1076 ms
+2026-10-24 15:24:40.979	boundary	waitHistory	0 ms
+2026-10-24 15:24:41.501	boundary	index	521 ms
+2026-10-24 15:24:41.678	boundary	brushState	1740 ms
+2026-10-24 15:24:42.582	execute	plan (clean boundary)	30 ms
+2026-10-24 15:24:43.319	edit-txn-5f39340248034028836fe1689f6c9a12	shortcuts	108 ms
+2026-10-24 15:24:43.404	edit-txn-5f39340248034028836fe1689f6c9a12	  bridgeInspect	56 ms
+2026-10-24 15:24:43.444	edit-txn-5f39340248034028836fe1689f6c9a12	  clipState	35 ms
+2026-10-24 15:24:43.449	edit-txn-5f39340248034028836fe1689f6c9a12	saveAndInspect	114 ms
+2026-10-24 15:24:43.768	execute	composePreciseUndo	296 ms
+2026-10-24 15:24:43.997	edit-txn-5f39340248034028836fe1689f6c9a12	clipboard (PNG)	209 ms
+2026-10-24 15:24:46.883	edit-txn-5f39340248034028836fe1689f6c9a12	  saveSettled (modified)	2647 ms
+2026-10-24 15:24:46.935	edit-txn-5f39340248034028836fe1689f6c9a12	  bridgeInspect	51 ms
+2026-10-24 15:24:47.006	edit-txn-5f39340248034028836fe1689f6c9a12	  clipState	70 ms
+2026-10-24 15:24:47.008	edit-txn-5f39340248034028836fe1689f6c9a12	saveAndInspect	2773 ms
+2026-10-24 15:24:47.283	edit-txn-5f39340248034028836fe1689f6c9a12	exportLayer	267 ms
+2026-10-24 15:24:54.954	edit-txn-5f39340248034028836fe1689f6c9a12	pen-up→pen-down Discrete	n=5 min 57.1 avg 60.7 max 62.5 ms
+2026-10-24 15:24:54.954	edit-txn-5f39340248034028836fe1689f6c9a12	replay 6 Discrete	7262 ms
+2026-10-24 15:24:55.833	edit-txn-5f39340248034028836fe1689f6c9a12	  saveSettled (modified)	861 ms
+2026-10-24 15:24:55.886	edit-txn-5f39340248034028836fe1689f6c9a12	  bridgeInspect	53 ms
+2026-10-24 15:24:55.959	edit-txn-5f39340248034028836fe1689f6c9a12	  clipState	72 ms
+2026-10-24 15:24:55.961	edit-txn-5f39340248034028836fe1689f6c9a12	saveAndInspect	990 ms
+2026-10-24 15:24:56.274	edit-txn-5f39340248034028836fe1689f6c9a12	exportLayer	311 ms
+2026-10-24 15:24:56.834	history	registerBaseline	27 ms
+2026-10-24 15:24:56.835	edit-txn-5f39340248034028836fe1689f6c9a12	registerBaseline	34 ms
+2026-10-24 15:24:57.739	history	recordOperation	841 ms
+2026-10-24 15:24:57.832	history	aggregateCommit memolineOperation	90 ms
+2026-10-24 15:24:57.833	edit-txn-5f39340248034028836fe1689f6c9a12	recordEditingAction+operationPacket	974 ms
+2026-10-24 15:24:57.846	execute	transaction (precise undo)	14754 ms
+2026-10-24 15:24:58.205	execute	releaseMemory	353 ms
+2026-10-24 15:25:00.932	edit-txn-5f39340248034028836fe1689f6c9a12	stateRefreshAfterEnd	3097 ms
+2026-10-24 15:26:37.510	boundary	states	1795 ms
+2026-10-24 15:26:40.213	history	advance (diff)	770 ms
+2026-10-24 15:26:40.401	history	aggregateCommit editBoundary	186 ms
+2026-10-24 15:26:41.228	history	advance (diff)	781 ms
+2026-10-24 15:26:41.293	history	aggregateCommit editBoundary	62 ms
+2026-10-24 15:26:41.360	boundary	saveAndCaptureLayers	3768 ms
+2026-10-24 15:26:41.427	boundary	savedStructure	66 ms
+2026-10-24 15:26:42.929	boundary	readMechanical	1568 ms
+2026-10-24 15:26:42.931	boundary	waitHistory	0 ms
+2026-10-24 15:26:43.599	boundary	brushState	2171 ms
+2026-10-24 15:26:44.212	boundary	index	1281 ms
+2026-10-24 15:27:06.087	boundary	states	1555 ms
+2026-10-24 15:27:09.352	history	advance (diff)	725 ms
+2026-10-24 15:27:09.397	history	aggregateCommit editBoundary	43 ms
+2026-10-24 15:27:10.149	history	advance (diff)	750 ms
+2026-10-24 15:27:10.174	history	aggregateCommit editBoundary	22 ms
+2026-10-24 15:27:10.198	boundary	saveAndCaptureLayers	4033 ms
+2026-10-24 15:27:10.225	boundary	savedStructure	27 ms
+2026-10-24 15:27:12.367	boundary	brushState	2142 ms
+2026-10-24 15:27:12.576	boundary	readMechanical	2378 ms
+2026-10-24 15:27:12.578	boundary	waitHistory	0 ms
+2026-10-24 15:27:13.881	boundary	index	1302 ms
+2026-10-24 15:27:38.770	boundary	states	1569 ms
+2026-10-24 15:27:41.311	history	advance (diff)	496 ms
+2026-10-24 15:27:41.420	history	aggregateCommit editBoundary	108 ms
+2026-10-24 15:27:41.904	history	advance (diff)	480 ms
+2026-10-24 15:27:41.945	history	aggregateCommit editBoundary	39 ms
+2026-10-24 15:27:42.476	history	advance (diff)	528 ms
+2026-10-24 15:27:42.518	history	aggregateCommit editBoundary	41 ms
+2026-10-24 15:27:42.539	boundary	saveAndCaptureLayers	3682 ms
+2026-10-24 15:27:42.577	boundary	savedStructure	37 ms
+2026-10-24 15:27:44.386	boundary	brushState	1809 ms
+2026-10-24 15:27:44.743	boundary	readMechanical	2203 ms
+2026-10-24 15:27:44.744	boundary	waitHistory	0 ms
+2026-10-24 15:27:45.855	boundary	index	1111 ms
+2026-10-24 15:27:47.237	execute	plan (clean boundary)	5 ms
+2026-10-24 15:27:47.654	edit-txn-5fec57f26f314ef3833493e0d2ad18fc	shortcuts	116 ms
+2026-10-24 15:27:47.706	edit-txn-5fec57f26f314ef3833493e0d2ad18fc	  bridgeInspect	48 ms
+2026-10-24 15:27:47.782	edit-txn-5fec57f26f314ef3833493e0d2ad18fc	  clipState	75 ms
+2026-10-24 15:27:47.785	edit-txn-5fec57f26f314ef3833493e0d2ad18fc	saveAndInspect	130 ms
+2026-10-24 15:27:47.903	execute	composePreciseUndo	118 ms
+2026-10-24 15:27:49.298	edit-txn-5fec57f26f314ef3833493e0d2ad18fc	currentLayerOcr	1265 ms
+2026-10-24 15:27:56.067	execute	transaction (precise undo)	8539 ms
+2026-10-24 15:27:56.190	execute	releaseMemory	120 ms
+2026-10-24 15:27:58.847	edit-txn-5fec57f26f314ef3833493e0d2ad18fc	stateRefreshAfterEnd	2791 ms
+2026-10-24 15:28:15.894	history	advance (diff)	679 ms
+2026-10-24 15:28:15.895	history	aggregateCommit recordingEnd	0 ms
+2026-10-24 15:28:16.516	history	advance (diff)	619 ms
+2026-10-24 15:28:16.517	history	aggregateCommit recordingEndLayer	0 ms
+2026-10-24 15:28:17.138	history	advance (diff)	618 ms
+2026-10-24 15:28:17.139	history	aggregateCommit recordingEndLayer	0 ms
+2026-10-25 17:44:11.817	boundary	states	1418 ms
+2026-10-25 17:44:14.530	history	advance (diff)	781 ms
+2026-10-25 17:44:14.948	history	aggregateCommit editBoundary	416 ms
+2026-10-25 17:44:14.982	boundary	saveAndCaptureLayers	3154 ms
+2026-10-25 17:44:15.010	boundary	savedStructure	25 ms
+2026-10-25 17:44:15.905	boundary	readMechanical	922 ms
+2026-10-25 17:44:15.907	boundary	waitHistory	0 ms
+2026-10-25 17:44:16.394	boundary	index	487 ms
+2026-10-25 17:44:16.759	boundary	brushState	1744 ms
+2026-10-25 17:44:17.517	execute	plan (clean boundary)	34 ms
+2026-10-25 17:44:18.219	edit-txn-c2efcf5820c84734937190bcb4e95547	shortcuts	127 ms
+2026-10-25 17:44:18.299	edit-txn-c2efcf5820c84734937190bcb4e95547	  bridgeInspect	54 ms
+2026-10-25 17:44:18.350	edit-txn-c2efcf5820c84734937190bcb4e95547	  clipState	46 ms
+2026-10-25 17:44:18.354	edit-txn-c2efcf5820c84734937190bcb4e95547	saveAndInspect	122 ms
+2026-10-25 17:44:18.643	execute	composePreciseUndo	263 ms
+2026-10-25 17:44:18.799	edit-txn-c2efcf5820c84734937190bcb4e95547	clipboard (PNG)	136 ms
+2026-10-25 17:44:21.195	edit-txn-c2efcf5820c84734937190bcb4e95547	  saveSettled (modified)	2111 ms
+2026-10-25 17:44:21.237	edit-txn-c2efcf5820c84734937190bcb4e95547	  bridgeInspect	42 ms
+2026-10-25 17:44:21.291	edit-txn-c2efcf5820c84734937190bcb4e95547	  clipState	54 ms
+2026-10-25 17:44:21.293	edit-txn-c2efcf5820c84734937190bcb4e95547	saveAndInspect	2209 ms
+2026-10-25 17:44:21.478	edit-txn-c2efcf5820c84734937190bcb4e95547	exportLayer	176 ms
+2026-10-25 17:44:44.848	edit-txn-c2efcf5820c84734937190bcb4e95547	pen-up→pen-down Discrete	n=35 min 62.8 avg 71.4 max 102.6 ms
+2026-10-25 17:44:44.849	edit-txn-c2efcf5820c84734937190bcb4e95547	replay 36 Discrete	23020 ms
+2026-10-25 17:44:45.570	edit-txn-c2efcf5820c84734937190bcb4e95547	  saveSettled (modified)	703 ms
+2026-10-25 17:44:45.619	edit-txn-c2efcf5820c84734937190bcb4e95547	  bridgeInspect	48 ms
+2026-10-25 17:44:45.636	edit-txn-c2efcf5820c84734937190bcb4e95547	  clipState	17 ms
+2026-10-25 17:44:45.638	edit-txn-c2efcf5820c84734937190bcb4e95547	saveAndInspect	772 ms
+2026-10-25 17:44:45.920	edit-txn-c2efcf5820c84734937190bcb4e95547	exportLayer	280 ms
+2026-10-25 17:44:46.450	history	registerBaseline	27 ms
+2026-10-25 17:44:46.451	edit-txn-c2efcf5820c84734937190bcb4e95547	registerBaseline	32 ms
+2026-10-25 17:44:47.310	history	recordOperation	792 ms
+2026-10-25 17:44:47.380	history	aggregateCommit memolineOperation	67 ms
+2026-10-25 17:44:47.381	edit-txn-c2efcf5820c84734937190bcb4e95547	recordEditingAction+operationPacket	903 ms
+2026-10-25 17:44:47.399	execute	transaction (precise undo)	29416 ms
+2026-10-25 17:44:48.054	execute	releaseMemory	650 ms
+2026-10-25 17:44:53.792	edit-txn-c2efcf5820c84734937190bcb4e95547	stateRefreshAfterEnd	6409 ms
+2026-10-25 17:46:30.511	boundary	states	1466 ms
+2026-10-25 17:46:32.741	history	advance (diff)	524 ms
+2026-10-25 17:46:33.084	history	aggregateCommit editBoundary	343 ms
+2026-10-25 17:46:33.103	boundary	saveAndCaptureLayers	2592 ms
+2026-10-25 17:46:33.148	boundary	savedStructure	44 ms
+2026-10-25 17:46:34.368	boundary	readMechanical	1264 ms
+2026-10-25 17:46:34.368	boundary	waitHistory	0 ms
+2026-10-25 17:46:34.768	boundary	brushState	1620 ms
+2026-10-25 17:46:35.537	boundary	index	1168 ms
+2026-10-25 17:46:36.103	execute	plan (clean boundary)	0 ms
+2026-10-25 17:46:36.561	edit-txn-12abc91e51e442dbac721e6de5c09751	shortcuts	109 ms
+2026-10-25 17:46:36.620	edit-txn-12abc91e51e442dbac721e6de5c09751	  bridgeInspect	55 ms
+2026-10-25 17:46:36.647	edit-txn-12abc91e51e442dbac721e6de5c09751	  clipState	26 ms
+2026-10-25 17:46:36.650	edit-txn-12abc91e51e442dbac721e6de5c09751	saveAndInspect	87 ms
+2026-10-25 17:46:36.716	execute	composePreciseUndo	64 ms
+2026-10-25 17:46:36.809	edit-txn-12abc91e51e442dbac721e6de5c09751	clipboard (PNG)	92 ms
+2026-10-25 17:46:39.269	edit-txn-12abc91e51e442dbac721e6de5c09751	  saveSettled (modified)	2154 ms
+2026-10-25 17:46:39.318	edit-txn-12abc91e51e442dbac721e6de5c09751	  bridgeInspect	48 ms
+2026-10-25 17:46:39.365	edit-txn-12abc91e51e442dbac721e6de5c09751	  clipState	45 ms
+2026-10-25 17:46:39.367	edit-txn-12abc91e51e442dbac721e6de5c09751	saveAndInspect	2252 ms
+2026-10-25 17:46:39.561	edit-txn-12abc91e51e442dbac721e6de5c09751	exportLayer	193 ms
+2026-10-25 17:46:40.124	edit-txn-12abc91e51e442dbac721e6de5c09751	replay 1 Discrete	357 ms
+2026-10-25 17:46:41.940	edit-txn-12abc91e51e442dbac721e6de5c09751	pen-up→pen-down Discrete	n=4 min 66.2 avg 68.7 max 75.1 ms
+2026-10-25 17:46:41.941	edit-txn-12abc91e51e442dbac721e6de5c09751	replay 5 Discrete	1814 ms
+2026-10-25 17:46:42.685	edit-txn-12abc91e51e442dbac721e6de5c09751	  saveSettled (modified)	742 ms
+2026-10-25 17:46:42.740	edit-txn-12abc91e51e442dbac721e6de5c09751	  bridgeInspect	55 ms
+2026-10-25 17:46:42.764	edit-txn-12abc91e51e442dbac721e6de5c09751	  clipState	23 ms
+2026-10-25 17:46:42.766	edit-txn-12abc91e51e442dbac721e6de5c09751	saveAndInspect	824 ms
+2026-10-25 17:46:43.019	edit-txn-12abc91e51e442dbac721e6de5c09751	exportLayer	252 ms
+2026-10-25 17:46:43.371	history	registerBaseline	24 ms
+2026-10-25 17:46:43.372	edit-txn-12abc91e51e442dbac721e6de5c09751	registerBaseline	29 ms
+2026-10-25 17:46:44.025	history	recordOperation	643 ms
+2026-10-25 17:46:44.076	history	aggregateCommit memolineOperation	49 ms
+2026-10-25 17:46:44.078	edit-txn-12abc91e51e442dbac721e6de5c09751	recordEditingAction+operationPacket	701 ms
+2026-10-25 17:46:44.080	execute	transaction (precise undo)	7635 ms
+2026-10-25 17:46:45.864	execute	releaseMemory	1781 ms
+2026-10-25 17:46:54.760	edit-txn-12abc91e51e442dbac721e6de5c09751	stateRefreshAfterEnd	10681 ms
+2026-10-25 17:48:20.661	boundary	states	1380 ms
+2026-10-25 17:48:23.249	history	advance (diff)	464 ms
+2026-10-25 17:48:23.359	history	aggregateCommit editBoundary	109 ms
+2026-10-25 17:48:23.374	boundary	saveAndCaptureLayers	2704 ms
+2026-10-25 17:48:23.384	boundary	savedStructure	10 ms
+2026-10-25 17:48:25.101	boundary	brushState	1717 ms
+2026-10-25 17:48:25.463	boundary	readMechanical	2089 ms
+2026-10-25 17:48:25.464	boundary	waitHistory	0 ms
+2026-10-25 17:48:27.056	boundary	index	1591 ms
+2026-10-25 17:48:27.719	execute	plan (clean boundary)	0 ms
+2026-10-25 17:48:28.168	edit-txn-0c52964d787245c2b2e7f4482aef10da	shortcuts	89 ms
+2026-10-25 17:48:28.218	edit-txn-0c52964d787245c2b2e7f4482aef10da	  bridgeInspect	47 ms
+2026-10-25 17:48:28.241	edit-txn-0c52964d787245c2b2e7f4482aef10da	  clipState	23 ms
+2026-10-25 17:48:28.243	edit-txn-0c52964d787245c2b2e7f4482aef10da	saveAndInspect	74 ms
+2026-10-25 17:48:28.298	execute	composePreciseUndo	54 ms
+2026-10-25 17:48:28.393	edit-txn-0c52964d787245c2b2e7f4482aef10da	clipboard (PNG)	94 ms
+2026-10-25 17:48:30.783	edit-txn-0c52964d787245c2b2e7f4482aef10da	  saveSettled (modified)	2095 ms
+2026-10-25 17:48:30.825	edit-txn-0c52964d787245c2b2e7f4482aef10da	  bridgeInspect	41 ms
+2026-10-25 17:48:30.835	edit-txn-0c52964d787245c2b2e7f4482aef10da	  clipState	9 ms
+2026-10-25 17:48:30.837	edit-txn-0c52964d787245c2b2e7f4482aef10da	saveAndInspect	2149 ms
+2026-10-25 17:48:30.992	edit-txn-0c52964d787245c2b2e7f4482aef10da	exportLayer	155 ms
+2026-10-25 17:48:32.547	edit-txn-0c52964d787245c2b2e7f4482aef10da	pen-up→pen-down Discrete	n=3 min 65.7 avg 67.7 max 69.9 ms
+2026-10-25 17:48:32.547	edit-txn-0c52964d787245c2b2e7f4482aef10da	replay 4 Discrete	1442 ms
+2026-10-25 17:48:33.260	edit-txn-0c52964d787245c2b2e7f4482aef10da	  saveSettled (modified)	710 ms
+2026-10-25 17:48:33.307	edit-txn-0c52964d787245c2b2e7f4482aef10da	  bridgeInspect	47 ms
+2026-10-25 17:48:33.356	edit-txn-0c52964d787245c2b2e7f4482aef10da	  clipState	48 ms
+2026-10-25 17:48:33.358	edit-txn-0c52964d787245c2b2e7f4482aef10da	saveAndInspect	808 ms
+2026-10-25 17:48:33.561	edit-txn-0c52964d787245c2b2e7f4482aef10da	exportLayer	203 ms
+2026-10-25 17:48:33.942	history	registerBaseline	29 ms
+2026-10-25 17:48:33.943	edit-txn-0c52964d787245c2b2e7f4482aef10da	registerBaseline	33 ms
+2026-10-25 17:48:34.573	history	recordOperation	622 ms
+2026-10-25 17:48:34.622	history	aggregateCommit memolineOperation	49 ms
+2026-10-25 17:48:34.623	edit-txn-0c52964d787245c2b2e7f4482aef10da	recordEditingAction+operationPacket	677 ms
+2026-10-25 17:48:34.624	execute	transaction (precise undo)	6552 ms
+2026-10-25 17:48:37.412	execute	releaseMemory	2785 ms
+2026-10-25 17:48:44.602	edit-txn-0c52964d787245c2b2e7f4482aef10da	stateRefreshAfterEnd	9978 ms
+2026-10-25 17:48:58.431	history	advance (diff)	536 ms
+2026-10-25 17:48:58.432	history	aggregateCommit recordingEnd	0 ms
+2026-10-25 17:52:45.602	boundary	states	1484 ms
+2026-10-25 17:52:47.226	history	advance (diff)	462 ms
+2026-10-25 17:52:47.401	history	aggregateCommit editBoundary	164 ms
+2026-10-25 17:52:47.875	history	advance (diff)	472 ms
+2026-10-25 17:52:47.917	history	aggregateCommit editBoundary	41 ms
+2026-10-25 17:52:47.934	boundary	saveAndCaptureLayers	2332 ms
+2026-10-25 17:52:47.965	boundary	savedStructure	31 ms
+2026-10-25 17:52:49.537	boundary	readMechanical	1603 ms
+2026-10-25 17:52:49.546	boundary	waitHistory	0 ms
+2026-10-25 17:52:49.696	boundary	brushState	1730 ms
+2026-10-25 17:52:50.880	boundary	index	1333 ms
+2026-10-25 17:53:33.811	boundary	states	1551 ms
+2026-10-25 17:53:35.502	history	advance (diff)	547 ms
+2026-10-25 17:53:35.568	history	aggregateCommit editBoundary	66 ms
+2026-10-25 17:53:36.136	history	advance (diff)	567 ms
+2026-10-25 17:53:36.158	history	aggregateCommit editBoundary	21 ms
+2026-10-25 17:53:36.182	boundary	saveAndCaptureLayers	2371 ms
+2026-10-25 17:53:36.206	boundary	savedStructure	24 ms
+2026-10-25 17:53:38.275	boundary	brushState	2069 ms
+2026-10-25 17:53:38.456	boundary	readMechanical	2273 ms
+2026-10-25 17:53:38.457	boundary	waitHistory	0 ms
+2026-10-25 17:53:39.764	boundary	index	1307 ms
+2026-10-25 17:53:43.243	execute	releaseMemory	3338 ms
+2026-10-25 17:55:05.658	history	advance (diff)	560 ms
+2026-10-25 17:55:05.659	history	aggregateCommit recordingEnd	0 ms
+2026-10-25 17:55:06.212	history	advance (diff)	552 ms
+2026-10-25 17:55:06.213	history	aggregateCommit recordingEndLayer	0 ms
+2026-10-25 18:27:17.428	boundary	states	1314 ms
+2026-10-25 18:27:20.242	history	advance (diff)	510 ms
+2026-10-25 18:27:20.328	history	aggregateCommit editBoundary	85 ms
+2026-10-25 18:27:20.357	boundary	saveAndCaptureLayers	2921 ms
+2026-10-25 18:27:20.389	boundary	savedStructure	28 ms
+2026-10-25 18:27:21.480	boundary	brushState	1087 ms
+2026-10-25 18:27:21.870	boundary	readMechanical	1511 ms
+2026-10-25 18:27:21.882	boundary	waitHistory	0 ms
+2026-10-25 18:27:23.501	boundary	index	1619 ms
+2026-10-25 18:27:45.185	execute	plan (clean boundary)	545 ms
+2026-10-25 18:27:45.728	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	shortcuts	78 ms
+2026-10-25 18:27:45.795	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	  bridgeInspect	42 ms
+2026-10-25 18:27:45.807	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	  clipState	8 ms
+2026-10-25 18:27:45.811	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	saveAndInspect	72 ms
+2026-10-25 18:27:46.577	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	clipboard (PNG)	117 ms
+2026-10-25 18:27:48.970	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	  saveSettled (modified)	2167 ms
+2026-10-25 18:27:49.011	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	  bridgeInspect	42 ms
+2026-10-25 18:27:49.036	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	  clipState	24 ms
+2026-10-25 18:27:49.039	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	saveAndInspect	2236 ms
+2026-10-25 18:27:49.188	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	exportLayer	140 ms
+2026-10-25 18:27:59.874	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	pen-up→pen-down Concentrated	n=3 min 5.2 avg 1605.2 max 4793.6 ms
+2026-10-25 18:27:59.875	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	replay 4 Concentrated	10360 ms
+2026-10-25 18:28:00.680	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	  saveSettled (modified)	793 ms
+2026-10-25 18:28:00.726	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	  bridgeInspect	46 ms
+2026-10-25 18:28:00.777	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	  clipState	50 ms
+2026-10-25 18:28:00.779	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	saveAndInspect	892 ms
+2026-10-25 18:28:00.963	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	exportLayer	182 ms
+2026-10-25 18:28:01.692	history	registerBaseline	26 ms
+2026-10-25 18:28:01.693	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	registerBaseline	33 ms
+2026-10-25 18:28:01.861	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	recordEditingAction+operationPacket	22 ms
+2026-10-25 18:28:01.886	execute	transaction (event editing)	16313 ms
+2026-10-25 18:28:03.291	execute	releaseMemory	1399 ms
+2026-10-25 18:28:07.928	edit-txn-559f5f1f46434bfdac5946b3e1ba9ef9	stateRefreshAfterEnd	6062 ms
+2026-10-25 18:28:56.477	boundary	states	1294 ms
+2026-10-25 18:28:59.169	history	advance (diff)	451 ms
+2026-10-25 18:28:59.228	history	aggregateCommit editBoundary	58 ms
+2026-10-25 18:28:59.243	boundary	saveAndCaptureLayers	2758 ms
+2026-10-25 18:28:59.258	boundary	savedStructure	14 ms
+2026-10-25 18:29:00.303	boundary	brushState	1045 ms
+2026-10-25 18:29:00.920	boundary	readMechanical	1676 ms
+2026-10-25 18:29:00.920	boundary	waitHistory	0 ms
+2026-10-25 18:29:02.554	boundary	index	1634 ms
+2026-10-25 18:29:22.996	history	advance (diff)	653 ms
+2026-10-25 18:29:22.997	history	aggregateCommit recordingEnd	0 ms
+2026-10-26 00:44:55.550	boundary	states	1347 ms
+2026-10-26 00:44:59.463	history	advance (diff)	924 ms
+2026-10-26 00:45:00.037	history	aggregateCommit editBoundary	573 ms
+2026-10-26 00:45:00.079	boundary	saveAndCaptureLayers	4482 ms
+2026-10-26 00:45:00.114	boundary	savedStructure	31 ms
+2026-10-26 00:45:01.225	boundary	readMechanical	1145 ms
+2026-10-26 00:45:01.229	boundary	waitHistory	0 ms
+2026-10-26 00:45:01.801	boundary	brushState	1684 ms
+2026-10-26 00:45:02.084	boundary	index	855 ms
+2026-10-26 00:45:02.868	execute	plan (clean boundary)	28 ms
+2026-10-26 00:45:03.444	edit-txn-3a14a315662f443a85d811149a14f4a9	shortcuts	90 ms
+2026-10-26 00:45:03.503	edit-txn-3a14a315662f443a85d811149a14f4a9	  bridgeInspect	38 ms
+2026-10-26 00:45:03.521	edit-txn-3a14a315662f443a85d811149a14f4a9	  clipState	15 ms
+2026-10-26 00:45:03.525	edit-txn-3a14a315662f443a85d811149a14f4a9	saveAndInspect	72 ms
+2026-10-26 00:45:04.469	execute	composePreciseUndo	921 ms
+2026-10-26 00:45:04.588	edit-txn-3a14a315662f443a85d811149a14f4a9	clipboard (PNG)	101 ms
+2026-10-26 00:45:06.653	edit-txn-3a14a315662f443a85d811149a14f4a9	  saveSettled (modified)	1788 ms
+2026-10-26 00:45:06.693	edit-txn-3a14a315662f443a85d811149a14f4a9	  bridgeInspect	40 ms
+2026-10-26 00:45:06.701	edit-txn-3a14a315662f443a85d811149a14f4a9	  clipState	7 ms
+2026-10-26 00:45:06.702	edit-txn-3a14a315662f443a85d811149a14f4a9	saveAndInspect	1837 ms
+2026-10-26 00:45:06.854	edit-txn-3a14a315662f443a85d811149a14f4a9	exportLayer	145 ms
+2026-10-26 00:45:13.181	edit-txn-3a14a315662f443a85d811149a14f4a9	pen-up→pen-down Discrete	n=8 min 58.2 avg 72.9 max 93.8 ms
+2026-10-26 00:45:13.182	edit-txn-3a14a315662f443a85d811149a14f4a9	replay 9 Discrete	6019 ms
+2026-10-26 00:45:25.997	edit-txn-3a14a315662f443a85d811149a14f4a9	pen-up→pen-down Discrete	n=44 min 58.9 avg 67.0 max 75.2 ms
+2026-10-26 00:45:25.998	edit-txn-3a14a315662f443a85d811149a14f4a9	replay 45 Discrete	12803 ms
+2026-10-26 00:45:26.621	edit-txn-3a14a315662f443a85d811149a14f4a9	  saveSettled (modified)	619 ms
+2026-10-26 00:45:26.667	edit-txn-3a14a315662f443a85d811149a14f4a9	  bridgeInspect	45 ms
+2026-10-26 00:45:26.701	edit-txn-3a14a315662f443a85d811149a14f4a9	  clipState	34 ms
+2026-10-26 00:45:26.702	edit-txn-3a14a315662f443a85d811149a14f4a9	saveAndInspect	701 ms
+2026-10-26 00:45:26.945	edit-txn-3a14a315662f443a85d811149a14f4a9	exportLayer	241 ms
+2026-10-26 00:45:27.373	history	registerBaseline	25 ms
+2026-10-26 00:45:27.374	edit-txn-3a14a315662f443a85d811149a14f4a9	registerBaseline	29 ms
+2026-10-26 00:45:28.092	history	recordOperation	668 ms
+2026-10-26 00:45:28.163	history	aggregateCommit memolineOperation	70 ms
+2026-10-26 00:45:28.164	edit-txn-3a14a315662f443a85d811149a14f4a9	recordEditingAction+operationPacket	771 ms
+2026-10-26 00:45:28.179	execute	transaction (precise undo)	24910 ms
+2026-10-26 00:45:28.838	execute	releaseMemory	654 ms
+2026-10-26 00:45:33.036	edit-txn-3a14a315662f443a85d811149a14f4a9	stateRefreshAfterEnd	4870 ms
+2026-10-26 00:46:21.164	history	advance (diff)	517 ms
+2026-10-26 00:46:21.165	history	aggregateCommit recordingEnd	0 ms
+2026-10-26 13:55:19.666	boundary	states	1583 ms
+2026-10-26 13:55:24.839	boundary	saveAndCaptureLayers	5172 ms
+2026-10-26 13:55:42.250	boundary	states	1287 ms
+2026-10-26 13:55:47.629	boundary	saveAndCaptureLayers	5371 ms
+2026-10-26 13:56:06.544	history	advance (diff)	833 ms
+2026-10-26 13:56:06.547	history	aggregateCommit recordingEnd	2 ms
+2026-10-26 13:57:43.199	history	advance (diff)	877 ms
+2026-10-26 13:57:43.201	history	aggregateCommit recordingEnd	0 ms
+2026-10-26 13:59:50.990	boundary	states	1134 ms
+2026-10-26 13:59:53.002	history	advance (diff)	633 ms
+2026-10-26 13:59:53.511	history	aggregateCommit editBoundary	504 ms
+2026-10-26 13:59:53.529	boundary	saveAndCaptureLayers	2539 ms
+2026-10-26 13:59:53.559	boundary	savedStructure	27 ms
+2026-10-26 13:59:54.294	boundary	readMechanical	764 ms
+2026-10-26 13:59:54.296	boundary	waitHistory	0 ms
+2026-10-26 13:59:54.958	boundary	index	662 ms
+2026-10-26 13:59:55.167	boundary	brushState	1605 ms
+2026-10-26 13:59:55.941	execute	plan (clean boundary)	22 ms
+2026-10-26 13:59:56.474	edit-txn-87aafe0dd6524a9999311ee85bc2879e	shortcuts	76 ms
+2026-10-26 13:59:56.548	edit-txn-87aafe0dd6524a9999311ee85bc2879e	  bridgeInspect	51 ms
+2026-10-26 13:59:56.598	edit-txn-87aafe0dd6524a9999311ee85bc2879e	  clipState	47 ms
+2026-10-26 13:59:56.602	edit-txn-87aafe0dd6524a9999311ee85bc2879e	saveAndInspect	117 ms
+2026-10-26 13:59:56.698	execute	composePreciseUndo	71 ms
+2026-10-26 13:59:56.830	edit-txn-87aafe0dd6524a9999311ee85bc2879e	clipboard (PNG)	110 ms
+2026-10-26 13:59:59.157	edit-txn-87aafe0dd6524a9999311ee85bc2879e	  saveSettled (modified)	2039 ms
+2026-10-26 13:59:59.209	edit-txn-87aafe0dd6524a9999311ee85bc2879e	  bridgeInspect	52 ms
+2026-10-26 13:59:59.222	edit-txn-87aafe0dd6524a9999311ee85bc2879e	  clipState	13 ms
+2026-10-26 13:59:59.224	edit-txn-87aafe0dd6524a9999311ee85bc2879e	saveAndInspect	2107 ms
+2026-10-26 13:59:59.426	edit-txn-87aafe0dd6524a9999311ee85bc2879e	exportLayer	194 ms
+2026-10-26 14:00:12.106	edit-txn-87aafe0dd6524a9999311ee85bc2879e	pen-up→pen-down Discrete	n=37 min 84.9 avg 93.9 max 114.3 ms
+2026-10-26 14:00:12.106	edit-txn-87aafe0dd6524a9999311ee85bc2879e	replay 38 Discrete	12355 ms
+2026-10-26 14:00:12.788	edit-txn-87aafe0dd6524a9999311ee85bc2879e	  saveSettled (modified)	670 ms
+2026-10-26 14:00:12.843	edit-txn-87aafe0dd6524a9999311ee85bc2879e	  bridgeInspect	55 ms
+2026-10-26 14:00:12.852	edit-txn-87aafe0dd6524a9999311ee85bc2879e	  clipState	8 ms
+2026-10-26 14:00:12.854	edit-txn-87aafe0dd6524a9999311ee85bc2879e	saveAndInspect	736 ms
+2026-10-26 14:00:13.062	edit-txn-87aafe0dd6524a9999311ee85bc2879e	exportLayer	206 ms
+2026-10-26 14:00:13.458	history	registerBaseline	27 ms
+2026-10-26 14:00:13.459	edit-txn-87aafe0dd6524a9999311ee85bc2879e	registerBaseline	33 ms
+2026-10-26 14:00:14.267	history	recordOperation	742 ms
+2026-10-26 14:00:14.325	history	aggregateCommit memolineOperation	56 ms
+2026-10-26 14:00:14.327	edit-txn-87aafe0dd6524a9999311ee85bc2879e	recordEditingAction+operationPacket	840 ms
+2026-10-26 14:00:14.343	execute	transaction (precise undo)	18043 ms
+2026-10-26 14:00:15.260	execute	releaseMemory	910 ms
+2026-10-26 14:00:21.076	edit-txn-87aafe0dd6524a9999311ee85bc2879e	stateRefreshAfterEnd	6747 ms
+2026-10-26 14:00:41.073	history	advance (diff)	586 ms
+2026-10-26 14:00:41.074	history	aggregateCommit recordingEnd	0 ms
+2026-10-26 14:02:47.966	boundary	states	1348 ms
+2026-10-26 14:02:50.263	history	advance (diff)	471 ms
+2026-10-26 14:02:50.381	history	aggregateCommit editBoundary	106 ms
+2026-10-26 14:02:50.407	boundary	saveAndCaptureLayers	2435 ms
+2026-10-26 14:02:50.449	boundary	savedStructure	41 ms
+2026-10-26 14:02:51.332	boundary	readMechanical	924 ms
+2026-10-26 14:02:51.333	boundary	waitHistory	0 ms
+2026-10-26 14:02:52.186	boundary	brushState	1736 ms
+2026-10-26 14:02:52.375	boundary	index	1042 ms
+2026-10-26 14:03:29.933	boundary	states	1615 ms
+2026-10-26 14:03:32.554	history	advance (diff)	665 ms
+2026-10-26 14:03:32.605	history	aggregateCommit editBoundary	49 ms
+2026-10-26 14:03:32.620	boundary	saveAndCaptureLayers	2687 ms
+2026-10-26 14:03:32.638	boundary	savedStructure	17 ms
+2026-10-26 14:03:34.026	boundary	readMechanical	1406 ms
+2026-10-26 14:03:34.027	boundary	brushState	1388 ms
+2026-10-26 14:03:34.028	boundary	waitHistory	0 ms
+2026-10-26 14:03:35.121	boundary	index	1092 ms
+2026-10-26 14:03:35.716	execute	plan (boundary rebuilt)	364 ms
+2026-10-26 14:03:38.106	execute	states	2378 ms
+2026-10-26 14:03:38.535	edit-txn-4c01de4855b64a7c8c00896086044fa1	shortcuts	121 ms
+2026-10-26 14:03:40.064	edit-txn-4c01de4855b64a7c8c00896086044fa1	  saveSettled	1528 ms
+2026-10-26 14:03:40.125	edit-txn-4c01de4855b64a7c8c00896086044fa1	  bridgeInspect	60 ms
+2026-10-26 14:03:40.146	edit-txn-4c01de4855b64a7c8c00896086044fa1	  clipState	21 ms
+2026-10-26 14:03:40.148	edit-txn-4c01de4855b64a7c8c00896086044fa1	saveAndInspect	1612 ms
+2026-10-26 14:03:41.001	edit-txn-4c01de4855b64a7c8c00896086044fa1	clipboard (PNG)	167 ms
+2026-10-26 14:03:43.611	edit-txn-4c01de4855b64a7c8c00896086044fa1	  saveSettled (modified)	2320 ms
+2026-10-26 14:03:43.674	edit-txn-4c01de4855b64a7c8c00896086044fa1	  bridgeInspect	63 ms
+2026-10-26 14:03:43.694	edit-txn-4c01de4855b64a7c8c00896086044fa1	  clipState	19 ms
+2026-10-26 14:03:43.696	edit-txn-4c01de4855b64a7c8c00896086044fa1	saveAndInspect	2406 ms
+2026-10-26 14:03:43.853	edit-txn-4c01de4855b64a7c8c00896086044fa1	exportLayer	156 ms
+2026-10-26 14:03:44.195	edit-txn-4c01de4855b64a7c8c00896086044fa1	replay 5 Concentrated	224 ms
+2026-10-26 14:03:44.321	execute	transaction (event editing)	5981 ms
+2026-10-26 14:03:45.938	execute	releaseMemory	1614 ms
+2026-10-26 14:03:50.298	edit-txn-4c01de4855b64a7c8c00896086044fa1	stateRefreshAfterEnd	6088 ms
+2026-10-26 14:04:16.382	history	advance (baseline)	590 ms
+2026-10-26 14:04:16.382	history	aggregateCommit recordingEnd	0 ms
+2026-10-26 15:03:55.649	boundary	states	1570 ms
+2026-10-26 15:03:58.789	history	advance (diff)	793 ms
+2026-10-26 15:03:59.296	history	aggregateCommit editBoundary	505 ms
+2026-10-26 15:03:59.330	boundary	saveAndCaptureLayers	3642 ms
+2026-10-26 15:03:59.368	boundary	savedStructure	35 ms
+2026-10-26 15:04:00.240	boundary	readMechanical	909 ms
+2026-10-26 15:04:00.242	boundary	waitHistory	0 ms
+2026-10-26 15:04:00.867	boundary	index	625 ms
+2026-10-26 15:04:01.131	boundary	brushState	1757 ms
+2026-10-26 15:04:01.912	execute	plan (clean boundary)	23 ms
+2026-10-26 15:04:02.702	edit-txn-7572ed7e727341d29783bd030cc17890	shortcuts	104 ms
+2026-10-26 15:04:02.774	edit-txn-7572ed7e727341d29783bd030cc17890	  bridgeInspect	49 ms
+2026-10-26 15:04:02.833	edit-txn-7572ed7e727341d29783bd030cc17890	  clipState	54 ms
+2026-10-26 15:04:02.837	edit-txn-7572ed7e727341d29783bd030cc17890	saveAndInspect	123 ms
+2026-10-26 15:04:03.017	execute	composePreciseUndo	155 ms
+2026-10-26 15:04:03.155	edit-txn-7572ed7e727341d29783bd030cc17890	clipboard (PNG)	119 ms
+2026-10-26 15:04:05.722	edit-txn-7572ed7e727341d29783bd030cc17890	  saveSettled (modified)	2266 ms
+2026-10-26 15:04:05.776	edit-txn-7572ed7e727341d29783bd030cc17890	  bridgeInspect	53 ms
+2026-10-26 15:04:05.804	edit-txn-7572ed7e727341d29783bd030cc17890	  clipState	28 ms
+2026-10-26 15:04:05.806	edit-txn-7572ed7e727341d29783bd030cc17890	saveAndInspect	2351 ms
+2026-10-26 15:04:06.030	edit-txn-7572ed7e727341d29783bd030cc17890	exportLayer	215 ms
+2026-10-26 15:04:18.258	edit-txn-7572ed7e727341d29783bd030cc17890	pen-up→pen-down Discrete	n=24 min 232.8 avg 240.7 max 253.1 ms
+2026-10-26 15:04:18.258	edit-txn-7572ed7e727341d29783bd030cc17890	replay 25 Discrete	11890 ms
+2026-10-26 15:04:18.919	edit-txn-7572ed7e727341d29783bd030cc17890	  saveSettled (modified)	647 ms
+2026-10-26 15:04:18.965	edit-txn-7572ed7e727341d29783bd030cc17890	  bridgeInspect	46 ms
+2026-10-26 15:04:18.982	edit-txn-7572ed7e727341d29783bd030cc17890	  clipState	16 ms
+2026-10-26 15:04:18.984	edit-txn-7572ed7e727341d29783bd030cc17890	saveAndInspect	712 ms
+2026-10-26 15:04:19.219	edit-txn-7572ed7e727341d29783bd030cc17890	exportLayer	234 ms
+2026-10-26 15:04:19.697	history	registerBaseline	27 ms
+2026-10-26 15:04:19.698	edit-txn-7572ed7e727341d29783bd030cc17890	registerBaseline	33 ms
+2026-10-26 15:04:20.530	history	recordOperation	762 ms
+2026-10-26 15:04:20.598	history	aggregateCommit memolineOperation	66 ms
+2026-10-26 15:04:20.600	edit-txn-7572ed7e727341d29783bd030cc17890	recordEditingAction+operationPacket	874 ms
+2026-10-26 15:04:20.618	execute	transaction (precise undo)	18161 ms
+2026-10-26 15:04:21.292	execute	releaseMemory	668 ms
+2026-10-26 15:04:26.480	edit-txn-7572ed7e727341d29783bd030cc17890	stateRefreshAfterEnd	5878 ms
+2026-10-26 15:05:10.805	boundary	states	1519 ms
+2026-10-26 15:05:13.240	history	advance (diff)	525 ms
+2026-10-26 15:05:13.404	history	aggregateCommit editBoundary	163 ms
+2026-10-26 15:05:13.952	history	advance (diff)	543 ms
+2026-10-26 15:05:14.004	history	aggregateCommit editBoundary	52 ms
+2026-10-26 15:05:14.025	boundary	saveAndCaptureLayers	3220 ms
+2026-10-26 15:05:14.047	boundary	savedStructure	21 ms
+2026-10-26 15:05:15.763	boundary	brushState	1716 ms
+2026-10-26 15:05:15.978	boundary	readMechanical	1953 ms
+2026-10-26 15:05:15.979	boundary	waitHistory	0 ms
+2026-10-26 15:05:16.804	boundary	index	825 ms
+2026-10-26 15:05:17.317	execute	plan (clean boundary)	0 ms
+2026-10-26 15:05:17.787	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	shortcuts	81 ms
+2026-10-26 15:05:17.847	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	  bridgeInspect	55 ms
+2026-10-26 15:05:17.873	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	  clipState	26 ms
+2026-10-26 15:05:17.875	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	saveAndInspect	88 ms
+2026-10-26 15:05:17.959	execute	composePreciseUndo	83 ms
+2026-10-26 15:05:18.079	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	clipboard (PNG)	119 ms
+2026-10-26 15:05:20.520	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	  saveSettled (modified)	2167 ms
+2026-10-26 15:05:20.569	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	  bridgeInspect	49 ms
+2026-10-26 15:05:20.588	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	  clipState	18 ms
+2026-10-26 15:05:20.590	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	saveAndInspect	2238 ms
+2026-10-26 15:05:20.838	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	exportLayer	247 ms
+2026-10-26 15:05:21.557	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	replay 1 Discrete	562 ms
+2026-10-26 15:05:22.324	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	  saveSettled (modified)	764 ms
+2026-10-26 15:05:22.375	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	  bridgeInspect	50 ms
+2026-10-26 15:05:22.419	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	  clipState	44 ms
+2026-10-26 15:05:22.422	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	saveAndInspect	862 ms
+2026-10-26 15:05:22.702	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	exportLayer	280 ms
+2026-10-26 15:05:23.052	history	registerBaseline	31 ms
+2026-10-26 15:05:23.053	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	registerBaseline	35 ms
+2026-10-26 15:05:23.779	history	recordOperation	706 ms
+2026-10-26 15:05:23.831	history	aggregateCommit memolineOperation	50 ms
+2026-10-26 15:05:23.833	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	recordEditingAction+operationPacket	765 ms
+2026-10-26 15:05:23.835	execute	transaction (precise undo)	6173 ms
+2026-10-26 15:05:25.146	execute	releaseMemory	1309 ms
+2026-10-26 15:05:33.187	edit-txn-0aedb6eea3194c56b1af7b38d37b2cdf	stateRefreshAfterEnd	9354 ms
+2026-10-26 15:09:50.439	boundary	states	1554 ms
+2026-10-26 15:09:51.121	boundary	saveAndCaptureLayers	682 ms
+2026-10-26 15:09:56.774	boundary	states	1435 ms
+2026-10-26 15:09:59.896	history	advance (diff)	832 ms
+2026-10-26 15:10:00.605	history	aggregateCommit editBoundary	697 ms
+2026-10-26 15:10:01.331	history	advance (diff)	626 ms
+2026-10-26 15:10:01.638	history	aggregateCommit editBoundary	306 ms
+2026-10-26 15:10:01.663	boundary	saveAndCaptureLayers	4888 ms
+2026-10-26 15:10:01.697	boundary	savedStructure	33 ms
+2026-10-26 15:10:03.546	boundary	brushState	1849 ms
+2026-10-26 15:10:05.235	boundary	readMechanical	3572 ms
+2026-10-26 15:10:05.244	boundary	waitHistory	0 ms
+2026-10-26 15:10:06.369	boundary	index	1125 ms
+2026-10-26 15:12:46.341	boundary	states	1655 ms
+2026-10-26 15:12:49.820	history	advance (diff)	761 ms
+2026-10-26 15:12:50.392	history	aggregateCommit editBoundary	557 ms
+2026-10-26 15:12:51.054	history	advance (diff)	640 ms
+2026-10-26 15:12:51.267	history	aggregateCommit editBoundary	213 ms
+2026-10-26 15:12:52.017	history	advance (diff)	705 ms
+2026-10-26 15:12:52.259	history	aggregateCommit editBoundary	241 ms
+2026-10-26 15:12:52.274	boundary	saveAndCaptureLayers	5932 ms
+2026-10-26 15:12:52.284	boundary	savedStructure	10 ms
+2026-10-26 15:12:53.946	boundary	brushState	1661 ms
+2026-10-26 15:12:56.304	boundary	readMechanical	4030 ms
+2026-10-26 15:12:56.308	boundary	waitHistory	0 ms
+2026-10-26 15:12:58.066	boundary	index	1757 ms
+2026-10-26 15:13:50.613	boundary	states	1827 ms
+2026-10-26 15:13:54.292	history	advance (diff)	524 ms
+2026-10-26 15:13:54.366	history	aggregateCommit editBoundary	74 ms
+2026-10-26 15:13:54.907	history	advance (diff)	537 ms
+2026-10-26 15:13:54.953	history	aggregateCommit editBoundary	44 ms
+2026-10-26 15:13:55.498	history	advance (diff)	542 ms
+2026-10-26 15:13:55.553	history	aggregateCommit editBoundary	51 ms
+2026-10-26 15:13:55.581	boundary	saveAndCaptureLayers	4968 ms
+2026-10-26 15:13:55.615	boundary	savedStructure	34 ms
+2026-10-26 15:13:57.327	boundary	brushState	1711 ms
+2026-10-26 15:13:59.590	boundary	readMechanical	4009 ms
+2026-10-26 15:13:59.600	boundary	waitHistory	0 ms
+2026-10-26 15:14:01.662	boundary	index	2062 ms
+2026-10-26 15:15:08.761	boundary	states	1693 ms
+2026-10-26 15:15:12.830	history	advance (diff)	742 ms
+2026-10-26 15:15:12.914	history	aggregateCommit editBoundary	82 ms
+2026-10-26 15:15:13.707	history	advance (diff)	789 ms
+2026-10-26 15:15:13.762	history	aggregateCommit editBoundary	54 ms
+2026-10-26 15:15:14.540	history	advance (diff)	773 ms
+2026-10-26 15:15:14.594	history	aggregateCommit editBoundary	53 ms
+2026-10-26 15:15:14.612	boundary	saveAndCaptureLayers	5850 ms
+2026-10-26 15:15:14.626	boundary	savedStructure	14 ms
+2026-10-26 15:15:16.758	boundary	brushState	2131 ms
+2026-10-26 15:15:19.079	boundary	readMechanical	4467 ms
+2026-10-26 15:15:19.080	boundary	waitHistory	0 ms
+2026-10-26 15:15:21.228	boundary	index	2147 ms
+2026-10-26 15:15:22.805	execute	plan (boundary rebuilt)	1418 ms
+2026-10-26 15:15:26.149	execute	states	3327 ms
+2026-10-26 15:15:26.613	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	shortcuts	97 ms
+2026-10-26 15:15:28.159	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	  saveSettled	1545 ms
+2026-10-26 15:15:28.205	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	  bridgeInspect	46 ms
+2026-10-26 15:15:28.253	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	  clipState	47 ms
+2026-10-26 15:15:28.256	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	saveAndInspect	1643 ms
+2026-10-26 15:15:29.322	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	clipboard (PNG)	210 ms
+2026-10-26 15:15:32.041	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	  saveSettled (modified)	2400 ms
+2026-10-26 15:15:32.092	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	  bridgeInspect	51 ms
+2026-10-26 15:15:32.136	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	  clipState	44 ms
+2026-10-26 15:15:32.140	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	saveAndInspect	2500 ms
+2026-10-26 15:15:32.306	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	exportLayer	166 ms
+2026-10-26 15:16:25.402	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	pen-up→pen-down Concentrated	n=38 min 31.5 avg 799.0 max 7848.3 ms
+2026-10-26 15:16:25.402	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	replay 53 Concentrated	52983 ms
+2026-10-26 15:16:27.321	execute	transaction (event editing)	60924 ms
+2026-10-26 15:16:29.291	execute	releaseMemory	1968 ms
+2026-10-26 15:16:34.907	edit-txn-2b69c4f75b404eccaf7f37cd47c56473	stateRefreshAfterEnd	7618 ms
+2026-10-26 15:22:59.167	history	advance (baseline)	960 ms
+2026-10-26 15:22:59.168	history	aggregateCommit recordingEnd	0 ms
+2026-10-26 15:22:59.931	history	advance (diff)	758 ms
+2026-10-26 15:22:59.932	history	aggregateCommit recordingEndLayer	0 ms
+2026-10-26 15:23:00.608	history	advance (diff)	673 ms
+2026-10-26 15:23:00.609	history	aggregateCommit recordingEndLayer	0 ms
+2026-10-26 15:41:50.579	boundary	states	1447 ms
+2026-10-26 15:41:54.082	history	advance (diff)	1691 ms
+2026-10-26 15:41:54.891	history	aggregateCommit editBoundary	797 ms
+2026-10-26 15:41:54.950	boundary	saveAndCaptureLayers	4371 ms
+2026-10-26 15:41:54.980	boundary	savedStructure	27 ms
+2026-10-26 15:41:56.378	boundary	readMechanical	1426 ms
+2026-10-26 15:41:56.395	boundary	waitHistory	0 ms
+2026-10-26 15:41:56.466	boundary	brushState	1482 ms
+2026-10-26 15:41:57.242	boundary	index	847 ms
+2026-10-26 15:42:31.064	boundary	states	1435 ms
+2026-10-26 15:42:33.962	history	advance (diff)	704 ms
+2026-10-26 15:42:34.039	history	aggregateCommit editBoundary	76 ms
+2026-10-26 15:42:34.061	boundary	saveAndCaptureLayers	2996 ms
+2026-10-26 15:42:34.070	boundary	savedStructure	9 ms
+2026-10-26 15:42:35.269	boundary	readMechanical	1208 ms
+2026-10-26 15:42:35.270	boundary	waitHistory	0 ms
+2026-10-26 15:42:35.884	boundary	index	614 ms
+2026-10-26 15:42:35.956	boundary	brushState	1886 ms
+2026-10-26 15:42:37.255	execute	plan (boundary rebuilt)	1076 ms
+2026-10-26 15:42:39.829	execute	states	2559 ms
+2026-10-26 15:42:40.414	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	shortcuts	83 ms
+2026-10-26 15:42:41.966	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	  saveSettled	1538 ms
+2026-10-26 15:42:42.011	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	  bridgeInspect	45 ms
+2026-10-26 15:42:42.048	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	  clipState	33 ms
+2026-10-26 15:42:42.053	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	saveAndInspect	1626 ms
+2026-10-26 15:42:43.496	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	clipboard (PNG)	107 ms
+2026-10-26 15:42:45.831	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	  saveSettled (modified)	2041 ms
+2026-10-26 15:42:45.873	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	  bridgeInspect	42 ms
+2026-10-26 15:42:45.882	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	  clipState	9 ms
+2026-10-26 15:42:45.883	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	saveAndInspect	2095 ms
+2026-10-26 15:42:46.035	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	exportLayer	143 ms
+2026-10-26 15:43:46.870	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	pen-up→pen-down Concentrated	n=63 min 32.4 avg 610.1 max 6399.5 ms
+2026-10-26 15:43:46.870	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	replay 64 Concentrated	60596 ms
+2026-10-26 15:43:47.688	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	  saveSettled (modified)	801 ms
+2026-10-26 15:43:47.741	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	  bridgeInspect	52 ms
+2026-10-26 15:43:47.771	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	  clipState	29 ms
+2026-10-26 15:43:47.774	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	saveAndInspect	887 ms
+2026-10-26 15:43:48.094	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	exportLayer	318 ms
+2026-10-26 15:43:49.013	history	registerBaseline	28 ms
+2026-10-26 15:43:49.013	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	registerBaseline	35 ms
+2026-10-26 15:43:49.207	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	recordEditingAction+operationPacket	31 ms
+2026-10-26 15:43:49.237	execute	transaction (event editing)	69031 ms
+2026-10-26 15:43:49.775	execute	releaseMemory	532 ms
+2026-10-26 15:43:54.919	edit-txn-ffdd172dfa35447a85d65aa36ac5eac0	stateRefreshAfterEnd	5705 ms
+2026-10-26 15:44:17.245	boundary	states	1435 ms
+2026-10-26 15:44:19.969	history	advance (diff)	508 ms
+2026-10-26 15:44:20.066	history	aggregateCommit editBoundary	95 ms
+2026-10-26 15:44:20.080	boundary	saveAndCaptureLayers	2835 ms
+2026-10-26 15:44:20.109	boundary	savedStructure	28 ms
+2026-10-26 15:44:21.159	boundary	readMechanical	1078 ms
+2026-10-26 15:44:21.159	boundary	waitHistory	0 ms
+2026-10-26 15:44:21.854	boundary	brushState	1744 ms
+2026-10-26 15:44:21.874	boundary	index	714 ms
+2026-10-26 15:49:10.261	boundary	states	2128 ms
+2026-10-26 15:49:12.719	history	advance (diff)	682 ms
+2026-10-26 15:49:13.123	history	aggregateCommit editBoundary	395 ms
+2026-10-26 15:49:13.716	history	advance (diff)	587 ms
+2026-10-26 15:49:13.804	history	aggregateCommit editBoundary	87 ms
+2026-10-26 15:49:13.820	boundary	saveAndCaptureLayers	3559 ms
+2026-10-26 15:49:13.889	boundary	savedStructure	68 ms
+2026-10-26 15:49:15.510	boundary	brushState	1620 ms
+2026-10-26 15:49:15.696	boundary	readMechanical	1875 ms
+2026-10-26 15:49:15.696	boundary	waitHistory	0 ms
+2026-10-26 15:49:16.739	boundary	index	1043 ms
+2026-10-26 15:50:15.612	history	advance (diff)	790 ms
+2026-10-26 15:50:15.613	history	aggregateCommit recordingEnd	0 ms
+2026-10-26 15:50:16.485	history	advance (diff)	797 ms
+2026-10-26 15:50:16.486	history	aggregateCommit recordingEndLayer	0 ms
+2026-10-26 15:51:51.965	boundary	states	1458 ms
+2026-10-26 15:51:54.351	history	advance (diff)	942 ms
+2026-10-26 15:51:54.808	history	aggregateCommit editBoundary	454 ms
+2026-10-26 15:51:54.856	boundary	saveAndCaptureLayers	2890 ms
+2026-10-26 15:51:54.896	boundary	savedStructure	37 ms
+2026-10-26 15:51:55.785	boundary	readMechanical	927 ms
+2026-10-26 15:51:55.789	boundary	waitHistory	0 ms
+2026-10-26 15:51:56.210	boundary	index	420 ms
+2026-10-26 15:51:56.554	boundary	brushState	1654 ms
+2026-10-26 15:51:57.255	execute	plan (clean boundary)	25 ms
+2026-10-26 15:51:58.161	edit-txn-2b0201571bd34ee3bfe3ed7246374749	shortcuts	74 ms
+2026-10-26 15:51:58.230	edit-txn-2b0201571bd34ee3bfe3ed7246374749	  bridgeInspect	43 ms
+2026-10-26 15:51:58.285	edit-txn-2b0201571bd34ee3bfe3ed7246374749	  clipState	50 ms
+2026-10-26 15:51:58.289	edit-txn-2b0201571bd34ee3bfe3ed7246374749	saveAndInspect	115 ms
+2026-10-26 15:51:58.525	execute	composePreciseUndo	211 ms
+2026-10-26 15:51:58.812	edit-txn-2b0201571bd34ee3bfe3ed7246374749	clipboard (PNG)	265 ms
+2026-10-26 15:52:01.136	edit-txn-2b0201571bd34ee3bfe3ed7246374749	  saveSettled (modified)	2020 ms
+2026-10-26 15:52:01.182	edit-txn-2b0201571bd34ee3bfe3ed7246374749	  bridgeInspect	45 ms
+2026-10-26 15:52:01.204	edit-txn-2b0201571bd34ee3bfe3ed7246374749	  clipState	22 ms
+2026-10-26 15:52:01.207	edit-txn-2b0201571bd34ee3bfe3ed7246374749	saveAndInspect	2091 ms
+2026-10-26 15:52:01.458	edit-txn-2b0201571bd34ee3bfe3ed7246374749	exportLayer	242 ms
+2026-10-26 15:52:05.772	edit-txn-2b0201571bd34ee3bfe3ed7246374749	pen-up→pen-down Discrete	n=3 min 234.9 avg 238.9 max 242.2 ms
+2026-10-26 15:52:05.772	edit-txn-2b0201571bd34ee3bfe3ed7246374749	replay 4 Discrete	3816 ms
+2026-10-26 15:52:06.466	edit-txn-2b0201571bd34ee3bfe3ed7246374749	  saveSettled (modified)	680 ms
+2026-10-26 15:52:06.511	edit-txn-2b0201571bd34ee3bfe3ed7246374749	  bridgeInspect	44 ms
+2026-10-26 15:52:06.531	edit-txn-2b0201571bd34ee3bfe3ed7246374749	  clipState	19 ms
+2026-10-26 15:52:06.533	edit-txn-2b0201571bd34ee3bfe3ed7246374749	saveAndInspect	748 ms
+2026-10-26 15:52:06.825	edit-txn-2b0201571bd34ee3bfe3ed7246374749	exportLayer	289 ms
+2026-10-26 15:52:07.330	history	registerBaseline	26 ms
+2026-10-26 15:52:07.331	edit-txn-2b0201571bd34ee3bfe3ed7246374749	registerBaseline	31 ms
+2026-10-26 15:52:08.174	history	recordOperation	776 ms
+2026-10-26 15:52:08.252	history	aggregateCommit memolineOperation	75 ms
+2026-10-26 15:52:08.253	edit-txn-2b0201571bd34ee3bfe3ed7246374749	recordEditingAction+operationPacket	897 ms
+2026-10-26 15:52:08.270	execute	transaction (precise undo)	10328 ms
+2026-10-26 15:52:08.919	execute	releaseMemory	643 ms
+2026-10-26 15:52:20.374	edit-txn-2b0201571bd34ee3bfe3ed7246374749	stateRefreshAfterEnd	12119 ms
+2026-10-26 16:10:17.611	history	advance (diff)	654 ms
+2026-10-26 16:10:17.612	history	aggregateCommit recordingEnd	0 ms
+2026-10-26 22:09:12.104	history	advance (diff)	935 ms
+2026-10-26 22:09:12.914	history	aggregateCommit stateUpdated	808 ms
+2026-10-26 22:09:25.491	boundary	states	1514 ms
+2026-10-26 22:09:28.934	history	advance (diff)	470 ms
+2026-10-26 22:09:29.003	history	aggregateCommit editBoundary	69 ms
+2026-10-26 22:09:29.564	history	advance (diff)	548 ms
+2026-10-26 22:09:29.732	history	aggregateCommit editBoundary	167 ms
+2026-10-26 22:09:29.755	boundary	saveAndCaptureLayers	4263 ms
+2026-10-26 22:09:29.776	boundary	savedStructure	18 ms
+2026-10-26 22:09:31.227	boundary	readMechanical	1470 ms
+2026-10-26 22:09:31.228	boundary	waitHistory	0 ms
+2026-10-26 22:09:31.424	boundary	brushState	1643 ms
+2026-10-26 22:09:32.321	boundary	index	1092 ms
+2026-10-26 22:09:33.256	execute	plan (clean boundary)	22 ms
+2026-10-26 22:09:33.956	edit-txn-8733a76c289342b5a4a063d1544d5ed1	shortcuts	117 ms
+2026-10-26 22:09:34.035	edit-txn-8733a76c289342b5a4a063d1544d5ed1	  bridgeInspect	55 ms
+2026-10-26 22:09:34.084	edit-txn-8733a76c289342b5a4a063d1544d5ed1	  clipState	44 ms
+2026-10-26 22:09:34.088	edit-txn-8733a76c289342b5a4a063d1544d5ed1	saveAndInspect	120 ms
+2026-10-26 22:09:34.210	execute	composePreciseUndo	97 ms
+2026-10-26 22:09:34.457	edit-txn-8733a76c289342b5a4a063d1544d5ed1	clipboard (PNG)	231 ms
+2026-10-26 22:09:36.943	edit-txn-8733a76c289342b5a4a063d1544d5ed1	  saveSettled (modified)	2222 ms
+2026-10-26 22:09:37.004	edit-txn-8733a76c289342b5a4a063d1544d5ed1	  bridgeInspect	61 ms
+2026-10-26 22:09:37.056	edit-txn-8733a76c289342b5a4a063d1544d5ed1	  clipState	51 ms
+2026-10-26 22:09:37.059	edit-txn-8733a76c289342b5a4a063d1544d5ed1	saveAndInspect	2338 ms
+2026-10-26 22:09:37.280	edit-txn-8733a76c289342b5a4a063d1544d5ed1	exportLayer	212 ms
+2026-10-26 22:09:46.816	edit-txn-8733a76c289342b5a4a063d1544d5ed1	replay 12 Discrete	9212 ms
+2026-10-26 22:09:46.965	execute	transaction (precise undo)	13240 ms
+2026-10-26 22:09:47.983	execute	releaseMemory	1012 ms
+2026-10-26 22:09:53.457	edit-txn-8733a76c289342b5a4a063d1544d5ed1	stateRefreshAfterEnd	6615 ms
+2026-10-26 22:10:01.458	history	advance (baseline)	659 ms
+2026-10-26 22:10:01.624	history	aggregateCommit stateUpdated	165 ms
+2026-10-26 22:11:43.340	boundary	states	1677 ms
+2026-10-26 22:11:46.963	history	advance (diff)	604 ms
+2026-10-26 22:11:47.549	history	aggregateCommit editBoundary	585 ms
+2026-10-26 22:11:48.117	history	advance (diff)	557 ms
+2026-10-26 22:11:48.298	history	aggregateCommit editBoundary	180 ms
+2026-10-26 22:11:48.835	history	advance (diff)	522 ms
+2026-10-26 22:11:49.006	history	aggregateCommit editBoundary	171 ms
+2026-10-26 22:11:49.023	boundary	saveAndCaptureLayers	5632 ms
+2026-10-26 22:11:49.050	boundary	savedStructure	26 ms
+2026-10-26 22:11:50.749	boundary	brushState	1699 ms
+2026-10-26 22:11:51.836	boundary	readMechanical	2812 ms
+2026-10-26 22:11:51.836	boundary	waitHistory	0 ms
+2026-10-26 22:11:53.675	boundary	index	1838 ms
+2026-10-26 22:12:53.459	history	advance (diff)	724 ms
+2026-10-26 22:12:53.462	history	aggregateCommit recordingEnd	0 ms
+2026-10-26 22:12:54.122	history	advance (diff)	657 ms
+2026-10-26 22:12:54.123	history	aggregateCommit recordingEndLayer	0 ms
+2026-10-26 22:12:54.785	history	advance (diff)	660 ms
+2026-10-26 22:12:54.786	history	aggregateCommit recordingEndLayer	0 ms
+2026-10-26 22:15:41.908	boundary	states	1611 ms
+2026-10-26 22:15:44.935	history	advance (diff)	608 ms
+2026-10-26 22:15:45.343	history	aggregateCommit editBoundary	407 ms
+2026-10-26 22:15:45.376	boundary	saveAndCaptureLayers	3425 ms
+2026-10-26 22:15:45.394	boundary	savedStructure	18 ms
+2026-10-26 22:15:46.207	boundary	readMechanical	830 ms
+2026-10-26 22:15:46.207	boundary	waitHistory	0 ms
+2026-10-26 22:15:46.540	boundary	index	332 ms
+2026-10-26 22:15:47.103	boundary	brushState	1708 ms
+2026-10-26 22:15:47.632	execute	plan (clean boundary)	2 ms
+2026-10-26 22:15:48.152	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	shortcuts	118 ms
+2026-10-26 22:15:48.217	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	  bridgeInspect	61 ms
+2026-10-26 22:15:48.233	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	  clipState	16 ms
+2026-10-26 22:15:48.235	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	saveAndInspect	82 ms
+2026-10-26 22:15:48.282	execute	composePreciseUndo	45 ms
+2026-10-26 22:15:48.536	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	clipboard (PNG)	252 ms
+2026-10-26 22:15:51.106	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	  saveSettled (modified)	2304 ms
+2026-10-26 22:15:51.162	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	  bridgeInspect	56 ms
+2026-10-26 22:15:51.174	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	  clipState	11 ms
+2026-10-26 22:15:51.176	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	saveAndInspect	2375 ms
+2026-10-26 22:15:51.392	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	exportLayer	215 ms
+2026-10-26 22:15:55.408	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	pen-up→pen-down Discrete	n=8 min 90.2 avg 105.8 max 120.5 ms
+2026-10-26 22:15:55.408	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	replay 9 Discrete	3809 ms
+2026-10-26 22:16:03.055	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	pen-up→pen-down Discrete	n=20 min 89.1 avg 99.1 max 109.6 ms
+2026-10-26 22:16:03.055	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	replay 21 Discrete	7641 ms
+2026-10-26 22:16:03.757	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	  saveSettled (modified)	697 ms
+2026-10-26 22:16:03.815	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	  bridgeInspect	58 ms
+2026-10-26 22:16:03.871	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	  clipState	56 ms
+2026-10-26 22:16:03.873	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	saveAndInspect	814 ms
+2026-10-26 22:16:04.151	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	exportLayer	276 ms
+2026-10-26 22:16:04.660	history	registerBaseline	25 ms
+2026-10-26 22:16:04.660	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	registerBaseline	30 ms
+2026-10-26 22:16:05.496	history	recordOperation	776 ms
+2026-10-26 22:16:05.568	history	aggregateCommit memolineOperation	68 ms
+2026-10-26 22:16:05.569	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	recordEditingAction+operationPacket	890 ms
+2026-10-26 22:16:05.572	execute	transaction (precise undo)	17581 ms
+2026-10-26 22:16:06.176	execute	releaseMemory	601 ms
+2026-10-26 22:16:18.259	edit-txn-9eafee100bfd4ebd8cbf8336c61da1f6	stateRefreshAfterEnd	12690 ms
+2026-10-26 22:16:53.255	boundary	states	3865 ms
+2026-10-26 22:16:53.972	boundary	saveAndCaptureLayers	712 ms
+2026-10-26 22:18:26.968	boundary	states	1352 ms
+2026-10-26 22:18:29.736	history	advance (diff)	522 ms
+2026-10-26 22:18:30.119	history	aggregateCommit editBoundary	383 ms
+2026-10-26 22:18:30.665	history	advance (diff)	533 ms
+2026-10-26 22:18:30.787	history	aggregateCommit editBoundary	122 ms
+2026-10-26 22:18:30.803	boundary	saveAndCaptureLayers	3828 ms
+2026-10-26 22:18:30.837	boundary	savedStructure	33 ms
+2026-10-26 22:18:32.508	boundary	brushState	1670 ms
+2026-10-26 22:18:32.755	boundary	readMechanical	1952 ms
+2026-10-26 22:18:32.756	boundary	waitHistory	0 ms
+2026-10-26 22:18:33.552	boundary	index	796 ms
+2026-10-26 22:18:34.261	execute	plan (clean boundary)	0 ms
+2026-10-26 22:18:34.652	edit-txn-836e79a4835e4e52988744349c3f9e9a	shortcuts	104 ms
+2026-10-26 22:18:34.718	edit-txn-836e79a4835e4e52988744349c3f9e9a	  bridgeInspect	62 ms
+2026-10-26 22:18:34.739	edit-txn-836e79a4835e4e52988744349c3f9e9a	  clipState	20 ms
+2026-10-26 22:18:34.742	edit-txn-836e79a4835e4e52988744349c3f9e9a	saveAndInspect	88 ms
+2026-10-26 22:18:34.798	execute	composePreciseUndo	56 ms
+2026-10-26 22:18:35.013	edit-txn-836e79a4835e4e52988744349c3f9e9a	clipboard (PNG)	214 ms
+2026-10-26 22:18:37.624	edit-txn-836e79a4835e4e52988744349c3f9e9a	  saveSettled (modified)	2348 ms
+2026-10-26 22:18:37.684	edit-txn-836e79a4835e4e52988744349c3f9e9a	  bridgeInspect	59 ms
+2026-10-26 22:18:37.737	edit-txn-836e79a4835e4e52988744349c3f9e9a	  clipState	53 ms
+2026-10-26 22:18:37.739	edit-txn-836e79a4835e4e52988744349c3f9e9a	saveAndInspect	2464 ms
+2026-10-26 22:18:37.960	edit-txn-836e79a4835e4e52988744349c3f9e9a	exportLayer	220 ms
+2026-10-26 22:18:44.340	edit-txn-836e79a4835e4e52988744349c3f9e9a	pen-up→pen-down Discrete	n=12 min 143.5 avg 152.7 max 165.8 ms
+2026-10-26 22:18:44.340	edit-txn-836e79a4835e4e52988744349c3f9e9a	replay 13 Discrete	6226 ms
+2026-10-26 22:18:45.093	edit-txn-836e79a4835e4e52988744349c3f9e9a	  saveSettled (modified)	751 ms
+2026-10-26 22:18:45.162	edit-txn-836e79a4835e4e52988744349c3f9e9a	  bridgeInspect	68 ms
+2026-10-26 22:18:45.201	edit-txn-836e79a4835e4e52988744349c3f9e9a	  clipState	39 ms
+2026-10-26 22:18:45.204	edit-txn-836e79a4835e4e52988744349c3f9e9a	saveAndInspect	862 ms
+2026-10-26 22:18:45.431	edit-txn-836e79a4835e4e52988744349c3f9e9a	exportLayer	227 ms
+2026-10-26 22:18:45.794	history	registerBaseline	28 ms
+2026-10-26 22:18:45.795	edit-txn-836e79a4835e4e52988744349c3f9e9a	registerBaseline	32 ms
+2026-10-26 22:18:46.516	history	recordOperation	705 ms
+2026-10-26 22:18:46.577	history	aggregateCommit memolineOperation	59 ms
+2026-10-26 22:18:46.579	edit-txn-836e79a4835e4e52988744349c3f9e9a	recordEditingAction+operationPacket	775 ms
+2026-10-26 22:18:46.580	execute	transaction (precise undo)	12062 ms
+2026-10-26 22:18:47.882	execute	releaseMemory	1299 ms
+2026-10-26 22:18:55.683	edit-txn-836e79a4835e4e52988744349c3f9e9a	stateRefreshAfterEnd	9104 ms
+2026-10-26 22:20:26.926	boundary	states	1508 ms
+2026-10-26 22:20:32.218	history	advance (diff)	724 ms
+2026-10-26 22:20:32.621	history	aggregateCommit editBoundary	402 ms
+2026-10-26 22:20:33.511	history	advance (diff)	703 ms
+2026-10-26 22:20:33.747	history	aggregateCommit editBoundary	233 ms
+2026-10-26 22:20:33.785	boundary	saveAndCaptureLayers	6859 ms
+2026-10-26 22:20:33.798	boundary	savedStructure	12 ms
+2026-10-26 22:20:35.834	boundary	brushState	2036 ms
+2026-10-26 22:20:37.685	boundary	readMechanical	3900 ms
+2026-10-26 22:20:37.686	boundary	waitHistory	0 ms
+2026-10-26 22:20:39.249	boundary	index	1563 ms
+2026-10-26 22:20:40.402	execute	plan (clean boundary)	1 ms
+2026-10-26 22:20:40.846	edit-txn-214d6cbbf93643ca9880647a77b8829d	shortcuts	125 ms
+2026-10-26 22:20:40.910	edit-txn-214d6cbbf93643ca9880647a77b8829d	  bridgeInspect	59 ms
+2026-10-26 22:20:40.927	edit-txn-214d6cbbf93643ca9880647a77b8829d	  clipState	17 ms
+2026-10-26 22:20:40.931	edit-txn-214d6cbbf93643ca9880647a77b8829d	saveAndInspect	84 ms
+2026-10-26 22:20:40.993	execute	composePreciseUndo	62 ms
+2026-10-26 22:20:41.216	edit-txn-214d6cbbf93643ca9880647a77b8829d	clipboard (PNG)	222 ms
+2026-10-26 22:20:43.759	edit-txn-214d6cbbf93643ca9880647a77b8829d	  saveSettled (modified)	2284 ms
+2026-10-26 22:20:43.816	edit-txn-214d6cbbf93643ca9880647a77b8829d	  bridgeInspect	56 ms
+2026-10-26 22:20:43.826	edit-txn-214d6cbbf93643ca9880647a77b8829d	  clipState	10 ms
+2026-10-26 22:20:43.829	edit-txn-214d6cbbf93643ca9880647a77b8829d	saveAndInspect	2354 ms
+2026-10-26 22:20:44.026	edit-txn-214d6cbbf93643ca9880647a77b8829d	exportLayer	197 ms
+2026-10-26 22:20:45.180	edit-txn-214d6cbbf93643ca9880647a77b8829d	pen-up→pen-down Discrete	n=1 min 246.1 avg 246.1 max 246.1 ms
+2026-10-26 22:20:45.180	edit-txn-214d6cbbf93643ca9880647a77b8829d	replay 2 Discrete	935 ms
+2026-10-26 22:20:53.788	edit-txn-214d6cbbf93643ca9880647a77b8829d	pen-up→pen-down Discrete	n=16 min 233.3 avg 238.2 max 250.8 ms
+2026-10-26 22:20:53.789	edit-txn-214d6cbbf93643ca9880647a77b8829d	replay 17 Discrete	8607 ms
+2026-10-26 22:20:54.497	edit-txn-214d6cbbf93643ca9880647a77b8829d	  saveSettled (modified)	706 ms
+2026-10-26 22:20:54.565	edit-txn-214d6cbbf93643ca9880647a77b8829d	  bridgeInspect	69 ms
+2026-10-26 22:20:54.597	edit-txn-214d6cbbf93643ca9880647a77b8829d	  clipState	31 ms
+2026-10-26 22:20:54.599	edit-txn-214d6cbbf93643ca9880647a77b8829d	saveAndInspect	809 ms
+2026-10-26 22:20:54.847	edit-txn-214d6cbbf93643ca9880647a77b8829d	exportLayer	247 ms
+2026-10-26 22:20:55.344	history	registerBaseline	35 ms
+2026-10-26 22:20:55.345	edit-txn-214d6cbbf93643ca9880647a77b8829d	registerBaseline	39 ms
+2026-10-26 22:20:56.080	history	recordOperation	720 ms
+2026-10-26 22:20:56.150	history	aggregateCommit memolineOperation	67 ms
+2026-10-26 22:20:56.151	edit-txn-214d6cbbf93643ca9880647a77b8829d	recordEditingAction+operationPacket	797 ms
+2026-10-26 22:20:56.152	execute	transaction (precise undo)	15462 ms
+2026-10-26 22:20:58.388	execute	releaseMemory	2233 ms
+2026-10-26 22:21:03.589	edit-txn-214d6cbbf93643ca9880647a77b8829d	stateRefreshAfterEnd	7438 ms
+2026-10-26 22:24:56.380	boundary	states	1323 ms
+2026-10-26 22:24:59.075	history	advance (diff)	522 ms
+2026-10-26 22:24:59.220	history	aggregateCommit editBoundary	129 ms
+2026-10-26 22:24:59.783	history	advance (diff)	544 ms
+2026-10-26 22:24:59.849	history	aggregateCommit editBoundary	53 ms
+2026-10-26 22:24:59.872	boundary	saveAndCaptureLayers	3482 ms
+2026-10-26 22:24:59.889	boundary	savedStructure	17 ms
+2026-10-26 22:25:01.592	boundary	brushState	1703 ms
+2026-10-26 22:25:03.652	boundary	readMechanical	3780 ms
+2026-10-26 22:25:03.652	boundary	waitHistory	0 ms
+2026-10-26 22:25:05.094	boundary	index	1442 ms
+2026-10-26 22:25:14.176	boundary	states	1340 ms
+2026-10-26 22:25:17.716	history	advance (diff)	514 ms
+2026-10-26 22:25:17.756	history	aggregateCommit editBoundary	39 ms
+2026-10-26 22:25:18.303	history	advance (diff)	544 ms
+2026-10-26 22:25:18.336	history	aggregateCommit editBoundary	33 ms
+2026-10-26 22:25:18.349	boundary	saveAndCaptureLayers	4164 ms
+2026-10-26 22:25:18.369	boundary	savedStructure	20 ms
+2026-10-26 22:25:19.873	boundary	brushState	1503 ms
+2026-10-26 22:25:21.955	boundary	readMechanical	3606 ms
+2026-10-26 22:25:21.955	boundary	waitHistory	0 ms
+2026-10-26 22:25:23.770	boundary	index	1814 ms
+2026-10-26 22:25:56.487	boundary	states	1467 ms
+2026-10-26 22:25:59.803	history	advance (diff)	622 ms
+2026-10-26 22:25:59.873	history	aggregateCommit editBoundary	68 ms
+2026-10-26 22:26:00.530	history	advance (diff)	654 ms
+2026-10-26 22:26:00.567	history	aggregateCommit editBoundary	36 ms
+2026-10-26 22:26:00.583	boundary	saveAndCaptureLayers	4096 ms
+2026-10-26 22:26:00.596	boundary	savedStructure	12 ms
+2026-10-26 22:26:02.005	boundary	brushState	1408 ms
+2026-10-26 22:26:04.739	boundary	readMechanical	4156 ms
+2026-10-26 22:26:04.740	boundary	waitHistory	0 ms
+2026-10-26 22:26:06.699	boundary	index	1958 ms
+2026-10-26 22:26:07.597	execute	plan (boundary rebuilt)	732 ms
+2026-10-26 22:26:09.813	execute	states	2204 ms
+2026-10-26 22:26:10.291	edit-txn-222de0cd646c4a3e948a01966f235d53	shortcuts	112 ms
+2026-10-26 22:26:11.831	edit-txn-222de0cd646c4a3e948a01966f235d53	  saveSettled	1540 ms
+2026-10-26 22:26:11.906	edit-txn-222de0cd646c4a3e948a01966f235d53	  bridgeInspect	75 ms
+2026-10-26 22:26:11.928	edit-txn-222de0cd646c4a3e948a01966f235d53	  clipState	21 ms
+2026-10-26 22:26:11.930	edit-txn-222de0cd646c4a3e948a01966f235d53	saveAndInspect	1639 ms
+2026-10-26 22:26:12.661	edit-txn-222de0cd646c4a3e948a01966f235d53	clipboard (PNG)	101 ms
+2026-10-26 22:26:15.206	edit-txn-222de0cd646c4a3e948a01966f235d53	  saveSettled (modified)	2177 ms
+2026-10-26 22:26:15.267	edit-txn-222de0cd646c4a3e948a01966f235d53	  bridgeInspect	60 ms
+2026-10-26 22:26:15.287	edit-txn-222de0cd646c4a3e948a01966f235d53	  clipState	20 ms
+2026-10-26 22:26:15.289	edit-txn-222de0cd646c4a3e948a01966f235d53	saveAndInspect	2262 ms
+2026-10-26 22:26:15.490	edit-txn-222de0cd646c4a3e948a01966f235d53	exportLayer	200 ms
+2026-10-26 22:26:21.911	edit-txn-222de0cd646c4a3e948a01966f235d53	pen-up→pen-down Concentrated	n=2 min 36.8 avg 2590.2 max 5143.7 ms
+2026-10-26 22:26:21.911	edit-txn-222de0cd646c4a3e948a01966f235d53	replay 3 Concentrated	6210 ms
+2026-10-26 22:26:22.789	edit-txn-222de0cd646c4a3e948a01966f235d53	  saveSettled (modified)	871 ms
+2026-10-26 22:26:22.850	edit-txn-222de0cd646c4a3e948a01966f235d53	  bridgeInspect	61 ms
+2026-10-26 22:26:22.871	edit-txn-222de0cd646c4a3e948a01966f235d53	  clipState	21 ms
+2026-10-26 22:26:22.873	edit-txn-222de0cd646c4a3e948a01966f235d53	saveAndInspect	956 ms
+2026-10-26 22:26:23.096	edit-txn-222de0cd646c4a3e948a01966f235d53	exportLayer	222 ms
+2026-10-26 22:26:24.026	history	registerBaseline	40 ms
+2026-10-26 22:26:24.027	edit-txn-222de0cd646c4a3e948a01966f235d53	registerBaseline	42 ms
+2026-10-26 22:26:24.175	edit-txn-222de0cd646c4a3e948a01966f235d53	recordEditingAction+operationPacket	9 ms
+2026-10-26 22:26:24.186	execute	transaction (event editing)	14124 ms
+2026-10-26 22:26:26.881	execute	releaseMemory	2693 ms
+2026-10-26 22:26:31.689	edit-txn-222de0cd646c4a3e948a01966f235d53	stateRefreshAfterEnd	7508 ms
+2026-10-26 22:29:02.060	boundary	states	1441 ms
+2026-10-26 22:29:05.605	history	advance (diff)	578 ms
+2026-10-26 22:29:05.966	history	aggregateCommit editBoundary	358 ms
+2026-10-26 22:29:06.502	history	advance (diff)	524 ms
+2026-10-26 22:29:06.597	history	aggregateCommit editBoundary	85 ms
+2026-10-26 22:29:06.622	boundary	saveAndCaptureLayers	4554 ms
+2026-10-26 22:29:06.652	boundary	savedStructure	30 ms
+2026-10-26 22:29:07.952	boundary	brushState	1299 ms
+2026-10-26 22:29:11.189	boundary	readMechanical	4566 ms
+2026-10-26 22:29:11.189	boundary	waitHistory	0 ms
+2026-10-26 22:29:13.055	boundary	index	1866 ms
+2026-10-26 22:31:43.439	boundary	states	1601 ms
+2026-10-26 22:31:46.909	history	advance (diff)	692 ms
+2026-10-26 22:31:47.150	history	aggregateCommit editBoundary	239 ms
+2026-10-26 22:31:47.706	history	advance (diff)	550 ms
+2026-10-26 22:31:47.762	history	aggregateCommit editBoundary	56 ms
+2026-10-26 22:31:47.775	boundary	saveAndCaptureLayers	4336 ms
+2026-10-26 22:31:47.790	boundary	savedStructure	15 ms
+2026-10-26 22:31:48.830	boundary	brushState	1039 ms
+2026-10-26 22:31:52.438	boundary	readMechanical	4662 ms
+2026-10-26 22:31:52.438	boundary	waitHistory	0 ms
+2026-10-26 22:31:55.253	boundary	index	2814 ms
+2026-10-26 22:32:11.884	execute	plan (clean boundary)	526 ms
+2026-10-26 22:32:12.431	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	shortcuts	139 ms
+2026-10-26 22:32:12.518	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	  bridgeInspect	82 ms
+2026-10-26 22:32:12.547	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	  clipState	28 ms
+2026-10-26 22:32:12.550	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	saveAndInspect	118 ms
+2026-10-26 22:32:13.546	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	clipboard (PNG)	294 ms
+2026-10-26 22:32:16.422	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	  saveSettled (modified)	2567 ms
+2026-10-26 22:32:16.485	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	  bridgeInspect	62 ms
+2026-10-26 22:32:16.533	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	  clipState	48 ms
+2026-10-26 22:32:16.537	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	saveAndInspect	2683 ms
+2026-10-26 22:32:16.928	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	exportLayer	390 ms
+2026-10-26 22:32:17.671	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	replay 1 Concentrated	286 ms
+2026-10-26 22:32:18.603	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	  saveSettled (modified)	929 ms
+2026-10-26 22:32:18.661	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	  bridgeInspect	58 ms
+2026-10-26 22:32:18.696	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	  clipState	35 ms
+2026-10-26 22:32:18.700	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	saveAndInspect	1027 ms
+2026-10-26 22:32:19.087	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	exportLayer	387 ms
+2026-10-26 22:32:20.524	history	registerBaseline	54 ms
+2026-10-26 22:32:20.525	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	registerBaseline	58 ms
+2026-10-26 22:32:21.402	history	recordOperation	726 ms
+2026-10-26 22:32:21.495	history	aggregateCommit memolineOperation	91 ms
+2026-10-26 22:32:21.497	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	recordEditingAction+operationPacket	825 ms
+2026-10-26 22:32:21.499	execute	transaction (event editing)	9234 ms
+2026-10-26 22:32:24.666	execute	releaseMemory	3165 ms
+2026-10-26 22:32:29.456	edit-txn-c49d05c9cdb8474ea9d68c732dd809da	stateRefreshAfterEnd	7958 ms
+2026-10-26 22:33:14.799	boundary	states	1406 ms
+2026-10-26 22:33:18.478	history	advance (diff)	632 ms
+2026-10-26 22:33:18.761	history	aggregateCommit editBoundary	282 ms
+2026-10-26 22:33:19.329	history	advance (diff)	558 ms
+2026-10-26 22:33:19.450	history	aggregateCommit editBoundary	120 ms
+2026-10-26 22:33:19.463	boundary	saveAndCaptureLayers	4655 ms
+2026-10-26 22:33:19.479	boundary	savedStructure	17 ms
+2026-10-26 22:33:20.436	boundary	brushState	956 ms
+2026-10-26 22:33:24.745	boundary	readMechanical	5282 ms
+2026-10-26 22:33:24.746	boundary	waitHistory	0 ms
+2026-10-26 22:33:27.065	boundary	index	2319 ms
+2026-10-26 22:33:56.239	boundary	states	1506 ms
+2026-10-26 22:34:00.377	history	advance (diff)	770 ms
+2026-10-26 22:34:00.459	history	aggregateCommit editBoundary	81 ms
+2026-10-26 22:34:01.159	history	advance (diff)	695 ms
+2026-10-26 22:34:01.293	history	aggregateCommit editBoundary	133 ms
+2026-10-26 22:34:01.319	boundary	saveAndCaptureLayers	5079 ms
+2026-10-26 22:34:01.344	boundary	savedStructure	25 ms
+2026-10-26 22:34:02.590	boundary	brushState	1245 ms
+2026-10-26 22:34:07.377	boundary	readMechanical	6058 ms
+2026-10-26 22:34:07.378	boundary	waitHistory	0 ms
+2026-10-26 22:34:10.698	boundary	index	3320 ms
+2026-10-26 22:34:12.066	execute	plan (boundary rebuilt)	1189 ms
+2026-10-26 22:34:14.275	execute	states	2195 ms
+2026-10-26 22:34:14.665	edit-txn-e32876ff5c6643f589430400c43d2782	shortcuts	88 ms
+2026-10-26 22:34:16.208	edit-txn-e32876ff5c6643f589430400c43d2782	  saveSettled	1542 ms
+2026-10-26 22:34:16.276	edit-txn-e32876ff5c6643f589430400c43d2782	  bridgeInspect	67 ms
+2026-10-26 22:34:16.289	edit-txn-e32876ff5c6643f589430400c43d2782	  clipState	12 ms
+2026-10-26 22:34:16.293	edit-txn-e32876ff5c6643f589430400c43d2782	saveAndInspect	1626 ms
+2026-10-26 22:34:17.385	edit-txn-e32876ff5c6643f589430400c43d2782	clipboard (PNG)	389 ms
+2026-10-26 22:34:19.944	edit-txn-e32876ff5c6643f589430400c43d2782	  saveSettled (modified)	2304 ms
+2026-10-26 22:34:20.003	edit-txn-e32876ff5c6643f589430400c43d2782	  bridgeInspect	59 ms
+2026-10-26 22:34:20.027	edit-txn-e32876ff5c6643f589430400c43d2782	  clipState	23 ms
+2026-10-26 22:34:20.031	edit-txn-e32876ff5c6643f589430400c43d2782	saveAndInspect	2391 ms
+2026-10-26 22:34:20.411	edit-txn-e32876ff5c6643f589430400c43d2782	exportLayer	380 ms
+2026-10-26 22:34:26.671	edit-txn-e32876ff5c6643f589430400c43d2782	pen-up→pen-down Concentrated	n=2 min 17.7 avg 2354.0 max 4690.4 ms
+2026-10-26 22:34:26.672	edit-txn-e32876ff5c6643f589430400c43d2782	replay 3 Concentrated	5850 ms
+2026-10-26 22:34:27.600	edit-txn-e32876ff5c6643f589430400c43d2782	  saveSettled (modified)	927 ms
+2026-10-26 22:34:27.660	edit-txn-e32876ff5c6643f589430400c43d2782	  bridgeInspect	59 ms
+2026-10-26 22:34:27.683	edit-txn-e32876ff5c6643f589430400c43d2782	  clipState	22 ms
+2026-10-26 22:34:27.687	edit-txn-e32876ff5c6643f589430400c43d2782	saveAndInspect	1014 ms
+2026-10-26 22:34:28.081	edit-txn-e32876ff5c6643f589430400c43d2782	exportLayer	394 ms
+2026-10-26 22:34:29.701	history	registerBaseline	58 ms
+2026-10-26 22:34:29.702	edit-txn-e32876ff5c6643f589430400c43d2782	registerBaseline	61 ms
+2026-10-26 22:34:29.844	edit-txn-e32876ff5c6643f589430400c43d2782	recordEditingAction+operationPacket	6 ms
+2026-10-26 22:34:29.849	execute	transaction (event editing)	15310 ms
+2026-10-26 22:34:34.119	execute	releaseMemory	4268 ms
+2026-10-26 22:34:38.736	edit-txn-e32876ff5c6643f589430400c43d2782	stateRefreshAfterEnd	8889 ms
+2026-10-26 22:34:51.352	history	advance (diff)	710 ms
+2026-10-26 22:34:51.353	history	aggregateCommit recordingEnd	0 ms
+2026-10-26 22:34:51.992	history	advance (diff)	635 ms
+2026-10-26 22:34:51.993	history	aggregateCommit recordingEndLayer	0 ms
+2026-10-26 23:54:32.734	boundary	states	1217 ms
+2026-10-26 23:54:35.404	history	advance (diff)	644 ms
+2026-10-26 23:54:35.621	history	aggregateCommit editBoundary	216 ms
+2026-10-26 23:54:35.644	boundary	saveAndCaptureLayers	2902 ms
+2026-10-26 23:54:35.684	boundary	savedStructure	37 ms
+2026-10-26 23:54:36.704	boundary	readMechanical	1058 ms
+2026-10-26 23:54:36.706	boundary	waitHistory	0 ms
+2026-10-26 23:54:37.229	boundary	brushState	1542 ms
+2026-10-26 23:54:37.859	boundary	index	1153 ms
+2026-10-26 23:54:58.513	boundary	states	1368 ms
+2026-10-26 23:55:01.394	history	advance (diff)	572 ms
+2026-10-26 23:55:01.427	history	aggregateCommit editBoundary	25 ms
+2026-10-26 23:55:01.611	boundary	saveAndCaptureLayers	3098 ms
+2026-10-26 23:55:01.636	boundary	savedStructure	24 ms
+2026-10-26 23:55:03.038	boundary	readMechanical	1426 ms
+2026-10-26 23:55:03.097	boundary	waitHistory	0 ms
+2026-10-26 23:55:03.694	boundary	brushState	2057 ms
+2026-10-26 23:55:04.224	boundary	index	1127 ms
+2026-10-26 23:55:48.620	boundary	states	1442 ms
+2026-10-26 23:55:50.843	history	advance (diff)	837 ms
+2026-10-26 23:55:51.133	history	aggregateCommit editBoundary	289 ms
+2026-10-26 23:55:51.147	boundary	saveAndCaptureLayers	2527 ms
+2026-10-26 23:55:51.173	boundary	savedStructure	25 ms
+2026-10-26 23:55:52.242	boundary	brushState	1069 ms
+2026-10-26 23:55:52.664	boundary	readMechanical	1516 ms
+2026-10-26 23:55:52.665	boundary	waitHistory	0 ms
+2026-10-26 23:55:53.822	boundary	index	1157 ms
+2026-10-26 23:55:54.320	execute	plan (boundary rebuilt)	361 ms
+2026-10-26 23:55:56.476	execute	states	2145 ms
+2026-10-26 23:55:57.043	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	shortcuts	108 ms
+2026-10-26 23:55:57.599	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	  saveSettled	542 ms
+2026-10-26 23:55:57.656	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	  bridgeInspect	57 ms
+2026-10-26 23:55:58.092	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	  clipState	432 ms
+2026-10-26 23:55:58.098	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	saveAndInspect	1042 ms
+2026-10-26 23:55:59.159	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	clipboard (PNG)	230 ms
+2026-10-26 23:56:01.492	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	  saveSettled (modified)	2100 ms
+2026-10-26 23:56:01.540	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	  bridgeInspect	48 ms
+2026-10-26 23:56:02.594	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	  clipState	1053 ms
+2026-10-26 23:56:02.598	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	saveAndInspect	3207 ms
+2026-10-26 23:56:03.044	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	exportLayer	438 ms
+2026-10-26 23:56:08.145	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	pen-up→pen-down Concentrated	n=3 min 34.0 avg 560.4 max 1606.7 ms
+2026-10-26 23:56:08.145	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	replay 6 Concentrated	4378 ms
+2026-10-26 23:56:08.298	execute	transaction (event editing)	11452 ms
+2026-10-26 23:56:09.826	execute	releaseMemory	1520 ms
+2026-10-26 23:56:14.287	edit-txn-9a3a8082093a4197bb42b00ad0f3a48d	stateRefreshAfterEnd	6084 ms
+2026-10-26 23:56:36.550	boundary	states	1627 ms
+2026-10-26 23:56:37.279	boundary	saveAndCaptureLayers	729 ms
+2026-10-26 23:56:41.911	boundary	states	1448 ms
+2026-10-26 23:56:45.264	history	advance (diff)	549 ms
+2026-10-26 23:56:45.355	history	aggregateCommit editBoundary	91 ms
+2026-10-26 23:56:45.369	boundary	saveAndCaptureLayers	3449 ms
+2026-10-26 23:56:45.402	boundary	savedStructure	33 ms
+2026-10-26 23:56:46.259	boundary	brushState	857 ms
+2026-10-26 23:56:46.655	boundary	readMechanical	1286 ms
+2026-10-26 23:56:46.655	boundary	waitHistory	0 ms
+2026-10-26 23:56:47.749	boundary	index	1094 ms
+2026-10-26 23:57:14.997	execute	plan (clean boundary)	364 ms
+2026-10-26 23:57:15.452	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	shortcuts	118 ms
+2026-10-26 23:57:15.509	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	  bridgeInspect	48 ms
+2026-10-26 23:57:15.535	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	  clipState	26 ms
+2026-10-26 23:57:15.540	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	saveAndInspect	87 ms
+2026-10-26 23:57:16.539	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	clipboard (PNG)	282 ms
+2026-10-26 23:57:18.965	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	  saveSettled (modified)	2179 ms
+2026-10-26 23:57:19.013	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	  bridgeInspect	48 ms
+2026-10-26 23:57:19.034	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	  clipState	20 ms
+2026-10-26 23:57:19.038	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	saveAndInspect	2253 ms
+2026-10-26 23:57:19.420	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	exportLayer	381 ms
+2026-10-26 23:57:29.306	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	pen-up→pen-down Concentrated	n=5 min 31.2 avg 1078.5 max 5255.3 ms
+2026-10-26 23:57:29.306	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	replay 6 Concentrated	9510 ms
+2026-10-26 23:57:30.101	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	  saveSettled (modified)	781 ms
+2026-10-26 23:57:30.144	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	  bridgeInspect	43 ms
+2026-10-26 23:57:30.166	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	  clipState	22 ms
+2026-10-26 23:57:30.171	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	saveAndInspect	852 ms
+2026-10-26 23:57:30.634	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	exportLayer	462 ms
+2026-10-26 23:57:31.689	history	registerBaseline	24 ms
+2026-10-26 23:57:31.690	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	registerBaseline	30 ms
+2026-10-26 23:57:31.826	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	recordEditingAction+operationPacket	19 ms
+2026-10-26 23:57:31.831	execute	transaction (event editing)	16535 ms
+2026-10-26 23:57:32.699	execute	releaseMemory	865 ms
+2026-10-26 23:57:36.752	edit-txn-fdcb8ef64f3645aabdcb7ced603a39b3	stateRefreshAfterEnd	4923 ms
+2026-10-27 00:00:40.674	history	advance (diff)	721 ms
+2026-10-27 00:00:40.675	history	aggregateCommit recordingEnd	0 ms

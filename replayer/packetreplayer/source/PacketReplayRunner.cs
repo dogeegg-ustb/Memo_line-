@@ -30,7 +30,10 @@ internal static class PacketReplayRunner
     {
         if (target.ValueKind != JsonValueKind.Object) return true;
         if (actual.ValueKind != JsonValueKind.Object) return false;
-        if (J.Text(actual, "kind") != J.Text(target, "kind")) return false;
+        // The recorder reports "rgb" from the colour slider's RGB page and "color" from the colour wheel's swatch:
+        // either is the current colour's value.
+        static string? Kind(JsonElement color) => J.Text(color, "kind") is "color" ? "rgb" : J.Text(color, "kind");
+        if (Kind(actual) != Kind(target)) return false;
         var a = J.Array(J.Get(actual, "rgb")).Select(J.Number).ToArray();
         var b = J.Array(J.Get(target, "rgb")).Select(J.Number).ToArray();
         return a.Length == b.Length && a.Zip(b).All(p => p.First == p.Second);

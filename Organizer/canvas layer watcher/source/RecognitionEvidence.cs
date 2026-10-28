@@ -89,6 +89,7 @@ internal sealed class RecognitionEvidence
     }
     public FrozenEvidence Freeze(long triggerTicks) => new(_session, _frequency, _connectedTicks, _droppedThrough, triggerTicks,
         _states.Where(s => s.Ticks <= triggerTicks).ToArray(), _inputs.Where(p => p.Ticks <= triggerTicks).ToArray());
+    public long Frequency => _frequency;
     public EvidenceWindow Snapshot(long from, long to) => Window(_session, _frequency, _connectedTicks, _droppedThrough, _states, _inputs, from, to);
     internal static EvidenceWindow Window(string session, long frequency, long connectedTicks, long droppedThrough,
         IEnumerable<RecognizerState> observations, IEnumerable<InputObservation> contacts, long from, long to)
@@ -163,10 +164,13 @@ internal sealed class RecognitionEvidence
             { last.Remove(input.OperationId); continue; }
             if (view is null || View.Parse(view.Data) is not { } parsed)
             { warnings.Add("canvasTransformUnavailable"); last.Remove(input.OperationId); continue; }
-            // x/y is the Windows cursor actually used by CSP; passive pen also
-            // exposes only this pair. Driver-mapped coordinates are a fallback.
-            double? x = J.Number(input.Data, "x") ?? J.Number(input.Data, "screenX");
-            double? y = J.Number(input.Data, "y") ?? J.Number(input.Data, "screenY");
+            // CSP draws from the tablet report, which the driver mapping places exactly; x/y is the Windows cursor,
+            // which can stay parked for a whole stroke (2026-10-20: 178 samples at one point while the ink matched the
+            // mapped path). The replayer reads the same pair (MemolineReplayReader.Coordinates).
+            bool mapped = J.Text(input.Data, "screenCoordinateSource") == "driverMapping"
+                && J.Number(input.Data, "screenX") is not null && J.Number(input.Data, "screenY") is not null;
+            double? x = mapped ? J.Number(input.Data, "screenX") : J.Number(input.Data, "x") ?? J.Number(input.Data, "screenX");
+            double? y = mapped ? J.Number(input.Data, "screenY") : J.Number(input.Data, "y") ?? J.Number(input.Data, "screenY");
             if (x is null || y is null) { warnings.Add("screenCoordinatesUnavailable"); continue; }
             var config = at.GetValueOrDefault("configuration");
             var regions = J.Get(J.Get(J.Get(J.Get(config?.Data ?? default, "settings"), "navigatorOcrSelection"), "layout"), "regions");
@@ -210,7 +214,7 @@ internal sealed class RecognitionEvidence
             if (!sizeKnown) localWarnings.Add("brushSizeFallback20Px");
             double dpi = J.Number(J.Get(J.Get(clip?.Data ?? default, "state"), "canvas"), "resolution") ?? 300;
             var settings = new CoverageSettings { CanvasWidth = canvas.Width, CanvasHeight = canvas.Height,
-                BrushSize = size, BrushUnit = unit, Dpi = dpi > 0 ? dpi : 300, ZoomPercent = parsed.Scale,
+                BrushSize = size, BrushUnit = unit, Dpi = dpi > 0 ? dpi : 300, ZoomPercent = MappedZoomPercent(view.Data, canvas) ?? parsed.Scale,
                 SpecifyBySizeOnScreen = fixedScreenSize, ClipToCanvasBounds = true };
             double radius = settings.Radius;
             var stateIds = at.Values.Select(s => s.Id).Append(view.Id).Distinct().Order().ToArray();
@@ -280,6 +284,19 @@ internal sealed class RecognitionEvidence
         double c = Math.Cos(angle), s = Math.Sin(angle), dx = x - view.X, dy = y - view.Y, zoom = view.Scale / 100;
         point = new((c * dx + s * dy) / zoom, (-s * dx + c * dy) / zoom);
         return double.IsFinite(point.X) && double.IsFinite(point.Y);
+    }
+
+    /// <summary>The zoom the canvas mapping itself shows: screen pixels per canvas pixel along the canvas width. The
+    /// navigator digits are OCR and can be misread (18.6 % read as "6" through all of memolinetest13, 2026-10-26), and
+    /// the coverage padding is in screen pixels divided by the zoom: 12 px became 200 canvas px around a 20 px brush.</summary>
+    internal static double? MappedZoomPercent(JsonElement data, Size canvas)
+    {
+        var matrices = J.Get(J.Get(J.Get(data, "rawResult"), "snapshot"), "matrices");
+        if (matrices.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) matrices = J.Get(J.Get(J.Get(data, "state"), "transform"), "matrices");
+        if (canvas.Width <= 0 || J.Text(matrices, "convention") != "sct-affine-row-major/v1" || J.Text(matrices, "canvasSpace") != "normalized"
+            || !ReadAffineArray(matrices, "canvasToScreen", out var forward)) return null;
+        double zoom = Math.Sqrt(forward[0] * forward[0] + forward[3] * forward[3]) / canvas.Width * 100;
+        return double.IsFinite(zoom) && zoom > 0 ? zoom : null;
     }
 
     private static bool ReadAffineArray(JsonElement matrices, string key, out double[] values)

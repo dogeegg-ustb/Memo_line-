@@ -76,6 +76,21 @@ public sealed partial class InputControlTests
     }
 
     [Fact]
+    public async Task FinalSaveWaitsForAsynchronousActivation()
+    {
+        await using var session = new TestSession();
+        session.Backend.ForegroundWindow = 2;
+        session.Backend.ActivationAllowed = true;
+        session.Backend.ActivationDelay = TimeSpan.FromMilliseconds(200);
+        session.Backend.SaveAcknowledged.TrySetResult();
+        var result = await session.Guard.RequestClipSaveAsync(new(@"C:\art\drawing.clip", "end-late", 0, ActivateCsp: true));
+        Assert.True(result.Success, result.Error);
+        Assert.True(result.SaveInputDispatched);
+        Assert.Equal(1, session.Backend.Activations);
+        Assert.Equal(1, session.Backend.Dispatches);
+    }
+
+    [Fact]
     public async Task FinalSaveActivationFailureDoesNotInjectInput()
     {
         await using var session = new TestSession();
@@ -83,6 +98,21 @@ public sealed partial class InputControlTests
         var result = await session.Guard.RequestClipSaveAsync(new(@"C:\art\drawing.clip", "end-failed", 0, ActivateCsp: true));
         Assert.False(result.Success);
         Assert.False(result.SaveInputDispatched);
+        Assert.Contains("refused", result.Error);
+        Assert.Equal(0, session.Backend.Dispatches);
+    }
+
+    [Fact]
+    public async Task FinalSaveReportsActivationThatNeverSettles()
+    {
+        await using var session = new TestSession();
+        session.Backend.ForegroundWindow = 2;
+        session.Backend.ActivationAllowed = true;
+        session.Backend.ActivationNeverSettles = true;
+        var result = await session.Guard.RequestClipSaveAsync(new(@"C:\art\drawing.clip", "end-stuck", 0, ActivateCsp: true));
+        Assert.False(result.Success);
+        Assert.StartsWith("Could not activate the CSP window", result.Error);
+        Assert.Contains("did not come to the front", result.Error);
         Assert.Equal(0, session.Backend.Dispatches);
     }
 
@@ -461,11 +491,16 @@ public sealed partial class InputControlTests
         public int Initializations, Dispatches;
         public bool ActivationAllowed;
         public int Activations;
+        // Windows accepts the switch at once, but CSP's thread shows its window in front only later.
+        public TimeSpan ActivationDelay;
+        public bool ActivationNeverSettles;
         public bool TryActivateCspWindow()
         {
             Activations++;
-            if (ActivationAllowed) ForegroundWindow = 1;
-            return ActivationAllowed;
+            if (!ActivationAllowed || ActivationNeverSettles) return ActivationAllowed;
+            if (ActivationDelay == TimeSpan.Zero) ForegroundWindow = 1;
+            else _ = Task.Delay(ActivationDelay).ContinueWith(_ => ForegroundWindow = 1, TaskScheduler.Default);
+            return true;
         }
         public Exception? WarmupError, DispatchError;
         public TaskCompletionSource SaveStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);

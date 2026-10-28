@@ -6,6 +6,10 @@ internal interface IRecordingEndActions
     Task CaptureAndCommitAsync(IReadOnlyList<CaptureRequest> requests, CancellationToken token);
 }
 
+/// <summary>The final save or state read failed before the Recognizer wrote its end marker: nothing of the
+/// recording's end is recorded yet, so recording may go on and the user stop again once CSP can be read.</summary>
+internal sealed class RecordingEndNotStartedException(string message, Exception inner) : IOException(message, inner);
+
 // Uses the same multi-layer save/export path as explicit editing boundaries.
 // The host still drains native shutdown and performs the final publication.
 internal static class RecordingEndCoordinator

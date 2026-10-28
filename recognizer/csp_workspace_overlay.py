@@ -260,27 +260,23 @@ def panel_rectangles(tree: dict, client: tuple[int, int, int, int], live_scale: 
     def sizes(dock: dict) -> list[int]:
         return [scaler.size(entry, "y") for entry in dock["dockplaces"]["_items"]]
 
-    def kinds(booth: dict) -> set[str]:
-        return {entry.get("_type", "") for entry in booth["subviews"]["_items"]}
-
-    left_dock = groups[1]["subviews"]["_items"][0]
-    right_dock = groups[4]["subviews"]["_items"][0]
-    left_booths = left_dock["subviews"]["_items"]
-    right_booths = right_dock["subviews"]["_items"]
-    if "palettekindtooloption" not in kinds(left_booths[1]):
-        raise ValueError("找不到笔刷属性面板停靠位")
-    if "palettekindnavigator" not in kinds(right_booths[0]):
-        raise ValueError("找不到导航器面板停靠位")
-    if "palettekindlayerorder" not in kinds(right_booths[2]):
-        raise ValueError("找不到图层面板停靠位")
-    if not all(booth.get("visible") for booth in (left_booths[1], right_booths[0], right_booths[2])):
-        raise ValueError("目标面板在保存的布局中不可见")
-    if not all(booth.get("currentindex", -1) == 0 for booth in (left_booths[1], right_booths[0], right_booths[2])):
-        raise ValueError("目标面板标签未被选中")
-
-    left_heights, right_heights = sizes(left_dock), sizes(right_dock)
-    if len(left_heights) != 3 or len(right_heights) != 3:
-        raise ValueError("不支持当前面板堆叠结构")
+    # Side columns: any number of booths each. A panel is located by the booth whose selected tab
+    # it is, wherever that booth sits; a panel that is not the selected tab of exactly one visible
+    # booth (another tab is in front, it was torn off as a floating window, or it is hidden) simply
+    # has no dock region. Floating windows are found live, not here.
+    side_columns = {}
+    for column in (1, 4):
+        group = groups[column]
+        docks = (group.get("subviews") or {}).get("_items") or []
+        if not docks or "dockplaces" not in docks[0]:
+            continue
+        booths, heights = docks[0]["subviews"]["_items"], sizes(docks[0])
+        if not booths or len(booths) != len(heights):
+            raise ValueError("不支持当前面板堆叠结构")
+        side_columns[column] = (group, booths, heights)
+    if set(side_columns) != {1, 4}:
+        raise ValueError("不支持当前停靠列结构")
+    left_heights, right_heights = side_columns[1][2], side_columns[4][2]
     col_x = [x]
     for column_width in widths:
         col_x.append(col_x[-1] + column_width)
@@ -317,37 +313,39 @@ def panel_rectangles(tree: dict, client: tuple[int, int, int, int], live_scale: 
                                col_x[column], widths[column], snapshot_factory)
 
     stacks = {1: stack("左栏", 1, left_heights), 4: stack("右栏", 4, right_heights)}
-    # Locate the selected color tenant from the saved configuration, not its
-    # localized title or an assumed tab index. All color tabs share one booth.
-    color_kinds = {"palettekindcolorcircle", "palettekindcolorset", "palettekindcolorslider",
-                   "palettekindmix", "palettekindcolorhistory", "palettekindcolorguide", "palettekindcolorblend"}
-    color_slots = []
-    for column, container, booths in ((1, groups[1], left_booths), (4, groups[4], right_booths)):
-        for index, booth in enumerate(booths):
-            tabs = booth["subviews"]["_items"]
-            selected = booth.get("currentindex", -1)
-            if (container.get("visible") and booth.get("visible") and
-                    0 <= selected < len(tabs) and tabs[selected].get("_type") in color_kinds):
-                color_slots.append((column, index))
-    if len(color_slots) != 1:
-        raise ValueError("需要一个可见且已选中色彩标签的停靠区域")
-    left, right = stacks[1], stacks[4]
+
+    def selected_kind(group: dict, booth: dict) -> str | None:
+        tabs = booth["subviews"]["_items"]
+        selected = booth.get("currentindex", -1)
+        if not (group.get("visible", 1) and booth.get("visible") and 0 <= selected < len(tabs)):
+            return None
+        return tabs[selected].get("_type")
+
+    def located(wanted: set[str]) -> tuple[int, int, int, int] | None:
+        slots = [(column, index) for column, (group, booths, _) in side_columns.items()
+                 for index, booth in enumerate(booths) if selected_kind(group, booth) in wanted]
+        if len(slots) != 1:
+            return None
+        column, index = slots[0]
+        top, booth_height = stacks[column][index]
+        return col_x[column], top, widths[column], booth_height
+
     # The central canvas has no palettekind node; the area above the saved
     # timeline is its candidate.
     center = groups[2]
     timeline = center["subviews"]["_items"][-1]
     timeline_height = sizes(center)[-1] if timeline.get("visible") else 0
-    result = {
-        "笔刷属性": (col_x[1], left[1][0], widths[1], left[1][1]),
-        "画布视口": (col_x[2], dock_top, widths[2], bottom - dock_top - timeline_height),
-        "导航器": (col_x[4], right[0][0], widths[4], right[0][1]),
-        "图层": (col_x[4], right[2][0], widths[4], right[2][1]),
-    }
-    group_booth = left_booths[0]
-    group_tabs = group_booth["subviews"]["_items"]
-    group_selected = group_booth.get("currentindex", -1)
-    if group_booth.get("visible") and 0 <= group_selected < len(group_tabs) and group_tabs[group_selected].get("_type") in {"palettekindsubtool", "palettekindtoolgroup"}:
-        result["工具组"] = (col_x[1], left[0][0], widths[1], left[0][1])
+    result = {"画布视口": (col_x[2], dock_top, widths[2], bottom - dock_top - timeline_height)}
+    # Locate the selected color tenant from the saved configuration, not its
+    # localized title or an assumed tab index. All color tabs share one booth.
+    color_kinds = {"palettekindcolorcircle", "palettekindcolorset", "palettekindcolorslider",
+                   "palettekindmix", "palettekindcolorhistory", "palettekindcolorguide", "palettekindcolorblend"}
+    for label, wanted in (("笔刷属性", {"palettekindtooloption"}), ("导航器", {"palettekindnavigator"}),
+                          ("图层", {"palettekindlayerorder"}), ("工具组", {"palettekindsubtool", "palettekindtoolgroup"}),
+                          ("色彩", color_kinds)):
+        region = located(wanted)
+        if region is not None:
+            result[label] = region
     tool_dock = groups[0]["subviews"]["_items"][0]
     tool_booths = tool_dock["subviews"]["_items"]
     if groups[0].get("visible") and any(
@@ -356,13 +354,11 @@ def panel_rectangles(tree: dict, client: tuple[int, int, int, int], live_scale: 
             for booth in tool_booths):
         # The tool column spans the whole dock; its saved height can be stale.
         result["工具栏"] = (col_x[0], dock_top, widths[0], dock_height)
-    color_column, color_index = color_slots[0]
-    color_top, color_height = stacks[color_column][color_index]
-    result["色彩"] = (col_x[color_column], color_top, widths[color_column], color_height)
-    # Both readers inspect the same booth; fresh pixels decide which tab is
-    # visible. The alias keeps geometry stable when the user manually changes
-    # color palettes and never treats a saved selection as live input proof.
-    result["色彩滑块"] = result["色彩"]
+    if "色彩" in result:
+        # Both readers inspect the same booth; fresh pixels decide which tab is
+        # visible. The alias keeps geometry stable when the user manually changes
+        # color palettes and never treats a saved selection as live input proof.
+        result["色彩滑块"] = result["色彩"]
     if any(w < 10 or h < 10 or rx < x or ry < y or rx + w > x + width or ry + h > y + height
            for rx, ry, w, h in result.values()):
         raise ValueError("解析出的面板区域超出 CSP 客户区")

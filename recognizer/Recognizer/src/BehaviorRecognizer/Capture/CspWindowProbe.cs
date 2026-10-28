@@ -23,11 +23,16 @@ public static class CspWindowProbe
         return true;
     }
 
+    /// <summary>Asks Windows to bring CSP to the front; true when the request was accepted. The switch itself is
+    /// asynchronous (CSP's UI thread activates its window when it next pumps messages), so right afterwards
+    /// the foreground may still read as no window or another one: callers poll <see cref="IsCspForeground"/>.</summary>
     public static bool TryActivateCspWindow()
     {
         nint window;
         lock (CacheSync) window = _lastForeground;
-        if (!IsCspWindow(window))
+        // The last CSP foreground can be one of its popups, since hidden; activate the frame that owns it.
+        if (IsCspWindow(window)) window = Native.GetAncestor(window, 3); // GA_ROOTOWNER
+        if (!IsCspWindow(window) || !Native.IsWindowVisible(window))
         {
             var windows = new List<nint>();
             foreach (var process in Process.GetProcessesByName("CLIPStudioPaint"))
@@ -38,8 +43,7 @@ public static class CspWindowProbe
             window = windows[0];
         }
         if (Native.IsIconic(window)) Native.ShowWindow(window, 9); // SW_RESTORE
-        Native.SetForegroundWindow(window);
-        return Native.GetForegroundWindow() == window && IsCspForeground();
+        return Native.SetForegroundWindow(window);
     }
 
     public static bool TryGetCspCursor(out ScreenPoint point)

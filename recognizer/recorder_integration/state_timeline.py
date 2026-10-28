@@ -50,7 +50,7 @@ def semantic_state(module, result):
         return dict(rows=[dict(text=row["text"],undone=row["undone"]) for row in result["rows"]],
                     currentIndex=result["currentIndex"])
     if module == "clipState" and isinstance(result,dict):
-        return {k:v for k,v in result.items() if k != "source"}
+        return {k:v for k,v in result.items() if k not in ("source", "snapshotPath")}
     return result
 
 
@@ -112,6 +112,13 @@ class StateTimeline:
                     unavailableModules=[u["module"] for u in updates if u["status"] in {"error","ambiguous","unknown"}]))
             del self.packages[package_id]
             self.resolved.add(package_id)
+
+    @synchronized
+    def repeats(self,module,result):
+        """True when the result is a usable state equal to the module's last one (it would publish unchanged)."""
+        state = semantic_state(module,result)
+        return state is not None and self.previous.get(module) == json.dumps(
+            state,sort_keys=True,ensure_ascii=False,separators=(",",":"))
 
     @synchronized
     def observe(self,module,result,evidence,error=None):

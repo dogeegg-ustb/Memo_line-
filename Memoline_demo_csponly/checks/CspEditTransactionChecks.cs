@@ -66,8 +66,12 @@ internal static class CspEditTransactionChecks
             new EventChange(BrushName:"Replacement pen",Numbers:new Dictionary<string,double>{["flow"]=61}){ReplacementBrushState=replacementEvidence});
         Check(targetOnlyOverride!.Numbers.Single(p=>p.Key=="flow").Value==61,"A confirmed changed subtool can override its own target-only numeric property.");
         string work = Path.Combine(root ?? Path.GetTempPath(), "csp-edit-transaction-" + Guid.NewGuid().ToString("N"));
-        Fixture Create(string name, bool discrete = false, bool twoLayers = false)
-            => new(Path.Combine(work, name), discrete, twoLayers);
+        // CSP documents keep their paper layer at the bottom, so a target normally has a row below it; bottomRow
+        // drops it to cover the paste-first replacement.
+        Fixture Create(string name, bool discrete = false, bool twoLayers = false, bool bottomRow = false)
+            => new(Path.Combine(work, name), discrete, twoLayers, bottomRow);
+        bool OnlyNew(Fake actions, int count) => actions.Layers.Where(l => l.Uuid != "paper").Count() == count &&
+            actions.Layers.Where(l => l.Uuid != "paper").All(l => l.Uuid.StartsWith("new-", StringComparison.Ordinal));
         async Task<CspEditingException> Fails(Fixture f, PlanIssueCode expected, Func<Task> action)
         {
             try { await action(); }
@@ -88,31 +92,47 @@ internal static class CspEditTransactionChecks
             await f.Transaction.BeginAsync(CancellationToken.None);
             var edited = Stroke(new(Numbers: new Dictionary<string, double> { ["opacity"] = .5 }));
             var actual = await f.Transaction.FlushAsync(Original, Seed(), [edited], new Dictionary<LayerKey, ImageRgba>(), CancellationToken.None);
-            Check(actual.Bytes[0] == 90 && f.Actions.Layers.Count == 1 && !f.Actions.Layers[0].Visible,
-                "Flush captures actual replay output, removes only checkpointed work layer and leaves original hidden.");
-            Check(f.Actions.Calls.IndexOf("export:2") < f.Actions.Calls.IndexOf("delete") && f.Actions.DeletionHadDurableCheckpoint,
-                "Durable recoverable checkpoint and captured PNG must exist before deleting T.");
+            Check(actual.Bytes[0] == 90 && OnlyNew(f.Actions, 1) && f.Actions.Deleted.SequenceEqual([Original.Uuid]) &&
+                  f.Actions.Calls.IndexOf("delete") < f.Actions.Calls.IndexOf("paste") && !f.Actions.Calls.Contains("hide"),
+                "Flush deletes the original first, pastes the seed where it was and captures the actual replay output; nothing is hidden.");
             Check(f.Actions.Replays[0].Mode == ReplayMode.Concentrated && f.Actions.Replays[0].Events[0].Change == edited.Change &&
                   f.Actions.Replays[0].Events[0].Stroke.Samples.Select(s => s.AppendId).SequenceEqual(new ulong[] { 8, 10 }),
                 "Flush passes concentrated replay overrides and full samples in appendId order.");
+            int calls = f.Actions.Calls.Count;
             var final = await f.Transaction.InstallReproductionLayerAsync(Original, actual, CancellationToken.None);
+            Check(!f.Actions.Calls.Skip(calls).Any(c => c is "paste" or "delete" || c.StartsWith("export:", StringComparison.Ordinal)),
+                "The work layer whose replay already holds the final pixels becomes the reproduction without another paste.");
             await f.Transaction.CompleteAsync(CancellationToken.None);
-            Check(final.Bytes.AsSpan().SequenceEqual(actual.Bytes) && f.Actions.Layers.Count == 1 && f.Actions.Baselines.Count == 1,
+            Check(final.Bytes.AsSpan().SequenceEqual(actual.Bytes) && OnlyNew(f.Actions, 1) && f.Actions.Baselines.Count == 1,
                 "Final F is retained and its actual exported PNG is registered as a baseline.");
-            Check(f.Actions.Layers.Single().Uuid != Original.Uuid && f.Actions.Deleted.Last() == Original.Uuid &&
-                  f.Actions.Replacements.SequenceEqual([(Original.Uuid, f.Actions.Layers.Single().Uuid)]),
+            var reproduction = f.Actions.Layers.First(l => l.Uuid != "paper");
+            Check(f.Actions.Replacements.SequenceEqual([(Original.Uuid, reproduction.Uuid)]),
                 "Final F replaces the original: the original is deleted and F is reported as standing for it.");
             var journal = EditJournal.Recover(f.Directory);
             Check(journal.ActiveTransactionId is null && journal.HasReplayed && journal.Records.Last().Data.GetProperty("outcome").GetString() == "Executed",
                 "One transaction finishes with durable replay evidence and Executed outcome.");
-            Check(journal.Records.FindKind("checkpoint") < journal.Records.FindKind("workLayerDeleted") &&
-                  journal.Records.FindKind("workLayerDeleted") < journal.Records.FindKind("originalDeleted") &&
-                  journal.Records.FindKind("originalDeleted") < journal.Records.FindKind("reproductionInstalled") &&
-                  journal.Records.FindKind("reproductionInstalled") < journal.Records.FindKind("transactionEnded"),
-                "Journal actions follow checkpoint/delete and final/end ordering.");
+            Check(journal.Records.FindKind("originalDeleted") < journal.Records.FindKind("checkpoint") &&
+                  journal.Records.FindKind("checkpoint") < journal.Records.FindKind("reproductionInstalled") &&
+                  journal.Records.FindKind("reproductionInstalled") < journal.Records.FindKind("transactionEnded") &&
+                  journal.Records.FindKind("workLayerDeleted") < 0,
+                "Journal actions follow delete/checkpoint and final/end ordering.");
             Check(f.Actions.Calls.IndexOf("begin") < f.Actions.Calls.IndexOf("pause:True") &&
                   f.Actions.Calls.IndexOf("end:executed") < f.Actions.Calls.LastIndexOf("pause:False"),
                 "Native begin/pause and end/restore ordering matches the transaction protocol.");
+        }
+        await using (var f = Create("two-flushes"))
+        {
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            var first = await f.Transaction.FlushAsync(Original, Seed(), [Stroke()], new Dictionary<LayerKey, ImageRgba>(), CancellationToken.None);
+            var next = first.Copy(); next.Bytes[4] = 77;
+            await f.Transaction.FlushAsync(Original, next, [Stroke()], new Dictionary<LayerKey, ImageRgba>(), CancellationToken.None);
+            var final = Seed(); final.Bytes[1] = 7;
+            await f.Transaction.InstallReproductionLayerAsync(Original, final, CancellationToken.None);
+            await f.Transaction.CompleteAsync(CancellationToken.None);
+            var journal = EditJournal.Recover(f.Directory);
+            Check(OnlyNew(f.Actions, 1) && f.Actions.Deleted.Count == 3 && f.Actions.DeletionHadDurableCheckpoint &&
+                  journal.Records.Count(r => r.Kind == "workLayerDeleted") == 2 && f.Actions.Images[f.Actions.Layers[0].Uuid].Bytes[1] == 7,
+                "Each later replacement deletes the checkpointed work layer standing for the target, then pastes where it was.");
         }
 
         await using (var f = Create("discrete", discrete: true))
@@ -125,57 +145,91 @@ internal static class CspEditTransactionChecks
             Check(final.Bytes[0] == 90 && f.Actions.Baselines.Single().Png.SequenceEqual(f.Actions.LastExport!.Png),
                 "Discrete final capture, not the pre-replay seed, is retained and registered.");
             Check(f.Actions.Deleted.SequenceEqual([Original.Uuid]) && !f.Actions.Calls.Contains("hide") &&
-                  f.Actions.Calls.IndexOf("delete") < f.Actions.Calls.IndexOf("replay:Discrete"),
-                "The original is deleted, never hidden first, before the undone strokes replay: they stay on top of CSP's undo stack.");
+                  f.Actions.Calls.IndexOf("delete") < f.Actions.Calls.IndexOf("paste") &&
+                  f.Actions.Calls.IndexOf("paste") < f.Actions.Calls.IndexOf("replay:Discrete"),
+                "The original is deleted first, then the composite is pasted, then the undone strokes replay: they stay on top of CSP's undo stack.");
+            Check(f.Actions.Calls.Count(c => c.StartsWith("save", StringComparison.Ordinal)) == 3 &&
+                  !f.Actions.Calls.Any(c => c.StartsWith("select:", StringComparison.Ordinal) || c.StartsWith("navigate:", StringComparison.Ordinal)),
+                "Precise undo needs three saves (the boundary copy, after delete+paste, after the replay) and no selection move.");
         }
         await using (var f = Create("offline-delete", discrete: true))
         {
-            f.Actions.Layers.Add(new("below", "Below", true, false, true));
+            f.Actions.Layers.Insert(1, new("below", "Below", true, false, true));
             await f.Transaction.BeginAsync(CancellationToken.None);
             await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
             await f.Transaction.CompleteAsync(CancellationToken.None);
             var calls = f.Actions.Calls;
-            int delete = calls.IndexOf("delete");
-            Check(!calls.Any(c => c.StartsWith("navigate:", StringComparison.Ordinal)) &&
-                  calls.LastIndexOf("select:down", delete) > calls.IndexOf("paste") && calls.IndexOf("select:up", delete) > delete &&
-                  calls.IndexOf("select:up", delete) < calls.IndexOf("replay:Discrete") && f.Actions.Current == f.Actions.Layers[0].Uuid &&
-                  f.Actions.Deleted.SequenceEqual([Original.Uuid]),
-                "Deleting the original is planned from the saved structure: one select-lower, delete, one select-upper back from the row that took its place, no panel navigation.");
+            Check(!calls.Any(c => c.StartsWith("navigate:", StringComparison.Ordinal) || c.StartsWith("select:", StringComparison.Ordinal)) &&
+                  calls.IndexOf("delete") < calls.IndexOf("paste") && f.Actions.Current == f.Actions.Layers[0].Uuid &&
+                  f.Actions.Layers[1].Uuid == "below" && f.Actions.Deleted.SequenceEqual([Original.Uuid]),
+                "CSP selects the row below a deleted layer, so the paste lands where the original was: no selection move at all.");
         }
         await using (var f = Create("offline-delete-misprediction", discrete: true))
         {
             f.Actions.Layers.Insert(0, new("top", "Top", true, false, true));
-            f.Actions.Layers.Add(new("below", "Below", true, false, true));
             f.Actions.DeleteSelectsAbove = true;
             await f.Transaction.BeginAsync(CancellationToken.None);
-            await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
-            await f.Transaction.CompleteAsync(CancellationToken.None);
-            var reproduction = f.Actions.Layers.Single(l => l.Uuid.StartsWith("new-", StringComparison.Ordinal));
-            int replay = f.Actions.Calls.IndexOf("replay:Discrete");
-            Check(f.Actions.Current == reproduction.Uuid && f.Actions.Calls.LastIndexOf("select:down", replay) > f.Actions.Calls.IndexOf("select:up") &&
-                  f.Actions.Statuses.Any(s => s.Contains("按图层结构切回")) && !f.Actions.Calls.Any(c => c.StartsWith("navigate:", StringComparison.Ordinal)),
-                "A wrong post-delete selection is only a selection: the save shows it and a planned move returns to the reproduction before the replay.");
+            var error = await Fails(f, PlanIssueCode.LayerIdentityUnconfirmed, () => f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None));
+            Check(error.Message.Contains("Ctrl+Z") && error.Message.Contains("回收箱") && !f.Actions.Calls.Contains("replay:Discrete"),
+                "A paste that did not land where the deleted original was stops before drawing and says how to undo it.");
         }
         await using (var f = Create("offline-start-elsewhere", discrete: true))
         {
             f.Actions.Layers.Insert(0, new("top", "Top", true, false, true));
             f.Actions.Current = "top";
             await f.Transaction.BeginAsync(CancellationToken.None);
-            Check(f.Actions.Current == Original.Uuid && f.Actions.Calls.Contains("select:down") &&
-                  !f.Actions.Calls.Any(c => c.StartsWith("navigate:", StringComparison.Ordinal)),
-                "Reaching the original from another layer of the same folder is planned from the saved structure.");
             await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
             await f.Transaction.CompleteAsync(CancellationToken.None);
+            Check(f.Actions.Deleted.SequenceEqual([Original.Uuid]) && f.Actions.Calls.IndexOf("select:down") < f.Actions.Calls.IndexOf("delete") &&
+                  !f.Actions.Calls.Any(c => c.StartsWith("navigate:", StringComparison.Ordinal)),
+                "Reaching the original from another layer of the same folder is planned from the structure and confirmed on the panel.");
+        }
+        await using (var f = Create("late-panel", discrete: true))
+        {
+            // Two presses down; the first panel read still shows the layer after the first press (2026-10-24).
+            f.Actions.Layers.Insert(0, new("mid", "Mid", true, false, true));
+            f.Actions.Layers.Insert(0, new("top", "Top", true, false, true));
+            f.Actions.Current = "top"; f.Actions.LatePanelReads = 1;
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
+            await f.Transaction.CompleteAsync(CancellationToken.None);
+            Check(f.Actions.Deleted.SequenceEqual([Original.Uuid]) && f.Actions.Calls.Count(c => c == "select:down") == 2 &&
+                  f.Actions.Calls.Count(c => c == "panel") >= 2 && !f.Actions.Calls.Any(c => c.StartsWith("navigate:", StringComparison.Ordinal)),
+                "A panel reading one press behind is read again instead of stepping on from it.");
+        }
+        await using (var f = Create("stale-saved-selection", discrete: true))
+        {
+            // The user selected Top after the last write: the save still names the original, the panel shows Top.
+            f.Actions.Layers.Insert(0, new("top", "Top", true, false, true));
+            f.Actions.Current = "top"; f.Actions.SavedCurrent = Original.Uuid; f.Actions.SelectionConfirmed = false;
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
+            await f.Transaction.CompleteAsync(CancellationToken.None);
+            Check(f.Actions.Deleted.SequenceEqual([Original.Uuid]) && f.Actions.Calls.Contains("panel") &&
+                  f.Actions.Calls.IndexOf("select:down") < f.Actions.Calls.IndexOf("delete") && f.Actions.Layers[0].Uuid == "top",
+                "A saved selection the panel does not confirm is never trusted for a delete: the panel shows where CSP is and the move is planned from there.");
         }
         await using (var f = Create("offline-folder-fallback", discrete: true))
         {
             f.Actions.Layers.Insert(0, new("folder", "Folder", false, true, true));
             f.Actions.Current = "folder";
             await f.Transaction.BeginAsync(CancellationToken.None);
-            Check(f.Actions.Calls.Contains("navigate:Ink") && !f.Actions.Calls.Contains("select:down"),
+            await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
+            int navigate = f.Actions.Calls.IndexOf("navigate:Ink");
+            Check(navigate >= 0 && f.Actions.Calls.Take(navigate).All(c => c != "select:down"),
                 "A path through a folder row (expanded or collapsed) falls back to panel-confirmed navigation.");
         }
-        await using (var f = Create("offline-dropped-select", discrete: true))
+        await using (var f = Create("bottom-row", discrete: true, bottomRow: true))
+        {
+            await f.Transaction.BeginAsync(CancellationToken.None);
+            await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
+            await f.Transaction.CompleteAsync(CancellationToken.None);
+            var calls = f.Actions.Calls;
+            Check(calls.IndexOf("paste") < calls.IndexOf("delete") && calls.IndexOf("export:1") < calls.IndexOf("delete") &&
+                  OnlyNew(f.Actions, 1) && f.Actions.Deleted.SequenceEqual([Original.Uuid]) && f.Actions.Current == f.Actions.Layers[0].Uuid,
+                "On the bottom row the paste comes first and is proven exact before the original is deleted.");
+        }
+        await using (var f = Create("offline-dropped-select", discrete: true, bottomRow: true))
         {
             f.Actions.DropSelects = 1;
             await f.Transaction.BeginAsync(CancellationToken.None);
@@ -200,9 +254,9 @@ internal static class CspEditTransactionChecks
             await f.Transaction.BeginAsync(CancellationToken.None);
             await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), [reverted], CancellationToken.None);
             await f.Transaction.CompleteAsync(CancellationToken.None);
-            Check(f.Actions.Replays.Count == 2 && f.Actions.Replays[0].Mode == ReplayMode.Concentrated && f.Actions.Replays[1].Mode == ReplayMode.Discrete &&
+            Check(f.Actions.Replays.Count == 2 && f.Actions.Replays.All(r => r.Mode == ReplayMode.Discrete) &&
                   f.Actions.Replays[0].Events.Single().Stroke.BeginEventId == 5 && f.Actions.Replays[1].Events.Single().Stroke.BeginEventId == 2,
-                "Precise undo replays reverted contacts first (concentrated) and the undone strokes last (discrete).");
+                "Precise undo replays reverted contacts first and the undone strokes last, both discrete (one CSP undo step per stroke).");
         }
         await using(var f=Create("discrete-reference-off"))
         {
@@ -246,8 +300,8 @@ internal static class CspEditTransactionChecks
             await f.Transaction.CompleteAsync(CancellationToken.None);
             Check(f.Actions.Baselines.Count == 2 && f.Actions.Calls.Count(c => c == "begin") == 1 && f.Actions.Calls.Count(c => c == "end:executed") == 1,
                 "A multi-layer request holds one native transaction and records both hidden original UUIDs.");
-            Check(f.Actions.Replacements.Count == 2 && f.Actions.Layers.Count == 2 && f.Actions.Layers.All(l => l.Uuid.StartsWith("new-", StringComparison.Ordinal)),
-                "Each original of a multi-layer request is replaced by its own reproduction.");
+            Check(f.Actions.Replacements.Count == 2 && OnlyNew(f.Actions, 2) && f.Actions.Calls.Contains("select:down"),
+                "Each original of a multi-layer request is replaced in place by its own reproduction; the second is reached by a planned, panel-confirmed move.");
         }
         await using(var f=Create("multi-layer-incomplete",twoLayers:true))
         {
@@ -262,7 +316,7 @@ internal static class CspEditTransactionChecks
             f.Actions.TamperPaste = true;
             await f.Transaction.BeginAsync(CancellationToken.None);
             await Fails(f, PlanIssueCode.PasteNotExact, async () => await f.Transaction.FlushAsync(Original, Seed(), [Stroke()], new Dictionary<LayerKey, ImageRgba>(), CancellationToken.None));
-            Check(f.Actions.Replays.Count == 0 && f.Actions.Layers.Count == 2, "Tampered paste cannot replay and the uncommitted T remains.");
+            Check(f.Actions.Replays.Count == 0 && OnlyNew(f.Actions, 1), "Tampered paste cannot replay and the uncommitted T remains.");
             int calls = f.Actions.Calls.Count;
             try { await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None); }
             catch (CspEditingException) { }
@@ -277,7 +331,7 @@ internal static class CspEditTransactionChecks
             await f.Transaction.CompleteAsync(CancellationToken.None);
             Check(f.Actions.Calls.Count(c => c == "save:refresh") >= 2,
                 "Retries after a stale save must ask for a new save rather than the remembered inspection.");
-            Check(f.Actions.Layers.Count == 1 && f.Actions.Calls.Contains("end:executed"),
+            Check(OnlyNew(f.Actions, 1) && f.Actions.Calls.Contains("end:executed"),
                 "A save that still shows the document before a paste or delete is retried instead of failing the structure check.");
         }
         await using (var f = Create("paste-multiple"))
@@ -294,8 +348,8 @@ internal static class CspEditTransactionChecks
             await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None);
             await f.Transaction.CompleteAsync(CancellationToken.None);
             Check(f.Actions.Calls.Count(c => c == "paste") == 2 && f.Actions.Calls.Count(c => c == "clipboard") == 2 &&
-                f.Actions.Layers.Count == 1 && f.Actions.Statuses.Any(t => t.Contains("再次粘贴")),
-                "A paste CSP ignored (structure unchanged over every save) is rewritten to the clipboard and pasted once more.");
+                f.Actions.Calls.Count(c => c == "delete") == 1 && OnlyNew(f.Actions, 1) && f.Actions.Statuses.Any(t => t.Contains("再次粘贴")),
+                "A paste CSP ignored after the delete is rewritten to the clipboard and pasted once more; the delete is not repeated.");
         }
         await using (var f = Create("paste-ignored"))
         {
@@ -306,20 +360,15 @@ internal static class CspEditTransactionChecks
                 !f.Actions.Calls.Any(c => c.StartsWith("export:", StringComparison.Ordinal)),
                 "A paste CSP keeps ignoring is reported as such, not as a structure mismatch, and stops before any export.");
         }
-        await using (var f = Create("changed-current"))
-        {
-            f.Actions.ChangeCurrentAfterCheckpoint = true;
-            await f.Transaction.BeginAsync(CancellationToken.None);
-            await Fails(f, PlanIssueCode.LayerIdentityUnconfirmed, async () => await f.Transaction.FlushAsync(Original, Seed(), [Stroke()], new Dictionary<LayerKey, ImageRgba>(), CancellationToken.None));
-            Check(EditJournal.Recover(f.Directory).LastCheckpoint is not null && f.Actions.Layers.Count == 2,
-                "Even a checkpointed T is retained when current UUID changes before deletion.");
-        }
         await using (var f = Create("checkpoint-readback"))
         {
-            f.Actions.CorruptAssetAfterCheckpoint = true;
             await f.Transaction.BeginAsync(CancellationToken.None);
-            await Fails(f, PlanIssueCode.CaptureMismatch, async () => await f.Transaction.FlushAsync(Original, Seed(), [Stroke()], new Dictionary<LayerKey, ImageRgba>(), CancellationToken.None));
-            Check(f.Actions.CheckpointFaultTriggered && f.Actions.Layers.Count == 2, "A checkpoint whose asset fails readback cannot authorize deletion.");
+            await f.Transaction.FlushAsync(Original, Seed(), [Stroke()], new Dictionary<LayerKey, ImageRgba>(), CancellationToken.None);
+            var checkpoint = EditJournal.Recover(f.Directory).LastCheckpoint!;
+            File.WriteAllBytes(Path.Combine(f.Journal.WorkingDirectory, checkpoint.Asset.RelativePath), [1, 2, 3]);
+            await Fails(f, PlanIssueCode.CaptureMismatch, async () => await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None));
+            Check(f.Actions.Layers.Any(l => l.Uuid == checkpoint.WorkLayerUuid) && f.Actions.Deleted.SequenceEqual([Original.Uuid]),
+                "A checkpoint whose asset fails readback cannot authorize deleting its work layer.");
         }
         await using (var f = Create("physical-input"))
         {
@@ -335,7 +384,7 @@ internal static class CspEditTransactionChecks
             await f.Transaction.BeginAsync(CancellationToken.None);
             var failure = await Fails(f, PlanIssueCode.BrushUnrestorable, async () =>
                 await f.Transaction.FlushAsync(Original, Seed(), [Stroke()], new Dictionary<LayerKey, ImageRgba>(), CancellationToken.None));
-            Check(failure.InnerException is ReplayStateException && f.Actions.Layers.Count == 2,
+            Check(failure.InnerException is ReplayStateException && OnlyNew(f.Actions, 1),
                 "Replay restoration failures preserve their exact error code, primary exception and uncommitted work layer.");
         }
         await using (var f = Create("cleanup-failure"))
@@ -355,7 +404,7 @@ internal static class CspEditTransactionChecks
             try { await f.Transaction.FlushAsync(Original, Seed(), [Stroke()], new Dictionary<LayerKey, ImageRgba>(), cancelled.Token); }
             catch (OperationCanceledException)
             {
-                Check(!f.Actions.Calls.Contains("delete") && f.Actions.Calls.Contains("end:failed") && !f.Actions.CaptureRequestsPaused,
+                Check(OnlyNew(f.Actions, 1) && f.Actions.Calls.Contains("end:failed") && !f.Actions.CaptureRequestsPaused,
                     "External cancellation releases the transaction, restores capture and preserves T.");
                 Check(EditJournal.Recover(f.Directory).Records.Last().Data.GetProperty("outcome").GetString() == "Cancelled",
                     "External cancellation remains Cancelled in the journal.");
@@ -369,22 +418,13 @@ internal static class CspEditTransactionChecks
             f.Actions.ThrowBaseline = true;
             await f.Transaction.BeginAsync(CancellationToken.None);
             await Fails(f, PlanIssueCode.CaptureMismatch, async () => await f.Transaction.InstallReproductionLayerAsync(Original, Seed(), CancellationToken.None));
-            Check(f.Actions.Layers.Count == 1 && f.Actions.Layers[0].Uuid.StartsWith("new-", StringComparison.Ordinal),
-                "A final layer survives baseline-registration failure.");
+            Check(OnlyNew(f.Actions, 1), "A final layer survives baseline-registration failure.");
         }
         await using (var f = Create("shortcuts"))
         {
             f.Actions.ShortcutsAvailable = false;
             await Fails(f, PlanIssueCode.ShortcutsMissing, () => f.Transaction.BeginAsync(CancellationToken.None));
             Check(!f.Actions.Calls.Any(c => c.StartsWith("navigate:", StringComparison.Ordinal)), "Missing shortcuts stop before navigation or paste.");
-        }
-        await using (var f = Create("hide-evidence"))
-        {
-            f.Actions.BadEyeEvidence = true;
-            await f.Transaction.BeginAsync(CancellationToken.None);
-            await Fails(f, PlanIssueCode.LayerIdentityUnconfirmed, async () =>
-                await f.Transaction.FlushAsync(Original, Seed(), [Stroke()], new Dictionary<LayerKey, ImageRgba>(), CancellationToken.None));
-            Check(!f.Actions.Calls.Contains("paste"), "Eye fallback without same-frame selected-row evidence cannot paste.");
         }
         await using (var f = Create("partial-export"))
         {
@@ -414,7 +454,7 @@ internal static class CspEditTransactionChecks
         internal readonly Fake Actions;
         internal readonly CspEditTransaction Transaction;
         internal readonly Dictionary<LayerKey, CanvasSize> Dimensions = new() { [Original] = new(2, 1) };
-        internal Fixture(string directory, bool discrete, bool twoLayers)
+        internal Fixture(string directory, bool discrete, bool twoLayers, bool bottomRow)
         {
             Directory = directory; Journal = EditJournal.Open(directory); Actions = new(Journal);
             if (twoLayers)
@@ -423,12 +463,18 @@ internal static class CspEditTransactionChecks
                 Dimensions[other] = new(2, 1);
                 Actions.Layers.Add(new(other.Uuid, "Other", true, false, true));
             }
+            if (!bottomRow) Actions.Layers.Add(new("paper", "Paper", false, false, true));
             Transaction = new(Actions, Journal, "tx", Dimensions, JsonSerializer.SerializeToElement(new { kind = "fixture", layers = Dimensions.Keys }),
                 discrete ? new Dictionary<LayerKey, IReadOnlyList<ReplayEvent>> { [Original] = [Stroke(new(Delete: true))] } : null);
         }
         public async ValueTask DisposeAsync() { await Transaction.DisposeAsync(); Journal.Dispose(); }
     }
 
+    /// <summary>
+    /// CSP as measured: a save writes the document only when it was modified since the last write, so the selection
+    /// it records (<see cref="SavedCurrent"/>) can lag behind the panel (<see cref="Current"/>) after a selection-only
+    /// move; paste adds a selected layer above the selected one; delete selects the row that takes the deleted one.
+    /// </summary>
     private sealed class Fake(EditJournal journal) : ICspEditingActions
     {
         internal readonly List<string> Calls = [];
@@ -439,15 +485,19 @@ internal static class CspEditTransactionChecks
         internal readonly List<LayerExportEvidence> Baselines = [];
         internal readonly List<string> Deleted = [];
         internal readonly List<(string Replaced, string Reproduction)> Replacements = [];
-        private bool _paused;
+        private bool _paused, _dirty, _input = true;
         private string _current = Original.Uuid;
+        private string? _savedCurrent;
+        private int _revision;
+        private CspLayerInspection? _last;
         private ImageRgba? _clipboard;
         private int _pastes, _exports;
-        internal bool TamperPaste, ChangeCurrentAfterCheckpoint, CorruptAssetAfterCheckpoint, CheckpointFaultTriggered;
-        internal bool PhysicalDuringReplay, ThrowEnd, ThrowRelease, BadEyeEvidence, ThrowBaseline;
+        internal bool TamperPaste;
+        internal bool PhysicalDuringReplay, ThrowEnd, ThrowRelease, ThrowBaseline;
         internal Action? DuringReplay;
         internal bool ShortcutsAvailable = true, FullCanvas = true, DeletionHadDurableCheckpoint;
         internal int NewLayersOnPaste = 1, StaleSaves, IgnorePastes;
+        public bool SelectionConfirmed { get; set; } = true;
         internal readonly List<string> Statuses = [];
         private CspLayerEvidence[]? _stale;
         private int _staleLeft;
@@ -460,40 +510,61 @@ internal static class CspEditTransactionChecks
         public Task<IAsyncDisposable> AcquireCaptureCoordinatorAsync(CancellationToken token)
         { Calls.Add("coordinator:acquire"); return Task.FromResult<IAsyncDisposable>(new Lease(Calls)); }
         public Task<bool> VerifyShortcutsAsync(CancellationToken token) { Calls.Add("shortcuts"); return Task.FromResult(ShortcutsAvailable); }
-        public Task<CspLayerInspection> SaveAndInspectAsync(CancellationToken token, bool refresh = false)
+        public Task<CspLayerInspection> SaveAndInspectAsync(CancellationToken token, bool refresh = false, bool expectChange = false)
         {
+            // Like the real adapter: without input since the last inspection the document is still the one inspected.
+            if (!refresh && !_input && _last is { } known) return Task.FromResult(known);
             Calls.Add(refresh ? "save:refresh" : "save");
-            var layers = _staleLeft-- > 0 ? _stale! : Layers.ToArray();
-            return Task.FromResult(new CspLayerInspection(Original.SessionId, Original.Generation, true, layers));
+            _input = false;
+            _savedCurrent ??= _current;
+            CspLayerEvidence[] layers;
+            if (_staleLeft-- > 0) layers = _stale!;
+            else
+            {
+                layers = Layers.ToArray();
+                if (_dirty) { _savedCurrent = _current; _revision++; _dirty = false; }
+            }
+            return Task.FromResult(_last = new CspLayerInspection(Original.SessionId, Original.Generation, true, layers, "r" + _revision));
         }
-        // CSP still busy when the save arrives: the next saves return the document before the last paste/delete.
-        private void Mutating() { _stale = Layers.ToArray(); _staleLeft = StaleSaves; }
+        // CSP still busy when the save arrives: the next saves return the document as last written, before every
+        // paste/delete since then.
+        private void Mutating()
+        {
+            if (!_dirty) { _stale = Layers.ToArray(); _staleLeft = StaleSaves; }
+            _dirty = true; _input = true;
+        }
         public Task NavigateToLayerAsync(string name, CancellationToken token)
-        { Calls.Add("navigate:" + name); _current = Layers.Single(l => l.Name == name).Uuid; return Task.CompletedTask; }
+        { Calls.Add("navigate:" + name); _current = Layers.Single(l => l.Name == name).Uuid; _input = true; return Task.CompletedTask; }
         internal string Current { get => _current; set => _current = value; }
+        internal string? SavedCurrent { get => _savedCurrent; set => _savedCurrent = value; }
         internal bool DeleteSelectsAbove;
         internal int DropSelects;
+        // Panel reads that still show the selection one press behind (CSP busy after a save).
+        internal int LatePanelReads;
+        private string? _behind;
         public Task SelectAdjacentLayerAsync(bool upper, CancellationToken token)
         {
-            Calls.Add(upper ? "select:up" : "select:down");
+            Calls.Add(upper ? "select:up" : "select:down"); _input = true;
             if (DropSelects > 0) { DropSelects--; return Task.CompletedTask; } // CSP dropped the shortcut.
             int i = Layers.FindIndex(l => l.Uuid == _current);
+            _behind = _current;
             _current = Layers[Math.Clamp(i + (upper ? -1 : 1), 0, Layers.Count - 1)].Uuid; return Task.CompletedTask;
+        }
+        private CspCurrentLayerEvidence Evidence(string uuid)
+            => Layers.SingleOrDefault(l => l.Uuid == uuid) is { } layer ? new(layer.Name, true, layer.Uuid) : new("?", false);
+        public Task<CspCurrentLayerEvidence> ReadPanelCurrentLayerAsync(CancellationToken token)
+        {
+            Calls.Add("panel");
+            if (LatePanelReads > 0 && _behind is { } behind) { LatePanelReads--; return Task.FromResult(Evidence(behind)); }
+            return Task.FromResult(Evidence(_current));
         }
         public Task<CspCurrentLayerEvidence> ReadCurrentLayerAsync(CancellationToken token)
         {
             Calls.Add("current");
-            if (!CheckpointFaultTriggered && (ChangeCurrentAfterCheckpoint || CorruptAssetAfterCheckpoint) && journal.Snapshot.LastCheckpoint is { } checkpoint)
-            {
-                CheckpointFaultTriggered = true;
-                if (ChangeCurrentAfterCheckpoint) _current = Original.Uuid;
-                if (CorruptAssetAfterCheckpoint) File.WriteAllBytes(Path.Combine(journal.WorkingDirectory, checkpoint.Asset.RelativePath), [1, 2, 3]);
-            }
-            var layer = Layers.Single(l => l.Uuid == _current);
-            return Task.FromResult(new CspCurrentLayerEvidence(layer.Name, true, layer.Uuid));
+            return Task.FromResult(Evidence(_savedCurrent ?? _current));
         }
         public Task<CspHideEvidence> HideLayerAsync(CspLayerEvidence layer, CancellationToken token)
-        { Calls.Add("hide"); int i = Layers.FindIndex(l => l.Uuid == layer.Uuid); Layers[i] = layer with { Visible = false }; return Task.FromResult(new CspHideEvidence(false, false, !BadEyeEvidence, true, layer.Name, true)); }
+        { Calls.Add("hide"); throw new InvalidOperationException("The transaction never hides a layer."); }
         public Task SetClipboardImageAsync(ImageRgba image, CancellationToken token) { Calls.Add("clipboard"); _clipboard = image.Copy(); return Task.CompletedTask; }
         public Task PasteAsync(CancellationToken token)
         {
@@ -520,7 +591,7 @@ internal static class CspEditTransactionChecks
             Calls.Add("replay:" + mode); Replays.Add((mode, events)); ReferenceScenes.Add(references);
             if (PhysicalDuringReplay) PhysicalInput?.Invoke(new("tx", "pen", 8));
             DuringReplay?.Invoke();
-            token.ThrowIfCancellationRequested(); Images[work.Uuid].Bytes[0] = 90; return Task.CompletedTask;
+            token.ThrowIfCancellationRequested(); Images[work.Uuid].Bytes[0] = 90; _dirty = true; _input = true; return Task.CompletedTask;
         }
         public Task DeleteLayerAsync(CancellationToken token)
         {

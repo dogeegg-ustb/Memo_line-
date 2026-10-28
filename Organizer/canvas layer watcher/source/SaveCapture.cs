@@ -35,11 +35,16 @@ internal static class SaveCapture
     internal static Signature Stat(string path)
     { var info = new FileInfo(path); return new(info.Length, info.LastWriteTimeUtc.Ticks); }
 
+    /// <param name="documentModified">Canvas input arrived after CSP last wrote the file. Without it an unchanged file
+    /// is taken after 1.5 s; on 2026-10-22 CSP did not write after a boundary's Ctrl+S, and the boundary captured the
+    /// layer from before ten strokes, which then had no dirty image of their own.</param>
     public static Task<IReadOnlyList<BoundaryLayerCapture>> CaptureBoundaryAsync(string clip, string bridge,
         RecorderControlClient control, Size pixelSize, IReadOnlyList<CaptureRequest> requests,
-        Func<bool> stillValid, Func<bool> inContact, Action<string> status, CancellationToken token)
+        Func<bool> stillValid, Func<bool> inContact, Action<string> status, CancellationToken token, bool documentModified = false,
+        bool requireWrite = false)
         => CaptureBoundaryAsync(new ClipLayerCaptureBackend(clip, bridge, control,
-                activateCsp: requests.Count > 0 && requests[0].TriggerKind == "recordingEnd"), pixelSize, requests,
+                // Both follow a click in Memoline (Stop, or an editing function), which may still hold the foreground.
+                activateCsp: requests.Count > 0 && requests[0].TriggerKind is "recordingEnd" or "editBoundary", documentModified, requireWrite), pixelSize, requests,
             stillValid, inContact, status, token);
 
     internal static async Task<IReadOnlyList<BoundaryLayerCapture>> CaptureBoundaryAsync(ILayerCaptureBackend backend,
@@ -54,8 +59,9 @@ internal static class SaveCapture
         if (ticks < 0 || string.IsNullOrWhiteSpace(requestId) || requests.Any(request =>
             (final ? request.TriggerKind is not ("recordingEnd" or "recordingEndLayer") : request.TriggerKind != "editBoundary")
             || request.TriggerTicks != ticks || request.BoundaryRequestId != requestId || request.Generation != requests[0].Generation
-            || request.Layer is null || string.IsNullOrWhiteSpace(request.Layer.Uuid))
-            || requests.Select(request => request.Layer!.Uuid).Distinct(StringComparer.OrdinalIgnoreCase).Count() != requests.Count)
+            || request.Layer is null || string.IsNullOrWhiteSpace(request.Layer.Uuid) && !Unresolved(request))
+            || requests.Where(request => !Unresolved(request)).Select(request => request.Layer!.Uuid)
+                .Distinct(StringComparer.OrdinalIgnoreCase).Count() != requests.Count(request => !Unresolved(request)))
             throw new InvalidDataException("多层捕获请求不属于同一已确认的编辑边界");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(90));
         var ct = deadline.Token;
@@ -77,11 +83,18 @@ internal static class SaveCapture
             {
                 ct.ThrowIfCancellationRequested();
                 if (!stillValid()) throw new InvalidOperationException("编辑边界会话已改变");
-                var matches = savedLayers.Where(layer => string.Equals(layer.Uuid, request.Layer!.Uuid, StringComparison.OrdinalIgnoreCase)).ToArray();
+                var matches = Unresolved(request)
+                    ? savedLayers.Where(layer => LayerMapping.SameName(layer.Name, request.LayerName) && !string.IsNullOrWhiteSpace(layer.Uuid)).ToArray()
+                    : savedLayers.Where(layer => string.Equals(layer.Uuid, request.Layer!.Uuid, StringComparison.OrdinalIgnoreCase)).ToArray();
                 if (matches.Length != 1 || !LayerMapping.SameName(matches[0].Name, request.LayerName))
                     throw new InvalidDataException($"编辑边界图层「{request.LayerName}」身份未确认");
+                // A layer the structure did not list before this save (Ctrl+Z brought it back) is named now. It keeps
+                // its reservation number; if it is a layer already captured by UUID, that capture covers it.
+                if (Unresolved(request) && requests.Any(other => string.Equals(other.Layer!.Uuid, matches[0].Uuid, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+                var resolved = Unresolved(request) ? request with { Layer = request.Layer! with { Name = matches[0].Name, Uuid = matches[0].Uuid } } : request;
                 var result = await backend.ExportAsync(document, matches[0], pixelSize, ct);
-                outputs.Add(new(request, result));
+                outputs.Add(new(resolved, result));
                 using var metadata = JsonDocument.Parse(result.Metadata);
                 if (J.Get(metadata.RootElement, "fullCanvas").ValueKind != JsonValueKind.True
                     || J.Tick(metadata.RootElement, "width", -1) != pixelSize.Width || J.Tick(metadata.RootElement, "height", -1) != pixelSize.Height
@@ -99,6 +112,9 @@ internal static class SaveCapture
             if (!success) foreach (var output in outputs) TryDelete(output.Result.PngPath);
         }
     }
+
+    /// <summary>A boundary layer reserved by name only: the saved structure did not list it yet.</summary>
+    internal static bool Unresolved(CaptureRequest request) => request.Layer is { Id: < 0, Uuid: null };
 
     public static async Task<CaptureResult> CaptureAsync(string clip, string bridge, RecorderControlClient control, Size pixelSize, CaptureRequest request,
         Func<bool> stillValid, Func<bool> inContact, Action<string> status, CancellationToken token)
@@ -163,7 +179,8 @@ internal static class SaveCapture
         if (!stillValid()) throw new InvalidOperationException("录制会话尚未稳定，无法建立开始 baseline");
         Signature before = Stat(clip);
         status("录制开始，保存完整图层 baseline…");
-        var controlResponse = await control.SaveClipAsync(clip, ct);
+        // Initialization ends a few seconds after the user switched to CSP; they may have looked back at Memoline meanwhile.
+        var controlResponse = await control.SaveClipAsync(clip, ct, activateCsp: true);
         string directory = Path.Combine(AppContext.BaseDirectory, "snapshots");
         Directory.CreateDirectory(directory);
         string unique = "baseline-" + Guid.NewGuid().ToString("N");
@@ -205,20 +222,41 @@ internal static class SaveCapture
     internal static string ResolveLayerName(JsonElement inspection, string observedName)
         => LayerMapping.FromFile(inspection, observedName, null).Name;
 
+    /// <summary>
+    /// Copies the .clip once CSP's save has finished. Measured on an A4 document: after Ctrl+S CSP prepares for
+    /// 0.4–0.9 s (about 2 s while it is still applying a full-canvas paste), then writes the whole file within a few
+    /// milliseconds, holding it open for writing only during that burst; an unmodified document is not written at
+    /// all. So a changed file that no writer holds and that stayed the same for a short moment is complete (the old
+    /// 700 ms quiet period only added latency), while an unchanged file is accepted after 1.5 s.
+    /// <paramref name="expectChange"/>: the document was modified, so CSP must write it. An unchanged file then
+    /// means CSP has not saved yet (busy with a paste); waiting longer is right, and copying the old file after
+    /// 1.5 s only cost a second save. <paramref name="resave"/> sends Ctrl+S again once if nothing was written
+    /// for 2.5 s; after 5 s the unchanged file is copied and the caller's structure check decides, or, with
+    /// <paramref name="requireWrite"/>, <see cref="ClipNotWrittenException"/> is thrown: an edit boundary built on
+    /// the old file finds no strokes (2026-10-24: CSP had another document open, every save was a two-day-old file).
+    /// </summary>
     internal static async Task StableSnapshotAsync(string source, string target, Signature before, CancellationToken token,
-        bool allowUnchanged = false)
+        bool allowUnchanged = false, bool expectChange = false, Func<CancellationToken, Task>? resave = null, bool requireWrite = false)
     {
+        const int ChangedQuietMs = 60;
+        int unchangedMs = expectChange ? 5000 : 1500;
+        bool resent = false;
         Signature? previous = null;
         var stable = Stopwatch.StartNew();
+        var waiting = Stopwatch.StartNew();
         while (true)
         {
             token.ThrowIfCancellationRequested();
             try
             {
                 var now = Stat(source);
-                if ((!allowUnchanged && now == before) || now != previous) { previous = now; stable.Restart(); }
-                else if (stable.ElapsedMilliseconds >= (now == before ? 1500 : 700))
+                bool unchanged = now == before;
+                if (unchanged && expectChange && resave is not null && !resent && waiting.ElapsedMilliseconds >= 2500)
+                { resent = true; await resave(token); }
+                if ((!allowUnchanged && unchanged) || now != previous) { previous = now; stable.Restart(); }
+                else if (stable.ElapsedMilliseconds >= (unchanged ? unchangedMs : ChangedQuietMs))
                 {
+                    if (unchanged && expectChange && requireWrite) throw new ClipNotWrittenException(source);
                     // Refuse to copy while CSP has a writable handle; allow source replacement on next poll.
                     using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
                     if (input.Length > 4L * 1024 * 1024 * 1024) throw new InvalidDataException(".clip 超过 4 GB 快照上限");
@@ -229,11 +267,17 @@ internal static class SaveCapture
                 }
             }
             catch (IOException) { stable.Restart(); }
-            await Task.Delay(100, token);
+            await Task.Delay(previous is { } seen && seen != before ? 10 : 25, token);
         }
     }
     internal static void TryDelete(string path) { try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
 }
+
+/// <summary>The document was edited, yet saving did not write the watched .clip: CSP is showing another document, or
+/// a dialog keeps it from saving.</summary>
+internal sealed class ClipNotWrittenException(string clip) : InvalidOperationException(
+    $"CSP 没有写入「{clip}」：画布上有改动，两次保存都没有写盘。请确认 CSP 当前打开的就是这个文件（Memoline 只监视它），" +
+    "并关闭 CSP 中打开的对话框后重试。");
 
 internal static class Native
 {

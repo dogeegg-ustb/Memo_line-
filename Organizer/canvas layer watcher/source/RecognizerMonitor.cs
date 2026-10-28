@@ -39,7 +39,14 @@ internal sealed class RecognizerMonitor
             _retentionFloors.Add(appearance.TriggerTicks);
             LayersCreated(new(_session, pixels, appearance));
         };
+        _state.LayersVanished += vanishing =>
+        {
+            if (_pixelSize is { } pixels && !string.IsNullOrEmpty(_session)) LayersVanished?.Invoke(new(_session, pixels, vanishing));
+        };
     }
+    internal sealed record VanishedLayers(string SessionId, Size PixelSize, LayerVanishing Vanishing);
+    /// <summary>Raised under the monitor lock; handlers only queue work.</summary>
+    public event Action<VanishedLayers>? LayersVanished;
     public void ReleaseRetention(long triggerTicks) { lock (_sync) _retentionFloors.Remove(triggerTicks); }
     public bool CaptureRequestsPaused
     {
@@ -64,8 +71,18 @@ internal sealed class RecognizerMonitor
     public int ControlProcessId { get { lock (_sync) return _controlProcessId; } }
     public Size? PixelSize { get { lock (_sync) return _pixelSize; } }
     public long Generation { get { lock (_sync) return _state.Generation; } }
+    public long Frequency { get { lock (_sync) return _evidence.Frequency; } }
     public bool Current(CaptureRequest request) { lock (_sync) return _state.Valid(request); }
     public bool InContact { get { lock (_sync) return _state.InContact; } }
+    private DateTime _lastEditUtc = DateTime.MinValue;
+    /// <summary>Whether canvas input arrived after CSP last wrote <paramref name="clip"/>: CSP then has to write it
+    /// on the next save, so an unchanged file means that save has not happened yet.</summary>
+    public bool EditedSinceWrite(string clip)
+    {
+        DateTime edited; lock (_sync) edited = _lastEditUtc;
+        try { return edited > File.GetLastWriteTimeUtc(clip); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException) { return false; }
+    }
     public void Complete(CaptureRequest request, bool success, long? evidenceRetentionTicks = null)
     {
         lock (_sync)
@@ -121,9 +138,16 @@ internal sealed class RecognizerMonitor
         var control = new RecorderControlClient(pipe, text => Diagnostic?.Invoke(text));
         // The Stop button owns foreground. Activate the initialized CSP target
         // through its existing save control before requesting fresh core pixels.
-        var save = await control.SaveClipAsync(clip, token, activateCsp: true);
-        var states = await control.RequestStatesAsync(session,
-            ["clipState", "currentLayerState", "canvasViewState"], token, J.Text(save, "requestId"));
+        IReadOnlyDictionary<string, JsonElement> states;
+        try
+        {
+            var save = await control.SaveClipAsync(clip, token, activateCsp: true);
+            states = await control.RequestStatesAsync(session,
+                ["clipState", "currentLayerState", "canvasViewState"], token, J.Text(save, "requestId"));
+        }
+        // Up to here the Recognizer has only saved and read panels, as it does during recording.
+        catch (Exception error) when (error is not OperationCanceledException)
+        { throw new RecordingEndNotStartedException(error.Message, error); }
         var response = await control.PrepareRecordingEndAsync(token);
         var observation = await _recordingEnd.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
         if (J.Text(response, "sessionId") != session || observation.Message.SessionId != session
@@ -272,7 +296,9 @@ internal sealed class RecognizerMonitor
                         if (message.Channel == "core.canvasViewState" && J.Confirmed(message.Data)
                             && ViewArea(message.Data) is { } area)
                             _state.SetCanvasArea(area);
+                        long edits = _state.Edits;
                         request = _state.Accept(message);
+                        if (_state.Edits != edits) _lastEditUtc = DateTime.UtcNow;
                         if (request is not null && _captureRequestsPaused)
                         {
                             // Accept may reserve a capture while the host is sealing.

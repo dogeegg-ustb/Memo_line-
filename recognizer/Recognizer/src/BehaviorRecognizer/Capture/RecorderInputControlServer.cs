@@ -69,7 +69,7 @@ public sealed class RecorderInputControlServer : IAsyncDisposable
                             switch (request.GetProperty("command").GetString())
                             {
                                 case "requestStates":
-                                    if (request.EnumerateObject().Any(p => p.Name is not ("command" or "requestId" or "sessionId" or "modules" or "saveId" or "brushPanelRoi")))
+                                    if (request.EnumerateObject().Any(p => p.Name is not ("command" or "requestId" or "sessionId" or "modules" or "saveId" or "brushPanelRoi" or "background")))
                                         throw new ArgumentException("Unknown state request option.");
                                     var stateRequest = request.Deserialize<RecorderStateRequest>(Json) ?? throw new ArgumentException("Missing state request.");
                                     if (string.IsNullOrWhiteSpace(stateRequest.RequestId) || stateRequest.RequestId.Length > 128
@@ -122,14 +122,25 @@ public sealed class RecorderInputControlServer : IAsyncDisposable
                                     break;
                                 case "recordEditingAction":
                                     RequireEditCapture();
-                                    ValidateOptions(request, "command", "transactionId", "editKind", "changes", "layerReplacements");
+                                    ValidateOptions(request, "command", "transactionId", "editKind", "changes", "layerReplacements", "replayed");
                                     string actionId = ReadIdentity(request, "transactionId");
                                     string editKind = ReadIdentity(request, "editKind");
                                     if (editKind is not ("eventEditing" or "preciseUndo")) throw new ArgumentException("Unknown editing action.");
                                     var action = await _capture!.RecordEditingActionAsync(actionId,editKind,request.GetProperty("changes"),_stop.Token,
-                                        request.TryGetProperty("layerReplacements", out var replacements) ? replacements : default);
+                                        request.TryGetProperty("layerReplacements", out var replacements) ? replacements : default,
+                                        request.TryGetProperty("replayed", out var replayed) ? replayed : default);
                                     await _recording!.FlushAsync(cancellationToken: _stop.Token);
-                                    response = new { success = true, sessionId = _recording.SessionId, transactionId = actionId, appendId = action.AppendId };
+                                    response = new { success = true, sessionId = _recording.SessionId, transactionId = actionId, appendId = action.AppendId, ticks = action.Ticks };
+                                    break;
+                                case "recordLayerLineage":
+                                    RequireEditCapture();
+                                    ValidateOptions(request, "command", "kind", "layer", "target", "evidence");
+                                    string lineageKind = ReadIdentity(request, "kind");
+                                    if (lineageKind is not ("recyclePaste" or "merged")) throw new ArgumentException("Unknown layer lineage kind.");
+                                    var lineage = await _capture!.RecordLayerLineageAsync(lineageKind, ReadIdentity(request, "layer"),
+                                        ReadIdentity(request, "target"), request.TryGetProperty("evidence", out var lineageEvidence) ? lineageEvidence : default, _stop.Token);
+                                    await _recording!.FlushAsync(cancellationToken: _stop.Token);
+                                    response = new { success = true, sessionId = _recording.SessionId, appendId = lineage.AppendId };
                                     break;
                                 case "prepareRecordingEnd":
                                     if (request.EnumerateObject().Any(p => p.Name != "command"))

@@ -25,6 +25,8 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
     // operation created (still empty) or selected. It follows the release of the guarded left button or key,
     // once CSP has had a moment to apply the operation, unless the click opened a menu or popup a save would disturb.
     internal static readonly TimeSpan AfterOperationSettle = TimeSpan.FromMilliseconds(40);
+    // How long an accepted activation may take before CSP's thread has shown its window in front.
+    internal static readonly TimeSpan ActivationSettle = TimeSpan.FromMilliseconds(750);
     private bool _awaitingLeftUp;
     private int _awaitingKeyUp = -1;
     private IReadOnlySet<nint>? _windowsBeforeOperation;
@@ -186,15 +188,17 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
         if (request.TriggerTicks > _writer.NowTicks)
             throw new ArgumentException("triggerTicks must not be later than this recording session's current ticks.");
         await _workerStarted.Task.WaitAsync(cancellationToken);
+        // Outside _sync: the input hooks take it, and activation waits for CSP's own thread.
+        if (request.ActivateCsp && await ActivateCspAsync(cancellationToken) is { } activation)
+            return new(false, request.RequestId, false, null, false, "Could not activate the CSP window for the final save: " + activation, request.TriggerTicks);
         var completion = new TaskCompletionSource<RecorderClipSaveResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_sync)
         {
             ObjectDisposedException.ThrowIf(_closed, this);
             if (_busy) return new(false, request.RequestId, false, null, false, "Save worker is busy; retry after it drains.", request.TriggerTicks);
             cancellationToken.ThrowIfCancellationRequested();
-            if (request.ActivateCsp && !(_backend?.IsCspForeground ?? CspWindowProbe.IsCspForeground())
-                && !(_backend?.TryActivateCspWindow() ?? CspWindowProbe.TryActivateCspWindow()))
-                return new(false, request.RequestId, false, null, false, "Could not activate the CSP window for the final save.", request.TriggerTicks);
+            if (request.ActivateCsp && !CspForeground)
+                return new(false, request.RequestId, false, null, false, "Could not activate the CSP window for the final save: CSP lost the foreground again.", request.TriggerTicks);
             _busy = true;
             _activeWindow = ForegroundWindow;
             _activeConfig = EffectiveConfiguration;
@@ -204,6 +208,25 @@ public sealed class LayerSaveGuard : IAsyncDisposable, IRecorderInputControl
         // Once queued, cancellation is checked by the resident worker before dispatch.
         // The response always distinguishes a dispatched chord from an unexecuted request.
         return await completion.Task;
+    }
+
+    private bool CspForeground => _backend?.IsCspForeground ?? CspWindowProbe.IsCspForeground();
+
+    /// <summary>Null once CSP is in front, else why not. Windows switches the foreground asynchronously: reading it
+    /// right after the accepted request can still show no window, which failed final saves started from Memoline.</summary>
+    private async Task<string?> ActivateCspAsync(CancellationToken cancellationToken)
+    {
+        if (CspForeground) return null;
+        bool accepted = _backend?.TryActivateCspWindow() ?? CspWindowProbe.TryActivateCspWindow();
+        var waited = Stopwatch.StartNew();
+        while (!CspForeground)
+        {
+            if (waited.Elapsed >= ActivationSettle) return accepted
+                ? $"CSP did not come to the front within {ActivationSettle.TotalMilliseconds:0} ms."
+                : "Windows refused to bring CSP to the front.";
+            await Task.Delay(15, cancellationToken);
+        }
+        return null;
     }
 
     private async Task DispatchOneShotAsync(OneShotSave save, nint hwnd)

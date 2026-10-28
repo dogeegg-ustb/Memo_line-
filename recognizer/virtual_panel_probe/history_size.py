@@ -33,16 +33,25 @@ def user_roots() -> list[Path]:
     ]
 
 
+_cache: dict[str, tuple[int, tuple[int, str]]] = {}
+
+
 def undo_count() -> tuple[int, str]:
-    """CSP's undo limit and where it came from."""
+    """CSP's undo limit and where it came from; read again only when the preferences file changes."""
     for root in user_roots():
         path = root / "Preference" / "Config.sqlite"
-        if not path.is_file():
+        try:
+            stamp = path.stat().st_mtime_ns
+        except OSError:
             continue
+        cached = _cache.get(str(path))
+        if cached and cached[0] == stamp:
+            return cached[1]
         try:
             with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=1)) as db:
                 row = db.execute("select UndoCount from Performance").fetchone()
             if row and isinstance(row[0], int) and row[0] > 0:
+                _cache[str(path)] = (stamp, (row[0], str(path)))
                 return row[0], str(path)
         except sqlite3.Error:
             continue

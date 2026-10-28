@@ -1,7 +1,3 @@
-using System.Drawing;
-using System.Drawing.Imaging;
-using System.Runtime.InteropServices;
-
 namespace DirtyMatrixPaster;
 
 /// <summary>
@@ -9,36 +5,11 @@ namespace DirtyMatrixPaster;
 /// </summary>
 internal static class ClipboardImageCodec
 {
+    // FastPng instead of GDI+: a full canvas encodes in ~80 ms instead of ~800 ms, to identical pixels.
     internal static byte[] EncodePng(int width, int height, ReadOnlySpan<byte> rgba)
     {
         Validate(width, height, rgba);
-        using var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
-        var rectangle = new Rectangle(0, 0, width, height);
-        var bits = bitmap.LockBits(rectangle, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-        try
-        {
-            int sourceStride = checked(width * 4);
-            for (int y = 0; y < height; y++)
-            {
-                var row = new byte[sourceStride];
-                rgba.Slice(y * sourceStride, sourceStride).CopyTo(row);
-                for (int x = 0; x < width; x++)
-                {
-                    int source = x * 4;
-                    (row[source], row[source + 2]) = (row[source + 2], row[source]);
-                }
-
-                Marshal.Copy(row, 0, IntPtr.Add(bits.Scan0, y * bits.Stride), row.Length);
-            }
-        }
-        finally
-        {
-            bitmap.UnlockBits(bits);
-        }
-
-        using var output = new MemoryStream();
-        bitmap.Save(output, ImageFormat.Png);
-        return output.ToArray();
+        return CanvasLayerWatcher.FastPng.Encode(width, height, rgba, bgra: false);
     }
 
     internal static byte[] EncodeDibV5(int width, int height, ReadOnlySpan<byte> rgba)
@@ -69,22 +40,9 @@ internal static class ClipboardImageCodec
         }
 
         // CF_DIBV5 stores top-down BGRA rows. The RGBA input is straight alpha.
-        int rowBytes = checked(width * 4);
-        for (int y = 0; y < height; y++)
-        {
-            int sourceRow = y * rowBytes;
-            int targetRow = 124 + sourceRow;
-            for (int x = 0; x < width; x++)
-            {
-                int source = sourceRow + x * 4;
-                int target = targetRow + x * 4;
-                output[target] = rgba[source + 2];
-                output[target + 1] = rgba[source + 1];
-                output[target + 2] = rgba[source];
-                output[target + 3] = rgba[source + 3];
-            }
-        }
-
+        var pixels = output.AsSpan(124);
+        rgba.CopyTo(pixels);
+        CanvasLayerWatcher.FastPng.SwapRedBlue(pixels);
         return output;
     }
 
@@ -93,14 +51,28 @@ internal static class ClipboardImageCodec
         Validate(width, height, rgba);
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
             throw new InvalidOperationException("剪贴板图像必须在 STA 线程中写入");
+        Publish(EncodePng(width, height, rgba), EncodeDibV5(width, height, rgba));
+    }
 
-        byte[] png = EncodePng(width, height, rgba);
-        byte[] dib = EncodeDibV5(width, height, rgba);
+    /// <summary>Both clipboard formats of one image; pure, so it may run off the STA thread that publishes them.</summary>
+    internal static (byte[] Png, byte[] Dib) Encode(int width, int height, byte[] rgba)
+    {
+        Validate(width, height, rgba);
+        var dib = Task.Run(() => EncodeDibV5(width, height, rgba));
+        var png = EncodePng(width, height, rgba);
+        return (png, dib.GetAwaiter().GetResult());
+    }
+
+    /// <param name="dib">Null publishes the PNG alone (what CSP pastes).</param>
+    internal static void Publish(byte[] png, byte[]? dib)
+    {
+        if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
+            throw new InvalidOperationException("剪贴板图像必须在 STA 线程中写入");
         var data = new DataObject();
         data.SetData("PNG", false, new MemoryStream(png, writable: false));
-        data.SetData(DataFormats.GetFormat(17).Name, false, new MemoryStream(dib, writable: false));
+        if (dib is not null) data.SetData(DataFormats.GetFormat(17).Name, false, new MemoryStream(dib, writable: false));
         Clipboard.SetDataObject(data, true, 10, 100);
-        VerifyReadBack(png, dib);
+        VerifyReadBack(png, dib is not null);
     }
 
     // Clipboard history and other watchers can briefly hold or re-render the clipboard right after a
@@ -108,10 +80,12 @@ internal static class ClipboardImageCodec
     // are not ours (measured: about 40% of first reads, always correct by the second or third). Retry
     // both. A clipboard that stays unreadable is left to the caller's own verification of the pasted
     // result (the editing transaction exports and compares the pasted layer); one that keeps holding
-    // other bytes was replaced by another program and fails.
+    // other bytes was replaced by another program and fails. The PNG is compared in full (a replaced
+    // clipboard cannot hold our exact PNG); the 139 MB CF_DIBV5 only has to be present.
     internal const int ReadBackAttempts = 10;
-    private static void VerifyReadBack(byte[] png, byte[] dib)
+    private static void VerifyReadBack(byte[] png, bool withDib)
     {
+        string dib = DataFormats.GetFormat(17).Name;
         for (int attempt = 1; ; attempt++)
         {
             try
@@ -119,8 +93,8 @@ internal static class ClipboardImageCodec
                 var readBack = Clipboard.GetDataObject() ?? throw new InvalidDataException("剪贴板写入后无法读回");
                 if (!ReadBytes(readBack, "PNG").AsSpan().SequenceEqual(png))
                     throw new IOException("剪贴板 PNG 读回校验失败");
-                if (!ReadBytes(readBack, DataFormats.GetFormat(17).Name).AsSpan().SequenceEqual(dib))
-                    throw new IOException("剪贴板 CF_DIBV5 读回校验失败");
+                if (withDib && !readBack.GetDataPresent(dib, false))
+                    throw new IOException("剪贴板缺少 CF_DIBV5");
                 return;
             }
             catch (Exception error) when (error is InvalidDataException or System.Runtime.InteropServices.ExternalException)

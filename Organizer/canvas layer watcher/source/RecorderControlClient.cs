@@ -88,6 +88,9 @@ internal sealed class RecorderControlClient(string pipeName, Action<string>? dia
         => SendAsync(new { command = "beginEditTransaction", transactionId }, token);
     public Task<JsonElement> EndEditTransactionAsync(string transactionId, string outcome, CancellationToken token)
         => SendAsync(new { command = "endEditTransaction", transactionId, outcome }, token);
+    /// <summary>Records in the native stream which layer a user-made layer continues (see the recorder's layerLineage).</summary>
+    public Task<JsonElement> RecordLayerLineageAsync(string kind, string layer, string target, object evidence, CancellationToken token)
+        => SendAsync(new { command = "recordLayerLineage", kind, layer, target, evidence }, token);
     public async Task<JsonElement> SaveClipAsync(string expectedClipPath, CancellationToken token, long? triggerTicks = null,
         bool activateCsp = false)
     {

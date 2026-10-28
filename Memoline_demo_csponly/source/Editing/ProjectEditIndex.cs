@@ -18,16 +18,11 @@ internal static class ProjectEditIndex
         var sessions = prior.Append(current).ToArray();
         if (sessions.Select(s => s.SessionId).Distinct(StringComparer.Ordinal).Count() != sessions.Length)
             throw new InvalidDataException("工程历史包含重复的原生 sessionId。");
-        // A layer Memoline installed in place of another (event editing, precise undo) is that layer: both
-        // histories join under the newest replacement still captured now. No other layers are ever joined.
-        var replaced = Replacements(sessions);
-        var successors = replaced.ToLookup(pair => pair.Value, pair => pair.Key, StringComparer.Ordinal);
-        string Canonical(string uuid) => CanonicalUuid(uuid, replaced);
+        // Each captured layer's history goes to the layer that continues it now (see LayerLineage); layers with no
+        // successor in CSP were deleted by the user and keep their own route, marked deleted.
+        var lineage = LayerLineage.Build(sessions);
         var currentLayers = current.Packets.Select(p => p.Layer).Distinct().ToArray();
-        var currentUuids = currentLayers.Select(l => l.Uuid).ToHashSet(StringComparer.Ordinal);
-        var currentRoutes = currentLayers.Where(layer => !successors[layer.Uuid].Any(currentUuids.Contains))
-            .GroupBy(layer => Canonical(layer.Uuid), StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.ToArray(), StringComparer.Ordinal);
-        var sources = new Dictionary<LayerKey, List<SourceLayer>>();
+        var sources = new Dictionary<string, List<SourceLayer>>(StringComparer.Ordinal);
         var globalIssues = new List<PlanIssue>();
         for (int order = 0; order < sessions.Length; order++)
         {
@@ -49,34 +44,36 @@ internal static class ProjectEditIndex
             var native = reused ? cached! : EditIndexBuilder.Build(session);
             foreach (var layer in native.Layers.Values)
             {
-                LayerKey route = layer.Layer;
-                var routeIssues = new List<PlanIssue>();
-                if (currentRoutes.TryGetValue(Canonical(layer.Layer.Uuid), out var matches) && matches.Length == 1)
-                    route = matches[0];
-                else routeIssues.Add(new(PlanIssueCode.LayerIdentityUnconfirmed,
-                    "历史图层尚未唯一对应当前 CSP 捕获：" + layer.Layer.Uuid));
+                if (lineage.Undone(layer.Layer.Uuid)) continue;
                 var packets = layer.Packets.OrderBy(p => p.TriggerTicks).ToArray();
                 var (baseline, final) = Endpoints(layer);
                 var issues = layer.Issues.ToList();
                 // A full, unchanged capture with no contacts is still a continuity checkpoint.
                 if (layer.Strokes.Count == 0 && packets.All(p => p.IsRecordingBaseline) && SamePixels(baseline, final))
                     issues.RemoveAll(i => i.Code == PlanIssueCode.NoBaseline && i.Message == "图层没有可重建的差异链。");
-                issues.AddRange(routeIssues);
                 // Baseline and final come from the layer alone, so a reused history layer is verified once.
                 issues.AddRange(reused ? VerifiedHistory(layer) : VerifyPixels(layer, baseline, final, session.SessionId));
-                if (!sources.TryGetValue(route, out var chain)) sources.Add(route, chain = []);
+                string owner = lineage.Owner(layer.Layer.Uuid);
+                if (!sources.TryGetValue(owner, out var chain)) sources.Add(owner, chain = []);
                 chain.Add(new(order, session, layer, baseline, final, issues));
             }
         }
         var layers = new Dictionary<LayerKey, LayerIndex>();
         var strokes = new Dictionary<EditableStrokeKey, EditableStroke>();
         var images = new Dictionary<DirtyImageKey, DirtyImage>();
-        foreach (var (route, unordered) in sources)
+        var routes = new Dictionary<string, LayerKey>(StringComparer.Ordinal);
+        foreach (var (owner, unordered) in sources)
         {
             // One session can hold an original and its replacement: order by session, then by capture time.
             var chain = unordered.OrderBy(source => source.Order)
                 .ThenBy(source => source.Index.Packets.Count == 0 ? long.MinValue : source.Index.Packets.Min(p => p.TriggerTicks)).ToList();
+            bool deleted = !lineage.Alive.Contains(owner);
             var issues = new List<PlanIssue>();
+            var live = currentLayers.Where(l => l.Uuid == owner).ToArray();
+            var route = !deleted && live.Length > 0 ? live[^1]
+                : chain.LastOrDefault(source => source.Index.Layer.Uuid == owner)?.Index.Layer ?? chain[^1].Index.Layer with { Uuid = owner };
+            if (live.Length > 1) issues.Add(new(PlanIssueCode.LayerIdentityUnconfirmed, "当前 CSP 捕获中同一图层 UUID 对应多个图层：" + owner));
+            routes.Add(owner, route);
             var packets = new List<LayerPacket>();
             var layerStrokes = new List<EditableStroke>();
             var commands = new List<UndoRedoEvidence>();
@@ -122,38 +119,135 @@ internal static class ProjectEditIndex
                 { PacketId = Scoped(source.Session.SessionId, checkpoint.PacketId) }));
             }
             var last = chain[^1];
-            if (last.Session.SessionId != current.SessionId)
+            if (!deleted && last.Session.SessionId != current.SessionId)
                 issues.Add(new(PlanIssueCode.CaptureMismatch, "当前编辑边界没有捕获历史图层：" + route.Uuid));
             var orderedPackets = packets.OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray();
             var orderedStrokes = layerStrokes.OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToArray();
             layers.Add(route, new(route, orderedPackets, orderedStrokes, issues.Count == 0, issues.ToArray(),
                 chain[0].Baseline, last.Current)
             { UndoRedo = commands.OrderBy(c => c.SessionOrder).ThenBy(c => c.InputAppendId).ToArray(),
-                UndoCheckpoints = undoCheckpoints });
+                UndoCheckpoints = undoCheckpoints, Deleted = deleted });
         }
-        return new(layers, strokes, images, globalIssues.Concat(layers.Values.SelectMany(layer => layer.Issues)).ToArray());
+        foreach (var merge in lineage.Merges)
+            if (routes.TryGetValue(lineage.Owner(merge.Predecessor), out var from) && routes.TryGetValue(lineage.Owner(merge.Successor), out var into) &&
+                from != into && layers.TryGetValue(from, out var source) && layers.TryGetValue(into, out var target))
+            {
+                if (Fold(source, target, merge, strokes, images) is { } folded)
+                {
+                    layers[into] = folded; layers.Remove(from);
+                    foreach (var owner in routes.Where(r => r.Value == from).Select(r => r.Key).ToArray()) routes[owner] = into;
+                }
+                else layers[from] = source with { Issues = [.. source.Issues, new(PlanIssueCode.ChainBroken,
+                    $"合并进图层 {merge.Successor} 的历史无法与它的像素链衔接，按已删除图层显示。")] };
+            }
+        // Executed Memoline edits turn what they changed into new versions (see MemolineEdits).
+        return MemolineEdits.Apply(new(layers, strokes, images,
+            globalIssues.Concat(layers.Values.Where(layer => !layer.Deleted).SelectMany(layer => layer.Issues)).ToArray()),
+            MemolineEdits.Read(sessions, lineage));
     }
 
-    /// <summary>reproduction UUID → the layer it replaced, from every completed Memoline editing action.</summary>
-    internal static IReadOnlyDictionary<string, string> Replacements(IEnumerable<SessionSnapshot> sessions)
+    /// <summary>
+    /// A merged layer's history continues inside the layer it went into. Its packets are moved to just before the
+    /// target's first capture after the merge and expressed in the target's pixels: each of its images composited
+    /// (normal, 100 %) over the target as it was then. A bridge brings its starting pixels in and another one takes
+    /// its final pixels out again, so the target's own capture of the merge stays as recorded and the chain stays
+    /// exact. Precise undo of a merged stroke then rewinds the target to the merged layer's pixels before that stroke.
+    /// Null when either chain is unusable or the moved packets do not fit between the target's captures.
+    /// </summary>
+    private static LayerIndex? Fold(LayerIndex source, LayerIndex target, LayerLineage.Link merge,
+        Dictionary<EditableStrokeKey, EditableStroke> strokes, Dictionary<DirtyImageKey, DirtyImage> images)
     {
-        var map = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var session in sessions)
-            foreach (var frame in session.Frames.Where(f => J.Text(f, "kind") == "editingActionCompleted" &&
-                         J.U64(f, "appendId") <= session.BoundaryAppendId).OrderBy(f => J.U64(f, "appendId")))
-                foreach (var item in J.Array(J.Get(J.Get(frame, "data"), "layerReplacements")))
-                    if (J.Text(item, "replaced") is { Length: > 0 } old && J.Text(item, "reproduction") is { Length: > 0 } now && old != now)
-                        map[now] = old;
-        return map;
+        if (!source.ChainValid || source.Current is null || target.Current is null) return null;
+        var route = target.Layer;
+        var targetPackets = target.Packets.Where(p => !p.IsRecordingBaseline).OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray();
+        var moved = source.Packets.Where(p => !p.IsRecordingBaseline).OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray();
+        var next = targetPackets.FirstOrDefault(p => (p.SessionOrder, p.TriggerTicks).CompareTo((merge.Order, merge.Ticks)) >= 0);
+        var previous = targetPackets.LastOrDefault(p => (p.SessionOrder, p.TriggerTicks).CompareTo((merge.Order, merge.Ticks)) < 0);
+        var under = next is null ? target.Current.Copy() : new LayerTimeline(target.Packets, target.Current).BeforePacket(next.PacketId);
+        var start = source.Baseline ?? new ImageRgba(under.Width, under.Height, new byte[under.Bytes.Length]);
+        if (start.Width != under.Width || start.Height != under.Height || source.Current.Width != under.Width || source.Current.Height != under.Height)
+            return null;
+        int count = moved.Length + 2;
+        long high = next is { } following && following.SessionOrder == merge.Order ? Math.Min(following.TriggerTicks - 1, merge.Ticks) : merge.Ticks;
+        long low = previous is { } preceding && preceding.SessionOrder == merge.Order ? preceding.TriggerTicks : long.MinValue / 2;
+        if (high - count <= low) return null;
+        string prefix = "merged/" + Uri.EscapeDataString(source.Layer.Uuid) + "/";
+        DirtyImageKey Key(DirtyImageKey key) => new(route, prefix + key.PacketId, key.ImageId);
+        var added = new List<LayerPacket>();
+        long tick = high - count;
+        LayerPacket? Bridge(string id, ImageRgba before, ImageRgba now)
+        {
+            tick++;
+            if (ObservedChange(new(route, prefix + id, "merge"), before, now) is not { } image) return null;
+            return new(prefix + id, route, tick, null, null, [image], AfterSnapshotId: prefix + id + "/before",
+                NowSnapshotId: prefix + id + "/now", BaselineSource: "mergedLayer", CanvasWidth: under.Width, CanvasHeight: under.Height)
+            { SessionOrder = merge.Order, SourceLayer = source.Layer };
+        }
+        if (Bridge("in", under, Over(start, under)) is { } entering) added.Add(entering);
+        foreach (var packet in moved)
+        {
+            tick++;
+            var translated = packet.Images.Select(image => image with
+            {
+                Key = Key(image.Key),
+                After = OverCrop(image.After, under, image.Mask), Now = OverCrop(image.Now, under, image.Mask),
+            }).ToArray();
+            added.Add(packet with { PacketId = prefix + packet.PacketId, Layer = route, TriggerTicks = tick, Before = null, Current = null,
+                Images = translated, IsBoundary = false, SessionOrder = merge.Order, SourceLayer = packet.SourceLayer ?? packet.Layer,
+                AfterSnapshotId = packet.AfterSnapshotId is { } a ? prefix + a : null, NowSnapshotId = packet.NowSnapshotId is { } b ? prefix + b : null });
+        }
+        if (Bridge("out", Over(source.Current, under), under) is { } leaving) added.Add(leaving);
+        foreach (var image in source.Packets.SelectMany(p => p.Images)) images.Remove(image.Key);
+        foreach (var image in added.SelectMany(p => p.Images)) images.Add(image.Key, image);
+        var mergedStrokes = new List<EditableStroke>();
+        foreach (var stroke in source.Strokes)
+        {
+            var mapped = stroke with { Layer = route, Images = stroke.Images.Select(Key).ToArray(), MergedFrom = stroke.MergedFrom ?? source.Layer.Uuid };
+            strokes[stroke.Key] = mapped; mergedStrokes.Add(mapped);
+        }
+        return target with
+        {
+            Packets = target.Packets.Concat(added).OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray(),
+            Strokes = target.Strokes.Concat(mergedStrokes).OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToArray(),
+            UndoRedo = target.UndoRedo.Concat(source.UndoRedo).OrderBy(c => c.SessionOrder).ThenBy(c => c.InputAppendId).ToArray(),
+            UndoCheckpoints = target.UndoCheckpoints.Concat(source.UndoCheckpoints.Select(c => c with { PacketId = prefix + c.PacketId })).ToArray(),
+        };
     }
 
-    internal static bool HasReplacements(SessionSnapshot session) => Replacements([session]).Count > 0;
-
-    internal static string CanonicalUuid(string uuid, IReadOnlyDictionary<string, string> replaced)
+    /// <summary>Straight-alpha source-over of two full canvases.</summary>
+    private static ImageRgba Over(ImageRgba top, ImageRgba bottom)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        while (seen.Add(uuid) && replaced.TryGetValue(uuid, out var earlier)) uuid = earlier;
-        return uuid;
+        var result = bottom.Copy();
+        var a = top.Bytes; var b = result.Bytes;
+        for (int i = 0; i < b.Length; i += 4) Over(a.AsSpan(i, 4), b.AsSpan(i, 4));
+        return result;
+    }
+
+    /// <summary><paramref name="top"/> is a crop at <paramref name="mask"/>'s bounds; the result is that crop over the canvas.</summary>
+    private static ImageRgba OverCrop(ImageRgba top, ImageRgba canvas, PixelMask mask)
+    {
+        var result = new byte[top.Bytes.Length];
+        var source = top.Bytes;
+        for (int y = 0; y < mask.Height; y++)
+        {
+            int row = ((mask.Top + y) * canvas.Width + mask.Left) * 4;
+            canvas.Bytes.AsSpan(row, mask.Width * 4).CopyTo(result.AsSpan(y * mask.Width * 4));
+            for (int x = 0; x < mask.Width; x++) Over(source.AsSpan((y * mask.Width + x) * 4, 4), result.AsSpan((y * mask.Width + x) * 4, 4));
+        }
+        return new(top.Width, top.Height, result);
+    }
+
+    private static void Over(ReadOnlySpan<byte> top, Span<byte> bottom)
+    {
+        int sa = top[3];
+        if (sa == 0) return;
+        if (sa == 255) { top.CopyTo(bottom); return; }
+        int da = bottom[3];
+        // In 1/255² units: alpha = a·255 + b·(255 − a); colour = (top·a·255 + bottom·b·(255 − a)) / alpha.
+        int alpha = sa * 255 + da * (255 - sa);
+        for (int c = 0; c < 3; c++)
+            bottom[c] = (byte)(((long)top[c] * sa * 255 + (long)bottom[c] * da * (255 - sa) + alpha / 2) / alpha);
+        bottom[3] = (byte)((alpha + 127) / 255);
     }
 
     private static (ImageRgba? Baseline, ImageRgba? Final) Endpoints(LayerIndex layer)
@@ -238,6 +332,21 @@ internal static class ProjectEditIndex
             return false;
         long earliest = next.Index.Packets.Min(p => p.TriggerTicks);
         if (earliest == long.MinValue) return false;
+        // A replacement inside one session joins two layers of that session; the layer keeps the bridge unique.
+        string id = Scoped(next.Session.SessionId, "project-observed-gap/" + previous.Session.SessionId +
+            (previous.Index.Layer.Uuid == next.Index.Layer.Uuid ? "" : "/" + previous.Index.Layer.Uuid));
+        if (ObservedChange(new(route, id, "unrecorded-change"), before, now) is not { } image) return false;
+        bridge = new(id, route, earliest - 1, before, now, [image],
+            AfterSnapshotId: Scoped(previous.Session.SessionId, "last-observed-pixels"),
+            NowSnapshotId: Scoped(next.Session.SessionId, "first-observed-pixels"), BaselineSource: "observedProjectContinuation",
+            CanvasWidth: before.Width, CanvasHeight: before.Height)
+        { SessionOrder = next.Order, SourceLayer = next.Index.Layer };
+        return true;
+    }
+
+    /// <summary>The pixels that differ between two full canvases as one unrecorded change; null when none do.</summary>
+    private static DirtyImage? ObservedChange(DirtyImageKey key, ImageRgba before, ImageRgba now)
+    {
         var oldPixels = MemoryMarshal.Cast<byte, uint>(before.Bytes.AsSpan());
         var newPixels = MemoryMarshal.Cast<byte, uint>(now.Bytes.AsSpan());
         int left = before.Width, top = before.Height, right = -1, bottom = -1;
@@ -247,7 +356,7 @@ internal static class ProjectEditIndex
             int x = i % before.Width, y = i / before.Width;
             left = Math.Min(left, x); top = Math.Min(top, y); right = Math.Max(right, x); bottom = Math.Max(bottom, y);
         }
-        if (right < left) return false;
+        if (right < left) return null;
         int width = right - left + 1, height = bottom - top + 1;
         var mask = new PixelMask(left, top, width, height);
         var oldCrop = new byte[checked(width * height * 4)]; var newCrop = new byte[oldCrop.Length];
@@ -262,19 +371,9 @@ internal static class ProjectEditIndex
                 if (oldPixels[index] != newPixels[index]) mask.Set(x, y);
             }
         }
-        // A replacement inside one session joins two layers of that session; the layer keeps the bridge unique.
-        string id = Scoped(next.Session.SessionId, "project-observed-gap/" + previous.Session.SessionId +
-            (previous.Index.Layer.Uuid == next.Index.Layer.Uuid ? "" : "/" + previous.Index.Layer.Uuid));
-        var image = new DirtyImage(new(route, id, "unrecorded-change"), mask,
-            new(width, height, oldCrop), new(width, height, newCrop), [], IsCausal: true, HasUnreplayableEvents: true)
+        return new DirtyImage(key, mask, new(width, height, oldCrop), new(width, height, newCrop), [], IsCausal: true, HasUnreplayableEvents: true)
         { UnknownHistoryInterval = true,
             W = new(mask.Left, mask.Top, mask.Width, mask.Height), Probe = new(mask.Left, mask.Top, mask.Width, mask.Height), Impact = mask.Clone() };
-        bridge = new(id, route, earliest - 1, before, now, [image],
-            AfterSnapshotId: Scoped(previous.Session.SessionId, "last-observed-pixels"),
-            NowSnapshotId: Scoped(next.Session.SessionId, "first-observed-pixels"), BaselineSource: "observedProjectContinuation",
-            CanvasWidth: before.Width, CanvasHeight: before.Height)
-        { SessionOrder = next.Order, SourceLayer = next.Index.Layer };
-        return true;
     }
 
     // A parked image restores exactly Width × Height × 4 bytes, so it is complete without being restored.

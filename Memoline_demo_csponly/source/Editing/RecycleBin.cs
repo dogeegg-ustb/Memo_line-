@@ -82,11 +82,61 @@ internal static class RecycleBin
     }
 
     /// <summary>Straight RGBA of the saved layer, for the clipboard (a full-canvas paste lands at the original position).</summary>
-    internal static ImageRgba LoadImage(RecycleEntry entry)
+    internal static ImageRgba LoadImage(RecycleEntry entry) => LoadPng(entry.ImagePath, entry.Width, entry.Height);
+
+    // Entries copied to the clipboard in this run, newest last: a paste is most likely one of them.
+    private static readonly List<string> Copied = [];
+
+    internal static void MarkCopied(RecycleEntry entry)
     {
-        using var stream = File.OpenRead(entry.ImagePath);
+        lock (Copied) { Copied.Remove(entry.Id); Copied.Add(entry.Id); }
+    }
+
+    /// <summary>
+    /// The recycle bin entry whose image a newly created layer (exported to <paramref name="layerPng"/>) is a paste of:
+    /// the same pixels, allowing CSP's rounding of semi-transparent colour. Entries copied in this run are tried first.
+    /// </summary>
+    internal static RecycleEntry? MatchPaste(string root, string layerPng, CancellationToken token)
+    {
+        var layer = LoadPng(layerPng, null, null);
+        int width = layer.Width, height = layer.Height;
+        string[] copied;
+        lock (Copied) copied = Copied.AsEnumerable().Reverse().ToArray();
+        var entries = List(root).Where(e => e.Width == width && e.Height == height && File.Exists(e.ImagePath))
+            .OrderBy(e => Array.IndexOf(copied, e.Id) is var i && i >= 0 ? i : int.MaxValue).ThenByDescending(e => e.Created).Take(12).ToArray();
+        if (entries.Length == 0) return null;
+        foreach (var entry in entries)
+        {
+            token.ThrowIfCancellationRequested();
+            if (SamePaste(LoadImage(entry), layer)) return entry;
+        }
+        return null;
+    }
+
+    /// <summary>At most 0.1 % of the inked pixels differ by more than CSP's paste rounding; an empty image never matches.</summary>
+    internal static bool SamePaste(ImageRgba recycled, ImageRgba pasted)
+    {
+        if (recycled.Width != pasted.Width || recycled.Height != pasted.Height) return false;
+        var a = recycled.Bytes; var b = pasted.Bytes;
+        long inked = 0, different = 0;
+        for (int i = 0; i < a.Length; i += 4)
+        {
+            int alphaA = a[i + 3], alphaB = b[i + 3];
+            if (alphaA == 0 && alphaB == 0) continue;
+            inked++;
+            bool colour = Math.Min(alphaA, alphaB) >= 16 &&
+                (Math.Abs(a[i] - b[i]) > 3 || Math.Abs(a[i + 1] - b[i + 1]) > 3 || Math.Abs(a[i + 2] - b[i + 2]) > 3);
+            if (Math.Abs(alphaA - alphaB) > 2 || colour) different++;
+        }
+        return inked > 0 && different * 1000 <= inked;
+    }
+
+    private static ImageRgba LoadPng(string path, int? width, int? height)
+    {
+        using var stream = File.OpenRead(path);
         using var bitmap = new Bitmap(stream);
-        if (bitmap.Width != entry.Width || bitmap.Height != entry.Height) throw new InvalidDataException("回收箱图像尺寸与记录不一致。");
+        if (width is not null && bitmap.Width != width || height is not null && bitmap.Height != height)
+            throw new InvalidDataException("回收箱图像尺寸与记录不一致。");
         var bytes = new byte[checked(bitmap.Width * bitmap.Height * 4)];
         var data = bitmap.LockBits(new(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
         try

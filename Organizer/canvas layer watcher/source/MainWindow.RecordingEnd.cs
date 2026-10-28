@@ -22,7 +22,7 @@ internal sealed partial class MainWindow
                 captures = await SaveCapture.CaptureBoundaryAsync(owner._clip.Text,
                     Path.Combine(AppContext.BaseDirectory, "clip-layer-bridge.exe"),
                     new RecorderControlClient(context.ControlPipe, owner.WriteLog), context.PixelSize, requests,
-                    Current, () => monitor.InContact, owner.Status, token);
+                    Current, () => monitor.InContact, owner.Status, token, documentModified: monitor.EditedSinceWrite(owner._clip.Text));
                 foreach (var capture in captures)
                 {
                     var update = await Task.Run(() => history.Advance(capture.Result, capture.Request,

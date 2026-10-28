@@ -56,8 +56,7 @@ internal static class ActualProjectEditingChecks
             interaction.SetRegion(CanvasSelectionGeometry.Rectangle(interaction.Transform.CanvasToScreen(a),interaction.Transform.CanvasToScreen(b)));
             var selection=interaction.RegionSelection!;
             var undo=PreciseUndoSelector.Select(index,layer,selection);
-            var undoRequest=new EditRequest(EditKind.PreciseUndo,layer,selection,
-                undo.Selected.ToDictionary(s=>s.Key,_=>new EventChange(Delete:true)));
+            var undoRequest=undo.Request(selection);
             var undoPlan=ReconstructionPlanner.Build(index,undoRequest);
             var candidate=interaction.Candidates.FirstOrDefault(c=>c.Image.Key==sourceImage.Key&&c.CanSelect);
             ReconstructionPlan? eventPlan=null;
@@ -153,5 +152,8 @@ internal static class ActualProjectEditingChecks
         }
         public Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer,ImageRgba expected,CancellationToken token)
         { InstallCalls++;return Task.FromResult(expected.Copy()); }
+        // Precise undo's closure and selection replay in CSP after the paste; offline the paste is the result.
+        public Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer,ImageRgba expected,IReadOnlyList<ReplayEvent> finalReplay,CancellationToken token)
+            =>InstallReproductionLayerAsync(layer,expected,token);
     }
 }

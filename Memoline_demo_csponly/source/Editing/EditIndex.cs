@@ -7,12 +7,16 @@ internal static class EditIndexBuilder
 {
     private sealed record Contact(LayerKey? Layer, EditableStroke? Stroke, ulong BeginAppend, ulong BeginEvent);
     private sealed record TransactionInterval(ulong Begin, ulong End);
+    /// <summary>Set by the offline probe: why each contact did or did not become an editable stroke.</summary>
+    internal static Action<string>? Trace;
 
     internal static EditIndex Build(SessionSnapshot session)
     {
         var history = (session.History.Count > 0 ? session.History : StateHistory.Resolve(session.Frames))
             .OrderBy(h => h.Anchor).ThenBy(h => h.Order).ToArray();
         var frames = session.Frames.Where(f => J.U64(f, "appendId") <= session.BoundaryAppendId).OrderBy(f => J.U64(f, "appendId")).ToArray();
+        var (packets, refiled) = RefileByInk(session.Packets);
+        var inked = InkedLayers(packets);
         var controlFrames = frames.Where(f => J.Text(f, "kind") is "coreStateUpdated" or "panelUpdateRequested" or
             "statePackageReserved" or "statePackageResult").ToArray();
         var catalogs = frames.Where(f => J.Text(f, "kind") == "shortcutConfiguration").ToArray();
@@ -34,7 +38,18 @@ internal static class EditIndexBuilder
             var usable = EditingProfiler.Part("usable/layer");
             bool layerConfirmed = UsableAt(history, controlFrames, "currentLayerState", beginEvent, beginAppend, Ticks(begin)) &&
                 UsableAt(history, controlFrames, "clipState", beginEvent, beginAppend, Ticks(begin));
-            LayerKey? layer = layerConfirmed ? ResolveLayer(session.Packets, state.Layer, clip, session.SessionId) : null;
+            LayerKey? layer = layerConfirmed ? ResolveLayer(packets, state.Layer, clip, session.SessionId)
+                ?? ResolveNewLayer(packets, state.Layer, clip, Next(history, "clipState", beginEvent), session.SessionId) : null;
+            if (layer is { } filed && refiled.TryGetValue(operation, out var move) && move.From == filed)
+            {
+                layer = move.To;
+                Trace?.Invoke($"op {operation}（append {beginAppend}）：状态记在图层 {filed.Uuid[..8]}，墨迹在图层 {move.To.Uuid[..8]}，按像素改记。");
+            }
+            else if (layer is { } stated && inked.TryGetValue(operation, out var inkedOn) && inkedOn.Count == 1 && !inkedOn.Contains(stated))
+            {
+                layer = inkedOn.Single();
+                Trace?.Invoke($"op {operation}（append {beginAppend}）：状态记在图层 {stated.Uuid[..8]}，墨迹只在图层 {layer.Value.Uuid[..8]}，按墨迹改记。");
+            }
             usable.Dispose();
             contacts[operation] = new(layer, null, beginAppend, beginEvent);
             var brushData = Latest(history, "brushState", beginEvent);
@@ -57,15 +72,38 @@ internal static class EditIndexBuilder
                 J.Text(J.Get(begin, "deviceSource"), "deviceType") == "pen" && J.Text(location, "region") == "canvasViewport" &&
                 J.Text(location, "status") == "matched" && J.Get(J.Get(begin, "data"), "injected").ValueKind != JsonValueKind.True &&
                 !transactions.Any(t => t.Begin <= endAppend && t.End >= beginAppend) && replay.ContainsKey(operation);
-            if (!valid) continue;
+            if (!valid)
+            {
+                if (Trace is { } trace)
+                {
+                    var reasons = new List<string>();
+                    if (end.ValueKind != JsonValueKind.Object) reasons.Add("无抬笔");
+                    if (!UsableAt(history, controlFrames, "currentLayerState", beginEvent, beginAppend, Ticks(begin))) reasons.Add("currentLayerState 不可用");
+                    if (!UsableAt(history, controlFrames, "clipState", beginEvent, beginAppend, Ticks(begin))) reasons.Add("clipState 不可用");
+                    if (layerConfirmed && layer is null) reasons.Add($"图层「{state.Layer}」在结构中不唯一或没有差异包（uuid={ResolveLayerUuid(state.Layer, clip)}）");
+                    if (!classification.Eligible) reasons.Add("笔刷不合格");
+                    if (state.Brush is null || !UsableAt(history, controlFrames, "brushState", beginEvent, beginAppend, Ticks(begin))) reasons.Add("brushState 不可用");
+                    if (state.View is null || !UsableAt(history, controlFrames, "canvasViewState", beginEvent, beginAppend, Ticks(begin))) reasons.Add("canvasViewState 不可用");
+                    if (J.Text(J.Get(begin, "deviceSource"), "deviceType") != "pen") reasons.Add("不是数位笔");
+                    if (J.Text(location, "region") != "canvasViewport" || J.Text(location, "status") != "matched")
+                        reasons.Add($"落笔区域 {J.Text(location, "region")}/{J.Text(location, "status")}");
+                    if (transactions.Any(t => t.Begin <= endAppend && t.End >= beginAppend)) reasons.Add("在编辑事务内");
+                    if (!replay.ContainsKey(operation)) reasons.Add("无重放数据");
+                    trace($"op {operation}（append {beginAppend}）未进入索引：{string.Join("；", reasons)}");
+                }
+                continue;
+            }
             var drawing = replay[operation];
-            if (drawing.Samples.Any(s => s.AppendId > session.BoundaryAppendId)) continue;
-            var labels = session.Packets.Where(p => p.Layer == layer).SelectMany(p => p.Labels).Where(l => l.OperationId == operation).ToArray();
-            var packet = session.Packets.First(p => p.Layer == layer);
+            if (drawing.Samples.Any(s => s.AppendId > session.BoundaryAppendId))
+            { Trace?.Invoke($"op {operation}（append {beginAppend}）未进入索引：接触越过编辑边界"); continue; }
+            var labels = packets.Where(p => p.Layer == layer).SelectMany(p => p.Labels).Where(l => l.OperationId == operation).ToArray();
+            var packet = packets.First(p => p.Layer == layer);
             int width = packet.CanvasWidth, height = packet.CanvasHeight;
-            if (!Footprints.TryMapContactSamples(drawing.Samples, Latest(history, "canvasViewState", beginEvent), width, height, out var points)) continue;
+            if (!Footprints.TryMapContactSamples(drawing.Samples, Latest(history, "canvasViewState", beginEvent), width, height, out var points))
+            { Trace?.Invoke($"op {operation}（append {beginAppend}）未进入索引：采样无法映射到画布"); continue; }
             var raster = EditingProfiler.Part("footprints");
             var write = Footprints.RasterizeCoverageBounded(labels, width, height);
+            var ink = Footprints.RasterizeInkBounded(labels, width, height);
             var probe = classification.ProbeGuaranteed
                 ? Footprints.RasterizeCenterlineBounded(points, width, height)
                 : write.Clone();
@@ -76,7 +114,7 @@ internal static class EditIndexBuilder
             var editable = new EditableStroke(key, operation, drawing.StartTicks, drawing.EndTicks, drawing.Samples,
                 state.Brush?.Name, layer!.Value, classification.Causal, BrushNumbers: state.Brush?.Numbers.ToDictionary(n => n.Key, n => n.Value))
             { BeginEventId = beginEvent, BrushState = J.Get(brushData, "state").Clone(), Classification = classification,
-                WriteMask = write, ProbeMask = probe, ImpactMask = impact, CoverageLabels = labels };
+                WriteMask = write, InkMask = ink, ProbeMask = probe, ImpactMask = impact, CoverageLabels = labels };
             contacts[operation] = new(layer, editable, beginAppend, beginEvent);
             strokes.Add(key, editable);
             undoProofs[^1] = undoProofs[^1] with { ReplayEligible = true };
@@ -86,7 +124,7 @@ internal static class EditIndexBuilder
         var imageStage = EditingProfiler.Stage("index images + chain");
         var images = new Dictionary<DirtyImageKey, DirtyImage>();
         var updatedPackets = new List<LayerPacket>();
-        foreach (var packet in session.Packets)
+        foreach (var packet in packets)
         {
             var labels = packet.Labels.ToDictionary(l => l.Id);
             var updated = new List<DirtyImage>();
@@ -96,7 +134,7 @@ internal static class EditIndexBuilder
                 foreach (var labelId in image.LabelIds)
                 {
                     if (!labels.TryGetValue(labelId, out var label)) throw new InvalidDataException("图片引用不存在的标签。");
-                    if (label.Source == "low-resolution-fallback" || label.OperationId is null ||
+                    if (label.Source == Fallback || label.OperationId is null ||
                         !contacts.TryGetValue(label.OperationId.Value, out var contact)) { unreplayable = true; continue; }
                     if (contact.Layer is null) { unreplayable = true; continue; }
                     if (contact.Layer != packet.Layer) continue;
@@ -119,10 +157,10 @@ internal static class EditIndexBuilder
         var layers = new Dictionary<LayerKey, LayerIndex>(); var allIssues = new List<PlanIssue>();
         foreach (var group in updatedPackets.GroupBy(p => p.Layer))
         {
-            var packets = group.OrderBy(p => p.TriggerTicks).ToArray();
+            var layerPackets = group.OrderBy(p => p.TriggerTicks).ToArray();
             var layerStrokes = strokes.Values.Where(s => s.Layer == group.Key).OrderBy(s => s.BeginEventId).ToArray();
-            var issues = VerifyChain(packets, layerStrokes);
-            layers.Add(group.Key, new(group.Key, packets, layerStrokes, issues.Count == 0, issues, Current: packets.Last().Current)
+            var issues = VerifyChain(layerPackets, layerStrokes);
+            layers.Add(group.Key, new(group.Key, layerPackets, layerStrokes, issues.Count == 0, issues, Current: layerPackets.Last().Current)
             { UndoRedo = ReadUndoRedo(group.Key, history, frames, controlFrames) });
             allIssues.AddRange(issues);
         }
@@ -136,6 +174,140 @@ internal static class EditIndexBuilder
 
     private static JsonElement Latest(IReadOnlyList<HistorySlot> history, string module, ulong beginEvent)
         => history.LastOrDefault(h => h.Module == module && h.Anchor < beginEvent)?.Data ?? default;
+
+    private static JsonElement Next(IReadOnlyList<HistorySlot> history, string module, ulong beginEvent)
+        => history.FirstOrDefault(h => h.Module == module && h.Anchor >= beginEvent && Confirmed(h.Data))?.Data ?? default;
+
+    /// <summary>
+    /// A layer created after the last save (a paste, a new layer) is not in that save's structure yet. The next save
+    /// names it: accepted only when the earlier structure has no layer of that name and the later one has exactly one,
+    /// with a UUID the earlier one did not have.
+    /// </summary>
+    private static LayerKey? ResolveNewLayer(IReadOnlyList<LayerPacket> packets, string? name, JsonElement before, JsonElement after, string sessionId)
+    {
+        if (name is null || !Confirmed(before) || !Confirmed(after)) return null;
+        var earlier = J.Array(J.Get(J.Get(before, "state"), "layers")).ToArray();
+        if (earlier.Any(l => J.Text(l, "name") is { } n && J.Name(n) == J.Name(name))) return null;
+        if (ResolveLayerUuid(name, after) is not { } uuid || earlier.Any(l => J.Text(l, "uuid") == uuid)) return null;
+        var layers = packets.Where(p => p.Layer.SessionId == sessionId && p.Layer.Uuid == uuid).Select(p => p.Layer).Distinct().ToArray();
+        return layers.Length == 1 ? layers[0] : null;
+    }
+
+    private const string Fallback = "low-resolution-fallback";
+
+    /// <summary>The layers whose recorded dirty images hold each contact's ink, as the watcher labelled them when it captured
+    /// the layer. A contact's own state can name a layer that is gone: after Ctrl+Z took back a precise undo
+    /// (memolinetest15, 2026-10-26) the .clip on disk listed the revoked reproduction under the layer's name until the next
+    /// save, the 74 strokes drawn meanwhile were filed on it and dropped with it, and their image was "不可编辑".</summary>
+    private static Dictionary<ulong, HashSet<LayerKey>> InkedLayers(IReadOnlyList<LayerPacket> packets)
+    {
+        var inked = new Dictionary<ulong, HashSet<LayerKey>>();
+        foreach (var packet in packets.Where(p => p.Operation is null && !p.IsRecordingBaseline))
+            foreach (var label in packet.Labels.Where(l => l.OperationId is not null && l.Source != Fallback && l.ImageIds.Count > 0))
+            {
+                if (!inked.TryGetValue(label.OperationId!.Value, out var layers)) inked.Add(label.OperationId.Value, layers = []);
+                layers.Add(packet.Layer);
+            }
+        return inked;
+    }
+
+    /// <summary>
+    /// A contact is filed under the layer CSP's state named when it began. Read before CSP applied a layer command (a
+    /// new layer tapped while CSP was still busy with the guard's save, 2026-10-24), that state names the old layer:
+    /// the watcher labels the contact there, where no pixel changed under it, while the layer CSP really drew on shows
+    /// ink nothing explains (a low-resolution-fallback label). The pixels decide instead. A contact whose labels explain
+    /// no change moves to the layer whose unexplained ink it touches in the same interval, when that is one layer and
+    /// the moved contacts explain every 64 px tile of that ink, as the watcher would have labelled it on that layer.
+    /// </summary>
+    private static (IReadOnlyList<LayerPacket> Packets, IReadOnlyDictionary<ulong, (LayerKey From, LayerKey To)> Moves)
+        RefileByInk(IReadOnlyList<LayerPacket> packets)
+    {
+        var none = new Dictionary<ulong, (LayerKey From, LayerKey To)>();
+        static bool Recorded(LayerPacket packet) => packet.Operation is null && !packet.IsRecordingBaseline;
+        var silent = new Dictionary<ulong, (LayerPacket Packet, LabelEvidence Label)>();
+        var explaining = new HashSet<ulong>();
+        foreach (var packet in packets.Where(Recorded))
+            foreach (var label in packet.Labels.Where(l => l.OperationId is not null && l.Source != Fallback))
+                if (label.ImageIds.Count > 0 || label.Segments.Count == 0 || !silent.TryAdd(label.OperationId!.Value, (packet, label)))
+                    explaining.Add(label.OperationId!.Value);
+        foreach (ulong operation in explaining) silent.Remove(operation);
+        var unexplained = new List<(LayerPacket Packet, DirtyImage Image, LabelEvidence Label)>();
+        foreach (var packet in packets.Where(Recorded))
+        {
+            var labels = packet.Labels.ToDictionary(l => l.Id, StringComparer.Ordinal);
+            foreach (var image in packet.Images)
+                if (image.LabelIds.Select(id => labels.GetValueOrDefault(id)).FirstOrDefault(l => l?.Source == Fallback) is { } fallback)
+                    unexplained.Add((packet, image, fallback));
+        }
+        if (silent.Count == 0 || unexplained.Count == 0) return (packets, none);
+        var targets = new Dictionary<ulong, int[]>();
+        foreach (var (operation, (packet, label)) in silent)
+        {
+            PixelMask? write = null;
+            var hits = Enumerable.Range(0, unexplained.Count).Where(i =>
+            {
+                var (other, image, fallback) = unexplained[i];
+                if (other.Layer == packet.Layer || other.Layer.SessionId != packet.Layer.SessionId ||
+                    label.FromTicks < fallback.FromTicks || label.ToTicks > fallback.ToTicks) return false;
+                write ??= Footprints.RasterizeCoverageBounded([label], packet.CanvasWidth, packet.CanvasHeight);
+                return write.Intersects(image.Mask);
+            }).ToArray();
+            if (hits.Length > 0 && hits.Select(i => unexplained[i].Packet.Layer).Distinct().Count() == 1) targets[operation] = hits;
+        }
+        // Dropping a contact can leave another image it touched unexplained: repeat until every touched image is explained.
+        bool dropped;
+        do
+        {
+            dropped = false;
+            foreach (var image in targets.SelectMany(t => t.Value.Select(i => (Operation: t.Key, Image: i))).GroupBy(t => t.Image).ToArray())
+            {
+                var (packet, dirty, _) = unexplained[image.Key];
+                var labels = packet.Labels.ToDictionary(l => l.Id, StringComparer.Ordinal);
+                var cover = dirty.LabelIds.Select(id => labels[id]).Where(l => l.Source != Fallback).Concat(image.Select(t => silent[t.Operation].Label));
+                if (ExplainsEveryTile(cover, dirty.Mask, packet.CanvasWidth, packet.CanvasHeight)) continue;
+                foreach (var (operation, _) in image) dropped |= targets.Remove(operation);
+            }
+        } while (dropped);
+        if (targets.Count == 0) return (packets, none);
+        var moves = targets.ToDictionary(t => t.Key, t => (silent[t.Key].Packet.Layer, unexplained[t.Value[0]].Packet.Layer));
+        var rewritten = new Dictionary<LayerPacket, LayerPacket>(ReferenceEqualityComparer.Instance);
+        foreach (var group in targets.SelectMany(t => t.Value.Select(i => (Operation: t.Key, Image: i)))
+                     .GroupBy(t => unexplained[t.Image].Packet, ReferenceEqualityComparer.Instance))
+        {
+            var packet = (LayerPacket)group.Key!;
+            var moved = group.GroupBy(t => t.Operation).Select(t =>
+            {
+                var (source, label) = silent[t.Key];
+                return label with { Id = $"refiled:{source.PacketId}:{label.Id}",
+                    ImageIds = t.Select(i => unexplained[i.Image].Image.Key.ImageId).Distinct().ToArray() };
+            }).ToArray();
+            var explained = moved.SelectMany(l => l.ImageIds).ToHashSet(StringComparer.Ordinal);
+            var fallbacks = packet.Labels.Where(l => l.Source == Fallback).Select(l => l.Id).ToHashSet(StringComparer.Ordinal);
+            rewritten[packet] = packet with
+            {
+                Images = packet.Images.Select(image => explained.Contains(image.Key.ImageId)
+                    ? image with { LabelIds = image.LabelIds.Where(id => !fallbacks.Contains(id))
+                        .Concat(moved.Where(l => l.ImageIds.Contains(image.Key.ImageId)).Select(l => l.Id)).ToArray(), HasUnreplayableEvents = false }
+                    : image).ToArray(),
+                Labels = packet.Labels.Select(l => fallbacks.Contains(l.Id) ? l with { ImageIds = l.ImageIds.Where(id => !explained.Contains(id)).ToArray() } : l)
+                    .Concat(moved).ToArray(),
+            };
+        }
+        return (packets.Select(p => rewritten.GetValueOrDefault(p) ?? p).ToArray(), moves);
+    }
+
+    /// <summary>Whether the labels' coverage meets every 64 px tile holding ink, the watcher's rule for labelling a change.</summary>
+    private static bool ExplainsEveryTile(IEnumerable<LabelEvidence> labels, PixelMask ink, int width, int height)
+    {
+        const int Tile = 64;
+        var matrix = new DirtyMatrix.Core.DirtyTileMatrix(width, height, Tile);
+        foreach (var label in labels)
+            matrix.AddCoverage(new(label.Segments.Select(s => new DirtyMatrix.Core.StrokeSegment(new(s.StartX, s.StartY), new(s.EndX, s.EndY))).ToArray(), label.Radius));
+        var covered = matrix.Runs.SelectMany(r => Enumerable.Range(r.Start, r.End - r.Start).Select(column => (r.Row, column))).ToHashSet();
+        foreach (var (x, y) in ink.Pixels())
+            if (!covered.Contains((y / Tile, x / Tile))) return false;
+        return true;
+    }
 
     private static LayerKey? ResolveLayer(IReadOnlyList<LayerPacket> packets, string? name, JsonElement clip, string sessionId)
     {
@@ -258,10 +430,10 @@ internal static class EditIndexBuilder
         foreach (var frame in frames)
         {
             var data = J.Get(frame, "data");
-            bool matches = J.Text(frame, "kind") == "coreStateUpdated" && JsonElement.DeepEquals(data, slot.Data) &&
+            bool matches = J.Text(frame, "kind") == "coreStateUpdated" && JsonElement.DeepEquals(data, slot.Recorded) &&
                 (packages.Contains(J.Text(data, "packageId")) || J.U64(frame, "appendId") == slot.Order);
             matches |= J.Text(frame, "kind") == "statePackageResult" && packages.Contains(J.Text(data, "packageId")) &&
-                J.Array(J.Get(J.Get(data, "result"), "updates")).Any(u => JsonElement.DeepEquals(u, slot.Data));
+                J.Array(J.Get(J.Get(data, "result"), "updates")).Any(u => JsonElement.DeepEquals(u, slot.Recorded));
             ulong append = J.U64(frame, "appendId");
             // Repeated identical publication must not move an old causal slot forward.
             if (matches && append > 0 && (confirmation is null || append < confirmation.Append))
@@ -319,9 +491,16 @@ internal static class EditIndexBuilder
     {
         var issues = new List<PlanIssue>();
         var diffs = packets.Where(p => !p.IsRecordingBaseline).ToArray();
-        if (diffs.Length == 0) { issues.Add(new(PlanIssueCode.NoBaseline, "图层没有可重建的差异链。")); return issues; }
+        if (diffs.Length == 0)
+        {
+            // A layer nothing was drawn on is complete as captured.
+            if (strokes.Count > 0) issues.Add(new(PlanIssueCode.NoBaseline, "图层没有可重建的差异链。"));
+            return issues;
+        }
         var first = diffs[0];
-        if (first.BaselineSource is not ("recordingStart" or "createdEmpty" or "layerCreated" or "reproduction")) issues.Add(new(PlanIssueCode.NoBaseline, "首个差异包没有可信的 baseline。"));
+        // Whatever the first diff starts from is the layer's pixels at that time: a seeded baseline (recording start,
+        // a new layer's first save or empty canvas, a reproduction) or else its first capture. Contacts before it are
+        // part of those pixels and simply have no dirty image of their own.
         if (diffs.Any(p => !p.FullResolution)) issues.Add(new(PlanIssueCode.ChainLossy, "旧录制没有使用全分辨率比较。"));
         for (int i = 0; i < diffs.Length; i++)
         {
@@ -333,11 +512,12 @@ internal static class EditIndexBuilder
                 (J.I64(packet.AfterDescriptor, "width") != J.I64(packet.NowDescriptor, "width") || J.I64(packet.AfterDescriptor, "height") != J.I64(packet.NowDescriptor, "height") ||
                  J.I64(packet.AfterDescriptor, "generation") != J.I64(packet.NowDescriptor, "generation") ||
                  J.Text(packet.AfterDescriptor, "sessionId") != J.Text(packet.NowDescriptor, "sessionId") ||
-                 J.Text(J.Get(packet.AfterDescriptor, "layer"), "uuid") != J.Text(J.Get(packet.NowDescriptor, "layer"), "uuid")))
+                 // A Memoline-operation packet goes from the layer it replaced to its reproduction.
+                 (packet.Operation is { } operation
+                     ? J.Text(J.Get(packet.AfterDescriptor, "layer"), "uuid") != operation.ReplacedLayerUuid || i > 0
+                     : J.Text(J.Get(packet.AfterDescriptor, "layer"), "uuid") != J.Text(J.Get(packet.NowDescriptor, "layer"), "uuid"))))
                 issues.Add(new(PlanIssueCode.ChainBroken, "捕获组前后图层身份或尺寸不同：" + packet.PacketId));
         }
-        if (strokes.Count > 0 && first.AfterDescriptor.ValueKind == JsonValueKind.Object && J.I64(first.AfterDescriptor, "triggerTicks") >= strokes.Min(s => s.StartTicks))
-            issues.Add(new(PlanIssueCode.NoBaseline, "baseline 不早于首个合格笔接触。"));
         if (!diffs[^1].IsBoundary || diffs[^1].Current is null) issues.Add(new(PlanIssueCode.CaptureMismatch, "编辑边界缺少最后一组的整层捕获。"));
         return issues;
     }

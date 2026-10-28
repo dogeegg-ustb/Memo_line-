@@ -66,11 +66,19 @@ internal sealed class EditingPanel : Form
     private readonly TreeView _details=new(){Dock=DockStyle.Fill,ShowNodeToolTips=true};
     private readonly TabControl _tabs=new(){Dock=DockStyle.Fill};
     private readonly CheckBox _delete=new(){Text="让所选事件不再发生",Checked=true,AutoSize=true};
+    // Images of layers the user deleted ("已被删除") are hidden unless asked for; they are never editable.
+    private readonly CheckBox _showDeleted=new(){Text="显示已被删除图层的脏矩阵",AutoSize=true,Dock=DockStyle.Top};
+    // Images a Memoline-operation packet replaced ("旧版本") are hidden unless asked for; they are never editable.
+    private readonly CheckBox _showSuperseded=new(){Text="显示被记艺线操作包取代的旧版本",AutoSize=true,Dock=DockStyle.Top};
     private readonly CheckBox _numberEnabled=new(){Text="调整数字参数",AutoSize=true};
     private readonly ComboBox _property=new(){Width=150,DropDownStyle=ComboBoxStyle.DropDownList};
     private readonly NumericUpDown _value=new(){Minimum=-100000,Maximum=100000,DecimalPlaces=3,Width=100};
     private readonly CheckBox _changeBrush=new(){Text="使用选取的笔刷属性",AutoSize=true};
     private readonly ComboBox _brush=new(){Width=220,DropDownStyle=ComboBoxStyle.DropDownList};
+    // Replay sets it with CSP's screen colour picker from a swatch on the virtual screen.
+    private readonly CheckBox _changeColor=new(){Text="改为颜色",AutoSize=true};
+    private readonly Button _color=new(){Width=110,Height=27,FlatStyle=FlatStyle.Flat,Text="选择…"};
+    private int[]? _chosenRgb;
     // Direct: CSP already shows the target brush, so the panel is framed on a fresh screenshot at once.
     private readonly Button _confirmBrush=new(){Text="截图笔刷属性面板…",AutoSize=true};
     // The frozen canvas covers CSP; switching brushes first needs it out of the way.
@@ -91,6 +99,9 @@ internal sealed class EditingPanel : Form
     private readonly Button _recycleOpen=new(){Text="打开文件夹",AutoSize=true,Enabled=false};
     private readonly Button _recycleRefresh=new(){Text="刷新",AutoSize=true};
     private readonly Button _chooseRecycle=new(){Text="回收箱",AutoSize=true};
+    // The pause after each stroke precise undo replays: shorter lets CSP fold neighbouring strokes into one undo step.
+    private readonly NumericUpDown _gap=new(){Minimum=0,Maximum=(decimal)WindowsCspEditingActions.ReplayTiming.MaximumGapMilliseconds,
+        Increment=10,Width=70,Margin=new(0,5,0,3)};
     private SelectionProgressFrame? _progressFrame;
     // Precise undo starts by itself once a region exists; set while that region waits for the boundary.
     private bool _autoUndoPending;
@@ -115,10 +126,13 @@ internal sealed class EditingPanel : Form
         _events.Columns.Add("所选",50);_events.Columns.Add("整笔事件",85);_events.Columns.Add("子工具",200);
         foreach(var (page,control) in new (TabPage,Control)[]{(_imagePage,_images),(_eventPage,_events),(_modifyPage,_options),(_planPage,_details)})
         {page.AutoScroll=true;page.Controls.Add(control);_tabs.TabPages.Add(page);}
+        _imagePage.Controls.Add(_showDeleted);_showDeleted.CheckedChanged+=(_,_)=>RefreshCandidates();
+        _imagePage.Controls.Add(_showSuperseded);_showSuperseded.CheckedChanged+=(_,_)=>RefreshCandidates();
         var numberRow=new FlowLayoutPanel{AutoSize=true};numberRow.Controls.AddRange([_numberEnabled,_property,_value]);
+        var colorRow=new FlowLayoutPanel{AutoSize=true};colorRow.Controls.AddRange([_changeColor,_color]);
         var brushRow=new FlowLayoutPanel{AutoSize=true};brushRow.Controls.AddRange([_changeBrush,_brush]);
         var brushCaptureRow=new FlowLayoutPanel{AutoSize=true};brushCaptureRow.Controls.AddRange([_confirmBrush,_switchBrush]);
-        _options.Controls.AddRange([_delete,numberRow,brushRow,brushCaptureRow,_brushPreview]);
+        _options.Controls.AddRange([_delete,numberRow,colorRow,brushRow,brushCaptureRow,_brushPreview]);
         _recycleList.LargeImageList=_recycleThumbs;
         _recycleProperties.Columns.Add("属性",130);_recycleProperties.Columns.Add("值",260);
         var recycleButtons=new FlowLayoutPanel{Dock=DockStyle.Bottom,AutoSize=true};recycleButtons.Controls.AddRange([_recycleCopy,_recycleOpen,_recycleRefresh]);
@@ -139,7 +153,14 @@ internal sealed class EditingPanel : Form
             _details.Bounds=new(0,0,width,Math.Max(1,height-confirmation));_undoCapacity.Bounds=new(0,Math.Max(0,height-confirmation),width,64);}
         _planPage.Layout+=(_,_)=>LayoutPlan();_undoCapacity.VisibleChanged+=(_,_)=>LayoutPlan();
         _actions.Controls.AddRange([_refresh,_eventPlan,_undoPlan,_execute,_cancel,_close]);
-        _modeBar.Controls.AddRange([_chooseUndo,_chooseEdit,_chooseRecycle]);_chooseRecycle.Click+=(_,_)=>ShowRecycleOnly();_brushCaptureBar.Controls.AddRange([_captureBrush,_cancelBrush]);
+        _gap.Value=(decimal)WindowsCspEditingActions.ReplayTiming.GapMilliseconds;
+        _gap.ValueChanged+=(_,_)=>WindowsCspEditingActions.ReplayTiming.GapMilliseconds=(double)_gap.Value;
+        var gapRow=new FlowLayoutPanel{AutoSize=true,WrapContents=false,Margin=new(3,0,3,0)};
+        gapRow.Controls.AddRange([new Label{Text="精确撤销笔间隔",AutoSize=true,Margin=new(3,9,3,3)},_gap,
+            new Label{Text="ms",AutoSize=true,Margin=new(3,9,3,3)}]);
+        new ToolTip().SetToolTip(_gap,$"精确撤销重放每一笔后等待的时间（0–{WindowsCspEditingActions.ReplayTiming.MaximumGapMilliseconds:0} ms，" +
+            $"默认 {WindowsCspEditingActions.ReplayTiming.DefaultGapMilliseconds:0}）。太短时 CSP 会把相邻几笔记成一个撤销步。");
+        _modeBar.Controls.AddRange([_chooseUndo,_chooseEdit,_chooseRecycle,gapRow]);_chooseRecycle.Click+=(_,_)=>ShowRecycleOnly();_brushCaptureBar.Controls.AddRange([_captureBrush,_cancelBrush]);
         foreach(var control in new Control[]{_tabs,_summary,_tools,_brushCaptureBar,_modeBar,_help,_status,_actions}){control.Dock=DockStyle.None;Controls.Add(control);}
         _status.TextChanged+=(_,_)=>PerformLayout();_status.FontChanged+=(_,_)=>PerformLayout();
         _chooseEdit.Click+=async(_,_)=>await SelectModeAsync(EditKind.EventEditing);_chooseUndo.Click+=async(_,_)=>await SelectModeAsync(EditKind.PreciseUndo);
@@ -155,6 +176,7 @@ internal sealed class EditingPanel : Form
         _delete.CheckedChanged+=(_,_)=>{InvalidatePlan();UpdateOptions();};
         _numberEnabled.CheckedChanged+=(_,_)=>{InvalidatePlan();UpdateOptions();};
         _changeBrush.CheckedChanged+=(_,_)=>{InvalidatePlan();UpdateParameters();UpdateOptions();};
+        _changeColor.CheckedChanged+=(_,_)=>{InvalidatePlan();UpdateOptions();};_color.Click+=(_,_)=>ChooseColor();
         _property.SelectedIndexChanged+=(_,_)=>{InvalidatePlan();if(_parameterAvailability?.Numbers.FirstOrDefault(n=>n.Key==_property.Text) is { } number)
             _value.Value=(decimal)Math.Clamp(number.RecordedValue,(double)_value.Minimum,(double)_value.Maximum);};_value.ValueChanged+=(_,_)=>InvalidatePlan();
         _brush.SelectedIndexChanged+=(_,_)=>{InvalidatePlan();UpdateParameters();};
@@ -320,7 +342,7 @@ internal sealed class EditingPanel : Form
     private void BindSession(EditSession session)
     {
         _shown=session;_liveBrushEvidence=session.LiveBrushEvidence;ClearThumbnailCache();
-        _preciseSummary=null;_delete.Checked=true;_changeBrush.Checked=false;
+        _preciseSummary=null;_delete.Checked=true;_changeBrush.Checked=false;_changeColor.Checked=false;ShowChosenColor(null);
         _brushPreview.Image?.Dispose();_brushPreview.Image=null;_brushPreview.Visible=false;
         _brush.Items.Clear();foreach(string name in session.BrushChoices)_brush.Items.Add(name);
         if(_brush.Items.Count>0)_brush.SelectedIndex=0;
@@ -337,13 +359,15 @@ internal sealed class EditingPanel : Form
         InvalidatePlan();_images.Items.Clear();_events.Items.Clear();_thumbnails.Images.Clear();
         if(_interaction is null)return;
         if(_mode==EditKind.PreciseUndo){UpdateSummary();return;}
-        foreach(var candidate in _interaction.Candidates)
+        foreach(var candidate in _interaction.Candidates.Where(c=>(_showDeleted.Checked||!c.Deleted)&&(_showSuperseded.Checked||!c.Superseded)))
         {
             var image=candidate.Image;
             if(!_thumbnailCache.TryGetValue(image.Key,out var thumbnail))_thumbnailCache[image.Key]=thumbnail=Thumbnail(image.Now);
             _thumbnails.Images.Add(thumbnail);
             double seconds=(double)candidate.TriggerTicks/_shown!.Source(candidate.SourceSessionId??_shown.LiveView.SessionId).Frequency;
-            _images.Items.Add(new ListViewItem($"{candidate.LayerName} · 第 {candidate.SessionOrder+1} 次录制 {seconds:0.00}s\r\n{image.Events.Count} 笔 · {(candidate.CanSelect?"可扫选":"不可编辑")}")
+            string origin=image.Operation is { } operation?(operation.PreciseUndo?"记艺线操作 · 精确撤销":"记艺线操作 · 新版本")+" · ":"";
+            _images.Items.Add(new ListViewItem($"{candidate.LayerName} · 第 {candidate.SessionOrder+1} 次录制 {seconds:0.00}s\r\n{origin}{candidate.Strokes} 笔 · "+
+                (candidate.Deleted?"已被删除":candidate.Superseded?"旧版本":candidate.CanSelect?"可扫选":"不可编辑"))
                 {Tag=image.Key,ImageIndex=_thumbnails.Images.Count-1,ToolTipText=$"{image.Key.PacketId}/{image.Key.ImageId}\r\n{candidate.Reason}",ForeColor=candidate.CanSelect?SystemColors.WindowText:Color.DimGray});
         }
         _tabs.SelectedTab=_imagePage;UpdateSummary();
@@ -409,18 +433,44 @@ internal sealed class EditingPanel : Form
             _events.Items.Add(new ListViewItem([_interaction.SelectedEvents.Contains(stroke.Key)?"●":"",stroke.BeginEventId.ToString(),stroke.BrushName??""])
                 {Tag=stroke.Key,ForeColor=_interaction.SelectedEvents.Contains(stroke.Key)?Color.RoyalBlue:SystemColors.WindowText});
         UpdateParameters();
+        if(!_changeColor.Checked)ShowChosenColor(_interaction.SelectedEvents.Select(StrokeRgb).FirstOrDefault(rgb=>rgb is not null));
         UpdateSummary();
+    }
+    // The colour a stroke is drawn in now: the one an earlier edit gave it, else the recorded one.
+    private int[]? StrokeRgb(EditableStrokeKey key)
+    {
+        if(_shown is null||!_shown.Index.Strokes.TryGetValue(key,out var stroke))return null;
+        if(MemolineEdits.Current(stroke)?.Rgb is { } rgb)return [..rgb];
+        return ColorRestorer.Rgb(StateHistory.At(_shown.Source(key.SessionId).History,stroke.BeginEventId).Color);
+    }
+    private void ChooseColor()
+    {
+        using var dialog=new ColorDialog{FullOpen=true,AnyColor=true,SolidColorOnly=true,
+            Color=_chosenRgb is { } rgb?Color.FromArgb(rgb[0],rgb[1],rgb[2]):Color.Black};
+        if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+        ShowChosenColor([dialog.Color.R,dialog.Color.G,dialog.Color.B]);
+        _delete.Checked=false;_changeColor.Checked=true;InvalidatePlan();UpdateOptions();
+    }
+    private void ShowChosenColor(int[]? rgb)
+    {
+        _chosenRgb=rgb;
+        _color.BackColor=rgb is null?SystemColors.Control:Color.FromArgb(rgb[0],rgb[1],rgb[2]);
+        _color.ForeColor=rgb is null||rgb[0]*299+rgb[1]*587+rgb[2]*114>128000?Color.Black:Color.White;
+        _color.Text=rgb is null?"选择…":$"#{rgb[0]:X2}{rgb[1]:X2}{rgb[2]:X2}";
     }
     private void UpdateSummary()=>_summary.Text=_interaction?.RegionSelection is null?"等待画布选区。":
         !_interaction.IsReady?"已记录选区。编辑边界建立后立即计算。":
         _mode==EditKind.PreciseUndo?_preciseSummary??"已选画布范围。精确撤销只作用于当前图层，可直接预览方案。":
-        _interaction.ChosenImage is null?$"范围内共 {_interaction.Candidates.Count} 张脏矩阵图片。请选择一张。":
+        _interaction.ChosenImage is null?$"范围内共 {_interaction.Candidates.Count(c=>!c.Deleted&&!c.Superseded)} 张脏矩阵图片"+
+            (_interaction.Candidates.Count(c=>c.Deleted) is > 0 and var gone?$"（另有 {gone} 张属于已被删除的图层{(_showDeleted.Checked?"":"，默认不显示")}）":"")+
+            (_interaction.Candidates.Count(c=>c.Superseded&&!c.Deleted) is > 0 and var old?$"（另有 {old} 张旧版本{(_showSuperseded.Checked?"":"，默认不显示")}）":"")+"。请选择一张。":
         $"已选择单张脏矩阵，扫选 {_interaction.SelectedEvents.Count} 笔。";
     private void InvalidatePlan()
     {_requestVersion++;_pending=null;_execute.Enabled=false;_details.Nodes.Clear();_undoCapacity.Checked=false;_undoCapacity.Enabled=false;_undoCapacity.Visible=false;}
     private void UpdateOptions()
     {
-        _numberEnabled.Enabled=_changeBrush.Enabled=!_busy&&!_delete.Checked;
+        _numberEnabled.Enabled=_changeBrush.Enabled=_changeColor.Enabled=!_busy&&!_delete.Checked;
+        _color.Enabled=!_busy;
         _property.Enabled=_value.Enabled=!_busy&&!_delete.Checked&&_numberEnabled.Checked;
         _brush.Enabled=false;
         _confirmBrush.Enabled=_switchBrush.Enabled=!_busy&&!_preparing&&_interaction?.SelectedEvents.Count>0;
@@ -505,7 +555,7 @@ internal sealed class EditingPanel : Form
         finally{if(!IsDisposed){Busy(false);EndBrushPick();}}
     }
     private void UpdateExecutionAvailability()=>_execute.Enabled=!_busy&&!_preparing&&_pending is { } request &&
-        (request.Kind!=EditKind.PreciseUndo||UndoCapacityPolicy.Check(request.Changes.Count,_shown?.VerifiedUndoCapacity,_undoCapacity.Checked).Allowed);
+        (request.Kind!=EditKind.PreciseUndo||UndoCapacityPolicy.Check(request.Changes.Count+request.Closure.Count,_shown?.VerifiedUndoCapacity,_undoCapacity.Checked).Allowed);
     private void Busy(bool busy)
     {
         _busy=busy;ApplyStyles();UpdateCaptureExclusion();_refresh.Enabled=_tools.Enabled=_delete.Enabled=!busy;_eventPlan.Enabled=_undoPlan.Enabled=_images.Enabled=!busy&&!_preparing;
@@ -525,11 +575,12 @@ internal sealed class EditingPanel : Form
             var model=_interaction??throw new InvalidOperationException("画布选择尚未就绪。");
             var selection=model.RegionSelection?.Clone()??throw new InvalidOperationException("请先在 CSP 画布上选范围。");
             IReadOnlyDictionary<EditableStrokeKey,EventChange> changes;string detail;
+            IReadOnlySet<EditableStrokeKey> closure=new HashSet<EditableStrokeKey>();
             if(preciseUndo)
             {
                 var undo=session.SelectPreciseUndo(selection);
                 if(!undo.IsValid)throw new InvalidOperationException(string.Join("；",undo.Issues.Select(i=>i.Message)));
-                changes=undo.Selected.ToDictionary(s=>s.Key,_=>new EventChange(Delete:true));
+                var undoRequest=undo.Request(selection);changes=undoRequest.Changes;closure=undoRequest.Closure;
                 string name=session.LayerName(undo.CurrentLayer!.Value);
                 detail=$"图层「{name}」撤销：基础 {undo.BaseCount} 笔 + 叠放闭包 {undo.ClosureCount} 笔 = {undo.Selected.Count} 笔。";
                 _overlay?.ShowPreciseUndo(undo.Selected.Select(s=>s.Key));
@@ -538,7 +589,9 @@ internal sealed class EditingPanel : Form
             {
                 _overlay?.ShowEventSelection();
                 if(model.ChosenImage is null||model.SelectedEvents.Count==0)throw new InvalidOperationException("请选择单张脏矩阵，然后在画布上扫选整笔。");
-                if(!_delete.Checked&&!_numberEnabled.Checked&&!_changeBrush.Checked)throw new InvalidOperationException("请选择数字参数修改或更换子工具。");
+                if(!_delete.Checked&&!_numberEnabled.Checked&&!_changeBrush.Checked&&!_changeColor.Checked)throw new InvalidOperationException("请选择数字参数修改、改颜色或更换子工具。");
+                if(!_delete.Checked&&_changeColor.Checked&&_chosenRgb is null)throw new InvalidOperationException("请先点颜色按钮选择要改成的颜色。");
+                if(!_delete.Checked&&_changeColor.Checked&&ColorRestorer.MissingPicker(session.Shortcuts) is { } noPicker)throw new InvalidOperationException(noPicker);
                 if(!_delete.Checked&&_numberEnabled.Checked&&_property.SelectedItem is null)throw new InvalidOperationException("所选笔画没有共同可修改的数字参数。");
                 if(!_delete.Checked&&_changeBrush.Checked&&_brush.SelectedItem is null)throw new InvalidOperationException("没有可用的子工具快捷键路由。");
                 if(!_delete.Checked&&_changeBrush.Checked&&!BrushSnapshot.SameName(BrushSnapshot.Parse(_liveBrushEvidence)?.Name??"",_brush.Text))
@@ -553,17 +606,18 @@ internal sealed class EditingPanel : Form
                 }
                 if(!_delete.Checked&&_numberEnabled.Checked)numbers[_property.Text]=(double)_value.Value;
                 var change=_delete.Checked?new EventChange(Delete:true):new EventChange(BrushName:_changeBrush.Checked?_brush.Text:null,Numbers:numbers)
-                    {ReplacementBrushState=_changeBrush.Checked?_liveBrushEvidence:default};
-                changes=model.SelectedEvents.ToDictionary(k=>k,_=>change);detail=$"修改 {changes.Count} 个完整笔接触："+(_delete.Checked?"删除":"参数 / 子工具覆盖")+"。";
+                    {ReplacementBrushState=_changeBrush.Checked?_liveBrushEvidence:default,Rgb=_changeColor.Checked?_chosenRgb:null};
+                // A stroke an earlier edit changed is edited as that new version: the request carries both changes.
+                changes=model.SelectedEvents.ToDictionary(k=>k,k=>MemolineEdits.Effective(session.Index.Strokes[k],change));detail=$"修改 {changes.Count} 个完整笔接触："+(_delete.Checked?"删除":"参数 / 颜色 / 子工具覆盖")+"。";
             }
-            var request=new EditRequest(preciseUndo?EditKind.PreciseUndo:EditKind.EventEditing,session.CurrentLayer,selection,changes);
+            var request=new EditRequest(preciseUndo?EditKind.PreciseUndo:EditKind.EventEditing,session.CurrentLayer,selection,changes){Closure=closure};
             var plan=await _host.PlanEditAsync(request,CancellationToken.None);if(IsDisposed||version!=_requestVersion)return;
             if(!plan.IsValid)throw new InvalidOperationException(string.Join("；",plan.Issues.Select(i=>i.Message)));
             _pending=request;RenderPlan(plan);_tabs.SelectedTab=_planPage;
             if(preciseUndo)
             {
-                var capacity=UndoCapacityPolicy.Check(changes.Count,session.VerifiedUndoCapacity,false);
-                _undoCapacity.Text=$"我已确认 CSP 撤销容量至少为 {capacity.Required}（{changes.Count} 笔 + 5）";
+                var capacity=UndoCapacityPolicy.Check(changes.Count+closure.Count,session.VerifiedUndoCapacity,false);
+                _undoCapacity.Text=$"我已确认 CSP 撤销容量至少为 {capacity.Required}（{changes.Count+closure.Count} 笔 + 5）";
                 _undoCapacity.Enabled=session.VerifiedUndoCapacity is null;_undoCapacity.Visible=true;detail+=" "+capacity.Message;
             }
             UpdateExecutionAvailability();_status.Text=detail;
@@ -641,7 +695,7 @@ internal sealed class EditingPanel : Form
             _status.Text="无法精确撤销："+string.Join("；",undo.Issues.Select(i=>i.Message))+" 请重新框选。";return;
         }
         // The target is the layer the selection found strokes on: the current one, or the nearest that has some.
-        var request=new EditRequest(EditKind.PreciseUndo,undo.CurrentLayer,region.Clone(),undo.Selected.ToDictionary(s=>s.Key,_=>new EventChange(Delete:true)));
+        var request=undo.Request(region.Clone());
         if(undo.CurrentLayer!=session.CurrentLayer)_status.Text=$"当前图层在选区内没有笔画，精确撤销最近的图层「{session.LayerName(undo.CurrentLayer!.Value)}」…";
         if(_progressFrame is not null)_progressFrame.Progress=.08;
         // No preview and no undo-capacity confirmation: the user chose to run precise undo directly.
@@ -702,7 +756,7 @@ internal sealed class EditingPanel : Form
         try
         {
             var image=RecycleBin.LoadImage(entry);
-            DirtyMatrixPaster.ClipboardImageCodec.SetImage(image.Width,image.Height,image.Bytes);
+            DirtyMatrixPaster.ClipboardImageCodec.SetImage(image.Width,image.Height,image.Bytes);RecycleBin.MarkCopied(entry);
             _status.Text=$"已复制「{entry.LayerName}」的完整画布图像。在 CSP 中按 Ctrl+V，会作为新图层粘贴在原位置。";
         }
         catch(Exception error){_status.Text="无法复制回收箱图像："+error.Message;}

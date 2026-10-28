@@ -38,8 +38,17 @@ class StateRequestTests(unittest.TestCase):
         self.assertEqual(options['reason'], 'externalStateRequest:r')
         self.assertEqual(runtime.pipeline.timeline.packages['explicit-package']['expected'], {'brushState','subtoolState','canvasViewState'})
 
-    def test_hidden_or_background_panels_return_error_without_borrowing_old_state(self):
+    def test_csp_in_the_background_is_still_read(self):
+        # Panels come from CSP's own window: Memoline (just clicked) may be the foreground window.
         runtime = self.fixture(foreground=False)
+        runtime.request_states(dict(requestId='r', packageId='p', modules=['brushState','canvasViewState'], ticks=100))
+        self.assertEqual(len(self.captures), 1)
+        self.assertEqual(self.captures[0][0], {BRUSH, CANVAS, NAVIGATOR})
+
+    def test_hidden_panels_return_error_without_borrowing_old_state(self):
+        runtime = self.fixture()
+        for panel in (BRUSH, LAYERS):
+            del runtime.engine.regions[panel]
         runtime.request_states(dict(requestId='r', packageId='p', modules=['brushState','currentLayerState'], ticks=100))
         self.assertEqual(self.captures, [])
         results = [m['update'] for m in self.emitted if 'update' in m]
@@ -71,11 +80,22 @@ class StateRequestTests(unittest.TestCase):
         runtime = self.fixture()
         queued = []
         runtime.pipeline.clip_path = 'current.clip'
-        runtime.pipeline._parse_clip = object()
-        runtime.pipeline.clip_executor = types.SimpleNamespace(submit=lambda *args: queued.append(args))
+        runtime.pipeline.request_clip_state = lambda *args, saved: queued.append((*args, saved))
         runtime.request_states(dict(requestId='r', packageId='p', modules=['clipState'], ticks=100, saveId='our-save'))
-        self.assertEqual(queued[0][1:], ('our-save', 100, 'p'))
+        # Bound to Memoline's save: the .clip has settled already.
+        self.assertEqual(queued[0], ('our-save', 100, 'p', True))
         self.assertEqual(self.captures, [])
+        # Without a save the file is CSP's last save: published, but marked as not bound to one.
+        runtime.request_states(dict(requestId='s', packageId='q', modules=['clipState'], ticks=120))
+        self.assertEqual(queued[1][2:], ('q', False))
+
+    def test_query_is_attributed_to_the_last_input_before_it(self):
+        runtime = self.fixture()
+        runtime.request_states(dict(requestId='r', packageId='p', modules=['brushState'], ticks=100, afterEventId=2395))
+        self.assertEqual(self.captures[0][2]['refs'], [2395])
+        self.captures.clear()
+        runtime.request_states(dict(requestId='s', packageId='q', modules=['brushState'], ticks=100))
+        self.assertNotIn('refs', self.captures[0][2])
 
     def test_config_request_returns_direct_result_and_resolves_reserved_package(self):
         runtime = self.fixture()

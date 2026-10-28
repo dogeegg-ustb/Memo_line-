@@ -5,6 +5,7 @@ internal interface ILayerSaveGuardBackend
 {
     bool SaveWorkerReady { get; }
     bool IsCspForeground { get; }
+    /// <summary>Requests the switch to CSP; true when accepted. CSP becomes foreground some time later.</summary>
     bool TryActivateCspWindow() => false;
     nint ForegroundWindow { get; }
     string ForegroundWindowTitle { get; }

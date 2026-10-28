@@ -81,14 +81,31 @@ internal static partial class PacketChecks
         environment.Clear(); feed.Color = Color(9);
         try { await EventReplayRunner.RunAsync(schedule, environment, 100000, new(), _ => { }, default); throw new Exception("Expected color failure"); }
         catch (ReplayStateException ex) { Check(ex.Code == "ColorUnrestorable", "Unverified color writes fail with the defined error code."); }
-        Check(feed.Requests.Last().SequenceEqual(new[] { "colorInputState" }) && environment.Transitions.Count == 0, "Different colors require RGB panel evidence before any pen injection.");
+        Check(feed.Requests.Last().SequenceEqual(new[] { "colorState" }) && environment.Transitions.Count == 0, "A colour that cannot be picked (no picker shortcut here) stops before any pen injection.");
         // Best effort (product default): an unsettable colour is attempted once per target colour,
         // and both strokes still replay in the current colour.
         EventReplayRunner.StrictColor = false; environment.Clear(); feed.Requests.Clear();
         await EventReplayRunner.RunAsync(schedule, environment, 100000, new(), _ => { }, default);
         Check(environment.Transitions.Count(t => t == PenReplayEngine.PointerTransition.Down) == 2 &&
-              feed.Requests.Count(r => r.Contains("colorInputState")) == 1,
+              feed.Requests.Count(r => r.Contains("colorState")) == 1,
             "Consecutive strokes with one target colour request colour state once, not per stroke.");
+        // An edit's colour replaces the recorded one and is never best effort.
+        environment.Clear(); var statuses = new List<string>();
+        await EventReplayRunner.RunAsync(schedule with { Strokes = [second with { OverrideColor = ColorRestorer.State([9, 2, 3]) }] },
+            environment, 100000, new(), statuses.Add, default);
+        Check(environment.Transitions.Count(t => t == PenReplayEngine.PointerTransition.Down) == 1 && !statuses.Any(s => s.Contains("颜色未还原")),
+            "A stroke recoloured by an edit is drawn in the edit's colour, not restored to the recorded one.");
+        environment.Clear();
+        try
+        {
+            await EventReplayRunner.RunAsync(schedule with { Strokes = [first, second with { OverrideColor = ColorRestorer.State([200, 100, 50]) }] },
+                environment, 100000, new(), _ => { }, default);
+            throw new Exception("Expected override colour failure");
+        }
+        catch (ReplayStateException ex) { Check(ex.Code == "ColorUnrestorable", "An edit's colour that cannot be picked fails even when recorded colours are best effort."); }
+        Check(environment.Transitions.Count(t => t == PenReplayEngine.PointerTransition.Down) == 1 && environment.Releases == 1,
+            "The recoloured stroke is not drawn in another colour; inputs are released.");
+        Reject<ReplayStateException>(() => EventReplayRunner.Validate(schedule with { Strokes = [second with { OverrideColor = Json(new { kind = "transparent" }) }] }));
         EventReplayRunner.StrictColor = true;
         feed.Color = Color(1); environment.Clear();
         feed.Layers = J.Get(Structure("工作层"), "state");

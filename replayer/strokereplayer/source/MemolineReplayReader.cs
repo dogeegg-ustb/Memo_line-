@@ -128,19 +128,7 @@ internal static class MemolineReplayReader
     private static ViewSlot[] SettleViews(ViewSlot[] slots, JsonElement[] frames, JsonElement[] hardware,
         List<PenOperation> operations, HashSet<ulong> navigationOperations)
     {
-        // Resolved keys only move the canvas when a match targets the canvas viewport or navigator. Unmapped
-        // keys (Memoline's Alt+M, a lone Space), tool switches and undo cannot. Unresolved keys count.
-        var keyMovesView = new Dictionary<ulong, bool>();
-        foreach (var resolved in frames.Where(f => Kind(f) == "shortcutResolved"))
-        {
-            if (!resolved.TryGetProperty("relatedEventIds", out var refs) || refs.ValueKind != JsonValueKind.Array) continue;
-            var data = resolved.GetProperty("data");
-            bool view = data.TryGetProperty("matches", out var matches) && matches.ValueKind == JsonValueKind.Array &&
-                matches.EnumerateArray().Any(m => m.TryGetProperty("targets", out var targets) && targets.ValueKind == JsonValueKind.Array &&
-                    targets.EnumerateArray().Any(t => t.GetString() is "画布视口" or "导航器"));
-            foreach (var reference in refs.EnumerateArray())
-                if (reference.TryGetUInt64(out var id)) keyMovesView[id] = view;
-        }
+        var keyMovesView = KeyMovesView(frames);
         var boundaries = new List<ulong>();
         foreach (var frame in hardware)
         {
@@ -177,6 +165,52 @@ internal static class MemolineReplayReader
         return settled;
     }
 
+    // Resolved keys only move the canvas when a match targets the canvas viewport or navigator. Unmapped
+    // keys (Memoline's Alt+M, a lone Space), tool switches and undo cannot. Unresolved keys count.
+    private static Dictionary<ulong, bool> KeyMovesView(IEnumerable<JsonElement> frames)
+    {
+        var keyMovesView = new Dictionary<ulong, bool>();
+        foreach (var resolved in frames.Where(f => Kind(f) == "shortcutResolved"))
+        {
+            if (!resolved.TryGetProperty("relatedEventIds", out var refs) || refs.ValueKind != JsonValueKind.Array) continue;
+            var data = resolved.GetProperty("data");
+            bool view = data.TryGetProperty("matches", out var matches) && matches.ValueKind == JsonValueKind.Array &&
+                matches.EnumerateArray().Any(m => m.TryGetProperty("targets", out var targets) && targets.ValueKind == JsonValueKind.Array &&
+                    targets.EnumerateArray().Any(t => t.GetString() is "画布视口" or "导航器"));
+            foreach (var reference in refs.EnumerateArray())
+                if (reference.TryGetUInt64(out var id)) keyMovesView[id] = view;
+        }
+        return keyMovesView;
+    }
+
+    /// <summary>Hardware events that cannot move the canvas view: a key that matches no canvas-viewport or navigator
+    /// shortcut, and a mouse-button release. Presses, drags, wheel turns and pen input all may.</summary>
+    internal static Func<ulong, bool> ViewInertInputs(IReadOnlyList<JsonElement> frames)
+    {
+        var keyMovesView = KeyMovesView(frames);
+        var inert = new HashSet<ulong>();
+        foreach (var frame in frames.Where(IsHardware))
+            if (frame.TryGetProperty("eventId", out var value) && value.TryGetUInt64(out ulong id) &&
+                (Kind(frame) == "mouseUp" || Kind(frame) == "keyInput" && !keyMovesView.GetValueOrDefault(id, true)))
+                inert.Add(id);
+        return inert.Contains;
+    }
+
+    /// <summary>
+    /// Whether a canvas view reading shows the view right after <paramref name="anchor"/>. The recorder marks a reading
+    /// causalAmbiguous when input arrived while it was being captured (observedAfterEventId is past its trigger); it
+    /// still shows that view when every such input is view-inert, e.g. the Space released right after a Space-drag pan.
+    /// </summary>
+    internal static bool ViewSettled(JsonElement update, ulong anchor, Func<ulong, bool> inert)
+    {
+        if (!update.TryGetProperty("evidence", out var evidence) || evidence.ValueKind != JsonValueKind.Object ||
+            !evidence.TryGetProperty("observedAfterEventId", out var observed) || !observed.TryGetUInt64(out ulong after) ||
+            after < anchor || after - anchor > 64) return false;
+        for (ulong id = anchor + 1; id <= after; id++)
+            if (!inert(id)) return false;
+        return true;
+    }
+
     private static bool IsRelevant(JsonElement frame)
         => IsHardware(frame) || Kind(frame) is "header" or "statePackageReserved" or "statePackageResult" or "shortcutResolved"
             or "penInterrupted" or "tabletDeviceChanged" or "driverConfiguration" or "panelUpdateRequested" or "initializationConfiguration" or "keyboardStateChanged" ||
@@ -194,6 +228,7 @@ internal static class MemolineReplayReader
         var cores = frames.Where(f => Kind(f) == "coreStateUpdated" && Text(f.GetProperty("data"), "packageId") is not null)
             .GroupBy(f => Text(f.GetProperty("data"), "packageId")!)
             .ToDictionary(g => g.Key, g => g.OrderBy(f => RequiredUnsigned(f, "appendId")).Last().GetProperty("data"));
+        var inert = ViewInertInputs(frames);
         var slots = new List<ViewSlot>();
         foreach (var (id, reservation) in reservations)
         {
@@ -228,9 +263,7 @@ internal static class MemolineReplayReader
             {
                 // Externally requested readings have no triggering input (causalAmbiguous), but the
                 // recognizer still records which input they were observed after; that places them.
-                var evidence = update.TryGetProperty("evidence", out var e) ? e : default;
-                bool placed = evidence.ValueKind == JsonValueKind.Object && evidence.TryGetProperty("observedAfterEventId", out var observed) &&
-                    observed.TryGetUInt64(out var observedAfter) && observedAfter == anchor;
+                bool placed = ViewSettled(update, anchor, inert);
                 var parsed = CanvasViewSnapshot.TryParse(update, raw, out var view, requireCausalAnchor: !placed);
                 slots.Add(new(anchor, reservationOrder, parsed ? view : null,
                     parsed ? null : $"canvasViewState 状态为 {Text(update, "status") ?? "无效"}（package {id}）"));
@@ -420,6 +453,10 @@ internal static class MemolineReplayReader
 
     private static (double X, double Y) Coordinates(JsonElement data, ulong operationId)
     {
+        // The driver mapping places every tablet report exactly; x/y is the Windows cursor, which can stay parked
+        // for many reports while the pen moves (seen with several displays: 132 samples on 16 positions).
+        if (Text(data, "screenCoordinateSource") == "driverMapping"
+            && Number(data, "screenX") is { } mappedX && Number(data, "screenY") is { } mappedY) return (mappedX, mappedY);
         if (Number(data, "x") is { } x && Number(data, "y") is { } y) return (x, y);
         if (Number(data, "screenX") is { } sx && Number(data, "screenY") is { } sy) return (sx, sy);
         throw new InvalidDataException($"笔操作 {operationId} 缺少 Windows 屏幕坐标。原始 tabletX/tabletY 不能直接作为屏幕像素重放。");

@@ -10,10 +10,25 @@ internal interface IPacketInput
     Task NumberAsync(Rectangle input, double value, CancellationToken token);
     Task ClickAsync(Rectangle input, CancellationToken token);
     Task ScrollAsync(Rectangle panel, int delta, CancellationToken token);
+    /// <summary>Sets CSP's current colour with its screen colour picker: shows <paramref name="rgb"/> on the virtual screen
+    /// and presses <paramref name="picker"/> with the cursor on it, staying there for <paramref name="dwell"/>.</summary>
+    Task PickColorAsync(IReadOnlyList<int> rgb, ShortcutBinding picker, TimeSpan dwell, CancellationToken token)
+        => throw new InvalidOperationException("这种输入方式不能用屏幕取色设置颜色。");
 }
-internal sealed class PacketWindowsInput(WindowsViewInput input) : IPacketInput
+internal sealed class PacketWindowsInput(WindowsViewInput input, IColorSwatch? swatch = null) : IPacketInput
 {
+    private readonly IColorSwatch _swatch = swatch ?? new PanelStashSwatch();
     public void EnsureTarget() => input.EnsureTarget();
+    public async Task PickColorAsync(IReadOnlyList<int> rgb, ShortcutBinding picker, TimeSpan dwell, CancellationToken token)
+    {
+        var area = await _swatch.ShowAsync(rgb, token);
+        try { await input.SendShortcutAtAsync(area, ShortcutConfiguration.Keys(picker.Shortcut), dwell, token); }
+        finally
+        {
+            // A swatch left shown only keeps the virtual screen attached; it must not hide the outcome above.
+            try { await _swatch.HideAsync(CancellationToken.None); } catch (InvalidOperationException) { }
+        }
+    }
     public Task ShortcutAsync(ShortcutBinding binding, CancellationToken token) => input.SendShortcutAsync(ShortcutConfiguration.Keys(binding.Shortcut), token);
     public Task NumberAsync(Rectangle inputArea, double value, CancellationToken token) => input.SetNumberAsync(inputArea, value, token);
     public Task ClickAsync(Rectangle area, CancellationToken token) => input.ClickAsync(area, token);
@@ -145,6 +160,9 @@ internal sealed class PacketStateRestorer(IPacketStateFeed feed, IPacketInput in
                 status($"切换图层：{current} → {target}（{route.Shortcut}）");
                 await input.ShortcutAsync(route, token);
                 await feed.RequestAsync(["currentLayerState"], token);
+                // CSP can show the move a moment late (busy after a save, 2026-10-24); an unchanged reading is read again
+                // before it counts as the end of this direction.
+                if (J.Name(feed.Layer ?? "") == J.Name(current)) await feed.RequestAsync(["currentLayerState"], token);
             }
         }
         if (J.Name(feed.Layer ?? "") != J.Name(target)) throw new InvalidOperationException("无法通过已配置的图层快捷键到达目标图层；请展开图层文件夹并更新结构表。");

@@ -251,6 +251,44 @@ internal static class EditIndexHardeningChecks
         Check(ReconstructionPlanner.Build(laterIndex, firstRequest).Issues.Any(i => i.Code == PlanIssueCode.UndoRedoInRange),
             "The same undo still blocks a request beginning at the earlier affected contact.");
 
+        // The layer state was read before CSP applied a new layer (2026-10-24): the contact is filed under "Ink", whose
+        // packet shows no change under it, while "Other" shows ink that only a fallback label explains.
+        var filed = basic.Snapshot();
+        var inkPacket = filed.Packets.Single();
+        LayerPacket Unexplained(string uuid)
+        {
+            var key = new LayerKey("stage4", 1, uuid);
+            var ink = inkPacket.Images.Single();
+            return new LayerPacket("q-" + uuid, key, 200, null, new(8, 8, new byte[256]),
+                [new DirtyImage(new(key, "q-" + uuid, "i"), ink.Mask, ink.After, ink.Now, [], HasUnreplayableEvents: true) { LabelIds = ["coarse-i"] }],
+                CanvasWidth: 8, CanvasHeight: 8)
+            { Labels = [new LabelEvidence("coarse-i", null, "low-resolution-fallback", 50, 200, 0, [], ["i"])] };
+        }
+        var silentInk = inkPacket with { Images = [], Labels = inkPacket.Labels.Select(l => l with { ImageIds = [] }).ToArray() };
+        var refiled = EditIndexBuilder.Build(filed with { Packets = [silentInk, Unexplained("other")] });
+        Check(refiled.Strokes.Values.Single() is { Layer.Uuid: "other", Images.Count: 1 } moved &&
+              refiled.Images[moved.Images[0]] is { HasUnreplayableEvents: false } image && image.Events.Single() == moved.Key,
+            "A contact whose filed layer shows no change moves to the layer whose unexplained ink it explains.");
+        var twoLayers = EditIndexBuilder.Build(filed with { Packets = [silentInk, Unexplained("other"), Unexplained("third")] });
+        Check(twoLayers.Strokes.Values.Single() is { Layer.Uuid: "ink", Images.Count: 0 },
+            "Unexplained ink on two other layers is not guessed between: the contact stays where it was filed.");
+        var explained = EditIndexBuilder.Build(filed with { Packets = [inkPacket, Unexplained("other")] });
+        Check(explained.Strokes.Values.Single() is { Layer.Uuid: "ink", Images.Count: 1 },
+            "A contact that explains a change on its filed layer stays there.");
+        // The saved structure was stale (memolinetest15, 2026-10-26: Ctrl+Z took back a precise undo, the .clip still
+        // listed its reproduction): the state files the contact under "ink", whose packet shows nothing of it, while the
+        // watcher, capturing the layers later, labelled its ink on "other".
+        var otherKey = new LayerKey("stage4", 1, "other");
+        var labelledElsewhere = inkPacket with { PacketId = "l-other", Layer = otherKey,
+            Images = inkPacket.Images.Select(i => i with { Key = new(otherKey, "l-other", i.Key.ImageId) }).ToArray() };
+        var stale = EditIndexBuilder.Build(filed with { Packets = [silentInk, labelledElsewhere] });
+        Check(stale.Strokes.Values.Single() is { Layer.Uuid: "other", Images.Count: 1 } inkFiled &&
+              stale.Images[inkFiled.Images[0]] is { HasUnreplayableEvents: false } staleImage && staleImage.Events.Single() == inkFiled.Key,
+            "A contact filed on a layer without its ink moves to the one layer whose recorded image the watcher labelled with it.");
+        var both = EditIndexBuilder.Build(filed with { Packets = [inkPacket, labelledElsewhere] });
+        Check(both.Strokes.Values.Single() is { Layer.Uuid: "ink" },
+            "A contact labelled with ink on its filed layer stays there even when another layer labels it too.");
+
         if (failures.Count > 0) throw new InvalidOperationException(
             $"Edit index hardening checks: {count - failures.Count}/{count} passed.\n" + string.Join("\n", failures));
         Console.WriteLine($"Edit index hardening checks passed: {count}.");

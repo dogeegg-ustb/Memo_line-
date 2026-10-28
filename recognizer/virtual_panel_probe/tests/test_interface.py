@@ -17,6 +17,7 @@ import display_config  # noqa: E402
 import guard  # noqa: E402
 import panel_host  # noqa: E402
 import stash  # noqa: E402
+import swatch  # noqa: E402
 from capture import Capture  # noqa: E402
 from csp_windows import CspWindow  # noqa: E402
 from virtual_display import Monitor  # noqa: E402
@@ -124,6 +125,14 @@ class GuardTests(unittest.TestCase):
         found = guard.intruders(windows, self.AREA, ["clipstudiopaint.exe"], own_pid=99)
         self.assertEqual([w.hwnd for w in found], [1, 6])
 
+    def test_topmost_overlay_over_the_whole_virtual_screen_stays(self):
+        # Win+Shift+S lays a topmost window with its frozen picture over every monitor.
+        windows = [guard.TopWindow(1, 10, "SnippingTool.exe", "XamlWindow", self.AREA, topmost=True),
+                   guard.TopWindow(2, 11, "notepad.exe", "Notepad", self.AREA),
+                   guard.TopWindow(3, 12, "widget.exe", "Widget", (2600, 1700, 3200, 2200), topmost=True)]
+        found = guard.intruders(windows, self.AREA, ["clipstudiopaint.exe"], own_pid=99)
+        self.assertEqual([w.hwnd for w in found], [2, 3])
+
     def test_evicted_window_keeps_its_offset_inside_the_work_area(self):
         work = (0, 0, 2560, 1516)
         self.assertEqual(guard.evicted_position((2700, 1800, 3300, 2300), self.AREA, work), (140, 200))
@@ -133,6 +142,21 @@ class GuardTests(unittest.TestCase):
 class FakeRoot:
     def after(self, *args):
         pass
+
+
+class FakeSwatch:
+    def __init__(self):
+        self.rect = self.rgb = None
+
+    @property
+    def shown(self):
+        return self.rect is not None
+
+    def show(self, rgb, rect):
+        self.rgb, self.rect = rgb, rect
+
+    def hide(self):
+        self.rect = self.rgb = None
 
 
 class HostRequestTests(unittest.TestCase):
@@ -149,7 +173,8 @@ class HostRequestTests(unittest.TestCase):
         host.settings = dict(panel_host.DEFAULTS)
         host.closing = host.display_busy = host.provide_again = host.virtual_active = False
         host.virtual_error = host.empty_since = None
-        host.virtual_devices, host.pending = {VIRTUAL.device}, {}
+        host.virtual_devices, host.pending, host.screen_waiters = {VIRTUAL.device}, {}, []
+        host.swatch = FakeSwatch()
         host.display_job = sync_job
         host.hardware = tuple(host.settings["virtualHardwareIds"])
         host.settings["virtualMinimumSize"] = None
@@ -275,6 +300,62 @@ class HostRequestTests(unittest.TestCase):
         self.host.detach_when_idle(200.0)
         self.host.detach_when_idle(300.0)
         self.assertEqual(released, [True])
+
+    def test_swatch_attaches_the_screen_and_sits_top_right(self):
+        self.host.screens = [PHYSICAL]
+        self.patch("provide", lambda fits, hardware, match_scale: (SMALL, ["接入虚拟屏"]))
+        read = []
+        original = panel_host.wait_for_pixel
+        panel_host.wait_for_pixel = lambda point, rgb: read.append(point) or rgb
+        self.addCleanup(setattr, panel_host, "wait_for_pixel", original)
+        shown = self.request("showSwatch", rgb=[12, 34, 56])
+        # Right edge minus the stash gap: the palettes are packed against the left edge.
+        self.assertEqual(shown, dict(rect=[4056, 1608, 4088, 1640], point=[4072, 1624], device=SMALL.device))
+        self.assertEqual((read, self.host.swatch.rgb), ([(4072, 1624)], (12, 34, 56)))
+        self.assertEqual(self.request("getStatus")["swatch"], dict(rect=[4056, 1608, 4088, 1640], rgb=[12, 34, 56]))
+        # Nothing is stashed, but the shown swatch keeps the screen attached.
+        released = []
+        self.patch("release", lambda hardware: released.append(True) or True)
+        self.host.detach_when_idle(100.0)
+        self.host.detach_when_idle(200.0)
+        self.assertEqual(released, [])
+        self.assertEqual(self.request("hideSwatch"), dict(hidden=True))
+        self.assertEqual(self.request("hideSwatch"), dict(hidden=False))
+        self.host.detach_when_idle(300.0)
+        self.host.detach_when_idle(306.0)
+        self.assertEqual(released, [True])
+
+    def test_swatch_whose_screen_pixel_differs_is_withdrawn(self):
+        original = panel_host.wait_for_pixel
+        panel_host.wait_for_pixel = lambda point, rgb: (13, 34, 56)
+        self.addCleanup(setattr, panel_host, "wait_for_pixel", original)
+        with self.assertRaisesRegex(RuntimeError, r"读回 \[13, 34, 56\]"):
+            self.request("showSwatch", rgb=[12, 34, 56])
+        self.assertFalse(self.host.swatch.shown)
+
+    def test_swatch_requests_are_validated(self):
+        for rgb in (None, [1, 2], [1, 2, 256], [1, 2, -1], [1, 2, 3.0], [True, 2, 3], "#010203"):
+            with self.assertRaises(ValueError):
+                self.request("showSwatch", **({} if rgb is None else dict(rgb=rgb)))
+        with self.assertRaises(ValueError):
+            self.request("hideSwatch", rgb=[1, 2, 3])
+        self.assertFalse(self.host.swatch.shown)
+
+    def test_swatch_reports_a_missing_driver(self):
+        self.host.screens = [PHYSICAL]
+
+        def missing(*args, **kwargs):
+            raise virtual_display.VirtualDisplayMissing("没有找到虚拟显示器")
+        self.patch("provide", missing)
+        with self.assertRaisesRegex(RuntimeError, "没有找到虚拟显示器"):
+            self.request("showSwatch", rgb=[1, 2, 3])
+        self.assertEqual((self.host.screen_waiters, self.host.swatch.shown), ([], False))
+
+    def test_wait_for_pixel_polls_until_the_compositor_shows_it(self):
+        pixels = iter([(0, 0, 0), None, (12, 34, 56)])
+        self.assertEqual(swatch.wait_for_pixel((1, 2), (12, 34, 56), read=lambda x, y: next(pixels)), (12, 34, 56))
+        self.assertEqual(swatch.wait_for_pixel((1, 2), (12, 34, 56), timeout=0.05, read=lambda x, y: (1, 1, 1)),
+                         (1, 1, 1))
 
     def test_capture_formats(self):
         pixels = bytes([10, 20, 30, 0]) * 6

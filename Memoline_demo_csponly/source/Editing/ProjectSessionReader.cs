@@ -301,8 +301,10 @@ internal static class ProjectSessionReader
             if (valid)
             {
                 int first = packets.IndexOf(ordered[0]);
+                baseline.Park(); // One layer's reconstruction at a time, not every layer's, stays inflated.
                 packets[first] = ordered[0] with { Before = baseline };
             }
+            EditingMemory.Collect(); // The inflated reconstruction is garbage now, valid or not.
         }
     }
 

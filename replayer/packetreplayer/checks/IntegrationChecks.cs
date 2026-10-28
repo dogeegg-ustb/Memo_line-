@@ -196,7 +196,7 @@ internal static partial class PacketChecks
             var request = json.RootElement;
             Check(J.Text(request, "command") == "requestClipSave" && J.Text(request, "expectedClipPath") == "D:\\test\\当前.clip"
                 && J.Text(request, "requestId") == "test-save" && J.I64(request, "triggerTicks") == 120
-                && J.Get(request, "activateCsp").ValueKind == JsonValueKind.False, "Control writes one UTF-8 JSON line using the documented current-document save contract.");
+                && J.Get(request, "activateCsp").ValueKind == JsonValueKind.True, "Control writes one UTF-8 JSON line using the documented current-document save contract.");
             await writer.WriteLineAsync(Json(new { success = true, requestId = "test-save", saveInputDispatched = true,
                 saveInputDispatchedTicks = 130, saveCompletionConfirmed = false }).GetRawText().AsMemory(), stop.Token);
         });

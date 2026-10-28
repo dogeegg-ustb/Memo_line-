@@ -4,7 +4,14 @@ using StrokeReplay;
 namespace PacketReplay;
 
 internal sealed record ScheduledStroke((string SessionId, ulong BeginAppendId) EditableKey,
-    MemolineReplayStroke Stroke, HistoricalState State, BrushSnapshot? OverrideBrush = null);
+    MemolineReplayStroke Stroke, HistoricalState State, BrushSnapshot? OverrideBrush = null)
+{
+    /// <summary>An edit's colour (a colorState object, see <see cref="ColorRestorer.State"/>) instead of the recorded
+    /// one. Unlike a recorded colour it is never best effort: a stroke the user recoloured is not drawn in another.</summary>
+    internal System.Text.Json.JsonElement OverrideColor { get; init; }
+    internal System.Text.Json.JsonElement Color => OverrideColor.ValueKind == System.Text.Json.JsonValueKind.Object ? OverrideColor : State.Color;
+    internal bool StrictColor => EventReplayRunner.StrictColor || OverrideColor.ValueKind == System.Text.Json.JsonValueKind.Object;
+}
 internal sealed record EventReplaySchedule(long Frequency, IReadOnlyList<ScheduledStroke> Strokes,
     string WorkLayerName, string WorkLayerUuid)
 {
@@ -36,8 +43,11 @@ internal sealed class WindowsReplayEnvironment(LivePacketFeed feed, WindowsViewI
     public IViewInput ViewInput => windows;
     // The actively requested view: pushed updates are not refreshed during an edit transaction.
     public CanvasViewSnapshot? CurrentView => feed.RequestedView ?? feed.View.Current;
-    public Func<PenReplayEngine.IPenInjector> CreateInjector => PenReplayEngine.CreateSyntheticInjector;
-    public Func<TimeSpan, CancellationToken, Task> Idle => (delay, token) => Task.Delay(delay, token);
+    /// <summary>Wraps each stroke's injector, e.g. to time the pauses between strokes.</summary>
+    internal Func<PenReplayEngine.IPenInjector, PenReplayEngine.IPenInjector>? WrapInjector { get; init; }
+    public Func<PenReplayEngine.IPenInjector> CreateInjector => WrapInjector is { } wrap
+        ? () => wrap(PenReplayEngine.CreateSyntheticInjector()) : PenReplayEngine.CreateSyntheticInjector;
+    public Func<TimeSpan, CancellationToken, Task> Idle => PenReplayEngine.PreciseDelayAsync;
     public void EnsureCanvasPoint(MemolineReplaySample sample, Rectangle viewport) => windows.EnsureCanvasPoint(sample.X, sample.Y, viewport);
     public void ReleaseInputs() => windows.ReleaseInputs();
 }
@@ -88,6 +98,8 @@ internal static class EventReplayRunner
                 throw new ReplayStateException("BrushUnrestorable", "事件缺少已确认的历史笔刷或图层状态。");
             if (StrictColor && drawing.State.Color.ValueKind != System.Text.Json.JsonValueKind.Object)
                 throw new ReplayStateException("ColorUnrestorable", "事件缺少已确认的历史颜色。");
+            if (drawing.OverrideColor.ValueKind != System.Text.Json.JsonValueKind.Undefined && ColorRestorer.Rgb(drawing.OverrideColor) is null)
+                throw new ReplayStateException("UnsupportedOverride", "颜色覆盖必须是三个 0–255 的 RGB 数值。");
             if (drawing.OverrideBrush is { } replacement)
             {
                 if (string.IsNullOrWhiteSpace(replacement.Name)||replacement.Name is "unknown" or "ambiguous"||
@@ -137,15 +149,17 @@ internal static class EventReplayRunner
                 catch (InvalidOperationException ex) { throw new ReplayStateException("BrushUnrestorable", ex.Message, ex); }
                 // Consecutive strokes usually share one colour. Restore (and request state) only when the
                 // target colour changes; a colour that could not be set is not retried for every stroke.
-                string colorKey = ColorKey(drawing.State.Color);
+                var color = drawing.Color;
+                string colorKey = ColorKey(color);
                 bool colorRestored;
-                if (colorKey == lastColorKey && (!lastColorRestored || PacketReplayRunner.ColorMatches(env.Feed.Color, drawing.State.Color)))
+                if (colorKey == lastColorKey && (!lastColorRestored || PacketReplayRunner.ColorMatches(env.Feed.Color, color)) &&
+                    (lastColorRestored || !drawing.StrictColor))
                     colorRestored = lastColorRestored;
                 else
                 {
                     colorRestored = true;
-                    try { await colors.RestoreAsync(drawing.State.Color, token); }
-                    catch (ReplayStateException ex) when (!StrictColor && ex.Code == "ColorUnrestorable")
+                    try { await colors.RestoreAsync(color, token); }
+                    catch (ReplayStateException ex) when (!drawing.StrictColor && ex.Code == "ColorUnrestorable")
                     { colorRestored = false; status("颜色未还原，按当前颜色重放：" + ex.Message); }
                     lastColorKey = colorKey; lastColorRestored = colorRestored;
                 }
@@ -169,8 +183,8 @@ internal static class EventReplayRunner
                     token.ThrowIfCancellationRequested(); WorkLayer();
                     if (env.Feed.Brush?.Matches(brush) != true)
                         throw new ReplayStateException("BrushUnrestorable", "回放采样期间笔刷发生变化。");
-                    if (colorRestored && (StrictColor || drawing.State.Color.ValueKind == System.Text.Json.JsonValueKind.Object) &&
-                        !PacketReplayRunner.ColorMatches(env.Feed.Color, drawing.State.Color))
+                    if (colorRestored && (drawing.StrictColor || color.ValueKind == System.Text.Json.JsonValueKind.Object) &&
+                        !PacketReplayRunner.ColorMatches(env.Feed.Color, color))
                         throw new ReplayStateException("ColorUnrestorable", "回放采样期间颜色发生变化。");
                     var current = env.CurrentView;
                     if (current is null || !ViewRestorer.Matches(current, drawing.Stroke.View) || current.Viewport is not { } region)

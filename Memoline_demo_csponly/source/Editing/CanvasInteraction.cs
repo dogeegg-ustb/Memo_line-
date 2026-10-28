@@ -114,6 +114,12 @@ internal sealed record CanvasImageCandidate(DirtyImage Image, string LayerName, 
 {
     internal string? SourceSessionId { get; init; }
     internal int SessionOrder { get; init; }
+    /// <summary>The image belongs to a layer the user deleted ("已被删除"); it is listed only on request.</summary>
+    internal bool Deleted { get; init; }
+    /// <summary>A Memoline-operation packet is this image's new version ("旧版本"); it is listed only on request.</summary>
+    internal bool Superseded { get; init; }
+    /// <summary>How many strokes the image shows: an operation image shows the strokes its edit changed.</summary>
+    internal int Strokes { get; init; }
 }
 internal sealed record CanvasStrokePath(EditableStrokeKey Key, IReadOnlyList<PointF[]> Paths);
 
@@ -190,26 +196,46 @@ internal sealed class CanvasInteraction
     private CanvasImageCandidate Candidate(LayerIndex layer, LayerPacket packet, DirtyImage image)
     {
         string name = CanvasAffineTransform.Text(CanvasAffineTransform.Get(packet.NowDescriptor, "layer"), "name") ?? layer.Layer.Uuid;
+        int strokes = Offered(image).Length;
+        if (layer.Deleted)
+            return new(image, name, packet.TriggerTicks, false, "图层已被删除：它的事件不再参与编辑。")
+            { SourceSessionId = packet.SourceLayer?.SessionId ?? packet.Layer.SessionId, SessionOrder = packet.SessionOrder, Deleted = true, Strokes = strokes };
+        if (image.SupersededBy is not null)
+            return new(image, name, packet.TriggerTicks, false, "旧版本：这些事件已由记艺线操作包的新版本取代，只供查看。")
+            { SourceSessionId = packet.SourceLayer?.SessionId ?? packet.Layer.SessionId, SessionOrder = packet.SessionOrder, Superseded = true, Strokes = strokes };
         var issues = layer.Issues.Where(i => i.Image is null || i.Image == image.Key).ToArray();
         string reason = string.Join("；", issues.Select(i => $"{i.Code}: {i.Message}"));
         if (!layer.ChainValid && reason.Length == 0) reason = "ChainBroken: 图层历史链不完整。";
         if (packet.CanvasWidth != Transform.CanvasSize.Width || packet.CanvasHeight != Transform.CanvasSize.Height)
             reason = Join(reason, "历史图片的画布尺寸与当前画布不一致。");
         if (!image.FullResolution) reason = Join(reason, "ChainLossy: 图片不是全分辨率捕获。");
-        if (image.HasUnreplayableEvents) reason = Join(reason, "UnreplayableEventInMatrix: 图片含不可重放事件。");
-        if (!image.Events.Any(k => Session.Index.Strokes.TryGetValue(k, out var s) && s.Eligible && !s.IsUndone && s.Layer == image.Key.Layer))
-            reason = Join(reason, "图片中没有可选择的完整笔画。");
+        if (image.Operation is { PreciseUndo: true }) reason = Join(reason, "记艺线精确撤销注入的事件不是用户操作，不可选择。");
+        else if (image.HasUnreplayableEvents) reason = Join(reason, "UnreplayableEventInMatrix: 图片含不可重放事件。");
+        if (strokes == 0) reason = Join(reason, "图片中没有可选择的完整笔画。");
         return new(image, name, packet.TriggerTicks, reason.Length == 0, reason)
-        { SourceSessionId = packet.SourceLayer?.SessionId ?? packet.Layer.SessionId, SessionOrder = packet.SessionOrder };
+        { SourceSessionId = packet.SourceLayer?.SessionId ?? packet.Layer.SessionId, SessionOrder = packet.SessionOrder, Strokes = strokes };
     }
     private static string Join(string a, string b) => a.Length == 0 ? b : a + "；" + b;
+
+    /// <summary>
+    /// The strokes an image lets the user sweep. A stroke an edit changed is offered as its new version, in that edit's
+    /// operation image only; the operation image offers just those (the strokes it replayed unchanged stay with their
+    /// own images). Memoline's injected strokes are never offered. An edit recorded before operation packets existed
+    /// has none: its new versions stay in their own images.
+    /// </summary>
+    private EditableStroke[] Offered(DirtyImage image) => image.Events.Distinct()
+        .Select(k => Session.Index.Strokes.GetValueOrDefault(k)).OfType<EditableStroke>()
+        .Where(s => s is { Eligible: true, IsUndone: false, MemolineInjected: false } && s.Layer == image.Key.Layer &&
+            (image.Operation is { } operation ? s.Version?.TransactionId == operation.TransactionId
+                : s.Version is not { } version || !s.Images.Any(k => Session.Index.Images.TryGetValue(k, out var other) &&
+                    other.Operation?.TransactionId == version.TransactionId)))
+        .OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ToArray();
 
     internal void SelectImage(DirtyImageKey image)
     {
         var candidate = Candidates.FirstOrDefault(c => c.Image.Key == image) ?? throw new InvalidDataException("请选择与当前选区相交的单张脏矩阵。");
         if (!candidate.CanSelect) throw new InvalidDataException(candidate.Reason);
-        var eligible = candidate.Image.Events.Distinct().Select(k => Session.Index.Strokes.GetValueOrDefault(k))
-            .Where(s => s is { Eligible: true, IsUndone: false } && s.Layer == image.Layer).Select(s => s!).OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ToArray();
+        var eligible = Offered(candidate.Image);
         var paths = eligible.Select(BuildPath).ToArray();
         ResetEvents(); ChosenImage = image; EligibleStrokes = eligible;
         foreach (var path in paths) _paths.Add(path.Key, path);

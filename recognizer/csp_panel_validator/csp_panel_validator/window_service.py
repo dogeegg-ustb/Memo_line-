@@ -236,14 +236,23 @@ def enumerate_csp_windows() -> list[WindowInfo]:
     known_exes = {"clipstudiopaint.exe", "clipstudiopaintver1.exe", "clipstudiopaintver2.exe"}
     callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
+    # The desktop has hundreds of top-level windows; full details (process image, monitor) for each
+    # cost ~80 ms per call. Only visible windows of a CSP process, or titled like CSP, are described.
+    names: dict[int, str] = {}
+
     @callback_type
     def callback(hwnd: int, _data: int) -> int:
-        info = _window_info(hwnd)
-        if info is None or not info.visible:
+        if not USER32.IsWindowVisible(hwnd):
             return 1
-        exe = info.exe_name.lower()
-        title = info.title.lower()
-        if exe in known_exes or "clip studio paint" in title or "clipstudiopaint" in exe:
+        pid = wintypes.DWORD(0)
+        USER32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value not in names:
+            names[pid.value] = _read_process_name(pid.value).lower()
+        exe = names[pid.value]
+        if not (exe in known_exes or "clipstudiopaint" in exe or "clip studio paint" in _read_window_text(hwnd).lower()):
+            return 1
+        info = _window_info(hwnd)
+        if info is not None and info.visible:
             candidates.append(info)
         return 1
 

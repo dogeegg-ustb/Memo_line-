@@ -133,7 +133,7 @@ public sealed class CapabilityOrchestrator
         foreach (var tablet in _inputSource.DetectedDevices)
             _memoline.AppendState("tabletDeviceChanged", _memoline.NowTicks, [], tablet, "immediate");
         _updateActivator = UpdateActivatorBridge.Start(_memoline, _driverInitialization);
-        _unifiedCapture = new UnifiedInputCapture(_memoline, _updateActivator);
+        _unifiedCapture = new UnifiedInputCapture(_memoline, _updateActivator, driver: _driverInitialization);
         if (_updateActivator is not null)
             _inputControlServer = new RecorderInputControlServer(_updateActivator.Guard,
                 () => _updateActivator?.RecordingReady == true, recording: _memoline, requestStates: _updateActivator.RequestStatesAsync,

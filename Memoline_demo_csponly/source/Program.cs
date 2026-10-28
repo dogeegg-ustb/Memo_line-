@@ -28,6 +28,8 @@ internal static class Program
                 return SubscribeAsync(args).GetAwaiter().GetResult();
             if (args.Length > 0 && args[0] == "--offline-edit")
                 return MemolineDemo.Editing.OfflineEditProbe.Run(args);
+            if (args.Length > 1 && args[0] is "--bench-png" or "--bench-diff" or "--live-replay-test" or "--live-transaction-test" or "--live-shield-test")
+                return MemolineDemo.Editing.PerformanceProbe.Run(args);
             if (args.Length > 0 && args[0] is "--verify" or "--seal" or "--extract-mechanical" or "--upgrade-dimensions" or "--compact")
                 return Command(args);
             ApplicationConfiguration.Initialize();

@@ -28,6 +28,9 @@ from engine import UpdateEngine
 from csp_workspace_overlay import Overlay, border_strips, find_dock_file, inspect
 from csp_panel_validator.window_service import enable_per_monitor_dpi_awareness
 from pipeline import Pipeline, now_ticks, prepare_analysis, close_shared_transform_host
+import csp_document
+import floating_panels
+from history_reader import PanelStashClient, DEFAULT_PIPE
 from setup_ui import SetupDialog
 
 OUTPUT_LOCK = threading.Lock()
@@ -57,6 +60,9 @@ class Runtime:
         self.initial_capture_pending = False
         self.canvas_roi = None
         self.navigator_roi = None
+        # Floating palette windows by panel, refreshed with every layout poll.
+        self.floating = {}
+        self.navigator_init_rect = None
         self.core_roi_strips = {}
         self.canvas_origin = None
         self.origin_hwnd = None
@@ -79,7 +85,8 @@ class Runtime:
         self.engine = UpdateEngine(self.catalog, self.on_state)
         self.engine.on_history = lambda evt, command: self.pipeline and self.pipeline.request_history(
             evt["ticks"], evt["eventId"], command)
-        self.engine.record("shortcutConfiguration", self.catalog.snapshot(), 0)
+        self.recorded_catalog = None
+        self.record_catalog(self.catalog.snapshot(), 0)
         self.path = Path(os.environ["MEMOLINE_CSP_DOCK"]) if os.environ.get("MEMOLINE_CSP_DOCK") else find_dock_file()
         self.user32 = ctypes.WinDLL("user32", use_last_error=True)
         self.user32.GetAncestor.argtypes = [ctypes.c_void_p, ctypes.c_uint]
@@ -110,17 +117,58 @@ class Runtime:
     def request_driver_configuration(self, request_id, path, screen_index):
         emit(dict(type="selectDriverConfiguration", requestId=request_id, path=path, screenIndex=screen_index))
 
-    def start_pipeline(self, dimensions, numbers_roi, clip_path):
+    def canvas_signature(self, layout):
+        return json.dumps(dict(hwnd=layout["hwnd"], client=layout["client_rect"],
+                               canvas=layout["regions"].get(CANVAS)), sort_keys=True)
+
+    def navigator_source(self):
+        """Where the navigator is read: ("window", FloatingPanel) or ("dock", [x, y, w, h]), or None."""
+        if NAVIGATOR in self.floating:
+            return "window", self.floating[NAVIGATOR]
+        if NAVIGATOR in self.engine.regions:
+            return "dock", list(self.engine.regions[NAVIGATOR])
+        return None
+
+    def reference_path(self):
+        return HERE / "navigator-reference.png"
+
+    def start_pipeline(self, dimensions, numbers_relative, clip_path):
         self.pipeline = Pipeline(self.settings,emit,self.messages.put)
         self.pipeline.set_tool_catalog(self.catalog.tool_catalog)
-        self.pipeline.configure(dimensions,numbers_roi,clip_path,self.initial_package_id,
-                                subtools_available=TOOLGROUP in self.engine.regions)
+        self.pipeline.floating = self.floating
+        reference = None
+        try:
+            from PIL import Image
+            import numpy
+            with Image.open(self.reference_path()) as image:
+                reference = numpy.asarray(image.convert("RGB")).copy()
+        except OSError:
+            pass
+        self.pipeline.configure(dimensions,numbers_relative,clip_path,self.initial_package_id,
+                                subtools_available=TOOLGROUP in self.engine.regions,numbers_reference=reference)
         self.initial_capture_pending = True
         self.initialization_configuration = dict(canvasPixelSize=dimensions,
-            numbersRoi=numbers_roi,clipPath=clip_path,settings=self.settings)
+            numbersRelativeToNavigator=list(numbers_relative),clipPath=clip_path,settings=self.settings)
         self.engine.record("initializationConfiguration",self.initialization_configuration,now_ticks())
+        try:
+            warning = csp_document.mismatch(clip_path)
+        except Exception as ex:  # a check only: never stop recording over it
+            warning = None
+            print(f"[Initialization] 无法读取 CSP 最近文档记录：{ex}",file=sys.stderr)
+        if warning:
+            self.engine.record("documentMismatchWarning",warning,now_ticks())
+            print("[Initialization] 注意："+warning["message"],file=sys.stderr)
         self.publish_guard()
         print("[Initialization] 请切回 CSP，随后自动截取初始状态。",file=sys.stderr)
+
+    def record_catalog(self, config, ticks=None):
+        """Records the shortcut catalog unless it equals the one recorded last. Memoline asks for the shortcuts at every
+        edit boundary and edit, and the catalog is about 380 KB: identical copies were half of the frame text Memoline
+        holds for a project's history (memoline test9: 32 copies, 12 MB of 25 MB) and change nothing for the index."""
+        text = json.dumps(config, sort_keys=True, ensure_ascii=False)
+        if text != self.recorded_catalog:
+            self.recorded_catalog = text
+            self.engine.record("shortcutConfiguration", config, ticks)
 
     def publish_guard(self):
         bindings = []
@@ -152,7 +200,7 @@ class Runtime:
                 self.catalog = self.engine.catalog = Catalog(self.catalog.root)
                 self.pipeline.set_tool_catalog(self.catalog.tool_catalog)
                 config = self.catalog.snapshot()
-                self.engine.record('shortcutConfiguration', config, ticks)
+                self.record_catalog(config, ticks)
                 emit(dict(type='stateRequestPart',packageId=package,module='shortcuts',data=config))
                 self.publish_guard()
             except Exception as ex:
@@ -162,16 +210,17 @@ class Runtime:
                       data=self.initialization_configuration or dict(error='Initialization configuration unavailable.')))
         if 'clipState' in observed:
             if self.pipeline.clip_path:
-                self.pipeline.clip_executor.submit(self.pipeline._parse_clip,msg.get('saveId') or uuid.uuid4().hex,ticks,package)
+                # A saveId binds the request to a save Memoline has already waited out.
+                self.pipeline.request_clip_state(msg.get('saveId') or uuid.uuid4().hex,ticks,package,saved=bool(msg.get('saveId')))
             else:
                 self.pipeline.timeline.complete_if_pending(package,'clipState',None,dict(triggerTicks=ticks),'.clip path unavailable.')
-        foreground = self.hwnd and self.user32.GetForegroundWindow() == self.hwnd
+        # Panels are read from CSP's own window: CSP need not be in front, only its layout initialized.
         if COLOR in self.engine.regions and COLOR_INPUT not in self.engine.regions:
             self.engine.regions = {**self.engine.regions, COLOR_INPUT:list(self.engine.regions[COLOR])}
         available = set()
         for module in observed - {'clipState'}:
             panel = panels_by_module[module]
-            if foreground and not self.engine.suspended and panel in self.engine.regions:
+            if not self.engine.suspended and panel in self.engine.regions:
                 available.add(panel)
             else:
                 if module == 'colorInputState':
@@ -180,11 +229,19 @@ class Runtime:
                         valueRegions=[],tabRegions=[]),dict(triggerTicks=ticks))
                 else:
                     self.pipeline.timeline.complete_if_pending(package,module,None,dict(triggerTicks=ticks),
-                        'CSP must be foreground with the requested panel visible and the initialized layout intact.')
+                        'The requested panel is not visible in CSP or the initialized layout is not intact.')
         if available:
             if CANVAS in available:
                 available.add(NAVIGATOR)
             options = dict(reason='externalStateRequest:'+msg['requestId'],package_id=package,final=True)
+            if msg.get('background') is True:
+                # Nobody waits for it (Memoline's refresh after an edit): analyzed alone, after the pen lifts.
+                options['background'] = True
+            # The last input before the request: a screenshot with no input after it is attributed to this request.
+            # Without it every requested state is causally ambiguous, and Memoline's edit index rejects such states.
+            after = msg.get('afterEventId')
+            if type(after) is int and after >= 0:
+                options['refs'] = [after]
             if brush_roi is not None:
                 options['regions_override'] = {BRUSH:list(brush_roi)}
             self.capture_panels(available,ticks,**options)
@@ -214,6 +271,9 @@ class Runtime:
                 continue # one final color capture supplies both readers
             if panel != CANVAS:
                 self.pending_captures[panel] = (due,ticks,list(refs),reason,[panel],package_id,token)
+        if LAYERS in panels and reason in Pipeline.LAYER_COMMAND_REASONS:
+            for attempt,delay in enumerate(Pipeline.LAYER_FOLLOW_UP_MS,1):
+                self.root.after(delay,lambda a=attempt: self.follow_up_layers(ticks,list(refs),token,a))
         # The canvas evidence taken at movement/release is already eligible for
         # analysis after quiet. Do not defer its usable capture to a second grab.
         canvas_panels = panels & {CANVAS,NAVIGATOR}
@@ -223,8 +283,32 @@ class Runtime:
         if other_panels:
             self.capture_panels(other_panels,ticks,refs,reason,package_id=package_id,analysis_token=token,final=False)
 
+    def settle_view(self, msg):
+        """Another look after a view command whose capture still showed the old view (see Pipeline._settle_view)."""
+        if self.closing or not self.pipeline:
+            return
+        # A newer canvas activation took over (and resolved this package as superseded).
+        current = self.pipeline.panel_activity.get(CANVAS)
+        if not current or current["token"] != msg["analysisToken"]:
+            return
+        self.schedule_capture([CANVAS,NAVIGATOR],msg["ticks"],msg["refs"],
+                              f"viewSettle{msg['attempt']}:{msg['captureId']}",msg["packageId"])
+
+    def follow_up_layers(self, ticks, refs, token, attempt):
+        """Evidence only: the layer panel again after a layer command (see Pipeline._follow_layer_command)."""
+        if self.closing or not self.pipeline or LAYERS not in self.engine.regions:
+            return
+        current = self.pipeline.panel_activity.get(LAYERS)
+        if not current or current["token"] != token:
+            return  # a newer layer activation took over
+        pending = self.pending_captures.get(LAYERS)
+        package = current["packageId"] or (pending[5] if pending and pending[6] == token else None)
+        if package:
+            self.capture_panels([LAYERS],ticks,refs,f"layerFollowUp{attempt}",package_id=package,
+                                analysis_token=token,final=False)
+
     def capture_panels(self, panels, ticks, refs=(), reason="operation", initialize=False,package_id=None,
-                       analysis_token=None,final=True,regions_override=None):
+                       analysis_token=None,final=True,regions_override=None,background=False):
         panels = self.engine.capture_targets(panels) & self.engine.regions.keys()
         if initialize:
             package_id = self.initial_package_id
@@ -257,7 +341,7 @@ class Runtime:
                 self.captures_pending -= 1
                 self.initial_capture_pending = True
             elif not self.closing and self.engine.regions:
-                self.pipeline.capture(panels,regions,ticks,refs,reason,initialize,package_id,analysis_token,final)
+                self.pipeline.capture(panels,regions,ticks,refs,reason,initialize,package_id,analysis_token,final,background)
             else:
                 self.captures_pending -= 1
                 if initialize and not self.closing:
@@ -297,12 +381,14 @@ class Runtime:
             return result
         saved = signature()
         next_config = time.monotonic() + 2
+        stash = PanelStashClient(self.settings.get("panelStashPipe") or DEFAULT_PIPE, timeout=0.5)
         while not self.stop.is_set():
+            floating = floating_panels.read(stash)
             try:
                 _, result = inspect(self.path, self.hwnd)
-                item = (time.monotonic(), result, None)
+                item = (time.monotonic(), result, None, floating)
             except Exception as ex:
-                item = (time.monotonic(), None, str(ex))
+                item = (time.monotonic(), None, str(ex), floating)
             try:
                 self.layouts.get_nowait()
             except queue.Empty:
@@ -332,7 +418,8 @@ class Runtime:
         if self.captures_pending or not self.settings.get("flashBorders", True) or time.monotonic() < self.capture_quiet_until:
             panels = set()
         on = int(time.monotonic() * 4) % 2 == 0
-        wanted = set(panels) if on else set()
+        # Nobody sees a palette stashed on the virtual screen; a border there would only be moved off it.
+        wanted = {p for p in panels if not (p in self.floating and self.floating[p].on_virtual_screen)} if on else set()
         for panel, rect in self.engine.regions.items():
             if panel not in self.panel_strips:
                 self.panel_strips[panel] = [self.make_strip("#ffcc00" if panel == BRUSH else "#00ee88") for _ in range(4)]
@@ -374,11 +461,21 @@ class Runtime:
                                        28, 28, 0x0010 | 0x0040):
             raise ctypes.WinError(ctypes.get_last_error())
 
+    def csp_in_front(self):
+        """CSP's main window or one of its floating palettes (just clicked) is the foreground window."""
+        front = self.user32.GetForegroundWindow()
+        return bool(self.hwnd) and (front == self.hwnd or floating_panels.same_process(front, self.hwnd))
+
+    def navigator_in_place(self):
+        """The navigator is docked where the canvas core was initialized, so its ROIs are on screen."""
+        return (NAVIGATOR not in self.floating and self.navigator_init_rect is not None
+                and list(self.engine.regions.get(NAVIGATOR) or []) == list(self.navigator_init_rect))
+
     def show_core_rois(self, visible):
         visible = (visible and not self.closing and not self.captures_pending
                    and bool(self.engine.regions) and time.monotonic() >= self.capture_quiet_until)
         for name, rect, color in (("workspace", self.canvas_roi, "#ff8a00"),
-                                  ("thumbnail", self.navigator_roi, "#a855f7")):
+                                  ("thumbnail", self.navigator_roi if self.navigator_in_place() else None, "#a855f7")):
             windows = self.core_roi_strips.get(name, [])
             if not visible or rect is None:
                 for hwnd in windows:
@@ -391,7 +488,8 @@ class Runtime:
                     raise ctypes.WinError(ctypes.get_last_error())
 
     def show_viewport(self, visible):
-        visible = (visible and self.viewport_points is not None and not self.closing
+        # The red frame is in the navigator's coordinates, which are off screen for a floating navigator.
+        visible = (visible and self.viewport_points is not None and not self.closing and self.navigator_in_place()
                    and not self.captures_pending and bool(self.engine.regions)
                    and time.monotonic() >= self.capture_quiet_until)
         if not visible:
@@ -450,23 +548,42 @@ class Runtime:
     def refresh(self):
         try:
             try:
-                at, result, error = self.layouts.get_nowait()
+                at, result, error, floating = self.layouts.get_nowait()
                 self.last_result = at
+                changed = False
                 if result and not self.engine.suspended:
-                    signature = json.dumps({k: result[k] for k in ("hwnd", "client_rect", "regions")}, sort_keys=True)
+                    # Docked palettes and floating windows may move during a session; each panel follows
+                    # its current place. Only the canvas viewport (with the window) anchors the canvas core,
+                    # so a change there initializes it again instead of stopping every reading.
+                    signature = self.canvas_signature(result)
                     if self.initial_signature is None:
                         self.initial_signature = signature
                     elif signature != self.initial_signature:
-                        error = "工作区位置发生变化，请恢复启动时布局或重新启动记录器"
-                        result = None
-                    if result:
-                        self.workspace_layout = result
-                        self.hwnd = result["hwnd"]
-                        os.environ["MEMOLINE_CSP_HWND"] = str(self.hwnd)
-                        self.engine.set_regions(result["regions"])
+                        self.initial_signature, changed = signature, True
+                        self.canvas_roi = self.navigator_roi = None
+                        self.engine.corrected_canvas_roi = None
+                        if self.pipeline:
+                            self.pipeline.reinitialize_canvas()
+                    # Floating windows first: one lying over the canvas wins the hit test (UpdateEngine.panel_at).
+                    regions = {panel: list(window.rect) for panel, window in floating.items()}
+                    regions.update((k, list(v)) for k, v in result["regions"].items() if k not in regions)
+                    if COLOR in regions:
+                        regions[COLOR_INPUT] = list(regions[COLOR])  # as UpdateEngine.set_regions stores it
+                    self.floating = floating
+                    if self.pipeline:
+                        self.pipeline.floating = floating
+                    self.workspace_layout = dict(result, regions=regions,
+                                                 floating={p: dict(hwnd=w.hwnd, rect=list(w.rect), kind=w.kind,
+                                                                   onVirtualScreen=w.on_virtual_screen) for p, w in floating.items()})
+                    self.hwnd = result["hwnd"]
+                    os.environ["MEMOLINE_CSP_HWND"] = str(self.hwnd)
+                    if regions != self.engine.regions:
+                        changed = changed or bool(self.engine.regions)
+                        self.engine.set_regions(regions)
                 status = error or ("suspended" if self.engine.suspended else "ready")
-                if status != self.last_status:
-                    self.engine.record("workspaceStatus", dict(status=status, layout=result))
+                if status != self.last_status or changed:
+                    self.engine.record("workspaceStatus", dict(status=status, layout=self.workspace_layout if result else None,
+                                                               changed=changed))
                     self.last_status = status
                 if error or self.engine.suspended:
                     self.engine.set_regions({})
@@ -506,6 +623,8 @@ class Runtime:
                 if msg["type"] == "canvasInitialized":
                     self.canvas_roi = msg["roi"]
                     self.navigator_roi = msg["navigatorRoi"]
+                    # Where the navigator was when the core was initialized; its ROIs are drawn only while it is there.
+                    self.navigator_init_rect = msg.get("navigatorPanelRect")
                     self.engine.corrected_canvas_roi = self.canvas_roi
                     self.engine.record("initializationStatus",dict(status="canvasReady",canvasRoi=self.canvas_roi,navigatorThumbnailRoi=msg["navigatorRoi"]),now_ticks())
                     continue
@@ -536,6 +655,9 @@ class Runtime:
                 if msg["type"] == "canvasRetry":
                     self.schedule_capture([CANVAS,NAVIGATOR],msg["ticks"],msg["refs"],
                                           "canvasRetry:"+msg["captureId"],msg.get("packageId"))
+                    continue
+                if msg["type"] == "viewSettle":
+                    self.root.after(msg["delayMs"], lambda m=msg: self.settle_view(m))
                     continue
                 if msg["type"] == "layerRetry":
                     self.schedule_capture([LAYERS],msg["ticks"],msg["refs"],
@@ -568,7 +690,7 @@ class Runtime:
                         self.pipeline.set_tool_catalog(self.catalog.tool_catalog)
                     self.engine.tool_state_targets.clear()
                     self.engine.gesture_signature = None
-                    self.engine.record("shortcutConfiguration", self.catalog.snapshot())
+                    self.record_catalog(self.catalog.snapshot())
                     self.publish_guard()
                     continue
                 if msg["type"] == "configurationError":
@@ -579,11 +701,14 @@ class Runtime:
                 if self.current_package_id and self.pipeline:
                     self.pipeline.timeline.not_requested(self.current_package_id)
                 self.current_package_id = None
+            if self.pipeline:
+                self.pipeline.observe_pointer(bool(self.engine.pointer_operations))
             stale = time.monotonic() - self.last_result > 1.5 or time.monotonic() - self.last_input > 1
             hovering = self.engine.last_cursor and self.engine.last_cursor.get("inCsp")
-            visible = not stale and self.hwnd and (hovering or self.user32.GetForegroundWindow() == self.hwnd)
-            foreground = self.hwnd and self.user32.GetForegroundWindow() == self.hwnd
-            if self.pipeline and foreground and self.engine.regions and not self.guard_busy:
+            foreground = self.csp_in_front()
+            visible = not stale and self.hwnd and (hovering or foreground)
+            # Captures read CSP's own window, so they need not wait for CSP to be in front.
+            if self.pipeline and self.engine.regions and not self.guard_busy:
                 if self.initial_capture_pending:
                     self.initial_capture_pending = False
                     self.capture_panels(self.engine.regions,now_ticks(),reason="initialization",initialize=True)

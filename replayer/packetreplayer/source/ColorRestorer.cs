@@ -1,48 +1,22 @@
-using System.Drawing;
 using System.Text.Json;
 
 namespace PacketReplay;
 
-internal sealed record RgbInputSnapshot(string CaptureId, string Slot, int[] Values, Rectangle[] Inputs)
-{
-    internal static RgbInputSnapshot? Parse(JsonElement data)
-    {
-        if (!J.Confirmed(data)) return null;
-        var state = J.Get(data, "state"); var evidence = J.Get(data, "evidence");
-        string? capture = J.Text(state, "captureFrameId"); string? slot = J.Text(state, "activeColorSlot");
-        var roi = Box(J.Get(state, "panelRoi"));
-        if (J.Text(state, "status") != "ok" || J.Text(state, "activeTab") != "rgb" ||
-            slot is not ("main" or "sub") || string.IsNullOrWhiteSpace(capture) || capture != J.Text(evidence, "captureId") ||
-            roi is null || Box(J.Get(evidence, "panelRoi")) != roi ||
-            J.I64(evidence, "capturedTicks", -1) < 0 || J.I64(evidence, "captureEndTicks", -1) < J.I64(evidence, "capturedTicks", -1)) return null;
-        var regions = J.Array(J.Get(state, "valueRegions")).ToArray();
-        if (regions.Length != 3) return null;
-        var values = new int[3]; var inputs = new Rectangle[3];
-        for (int i = 0; i < 3; i++)
-        {
-            var candidates = regions.Where(r => J.Text(r, "channel") == "rgb"[i].ToString()).ToArray();
-            if (candidates.Length != 1) return null;
-            var region = candidates[0]; var value = J.Get(region, "value"); var box = Box(J.Get(region, "screenBbox"));
-            if (J.Text(region, "status") != "ok" || value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out values[i]) || values[i] is < 0 or > 255 ||
-                box is null || !roi.Value.Contains(box.Value)) return null;
-            inputs[i] = box.Value;
-        }
-        if (inputs.Distinct().Count() != 3 || inputs[0].IntersectsWith(inputs[1]) || inputs[1].IntersectsWith(inputs[2]) || inputs[0].IntersectsWith(inputs[2])) return null;
-        return new(capture, slot!, values, inputs);
-    }
-    private static Rectangle? Box(JsonElement raw)
-    {
-        var parts = J.Array(raw).ToArray();
-        if (parts.Length != 4 || parts.Any(p => p.ValueKind != JsonValueKind.Number || !p.TryGetInt32(out _))) return null;
-        int[] v = parts.Select(p => p.GetInt32()).ToArray();
-        return v[2] > 0 && v[3] > 0 ? new(v[0], v[1], v[2], v[3]) : null;
-    }
-}
-
-/// <summary>Writes fresh RGB OCR targets and confirms each committed channel before drawing.</summary>
+/// <summary>
+/// Sets CSP's current colour with its own screen colour picker: Memoline shows the colour on the virtual screen, parks
+/// the cursor on it and presses the configured "obtain screen colour" shortcut. Nothing depends on which colour palette
+/// is open; a fresh colorState reading confirms the result before anything is drawn.
+/// </summary>
 internal sealed class ColorRestorer(IPacketStateFeed feed, IPacketInput? input = null)
 {
-    internal const string PanelMessage = "请暂停作画，将原颜色面板切换到色彩滑块的 RGB 页，并选中主色，再重试；记艺线会自动输入目标 RGB。";
+    internal const string PickerCommand = "applicationscreeneyecolorpicker";
+    internal const string TransparentCommand = "applicationchangecolortransparent";
+    internal const string PickerMessage = "请在 CSP 的快捷键设置里给「获取屏幕颜色」（applicationscreeneyecolorpicker）配置快捷键并保存；" +
+        "记艺线用它吸取虚拟屏上的色块来切换颜色。";
+    // How long the cursor stays on the swatch after CSP handled the shortcut. A pick that reads back wrong is repeated
+    // once with a longer stay, in case CSP takes the pixel later than it handles the key.
+    internal static readonly TimeSpan[] Dwells = [TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(500)];
+
     internal async Task RestoreAsync(JsonElement target, CancellationToken token)
     {
         token.ThrowIfCancellationRequested(); feed.EnsureConnected();
@@ -52,32 +26,65 @@ internal sealed class ColorRestorer(IPacketStateFeed feed, IPacketInput? input =
         try
         {
             try { await feed.RequestAsync(["colorState"], token); }
-            catch (InvalidOperationException) { /* wheel is hidden by the RGB page */ }
+            catch (InvalidOperationException) { /* no confirmed reading now; the one after the pick decides */ }
             if (PacketReplayRunner.ColorMatches(feed.Color, target)) return;
-            var rgb = J.Array(J.Get(target, "rgb")).ToArray();
-            if (J.Text(target, "kind") != "rgb" || rgb.Length != 3 || rgb.Any(v => v.ValueKind != JsonValueKind.Number || !v.TryGetInt32(out int n) || n is < 0 or > 255))
-                throw Failure("历史颜色不能表示为三个 0–255 的 RGB 数值。");
-            await feed.RequestAsync(["colorInputState"], token);
-            var snapshot = RgbInputSnapshot.Parse(feed.ColorInput) ?? throw Failure(PanelMessage);
-            if (snapshot.Slot != "main" || input is null) throw Failure(PanelMessage);
-            for (int i = 0; i < 3; i++)
+            if (input is null) throw Failure("没有可用的输入方式来切换颜色。");
+            var shortcuts = feed.Shortcuts ?? throw Failure("尚未取得 CSP 快捷键配置。");
+            if (J.Text(target, "kind") == "transparent")
+            {
+                input.EnsureTarget();
+                await input.ShortcutAsync(Binding(shortcuts, TransparentCommand, "CSP 没有给「切换到透明色」配置快捷键。"), token);
+                await feed.RequestAsync(["colorState"], token);
+                if (PacketReplayRunner.ColorMatches(feed.Color, target)) return;
+                throw Failure($"已按「切换到透明色」，但读回的当前颜色是 {Describe(feed.Color)}。");
+            }
+            var rgb = Rgb(target) ?? throw Failure("历史颜色不能表示为三个 0–255 的 RGB 数值。");
+            var picker = Binding(shortcuts, PickerCommand, PickerMessage);
+            foreach (var dwell in Dwells)
             {
                 token.ThrowIfCancellationRequested(); feed.EnsureConnected(); input.EnsureTarget();
-                int wanted = rgb[i].GetInt32();
-                if (snapshot.Values[i] == wanted) continue;
-                string previousCapture = snapshot.CaptureId;
-                int[] expected = snapshot.Values.ToArray(); expected[i] = wanted;
-                await input.NumberAsync(snapshot.Inputs[i], wanted, token);
-                await feed.RequestAsync(["colorInputState"], token);
-                snapshot = RgbInputSnapshot.Parse(feed.ColorInput) ?? throw Failure("RGB 写入后未取得可确认的新截图。" + PanelMessage);
-                if (snapshot.CaptureId == previousCapture || snapshot.Slot != "main" || !snapshot.Values.SequenceEqual(expected))
-                    throw Failure("RGB 写入后的新截图未确认通道数值，已停止回放。");
+                await input.PickColorAsync(rgb, picker, dwell, token);
+                await feed.RequestAsync(["colorState"], token);
+                if (PacketReplayRunner.ColorMatches(feed.Color, target)) return;
             }
-            await feed.RequestAsync(["colorState"], token);
-            if (!PacketReplayRunner.ColorMatches(feed.Color, target)) throw Failure("RGB 数值已输入，但当前颜色读回不符，已停止回放。");
+            throw Failure($"已用「获取屏幕颜色」吸取色块 {Hex(rgb)}，但读回的当前颜色是 {Describe(feed.Color)}。");
         }
         catch (ReplayStateException) { throw; }
         catch (InvalidOperationException ex) { throw Failure(ex.Message, ex); }
     }
+
+    /// <summary>Why <see cref="PickerCommand"/> cannot be sent with this configuration, or null when it can.</summary>
+    internal static string? MissingPicker(ShortcutConfiguration? shortcuts)
+    {
+        if (shortcuts is null) return "尚未取得 CSP 快捷键配置。";
+        try { shortcuts.ForCommand(PickerCommand); return null; }
+        catch (InvalidOperationException) { return PickerMessage; }
+    }
+
+    /// <summary>The colorState shape of an RGB colour, as the recorder reports the colour slider's RGB page.</summary>
+    internal static JsonElement State(IReadOnlyList<int> rgb) => JsonSerializer.SerializeToElement(new { kind = "rgb", rgb });
+
+    internal static int[]? Rgb(JsonElement color)
+    {
+        if (J.Text(color, "kind") is not ("rgb" or "color")) return null;
+        var values = J.Array(J.Get(color, "rgb")).Select(v => v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : -1).ToArray();
+        return values.Length == 3 && values.All(v => v is >= 0 and <= 255) ? values : null;
+    }
+
+    private static ShortcutBinding Binding(ShortcutConfiguration shortcuts, string command, string missing)
+    {
+        try { return shortcuts.ForCommand(command); }
+        catch (InvalidOperationException) { throw Failure(missing); }
+    }
+
+    private static string Hex(IReadOnlyList<int> rgb) => $"#{rgb[0]:X2}{rgb[1]:X2}{rgb[2]:X2}";
+
+    private static string Describe(JsonElement color) => J.Text(color, "kind") switch
+    {
+        "transparent" => "透明色",
+        "rgb" or "color" when Rgb(color) is { } rgb => Hex(rgb),
+        _ => "无法读取（请在 CSP 里打开色轮或色彩滑块面板）",
+    };
+
     private static ReplayStateException Failure(string message, Exception? inner = null) => new("ColorUnrestorable", message, inner);
 }

@@ -135,6 +135,45 @@ class WorkspaceGeometryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "找不到"):
             panel_rectangles(dock_tree(), (0, 0, 2560, 1515), 1.75, lambda: PaintedColumns([]))
 
+    def right_column(self, tree, booths, heights):
+        right = tree["dockplacementpalette"]["mainframe"]["dock"]["subviews"]["_items"][4]
+        right["subviews"]["_items"][0]["subviews"]["_items"] = booths
+        right["subviews"]["_items"][0]["dockplaces"]["_items"] = [place(363, h, ratio(3, 2)) for h in heights]
+
+    def test_a_panel_is_found_by_its_selected_tab_wherever_it_sits(self):
+        # Seen live 2026-10-18: the navigator re-docked as the third tab of its booth.
+        tree = dock_tree()
+        self.right_column(tree, [booth("palettekindsubview", "palettekinditembank", "palettekindnavigator", current=2),
+                                 booth("palettekindproperty"), booth("palettekindlayerorder", "palettekindaction")],
+                          [646, 71, 708])
+        self.assertEqual(panel_rectangles(tree, (0, 0, 2560, 1527), 1.5, None),
+                         panel_rectangles(dock_tree(), (0, 0, 2560, 1527), 1.5, None))
+
+    def test_a_panel_behind_another_tab_has_no_region_but_the_others_stay(self):
+        tree = dock_tree()
+        self.right_column(tree, [booth("palettekindnavigator"), booth("palettekindproperty"),
+                                 booth("palettekindlayerorder", "palettekindhistory", current=1)], [646, 71, 708])
+        regions = panel_rectangles(tree, (0, 0, 2560, 1527), 1.5, None)
+        self.assertNotIn("图层", regions)
+        self.assertEqual(regions["导航器"], (2278, 102, 282, 646))
+        self.assertEqual(regions["笔刷属性"], (65, 524, 345, 520))
+
+    def test_a_torn_off_panel_and_a_different_booth_count(self):
+        # The navigator floats; the right column now stacks four booths.
+        tree = dock_tree()
+        self.right_column(tree, [booth("palettekindsubview"), booth("palettekindlayerfind"), booth("palettekindproperty"),
+                                 booth("palettekindlayerorder")], [400, 175, 142, 708])
+        regions = panel_rectangles(tree, (0, 0, 2560, 1527), 1.5, None)
+        self.assertNotIn("导航器", regions)
+        self.assertEqual(regions["图层"], (2278, 819, 282, 708))
+        self.assertIn("色彩", regions)
+
+    def test_a_panel_selected_in_two_booths_is_ambiguous(self):
+        tree = dock_tree()
+        self.right_column(tree, [booth("palettekindnavigator"), booth("palettekindnavigator"),
+                                 booth("palettekindlayerorder")], [646, 71, 708])
+        self.assertNotIn("导航器", panel_rectangles(tree, (0, 0, 2560, 1527), 1.5, None))
+
     def test_restore_rect_keeps_origin_and_rescales_size(self):
         self.assertTrue(same_restore_rect((1372, 0, 2401, 771), (1372, 0, 2572, 900), 7 / 6))
         self.assertFalse(same_restore_rect((1372, 0, 2401, 771), (1300, 0, 2572, 900), 7 / 6))

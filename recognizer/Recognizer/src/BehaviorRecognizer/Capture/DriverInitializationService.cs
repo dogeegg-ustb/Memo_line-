@@ -13,6 +13,8 @@ public sealed class DriverInitializationService
     private readonly List<string> _warnings = [];
     private DriverMappingSession? _current;
     public DriverMappingSession? Current => Volatile.Read(ref _current);
+    private string? _selectedPath;
+    private readonly DisplayCalibration _calibration = new();
     public IReadOnlyList<DisplayInfo> Displays { get; }
 
     public DriverInitializationService(DetectedDeviceInfo? device = null)
@@ -44,6 +46,7 @@ public sealed class DriverInitializationService
             CandidatePaths = [], ScreenIndexOverride = screenIndex, ReloadSelectedConfiguration = true
         };
         var session = path is null ? DriverMappingSession.Disabled(options) : DriverMappingSession.Initialize(options);
+        _selectedPath = path;
         if (session.Snapshot.Status == "selected" && path is not null)
         {
             Console.WriteLine($"[Driver] 用户选用配置: {path}");
@@ -52,6 +55,24 @@ public sealed class DriverInitializationService
         }
         if (session.Snapshot.Status is "selected" or "disabled") Volatile.Write(ref _current, session);
         return session.Snapshot;
+    }
+
+    /// <summary>With several displays the profile's screen ratio does not say which display the tablet drives.
+    /// While the pen hovers, the Windows cursor follows it exactly: the display on which the mapped raw position
+    /// matches the cursor at <see cref="CalibrationMatches"/> distinct places in a row, and no other display does,
+    /// is selected as if the user had chosen it. Returns the new snapshot, or null while undecided.</summary>
+    public DriverConfigurationSnapshot? ObserveHover(double? rawX, double? rawY, int cursorX, int cursorY)
+    {
+        if (Current is not { } current || current.Snapshot.CoordinateMappingStatus != "monitorSelectionRequired"
+            || rawX is not { } x || rawY is not { } y || _selectedPath is null) return null;
+        lock (_calibration)
+        {
+            if (_calibration.Observe(current.CandidateScreens(x, y), Displays.Select(d => d.Index), cursorX, cursorY) is not { } index)
+                return null;
+            var display = Displays.First(d => d.Index == index);
+            Console.WriteLine($"[Driver] 多显示器：悬停光标与 {display.Name} 上的映射一致，选用该显示器。");
+            return Select(_selectedPath, display.Index);
+        }
     }
 
     private static IReadOnlyList<DisplayInfo> EnumerateDisplays()

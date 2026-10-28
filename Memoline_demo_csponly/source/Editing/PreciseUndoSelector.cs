@@ -2,8 +2,9 @@ using System.Globalization;
 
 namespace MemolineDemo.Editing;
 
-internal sealed record PreciseUndoClosureReason(EditableStrokeKey Stroke,
-    EditableStrokeKey OverlappingEarlierStroke, string Message);
+/// <summary>Why a stroke the region did not select is replayed too: it inked <see cref="Image"/>, a dirty image the
+/// precise undo replays whole.</summary>
+internal sealed record PreciseUndoClosureReason(EditableStrokeKey Stroke, DirtyImageKey Image, string Message);
 
 internal sealed record PreciseUndoSelection(LayerKey? CurrentLayer,
     IReadOnlyList<EditableStroke> Selected, int BaseCount, int CandidateCount,
@@ -12,14 +13,27 @@ internal sealed record PreciseUndoSelection(LayerKey? CurrentLayer,
 {
     public int ClosureCount => Selected.Count - BaseCount;
     public bool IsValid => Issues.Count == 0 && Selected.Count > 0;
+    /// <summary>The strokes the region selected: what CSP's undo is to step back through.</summary>
+    public IReadOnlyList<EditableStroke> Base => Selected.Where(s => Reasons.All(r => r.Stroke != s.Key)).ToArray();
+    /// <summary>The other strokes of the replayed images; replayed unchanged, before the selection.</summary>
+    public IReadOnlyList<EditableStroke> Closure => Selected.Where(s => Reasons.Any(r => r.Stroke == s.Key)).ToArray();
+    /// <summary>Deletes the selection; the closure rides along as <see cref="EditRequest.Closure"/>.</summary>
+    public EditRequest Request(PixelMask region) => new(EditKind.PreciseUndo, CurrentLayer, region,
+        Base.ToDictionary(s => s.Key, _ => new EventChange(Delete: true))) { Closure = Closure.Select(s => s.Key).ToHashSet() };
     public string CountDisplay => ClosureCount == 0
         ? BaseCount.ToString(CultureInfo.InvariantCulture)
         : $"{BaseCount.ToString(CultureInfo.InvariantCulture)} + {ClosureCount.ToString(CultureInfo.InvariantCulture)}";
 }
 
+/// <summary>The dirty images a precise undo replays and the strokes it replays in them (see <see cref="PreciseUndoSelector.Involve"/>).</summary>
+internal sealed record PreciseUndoInvolvement(IReadOnlySet<DirtyImageKey> Images, IReadOnlyList<EditableStroke> Closure,
+    IReadOnlyList<PreciseUndoClosureReason> Reasons, IReadOnlyList<PlanIssue> Issues);
+
 /// <summary>
-/// Selects by undo depth: the latest strokes whose write footprint meets the region, plus the strokes after
-/// the earliest of them that touch their ink. Their pixels are what precise undo rewinds; nothing else is.
+/// Selects by undo depth: the latest strokes whose ink meets the region. Precise undo works on whole dirty images, like
+/// the dirty matrix and its snapshot (user, 2026-10-26: "只把嘴巴和那个点直接复制合成出一个图片，然后再事件重放眼镜与头发"):
+/// an image the selection inked is rebuilt by replaying every stroke in it, the selection last; every other image is
+/// pasted as recorded.
 /// </summary>
 internal static class PreciseUndoSelector
 {
@@ -37,47 +51,24 @@ internal static class PreciseUndoSelector
         if (selection.IsEmpty)
             return Failure(layer, PlanIssueCode.NoSelection, "选区内没有画布像素。");
 
-        var packets = timeline.Packets.Where(p => !p.IsRecordingBaseline && p.Layer == layer)
-            .OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray();
-        var packetOf = new Dictionary<DirtyImageKey, int>();
-        for (int p = 0; p < packets.Length; p++)
-            foreach (var image in packets[p].Images.Where(i => !i.IsBaseline && i.Key.Layer == layer)) packetOf[image.Key] = p;
-        var strokes = timeline.Strokes.Where(s => s.Layer == layer && !s.IsUndone).DistinctBy(s => s.Key)
-            .OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToArray();
-        var candidates = strokes.Where(s => s.Eligible && s.Images.Any(packetOf.ContainsKey) && Intersects(s.WriteMask, selection)).Reverse().ToArray();
+        var map = new InkMap(timeline);
+        // The region selects by ink: the write footprint's padding reaches strokes the region never touched.
+        var candidates = map.Strokes.Where(s => s.Eligible && !s.MemolineInjected && map.InkImages(s).Count > 0 &&
+            Intersects(s.Ink, selection)).Reverse().ToArray();
         if (candidates.Length == 0)
             return new(layer, [], 0, 0, [], [],
                 [new(PlanIssueCode.NoSelection, "选区内没有可撤销的合格笔画写入范围。")]);
-
-        var selected = candidates.Take(Depth).Reverse().ToList();
-        int baseCount = selected.Count;
-        var seed = (selected[0].SessionOrder, selected[0].BeginEventId);
-        var selectedKeys = selected.Select(s => s.Key).ToHashSet();
-        var reasons = new List<PreciseUndoClosureReason>();
-        var issues = new List<PlanIssue>();
-        // Rewinding a selected stroke's pixels rewinds every later stroke drawn on them, so those are replayed too.
-        // Not transitive: chaining through added strokes spreads across a dense drawing.
-        foreach (var stroke in strokes)
-        {
-            if (selectedKeys.Contains(stroke.Key) || (stroke.SessionOrder, stroke.BeginEventId).CompareTo(seed) <= 0) continue;
-            var overlapped = selected.Take(baseCount).FirstOrDefault(s => Intersects(s.WriteMask, stroke.WriteMask));
-            if (overlapped is null) continue;
-            bool later = (stroke.SessionOrder, stroke.BeginEventId).CompareTo((overlapped.SessionOrder, overlapped.BeginEventId)) > 0;
-            // An earlier stroke that cannot be replayed keeps its own ink wherever it is not under the selection.
-            if (!stroke.Eligible && !later) continue;
-            selected.Add(stroke);
-            selectedKeys.Add(stroke.Key);
-            reasons.Add(new(stroke.Key, overlapped.Key, later
-                ? $"笔画 {stroke.BeginEventId} 画在已选笔画 {overlapped.BeginEventId} 之上；倒流会抹掉它，所以一起重放。"
-                : $"笔画 {stroke.BeginEventId} 在撤销深度内且与已选笔画 {overlapped.BeginEventId} 重叠；倒流会抹掉重叠处，所以一起重放。"));
-            if (!stroke.Eligible)
-                issues.Add(new(PlanIssueCode.UnreplayableEventInMatrix,
-                    "倒流范围包含无法离散重放的笔画：" + (stroke.IneligibleReason ?? "事件不合格。"), Stroke: stroke.Key));
-        }
-        var ordered = selected.OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToArray();
-        var images = ordered.SelectMany(s => s.Images).Where(packetOf.ContainsKey).Distinct().ToArray();
-        return new(layer, ordered, baseCount, candidates.Length, images, reasons.ToArray(), issues);
+        var selected = candidates.Take(Depth).Reverse().ToArray();
+        var involvement = map.Involve(selected);
+        var ordered = selected.Concat(involvement.Closure)
+            .OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToArray();
+        var images = map.Packets.SelectMany(p => p.Images).Select(i => i.Key).Where(involvement.Images.Contains).ToArray();
+        return new(layer, ordered, selected.Length, candidates.Length, images, involvement.Reasons, involvement.Issues);
     }
+
+    /// <summary>The replayed images and their other strokes for a selection (<paramref name="selected"/>).</summary>
+    internal static PreciseUndoInvolvement Involve(LayerIndex layer, IReadOnlyCollection<EditableStroke> selected)
+        => new InkMap(layer).Involve(selected);
 
     /// <summary>
     /// Searches the region on every layer of the live document and undoes on one: the current layer when the
@@ -105,6 +96,94 @@ internal static class PreciseUndoSelector
         => new(layer, [], 0, 0, [], [], [new(code, message)]);
 
     internal static bool Intersects(PixelMask left, PixelMask right) => left.Intersects(right);
+
+    /// <summary>One layer's dirty images and which of them each stroke really inked.</summary>
+    private sealed class InkMap
+    {
+        internal readonly LayerPacket[] Packets;
+        internal readonly EditableStroke[] Strokes;
+        private readonly Dictionary<DirtyImageKey, (DirtyImage Image, int Packet)> _images = [];
+        private readonly Dictionary<EditableStrokeKey, IReadOnlyList<DirtyImageKey>> _inked = [];
+        private readonly Dictionary<DirtyImageKey, List<EditableStroke>> _inkedBy = [];
+
+        internal InkMap(LayerIndex layer)
+        {
+            Packets = layer.Packets.Where(p => !p.IsRecordingBaseline && p.Layer == layer.Layer)
+                .OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray();
+            for (int p = 0; p < Packets.Length; p++)
+                foreach (var image in Packets[p].Images.Where(i => !i.IsBaseline && i.Key.Layer == layer.Layer)) _images[image.Key] = (image, p);
+            Strokes = layer.Strokes.Where(s => s.Layer == layer.Layer && !s.IsUndone).DistinctBy(s => s.Key)
+                .OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToArray();
+            foreach (var stroke in Strokes)
+            {
+                var linked = stroke.Images.Where(_images.ContainsKey).Distinct().ToArray();
+                // The watcher links a contact to every image its padded footprint meets (the nose dot listed 9 contacts,
+                // 3 drew it). One continuous contact inks one image; a path that misses every linked image keeps the links.
+                var inked = linked.Where(k => _images[k].Image.Mask.Intersects(stroke.Ink)).ToArray();
+                _inked[stroke.Key] = inked.Length > 0 ? inked : linked;
+                foreach (var key in _inked[stroke.Key]) (_inkedBy.TryGetValue(key, out var list) ? list : _inkedBy[key] = []).Add(stroke);
+            }
+        }
+
+        internal IReadOnlyList<DirtyImageKey> InkImages(EditableStroke stroke) => _inked.GetValueOrDefault(stroke.Key) ?? [];
+
+        /// <summary>
+        /// The images to replay: those the selection inked; those a replayed stroke also inked (one contact is replayed
+        /// whole); and every later image over one of them, whose recorded pixels hold the ink being rebuilt beneath.
+        /// Their other strokes are the closure. A stroke in them that cannot be replayed keeps its recorded pixels where
+        /// no replayed stroke can write; where one can, it would be lost, so that stops the undo.
+        /// </summary>
+        internal PreciseUndoInvolvement Involve(IReadOnlyCollection<EditableStroke> selected)
+        {
+            var images = new HashSet<DirtyImageKey>();
+            var why = new Dictionary<DirtyImageKey, string>();
+            var pending = new Queue<(DirtyImageKey Image, string Reason)>();
+            foreach (var stroke in selected)
+                foreach (var key in InkImages(stroke)) pending.Enqueue((key, $"已选笔画 {stroke.BeginEventId} 画在这张脏矩阵图片里"));
+            while (pending.TryDequeue(out var next))
+            {
+                if (!images.Add(next.Image)) continue;
+                why[next.Image] = next.Reason;
+                var (image, packet) = _images[next.Image];
+                foreach (var stroke in _inkedBy.GetValueOrDefault(next.Image) ?? [])
+                    foreach (var other in InkImages(stroke).Where(k => !images.Contains(k)))
+                        pending.Enqueue((other, $"笔画 {stroke.BeginEventId} 同时画在这张图片和要重放的图片里"));
+                foreach (var (key, (later, at)) in _images)
+                    if (at > packet && !images.Contains(key) && later.Mask.Intersects(image.Mask))
+                        pending.Enqueue((key, $"它画在要重放的图片 {image.Key.ImageId} 之上"));
+            }
+            var chosen = selected.Select(s => s.Key).ToHashSet();
+            var inImages = Strokes.Where(s => InkImages(s).Any(images.Contains)).ToArray();
+            var replayable = inImages.Where(s => s.Eligible && !s.MemolineInjected).ToArray();
+            var closure = replayable.Where(s => !chosen.Contains(s.Key)).ToArray();
+            var reasons = closure.Select(s =>
+            {
+                var image = InkImages(s).First(images.Contains);
+                return new PreciseUndoClosureReason(s.Key, image,
+                    $"笔画 {s.BeginEventId} 在要整张重放的图片 {image.ImageId} 里（{why[image]}），所以在所选笔画之前原样重放。");
+            }).ToArray();
+            var issues = new List<PlanIssue>();
+            PixelMask? reach = null;
+            foreach (var stroke in inImages.Where(s => !s.Eligible || s.MemolineInjected))
+            {
+                reach ??= Footprints.UnionBounded(replayable.Select(s => s.WriteMask));
+                if (!InkImages(stroke).Where(images.Contains).Any(k => _images[k].Image.Mask.Intersects(stroke.Ink) &&
+                        Within(stroke.Ink, _images[k].Image.Mask, reach))) continue;
+                issues.Add(new(PlanIssueCode.UnreplayableEventInMatrix, stroke.MemolineInjected
+                    ? "要重放的图片里有上次精确撤销重画、还没有用 Ctrl+Z 撤掉的笔画，它与本次重放的笔画重叠。"
+                    : "要重放的图片里有无法离散重放的笔画，且与重放的笔画重叠：" + (stroke.IneligibleReason ?? "事件不合格。"), Stroke: stroke.Key));
+            }
+            return new(images, closure, reasons, issues);
+        }
+
+        // Whether ink inside the image lies where a replayed stroke can write (and so would not survive as recorded pixels).
+        private static bool Within(PixelMask ink, PixelMask image, PixelMask reach)
+        {
+            foreach (var (x, y) in ink.Pixels())
+                if (image.Contains(x, y) && reach.Contains(x, y)) return true;
+            return false;
+        }
+    }
 }
 
 internal static class EditSessionPreciseUndo

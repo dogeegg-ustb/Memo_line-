@@ -92,6 +92,8 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
         _stderr = PumpAsync(_recorder.StandardError);
         Status?.Invoke("Recognizer 已启动；请完成初始化并切回 CSP。");
         RecordingStarted?.Invoke();
+        var recorder = _recorder;
+        _ = Task.Run(() => UsageLog.RunAsync(recorder));
         string directory = Path.Combine(RecorderRoot, "procedure", "stroke");
         while (true)
         {
@@ -159,10 +161,16 @@ internal sealed class DemoController : IWatcherHost, IAsyncDisposable
         };
     }
 
+    // A new layer whose pixels are a recycle bin image is that recycled layer pasted back: it continues its history.
+    public Task<string?> PredecessorOfCreatedLayerAsync(LayerReference layer, string pngPath, CancellationToken token) =>
+        Task.Run(() => MemolineDemo.Editing.RecycleBin.MatchPaste(MemolineDemo.Editing.RecycleBin.RootFor(_projectRecording, _workRoot),
+            pngPath, token)?.LayerUuid, token);
     public void CaptureQueued(CaptureRequest request) { lock (_sync) _aggregate?.CaptureQueued(request); }
     public Task PacketCommittedAsync(CaptureRequest request, SnapshotUpdate update, CancellationToken token)
-        => Task.Run(() => { lock (_sync) _aggregate?.CaptureCommitted(request, update); }, token);
+        => Task.Run(() => { using var timing = StepTiming.Start("history", "aggregateCommit " + request.TriggerKind); lock (_sync) _aggregate?.CaptureCommitted(request, update); }, token);
     public void CaptureFailed(CaptureRequest request, string reason) { lock (_sync) _aggregate?.CaptureFailed(request, reason); }
+    public void MemolineOperationRecorded(string transactionId, ulong appendId, long ticks)
+    { lock (_sync) _aggregate?.ObserveMemolineOperation(transactionId, appendId, ticks); }
     public void RecordingEndFailed(string reason) { lock (_sync) _aggregate?.RecordingEndFailed(reason); }
 
     public async Task FinishRecordingAsync(CancellationToken token)

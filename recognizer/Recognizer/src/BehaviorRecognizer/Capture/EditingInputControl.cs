@@ -13,17 +13,20 @@ public sealed partial class UnifiedInputCapture
     private readonly Dictionary<string, MemolineEvent> _editingActions = new(StringComparer.Ordinal);
     // layerReplacements: Memoline replaced each "replaced" layer by its "reproduction" layer; readers treat the
     // reproduction as the same layer. Only these records create that identity.
+    // replayed: every recorded contact Memoline drew again in CSP during the transaction ({sessionId, beginAppendId});
+    // with the reproduction it makes the Memoline-operation packet, the new version of the packets they were in.
     public Task<MemolineEvent> RecordEditingActionAsync(string transactionId,string kind,System.Text.Json.JsonElement changes,CancellationToken token,
-        System.Text.Json.JsonElement layerReplacements=default)
+        System.Text.Json.JsonElement layerReplacements=default,System.Text.Json.JsonElement replayed=default)
         => RunControlAsync(() =>
         {
             lock (_sync)
             {
+                static string Raw(System.Text.Json.JsonElement list)=>list.ValueKind==System.Text.Json.JsonValueKind.Array?list.GetRawText():"[]";
                 if (_editingActions.TryGetValue(transactionId,out var existing))
                 {
                     if(existing.Data.GetProperty("editKind").GetString()!=kind || existing.Data.GetProperty("changes").GetRawText()!=changes.GetRawText() ||
-                       (existing.Data.TryGetProperty("layerReplacements",out var known)?known.GetRawText():"[]")!=
-                       (layerReplacements.ValueKind==System.Text.Json.JsonValueKind.Array?layerReplacements.GetRawText():"[]"))
+                       (existing.Data.TryGetProperty("layerReplacements",out var known)?known.GetRawText():"[]")!=Raw(layerReplacements) ||
+                       (existing.Data.TryGetProperty("replayed",out var drawn)?drawn.GetRawText():"[]")!=Raw(replayed))
                         throw new InvalidOperationException("Editing action identity was already used with different content.");
                     return Task.FromResult(existing);
                 }
@@ -36,11 +39,32 @@ public sealed partial class UnifiedInputCapture
                        !r.TryGetProperty("reproduction",out var b) || b.ValueKind!=System.Text.Json.JsonValueKind.String || string.IsNullOrWhiteSpace(b.GetString()) ||
                        a.GetString()==b.GetString()))
                     throw new ArgumentException("layerReplacements must list distinct replaced and reproduction layer UUIDs.");
+                if(replayed.ValueKind is not (System.Text.Json.JsonValueKind.Undefined or System.Text.Json.JsonValueKind.Array) ||
+                   replayed.ValueKind==System.Text.Json.JsonValueKind.Array && replayed.EnumerateArray().Any(r=>r.ValueKind!=System.Text.Json.JsonValueKind.Object ||
+                       !r.TryGetProperty("sessionId",out var session) || session.ValueKind!=System.Text.Json.JsonValueKind.String || string.IsNullOrWhiteSpace(session.GetString()) ||
+                       !r.TryGetProperty("beginAppendId",out var begin) || begin.ValueKind!=System.Text.Json.JsonValueKind.Number || !begin.TryGetUInt64(out ulong append) || append==0))
+                    throw new ArgumentException("replayed must list recorded contacts as sessionId and beginAppendId.");
                 var replacements=layerReplacements.ValueKind==System.Text.Json.JsonValueKind.Array?layerReplacements.Clone():System.Text.Json.JsonSerializer.SerializeToElement(Array.Empty<object>());
+                var drawnAgain=replayed.ValueKind==System.Text.Json.JsonValueKind.Array?replayed.Clone():System.Text.Json.JsonSerializer.SerializeToElement(Array.Empty<object>());
                 var record=_writer.AppendImmediateState("editingActionCompleted",new { transactionId,editKind=kind,
-                    displayName=kind=="preciseUndo"?"精确撤销":"事件编辑",changes=changes.Clone(),layerReplacements=replacements });
+                    displayName=kind=="preciseUndo"?"精确撤销":"事件编辑",changes=changes.Clone(),layerReplacements=replacements,replayed=drawnAgain });
                 _editingActions.Add(transactionId,record); return Task.FromResult(record);
             }
+        },token);
+    // layerLineage: which layer a layer the user made continues. recyclePaste: "target" was pasted from Memoline's
+    // recycle bin copy of "layer" (the original an edit replaced), so it is that layer again. merged: "layer" was
+    // merged into "target". Readers never join layers by any other evidence.
+    public Task<MemolineEvent> RecordLayerLineageAsync(string kind,string layer,string target,System.Text.Json.JsonElement evidence,CancellationToken token)
+        => RunControlAsync(() =>
+        {
+            if (kind is not ("recyclePaste" or "merged") || string.IsNullOrWhiteSpace(layer) || string.IsNullOrWhiteSpace(target) ||
+                string.Equals(layer,target,StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Layer lineage needs a kind and two distinct layer UUIDs.");
+            if (evidence.ValueKind is not (System.Text.Json.JsonValueKind.Undefined or System.Text.Json.JsonValueKind.Object))
+                throw new ArgumentException("Layer lineage evidence must be an object.");
+            lock (_sync)
+                return Task.FromResult(_writer.AppendImmediateState("layerLineage", new { kind, layer, target,
+                    evidence = evidence.ValueKind == System.Text.Json.JsonValueKind.Object ? evidence.Clone() : System.Text.Json.JsonSerializer.SerializeToElement(new { }) }));
         },token);
     private string? _editTransactionId;
     private MemolineEvent? _transactionBegin;

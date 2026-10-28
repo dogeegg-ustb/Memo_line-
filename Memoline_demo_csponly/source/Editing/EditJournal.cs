@@ -84,6 +84,10 @@ public sealed class EditJournal : IDisposable
         var state = new State();
         using var row = new MemoryStream();
         long consumed = 0, validLength = 0;
+        // Whole rows are cut from a buffered copy: reading byte by byte took most of a recovery.
+        using var buffered = new MemoryStream();
+        input.CopyTo(buffered);
+        var journal = buffered.GetBuffer().AsSpan(0, checked((int)buffered.Length));
         void Verify(EditJournalAsset asset)
         {
             ValidateAssetReference(asset);
@@ -93,13 +97,16 @@ public sealed class EditJournal : IDisposable
                 return;
             }
             byte[] bytes = readAsset(asset);
-            ValidateAssetBytes(asset, bytes);
+            // The SHA-256 proves these are the bytes that were decoded when the asset was stored; recovery reads
+            // every asset of every earlier transaction and does not decode them again.
+            ValidateAssetBytes(asset, bytes, decode: false);
             assets.Add(asset.Sha256, asset);
         }
-        for (int next; (next = input.ReadByte()) >= 0;)
+        while (consumed < journal.Length)
         {
-            consumed++;
-            if (next != '\n') { row.WriteByte((byte)next); continue; }
+            int end = journal[(int)consumed..].IndexOf((byte)'\n');
+            if (end < 0) { row.Write(journal[(int)consumed..]); consumed = journal.Length; break; }
+            row.Write(journal.Slice((int)consumed, end)); consumed += end + 1;
             Require(row.Length > 0, "Committed journal row is empty");
             EditJournalRecord record;
             try
@@ -198,7 +205,8 @@ public sealed class EditJournal : IDisposable
         lock (_sync) Append("workLayerDeleted", new { checkpoint });
     }
     /// <summary>The original target was removed from CSP; its pixels and properties are in the recycle bin.</summary>
-    public void OriginalDeleted(string layerUuid, string replacementUuid)
+    /// <param name="replacementUuid">Null when the original is deleted before its replacement is pasted.</param>
+    public void OriginalDeleted(string layerUuid, string? replacementUuid)
     {
         lock (_sync) Append("originalDeleted", new { layerUuid, replacementUuid });
     }
@@ -335,7 +343,8 @@ public sealed class EditJournal : IDisposable
                 case "originalDeleted":
                     Require(state.SegmentId is null, "Cannot delete an original during an unfinished segment");
                     Require(state.OriginalLayerUuids!.Contains(GetText(data, "layerUuid")), "Only a frozen original target can be deleted");
-                    Require(!state.OriginalLayerUuids!.Contains(GetText(data, "replacementUuid")), "An original target cannot replace another"); break;
+                    Require(data.GetProperty("replacementUuid").ValueKind == JsonValueKind.Null ||
+                        !state.OriginalLayerUuids!.Contains(GetText(data, "replacementUuid")), "An original target cannot replace another"); break;
                 case "reproductionInstalled":
                     Require(state.SegmentId is null, "Cannot install reproduction during an unfinished segment");
                     Require(!state.OriginalLayerUuids!.Contains(GetText(data, "layerUuid")), "An original target cannot become a reproduction layer");
@@ -440,7 +449,7 @@ public sealed class EditJournal : IDisposable
         Require(IsHash(asset.Sha256) && asset.Width > 0 && asset.Height > 0 && asset.ByteLength > 0
             && asset.RelativePath == AssetEntryPrefix + asset.Sha256 + ".png", "Invalid content-addressed PNG reference");
     }
-    private static void ValidateAssetBytes(EditJournalAsset asset, byte[] png)
+    private static void ValidateAssetBytes(EditJournalAsset asset, byte[] png, bool decode = true)
     {
         ValidateAssetReference(asset); ArgumentNullException.ThrowIfNull(png);
         Require(asset.ByteLength == png.LongLength && Hash(png) == asset.Sha256, "PNG asset length/hash mismatch");
@@ -469,7 +478,10 @@ public sealed class EditJournal : IDisposable
             if (kind == "IEND") { Require(length == 0 && offset == png.Length && idat, "Invalid PNG end/data"); ended = true; break; }
         }
         Require(ended, "PNG has no complete IEND");
-        // Decode only for validity/dimensions. Keep the original PNG byte array and never re-encode it.
+        // Decode only for validity/dimensions. Keep the original PNG byte array and never re-encode it. The bytes
+        // were just proven to have this SHA-256, so a hash this process already decoded is not decoded again:
+        // every append and recovery re-validates each asset of the journal, ~150 ms per full-canvas PNG.
+        if (!decode || DecodedAssets.ContainsKey(asset.Sha256)) return;
         try
         {
             using var input = new MemoryStream(png, writable: false);
@@ -478,15 +490,19 @@ public sealed class EditJournal : IDisposable
         }
         catch (Exception error) when (error is ArgumentException or System.Runtime.InteropServices.ExternalException)
         { throw new InvalidDataException("PNG decoder rejected asset data", error); }
+        DecodedAssets.TryAdd(asset.Sha256, 0);
     }
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> DecodedAssets = new(StringComparer.Ordinal);
+    private static readonly uint[] CrcTable = Enumerable.Range(0, 256).Select(n =>
+    {
+        uint c = (uint)n;
+        for (int k = 0; k < 8; k++) c = (c & 1) != 0 ? 0xedb88320u ^ (c >> 1) : c >> 1;
+        return c;
+    }).ToArray();
     private static uint Crc32(ReadOnlySpan<byte> bytes)
     {
         uint crc = uint.MaxValue;
-        foreach (byte value in bytes)
-        {
-            crc ^= value;
-            for (int bit = 0; bit < 8; bit++) crc = (crc >> 1) ^ (0xedb88320u & (uint)-(int)(crc & 1));
-        }
+        foreach (byte value in bytes) crc = CrcTable[(crc ^ value) & 0xff] ^ (crc >> 8);
         return ~crc;
     }
     private static void RejectDuplicateProperties(JsonElement element)

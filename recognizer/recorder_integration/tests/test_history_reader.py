@@ -13,6 +13,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / 'recorder_integration'), str(ROOT.parent / 'CSP_Shortcut_Manager')]
 os.environ.setdefault("MEMOLINE_CLOCK_ORIGIN", "0")
+import floating_panels
 import history_reader
 from history_reader import HistoryReader
 from engine import UpdateEngine
@@ -46,18 +47,18 @@ class FakePipeline:
 
 
 class FakeClient:
+    """The panel stash names the History window; its pixels are rendered in-process (patched here)."""
     def __init__(self, error=None):
         self.requests, self.error = [], error
-        image = cv2.imdecode(np.fromfile(str(FIXTURE), np.uint8), cv2.IMREAD_COLOR)
-        self.height, self.width = image.shape[:2]
-        self.bgrx = np.dstack([image, np.zeros(image.shape[:2], np.uint8)]).tobytes()
+        self.image = cv2.imdecode(np.fromfile(str(FIXTURE), np.uint8), cv2.IMREAD_COLOR)
+        self.height, self.width = self.image.shape[:2]
 
     def request(self, **request):
         self.requests.append(request)
         if self.error:
             raise self.error
-        return dict(success=True, width=self.width, height=self.height, rect=[0, 0, self.width, self.height],
-                    data=base64.b64encode(self.bgrx).decode('ascii'), window=dict(hwnd=7))
+        return dict(success=True, windows=[dict(hwnd=7, kinds=["palettekindhistory"], currentKind="palettekindhistory",
+                                                rect=[100, 50, 100 + self.width, 50 + self.height], onVirtualScreen=True)])
 
 
 class FakeCore:
@@ -67,6 +68,15 @@ class FakeCore:
 
 class HistoryReaderTests(unittest.TestCase):
     def reader(self, client):
+        captured = []
+
+        def capture(hwnd, rect):
+            captured.append((hwnd, rect))
+            return client.image, rect
+        original = floating_panels.capture
+        floating_panels.capture = capture
+        self.addCleanup(setattr, floating_panels, "capture", original)
+        self.captured = captured
         pipeline = FakePipeline()
         reader = HistoryReader(pipeline, dict(historyQuietMs=60), client)
         reader.core = FakeCore()
@@ -82,7 +92,8 @@ class HistoryReaderTests(unittest.TestCase):
                 time.sleep(0.02)
             self.assertTrue(pipeline.timeline.done.wait(3))
             time.sleep(0.15)
-        self.assertEqual(client.requests, [dict(command='captureWindow', kind='palettekindhistory', format='bgrx')])
+        self.assertEqual(client.requests, [dict(command='listWindows')])
+        self.assertEqual(self.captured, [(7, (100, 50, client.width, client.height))])
         module, result, evidence, error = pipeline.timeline.observed[0]
         self.assertEqual((module, error), ('historyState', None))
         self.assertEqual(evidence['relatedEventIds'], [11, 12, 13])

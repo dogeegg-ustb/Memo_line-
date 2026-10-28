@@ -21,8 +21,8 @@ internal interface ICspReconstructionExecutor
     // The transaction verifies the paste before any discrete replay. PreciseUndo returns
     // the capture after discrete replay, which intentionally differs from the deletion seed.
     Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected, CancellationToken token);
-    // PreciseUndo never replays before installation: contacts that would need replay are handed
-    // over here and replayed last, merged in original order with the undone strokes.
+    // PreciseUndo never replays before installation: the closure (strokes the rewind wipes besides the
+    // selection) is handed over here and replayed first; the undone strokes come last, on top of CSP's undo.
     Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected,
         IReadOnlyList<ReplayEvent> finalReplay, CancellationToken token)
         => finalReplay.Count == 0 ? InstallReproductionLayerAsync(layer, expected, token)
@@ -119,7 +119,7 @@ internal static class ReconstructionEngine
                     var events=c.Pending.Values.OrderBy(e=>e.Stroke.SessionOrder).ThenBy(e=>e.Stroke.BeginEventId).ThenBy(e=>e.Stroke.Key.BeginAppendId)
                         .Select(e=>e with {Stroke=e.Stroke with {Samples=e.Stroke.Samples.OrderBy(s=>s.AppendId).ToArray()}}).ToArray();
                     var references=events.Any(e=>e.RequiresReferenceScene)
-                        ? plan.Index.Layers.ToDictionary(kv=>kv.Key,kv=>kv.Key==c.Plan.Layer?c.Actual:ReferenceAt(kv.Key,c.LastGroupSessionOrder,c.LastGroupTicks))
+                        ? plan.Index.Layers.Where(kv=>!kv.Value.Deleted).ToDictionary(kv=>kv.Key,kv=>kv.Key==c.Plan.Layer?c.Actual:ReferenceAt(kv.Key,c.LastGroupSessionOrder,c.LastGroupTicks))
                         : new Dictionary<LayerKey,ImageRgba>{{c.Plan.Layer,c.Actual}};
                     // Replaced by the capture below: compressed meanwhile, restored only if the executor reads it.
                     c.Actual.Park();
@@ -174,6 +174,8 @@ internal static class ReconstructionEngine
                 {
                     if(!c.Added.Add(key))continue;
                     plan.Request.Changes.TryGetValue(key,out var change);
+                    // A stroke an earlier edit changed is replayed as that new version unless this edit changes it again.
+                    change??=MemolineEdits.Current(plan.Index.Strokes[key]);
                     // Undone contacts left no ink in the effective history: skip them like deletions.
                     if(change?.Delete!=true&&!plan.Index.Strokes[key].IsUndone)c.Pending.Add(key,new(plan.Index.Strokes[key],change));
                 }
@@ -197,7 +199,7 @@ internal static class ReconstructionEngine
                 }
                 c.Started=true;c.LastGroupTicks=group.TriggerTicks;c.LastGroupSessionOrder=group.SessionOrder;
                 // Reference-layer reads need actual pixels from earlier pending replay in those layers.
-                if(group.Images.Any(i=>i.Events.Any(k=>plan.Index.Strokes.TryGetValue(k,out var s)&&new ReplayEvent(s,plan.Request.Changes.GetValueOrDefault(k)).ReadsReferenceLayers)))
+                if(group.Images.Any(i=>i.Events.Any(k=>plan.Index.Strokes.TryGetValue(k,out var s)&&new ReplayEvent(s,plan.Request.Changes.GetValueOrDefault(k)??MemolineEdits.Current(s)).ReadsReferenceLayers)))
                     foreach(var other in cursors.Values.Where(other=>other!=c&&other.Pending.Count>0))await Flush(other);
                 var trusted=new List<DirtyImage>();
                 foreach(var image in group.Images)
@@ -257,15 +259,17 @@ internal static class ReconstructionEngine
         {return new(ReconstructionStatus.Cancelled,layers,[],promoted);}
         catch(ReconstructionFailure failure){return Fail(failure.Issue);}
     }
-    /// <summary>Where precise undo starts and, per packet, whose ink it rewinds from that packet on.</summary>
+    /// <summary>Where precise undo starts, the dirty images it replays whole, and the strokes replayed in them
+    /// (the selection and its closure).</summary>
     internal sealed record PreciseUndoLayout(string SeedPacketId, IReadOnlySet<DirtyImageKey> Replayed,
-        IReadOnlyDictionary<string, IReadOnlyList<EditableStroke>> RewindFrom, int Composited);
+        IReadOnlyList<EditableStroke> Strokes, PreciseUndoInvolvement Involvement);
 
     /// <summary>
-    /// Precise undo is a local rewind. The selected strokes' pixels go back to before the undo depth; everywhere
-    /// else stays as it is now. That image is built from the snapshot before the earliest selected packet plus
-    /// every later dirty matrix, pasted into CSP, and only then are the selected strokes replayed, discretely,
-    /// so CSP's own undo steps back through exactly the selection.
+    /// Precise undo works on whole dirty images, like the dirty matrix and its snapshot. The images the selection
+    /// inked (and those tied to them, see <see cref="PreciseUndoSelector.Involve"/>) go back to the snapshot before the
+    /// earliest of them; every other dirty image is pasted as recorded. That image is pasted into CSP, then the strokes
+    /// of the replayed images are drawn again discretely: the closure first, the selection last, so CSP's own undo
+    /// steps back through exactly the selection and leaves the closure drawn.
     /// </summary>
     private static async Task<ReconstructionResult> RunPreciseUndoAsync(ReconstructionPlan plan,
         ICspReconstructionExecutor executor, CancellationToken token)
@@ -278,12 +282,20 @@ internal static class ReconstructionEngine
             var index = plan.Index;
             if (plan.Request.CurrentLayer is not { } layerKey || !index.Layers.TryGetValue(layerKey, out var layer) || layer.Current is not { } current)
                 return Fail(new(PlanIssueCode.LayerIdentityUnconfirmed, "精确撤销需要已确认的当前图层及其边界整层捕获。"));
-            var selected = plan.Request.Changes.Keys.Where(index.Strokes.ContainsKey).Select(k => index.Strokes[k]).ToArray();
-            if (selected.Length == 0) return Fail(new(PlanIssueCode.NoSelection, "没有可撤销的笔画。"));
-            if (LayoutPreciseUndo(layer, selected) is not { } layout)
+            if (!plan.Request.Changes.Keys.Any(index.Strokes.ContainsKey)) return Fail(new(PlanIssueCode.NoSelection, "没有可撤销的笔画。"));
+            var closure = plan.Request.Closure.Where(index.Strokes.ContainsKey).Select(k => index.Strokes[k])
+                .OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToArray();
+            var chosen = plan.Request.Changes.Keys.Where(index.Strokes.ContainsKey).Select(k => index.Strokes[k]).ToArray();
+            if (LayoutPreciseUndo(layer, chosen) is not { } layout)
                 return Fail(new(PlanIssueCode.NoSelection, "被选笔画没有对应的脏矩阵。"));
-            var target = ComposePreciseUndo(layer, current, layout);
-            var observed = await executor.InstallReproductionLayerAsync(layerKey, target, token);
+            if (!layout.Involvement.Closure.Select(s => s.Key).ToHashSet().SetEquals(closure.Select(s => s.Key)))
+                return Fail(new(PlanIssueCode.NoSelection, "精确撤销闭包已改变，请刷新并检查选择。"));
+            ImageRgba target;
+            using (EditTiming.Start("execute", "composePreciseUndo"))
+                target = await Task.Run(() => ComposePreciseUndo(layer, current, layout), token);
+            // The executor replays the closure before the selection (its discrete list, see CspEditTransaction).
+            var observed = await executor.InstallReproductionLayerAsync(layerKey, target,
+                closure.Select(s => new ReplayEvent(s, MemolineEdits.Current(s))).ToArray(), token);
             if (observed.Width != current.Width || observed.Height != current.Height)
                 return Fail(new(PlanIssueCode.CaptureMismatch, "复现层读回尺寸与期望不一致。"));
             layers.Add(layerKey, observed);
@@ -293,42 +305,36 @@ internal static class ReconstructionEngine
         { return new(ReconstructionStatus.Cancelled, layers, [], new HashSet<DirtyImageKey>()); }
     }
 
-    /// <summary>A selected stroke's ink first appears in the earliest packet holding one of its images.</summary>
-    internal static PreciseUndoLayout? LayoutPreciseUndo(LayerIndex layer, IReadOnlyList<EditableStroke> selected)
+    /// <summary>The images replayed for a selection; the seed is the earliest packet holding one of them.</summary>
+    internal static PreciseUndoLayout? LayoutPreciseUndo(LayerIndex layer, IReadOnlyCollection<EditableStroke> selected)
     {
-        var packets = layer.Packets.Where(p => !p.IsRecordingBaseline).OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray();
-        var packetOf = new Dictionary<DirtyImageKey, int>();
-        for (int p = 0; p < packets.Length; p++) foreach (var image in packets[p].Images) packetOf[image.Key] = p;
-        var first = selected.Where(s => s.Images.Any(packetOf.ContainsKey))
-            .GroupBy(s => s.Images.Where(packetOf.ContainsKey).Min(k => packetOf[k])).ToDictionary(g => g.Key, g => g.ToArray());
-        if (first.Count == 0) return null;
-        int seed = first.Keys.Min();
-        var replayed = selected.SelectMany(s => s.Images).Where(packetOf.ContainsKey).ToHashSet();
-        int composited = packets.Skip(seed).SelectMany(p => p.Images).Count(i => !replayed.Contains(i.Key));
-        return new(packets[seed].PacketId, replayed,
-            first.ToDictionary(kv => packets[kv.Key].PacketId, kv => (IReadOnlyList<EditableStroke>)kv.Value), composited);
+        var involvement = PreciseUndoSelector.Involve(layer, selected);
+        var seed = layer.Packets.Where(p => !p.IsRecordingBaseline).OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks)
+            .FirstOrDefault(p => p.Images.Any(i => involvement.Images.Contains(i.Key)));
+        if (seed is null) return null;
+        var strokes = selected.Concat(involvement.Closure).DistinctBy(s => s.Key)
+            .OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).ToArray();
+        return new(seed.PacketId, involvement.Images, strokes, involvement);
     }
 
-    /// <summary>The snapshot before the seed packet, then every later dirty matrix in time order, except on
-    /// pixels a selected stroke has already inked by that packet: those stay at the snapshot.</summary>
+    /// <summary>The snapshot before the seed packet, then every later dirty image in time order: pasted as recorded,
+    /// or, when it is replayed, left at what lies beneath. Of a replayed image only the pixels no replayed stroke can
+    /// write (ink nothing replayable explains) are pasted.</summary>
     internal static ImageRgba ComposePreciseUndo(LayerIndex layer, ImageRgba current, PreciseUndoLayout layout)
     {
         var target = new LayerTimeline(layer.Packets, current).BeforePacket(layout.SeedPacketId);
-        var rewound = new PixelMask(target.Width, target.Height);
+        var reach = Footprints.UnionBounded(layout.Strokes.Select(s => s.WriteMask));
         bool started = false;
         foreach (var packet in layer.Packets.Where(p => !p.IsRecordingBaseline).OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks))
         {
             started |= packet.PacketId == layout.SeedPacketId;
             if (!started) continue;
-            foreach (var stroke in layout.RewindFrom.GetValueOrDefault(packet.PacketId) ?? [])
-                foreach (var (x, y) in stroke.WriteMask.Pixels())
-                    if ((uint)x < (uint)target.Width && (uint)y < (uint)target.Height) rewound.Set(x, y);
             foreach (var image in packet.Images)
             {
-                if (!PreciseUndoSelector.Intersects(image.Mask, rewound)) { ImageCompositor.Replace(target, image); continue; }
+                if (!layout.Replayed.Contains(image.Key)) { ImageCompositor.Replace(target, image); continue; }
                 foreach (var (x, y) in image.Mask.Pixels())
                 {
-                    if (rewound.Contains(x, y)) continue;
+                    if (reach.Contains(x, y) || (uint)x >= (uint)target.Width || (uint)y >= (uint)target.Height) continue;
                     int source = ((y - image.Mask.Top) * image.Mask.Width + x - image.Mask.Left) * 4;
                     image.Now.Bytes.AsSpan(source, 4).CopyTo(target.Bytes.AsSpan((y * target.Width + x) * 4, 4));
                 }

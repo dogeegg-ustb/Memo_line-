@@ -15,6 +15,14 @@ internal static class PenReplayEngine
 
     internal static IPenInjector CreateSyntheticInjector() => new SyntheticPenInjector();
 
+    /// <summary>Waits <paramref name="delay"/> on a high-resolution timer; Task.Delay rounds up to the 15.6 ms system
+    /// tick, so a 30 ms pause between discrete strokes became 31–47 ms.</summary>
+    internal static async Task PreciseDelayAsync(TimeSpan delay, CancellationToken token)
+    {
+        using var timer = new HighResolutionWaitableTimer();
+        await timer.WaitUntilAsync(Stopwatch.StartNew(), delay.TotalMilliseconds, token);
+    }
+
     internal static async Task ReplayStrokeAsync(MemolineReplayStroke stroke, long frequency, double speed,
         Func<MemolineReplaySample, Task> ensureReady, CancellationToken token,
         ReplayOptions? options = null, Action<string>? status = null, TimeSpan followingGap = default)
@@ -28,12 +36,23 @@ internal static class PenReplayEngine
     {
         options.Validate();
         token.ThrowIfCancellationRequested();
+        speed = options.SpeedFor(stroke.StartTicks, stroke.EndTicks, frequency, speed);
+        stroke = options.Simplify(stroke);
+        // A compressed contact sends a sample every fraction of a millisecond: a timer wait per sample would
+        // overshoot each time and add up, so samples due within a fraction of a millisecond go out at once,
+        // but never closer than the minimum spacing CSP needs to read each one.
+        double spacing = options.MinSampleSeconds * 1000, nextAllowed = 0;
+        double tolerance = options.StrokeSeconds is null ? 0 : spacing > 0 ? Math.Min(.5, spacing / 8) : .5;
         using var injector = createInjector();
         using var timer = new HighResolutionWaitableTimer();
         var clock = Stopwatch.StartNew();
         bool down = false;
         long removedIdleTicks = 0;
         MappedPoint last = default;
+        // A contact stays with the window it went down on until the up (implicit pointer capture), so back-pressure goes
+        // there, also where the input shield covers the desktop. The shield's hole at the down point stays open as long.
+        nint target = 0;
+        InputShield.Hole? hole = null;
         var up = options.Mode == ReplayMode.Discrete ? PointerTransition.UpAndLeave : PointerTransition.Up;
         async Task SeparateAsync(TimeSpan gap)
         {
@@ -43,7 +62,8 @@ internal static class PenReplayEngine
             // Keep the device alive while the target handles UP/LEAVE. No further
             // pointer or view input is generated during the bounded recorded gap.
             clock.Stop();
-            status?.Invoke($"离散模式：已抬笔，按录制间隔等待 {gap.TotalMilliseconds:0.#} ms…");
+            status?.Invoke(options.FixedGap ? $"离散模式：已抬笔，固定等待 {gap.TotalMilliseconds:0.#} ms…"
+                : $"离散模式：已抬笔，按录制间隔等待 {gap.TotalMilliseconds:0.#} ms…");
             try { await idle(gap, token); }
             finally { clock.Start(); }
         }
@@ -56,7 +76,8 @@ internal static class PenReplayEngine
                 // In discrete mode the recorded hover interval is replaced by
                 // its bounded gap, rather than being waited a second time.
                 if (options.Mode == ReplayMode.Discrete && !down && !sample.InContact) continue;
-                await timer.WaitUntilAsync(clock, (sample.Ticks - stroke.StartTicks - removedIdleTicks) * 1000d / frequency / speed, token);
+                await timer.WaitUntilAsync(clock, Math.Max(nextAllowed,
+                    (sample.Ticks - stroke.StartTicks - removedIdleTicks) * 1000d / frequency / speed), token, tolerance);
                 clock.Stop();
                 try { await ensureReady(sample); }
                 finally { clock.Start(); }
@@ -67,13 +88,23 @@ internal static class PenReplayEngine
                     (int)Math.Clamp(Math.Round(sample.TiltY), -90, 90));
                 if (sample.InContact)
                 {
+                    if (!down) hole = InputShield.Active?.OpenHole(new(point.X, point.Y));
                     injector.Send(point, down ? PointerTransition.Update : PointerTransition.Down);
+                    if (!down && options.SyncRounds > 0) target = TargetSync.WindowAt(point.X, point.Y);
+                    if (options.SyncRounds > 0) TargetSync.Wait(target, options.SyncRounds);
+                    double settle = down ? 0 : options.DownSettleSeconds * 1000;
+                    nextAllowed = clock.Elapsed.TotalMilliseconds + Math.Max(spacing, settle);
+                    // The compressed schedule starts after the settle time, not inside it.
+                    if (settle > 0) removedIdleTicks -= (long)(settle / 1000 * frequency * speed);
                     down = true;
                     last = point;
                 }
                 else if (down)
                 {
                     injector.Send(point with { Pressure = 0 }, up);
+                    // CSP commits the stroke on pen-up; the next contact waits until it has.
+                    if (options.SyncRounds > 0) TargetSync.Wait(target, options.SyncRounds);
+                    hole?.Dispose(); hole = null;
                     down = false;
                     last = point;
                     TimeSpan gap = followingGap;
@@ -91,18 +122,41 @@ internal static class PenReplayEngine
             }
             if (down)
             {
-                await timer.WaitUntilAsync(clock, (stroke.EndTicks - stroke.StartTicks - removedIdleTicks) * 1000d / frequency / speed, token);
+                await timer.WaitUntilAsync(clock, (stroke.EndTicks - stroke.StartTicks - removedIdleTicks) * 1000d / frequency / speed, token, tolerance);
                 await ensureReady(stroke.Samples[^1] with { InContact = false });
                 injector.Send(last with { Pressure = 0 }, up);
+                if (options.SyncRounds > 0) TargetSync.Wait(target, options.SyncRounds);
+                hole?.Dispose(); hole = null;
                 down = false;
                 await SeparateAsync(followingGap);
             }
         }
         finally
         {
-            if (down) injector.Send(last with { Pressure = 0 }, up);
+            try { if (down) injector.Send(last with { Pressure = 0 }, up); }
+            finally { hole?.Dispose(); }
         }
     }
+    /// <summary>
+    /// Back-pressure on the window under the pen: a sent message is handled only when its UI thread returns to the
+    /// message loop, after the input it was handling. Pointer updates the target has not read yet are merged by
+    /// Windows, so waiting here keeps every injected sample a separate update.
+    /// </summary>
+    internal static class TargetSync
+    {
+        private const uint WmNull = 0, SmtoAbortIfHung = 2;
+        /// <summary>The window a pen going down at (x, y) reaches, through the input shield's hole if one is up.</summary>
+        internal static nint WindowAt(int x, int y) => InputShield.WindowFromPoint(new System.Drawing.Point(x, y));
+        internal static void Wait(nint window, int rounds)
+        {
+            if (window == IntPtr.Zero) return;
+            // Starting a stroke on a large canvas can keep CSP busy for tens of milliseconds; a hung CSP returns at once.
+            for (int i = 0; i < rounds; i++) SendMessageTimeout(window, WmNull, IntPtr.Zero, IntPtr.Zero, SmtoAbortIfHung, 1000, out _);
+        }
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SendMessageTimeout(IntPtr window, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeoutMs, out IntPtr result);
+    }
+
     private sealed class SyntheticPenInjector : IPenInjector
     {
         private const uint PointerTypePen = 3;
@@ -285,12 +339,19 @@ internal static class PenReplayEngine
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "无法创建高精度等待定时器。");
         }
 
-        public async Task WaitUntilAsync(Stopwatch clock, double dueMs, CancellationToken cancellationToken)
+        public async Task WaitUntilAsync(Stopwatch clock, double dueMs, CancellationToken cancellationToken, double toleranceMs = 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var remainingMs = dueMs - clock.Elapsed.TotalMilliseconds;
-            if (remainingMs <= 0)
+            if (remainingMs <= toleranceMs)
                 return;
+            // A compressed contact waits fractions of a millisecond between samples, finer than the timer
+            // resolves: those short waits spin instead.
+            if (toleranceMs > 0 && remainingMs < 2)
+            {
+                while (clock.Elapsed.TotalMilliseconds < dueMs) Thread.SpinWait(20);
+                return;
+            }
 
             var dueTime100ns = -Math.Max(1L, (long)Math.Ceiling(remainingMs * 10_000));
             if (!NativeMethods.SetWaitableTimer(_handle, ref dueTime100ns, 0, IntPtr.Zero, IntPtr.Zero, false))

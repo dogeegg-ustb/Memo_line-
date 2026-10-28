@@ -14,6 +14,9 @@ internal interface IPacketStateControl
     Task<IReadOnlyDictionary<string, JsonElement>> RequestAsync(string sessionId, string requestId, string[] modules, string? saveId, CancellationToken token);
     Task<IReadOnlyDictionary<string, JsonElement>> RequestBrushPanelAsync(string sessionId,string requestId,string[] modules,string? saveId,int[] region,CancellationToken token)
         => throw new NotSupportedException("当前识别器尚不支持截图笔刷属性选区，请更新程序并重新录制。");
+    /// <summary>Captured at once like any request; the recorder analyzes it one module at a time and not while the pen is down.</summary>
+    Task<IReadOnlyDictionary<string, JsonElement>> RequestBackgroundAsync(string sessionId,string requestId,string[] modules,int[]? brushPanelRoi,CancellationToken token)
+        => brushPanelRoi is null?RequestAsync(sessionId,requestId,modules,null,token):RequestBrushPanelAsync(sessionId,requestId,modules,null,brushPanelRoi,token);
 }
 internal sealed class PacketRecorderControl(int processId) : IClipSaveControl, IPacketStateControl
 {
@@ -21,7 +24,7 @@ internal sealed class PacketRecorderControl(int processId) : IClipSaveControl, I
     public async Task<ClipSaveDispatch> SaveAsync(string clipPath, string requestId, long triggerTicks, CancellationToken token)
     {
         var response = await SendAsync(new { command = "requestClipSave", expectedClipPath = clipPath,
-            requestId, triggerTicks, activateCsp = false }, TimeSpan.FromSeconds(5), token);
+            requestId, triggerTicks, activateCsp = true }, TimeSpan.FromSeconds(5), token);
         return Parse(response, requestId, triggerTicks);
     }
     private async Task<JsonElement> SendAsync(object request, TimeSpan timeout, CancellationToken token)
@@ -52,6 +55,11 @@ internal sealed class PacketRecorderControl(int processId) : IClipSaveControl, I
     public async Task<IReadOnlyDictionary<string, JsonElement>> RequestBrushPanelAsync(string sessionId,string requestId,string[] modules,string? saveId,int[] region,CancellationToken token)
     {
         var response=await SendAsync(new {command="requestStates",requestId,sessionId,modules,saveId,brushPanelRoi=region},TimeSpan.FromSeconds(35),token);
+        return ParseStates(response,sessionId,requestId,modules);
+    }
+    public async Task<IReadOnlyDictionary<string, JsonElement>> RequestBackgroundAsync(string sessionId,string requestId,string[] modules,int[]? brushPanelRoi,CancellationToken token)
+    {
+        var response=await SendAsync(new {command="requestStates",requestId,sessionId,modules,brushPanelRoi,background=true},TimeSpan.FromSeconds(35),token);
         return ParseStates(response,sessionId,requestId,modules);
     }
     internal static IReadOnlyDictionary<string, JsonElement> ParseStates(JsonElement response, string sessionId, string requestId, string[] modules)

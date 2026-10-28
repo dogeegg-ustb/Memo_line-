@@ -46,6 +46,12 @@ internal static class LayerCapture
                 }
             }
             if (!ended) throw new InvalidDataException("PNG 缺少完整 IEND。");
+            // The bridge writes 8-bit RGBA: decoded without GDI+ straight into RGBA.
+            if (CanvasLayerWatcher.FastPng.TryDecode(png, bgra: false, out int decodedWidth, out int decodedHeight) is { } fast)
+            {
+                if (decodedWidth != size.Width || decodedHeight != size.Height) throw new InvalidDataException("解码 PNG 尺寸不符。");
+                return new(export with { Png = png.ToArray() }, new(size.Width, size.Height, fast));
+            }
             using var input = new MemoryStream(png, writable: false);
             using var bitmap = new Bitmap(input);
             if (bitmap.Width != size.Width || bitmap.Height != size.Height) throw new InvalidDataException("解码 PNG 尺寸不符。");
@@ -68,14 +74,5 @@ internal static class LayerCapture
         { throw new CspEditingException(new(PlanIssueCode.CaptureMismatch, "权威图层捕获无效：" + error.Message), error); }
     }
 
-    private static uint Crc(ReadOnlySpan<byte> bytes)
-    {
-        uint crc = uint.MaxValue;
-        foreach (byte value in bytes)
-        {
-            crc ^= value;
-            for (int i = 0; i < 8; i++) crc = (crc & 1) == 0 ? crc >> 1 : (crc >> 1) ^ 0xedb88320u;
-        }
-        return ~crc;
-    }
+    private static uint Crc(ReadOnlySpan<byte> bytes) => CanvasLayerWatcher.FastPng.Crc32(bytes);
 }

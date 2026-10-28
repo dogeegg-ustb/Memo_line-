@@ -35,6 +35,7 @@ from csp_windows import CspWindow, csp_windows, is_window, resize_window, root_a
 from edge_drawer import EdgeDrawer, cursor
 from guard import Guard
 from stash import StashManager, bring_back, fits, is_hidden, physical_screen, stash_area
+from swatch import Swatch, parse_rgb, placement, wait_for_pixel
 from virtual_display import VirtualDisplayMissing, monitor_at
 from workspace import PALETTE_NAMES, load_workspace, palette_name
 
@@ -68,7 +69,8 @@ CALL_TIMEOUT = 5.0
 FORMATS = ("png", "bgrx")
 SELECTOR = ("hwnd", "kind")
 OPTIONS = {"getStatus": (), "listWindows": ("stashedOnly",), "captureWindow": (*SELECTOR, "format"),
-           "stashWindow": (*SELECTOR, "side"), "restoreWindow": SELECTOR, "shutdown": ()}
+           "stashWindow": (*SELECTOR, "side"), "restoreWindow": SELECTOR, "showSwatch": ("rgb",),
+           "hideSwatch": (), "shutdown": ()}
 HISTORY = history_size.HISTORY_KIND
 # A stretched History palette that CSP keeps at another height is not fought over.
 MAX_RESIZES = 3
@@ -135,6 +137,8 @@ class Host:
         self.virtual_error: str | None = None
         self.display_busy = self.provide_again = self.virtual_active = False
         self.pending: dict[int, Pending] = {}
+        # Callers waiting for the virtual screen itself (the colour swatch), not for a palette's room.
+        self.screen_waiters: list = []
         self.empty_since: float | None = None
         self.main: CspWindow | None = None
         self.windows: dict[int, CspWindow] = {}
@@ -148,6 +152,7 @@ class Host:
         self.closing = False
         self.stash = StashManager(HERE / "state.json", settings["cornerThresholdPx"], settings["stashGapPx"], self.log)
         self.guard = Guard(self.root, settings["virtualScreenAllowedProcesses"], self.log)
+        self.swatch = Swatch(self.root)
         self.build_ui()
         if embedded:
             # Memoline owns the session: no control window, only the edge drawer and the interface.
@@ -607,6 +612,9 @@ class Host:
             pending, self.pending = self.pending, {}
             for entry in pending.values():
                 entry.notify(error)
+            waiters, self.screen_waiters = self.screen_waiters, []
+            for waiter in waiters:
+                waiter(error)
             return
         screen, steps = result
         self.virtual_error = None
@@ -628,6 +636,25 @@ class Host:
                 entry.notify("窗口已关闭")
             else:
                 entry.notify(None if self.stash_window(window, entry.corner, entry.prior, entry.side) else "收纳失败")
+        waiters, self.screen_waiters = self.screen_waiters, []
+        for waiter in waiters:
+            waiter(None)
+
+    def request_screen(self, waiter) -> None:
+        """Attach the virtual screen without stashing anything (for the colour swatch); `waiter(error or None)`."""
+        if stash_area(self.screens) is not None and not self.display_busy:
+            waiter(None)
+            return
+        self.screen_waiters.append(waiter)
+        self.provide()
+
+    def show_swatch(self, rgb: tuple[int, int, int]) -> tuple[tuple[int, int, int, int], str]:
+        virtual = next((m for m in self.screens if m.virtual), None)
+        if virtual is None:
+            raise RuntimeError("虚拟屏没有接入")
+        rect = placement(virtual.rect, self.settings["stashGapPx"])
+        self.swatch.show(rgb, rect)
+        return rect, virtual.device
 
     def keep_virtual_screen_private(self) -> None:
         """Backdrop under the palettes and no other program's windows on the virtual screen (guard.py)."""
@@ -635,6 +662,8 @@ class Host:
         if virtual is None or self.display_busy:
             if virtual is None and self.guard.backdrop is not None:
                 self.guard.hide()
+            if virtual is None and self.swatch.shown:
+                self.swatch.hide()
             return
         if self.settings["wallpaperBackdrop"] and self.guard.backdrop_rect != virtual.rect:
             self.guard.show(virtual.rect)
@@ -647,7 +676,8 @@ class Host:
         reconfiguration); `detachDelaySeconds: null` keeps it attached instead.
         """
         delay = self.settings["detachDelaySeconds"]
-        busy = self.pending or self.display_busy or any(h in self.windows for h in self.stash.records)
+        busy = (self.pending or self.screen_waiters or self.display_busy or self.swatch.shown
+                or any(h in self.windows for h in self.stash.records))
         if busy or not self.virtual_active or delay is None:
             self.empty_since = None
         elif self.empty_since is None:
@@ -665,7 +695,7 @@ class Host:
             self.screens = [m for m in self.screens if not m.virtual]
             if detached:
                 self.log(f"{reason}，虚拟屏已断开")
-            if self.pending:
+            if self.pending or self.screen_waiters:
                 self.provide()
         self.display_job(lambda: virtual_display.release(self.hardware), done)
 
@@ -787,6 +817,10 @@ class Host:
             # Answer first; the Tk thread then brings every palette back and exits.
             self.calls.put(lambda: self.root.after(50, self.close))
             return dict(closing=True)
+        if command == "showSwatch":
+            return self.api_show_swatch(parse_rgb(request.get("rgb")))
+        if command == "hideSwatch":
+            return self.call(self.hide_swatch)
         if command == "stashWindow":
             side = request.get("side")
             if side not in (None, *SIDES):
@@ -859,7 +893,34 @@ class Host:
                                         monitors=[dict(device=m.device, rect=list(m.rect), dpi=m.dpi) for m in virtual]),
                     windows=len(self.windows), stashed=len(self.stash.on_side("left", self.windows))
                     + len(self.stash.on_side("right", self.windows)),
-                    remembered=[dict(entry) for entry in self.stash.remembered])
+                    remembered=[dict(entry) for entry in self.stash.remembered],
+                    swatch=dict(rect=list(self.swatch.rect), rgb=list(self.swatch.rgb)) if self.swatch.shown else None)
+
+    def api_show_swatch(self, rgb: tuple[int, int, int]) -> dict:
+        done, box = threading.Event(), {}
+
+        def waiter(error):
+            box["error"] = error
+            done.set()
+        self.call(lambda: self.request_screen(waiter))
+        if not done.wait(CALL_TIMEOUT * 3):
+            raise TimeoutError("等待虚拟屏超时")
+        if box["error"]:
+            raise RuntimeError(box["error"])
+        rect, device = self.call(lambda: self.show_swatch(rgb))
+        point = ((rect[0] + rect[2]) // 2, (rect[1] + rect[3]) // 2)
+        pixel = wait_for_pixel(point, rgb)
+        if pixel != rgb:
+            self.call(self.swatch.hide)
+            raise RuntimeError(f"虚拟屏上的色块在屏幕上读回 {list(pixel) if pixel else '无'}，不是 {list(rgb)}："
+                               "HDR、颜色滤镜等会改变屏幕取色的结果")
+        self.log(f"色块 {'#%02X%02X%02X' % rgb} 显示在 {device} {list(rect)}")
+        return dict(rect=list(rect), point=list(point), device=device)
+
+    def hide_swatch(self) -> dict:
+        shown = self.swatch.shown
+        self.swatch.hide()
+        return dict(hidden=shown)
 
     def api_stash(self, request: dict, side: str | None, waiter) -> int:
         hwnd = self.lookup(request)
@@ -879,6 +940,7 @@ class Host:
         try:
             self.refresh()
             self.restore_everything(forget=False)
+            self.swatch.destroy()
             self.guard.hide()
             if self.settings["detachOnExit"]:
                 self.wait_until_off_virtual()

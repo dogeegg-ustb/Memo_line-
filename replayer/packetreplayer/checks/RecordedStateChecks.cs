@@ -77,7 +77,7 @@ internal static partial class PacketChecks
         Check(feed.Requests.Count == 4, "Repeated or unchanged historical observations do not cause redundant queries.");
         feed.OnRequest = null;
         await RejectAsync<InvalidOperationException>(() => resumed.ApplyAsync(new(89, 8, "color", Color: Color(9)), default));
-        Check(feed.Requests.Count == 6 && feed.Requests[^1].SequenceEqual(new[] { "colorInputState" }), "An unmatched color requests fresh color and RGB panel evidence before drawing.");
+        Check(feed.Requests.Count == 5 && feed.Requests[^1].SequenceEqual(new[] { "colorState" }), "An unmatched color requests a fresh colour reading and stops when it cannot be picked.");
         feed.Brush = null;
         Reject<InvalidOperationException>(() => table.AssertMatches());
         using var stop = new CancellationTokenSource(); stop.Cancel();

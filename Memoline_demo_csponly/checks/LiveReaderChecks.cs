@@ -92,6 +92,27 @@ internal static class LiveReaderChecks
             single.Before.Bytes.AsSpan().SequenceEqual(pngSnapshot.Packets[0].Images[0].Now.Bytes) &&
             single.Current.Bytes.AsSpan().SequenceEqual(currentPixels),
             "A single capture packet must keep both its original baseline and its current pixels after record replacement.");
+        // A Memoline-operation packet as the watcher writes it belongs to the reproduction and starts from the replaced
+        // layer's last pixels, so the reproduction's chain continues the original's without a gap.
+        string operationRoot = Path.Combine(root, "operation-packet");
+        var operationHistory = new CanvasLayerWatcher.SnapshotHistory(operationRoot);
+        string Fixture(string name, byte[] pixels)
+        { string file = Path.Combine(root, name + ".png"); File.WriteAllBytes(file, DirtyMatrixPaster.ClipboardImageCodec.EncodePng(2, 1, pixels)); return file; }
+        byte[] originalPixels = [1, 2, 3, 255, 0, 0, 0, 0], reproducedPixels = [1, 2, 3, 255, 9, 9, 9, 255];
+        var inkLayer = new CanvasLayerWatcher.LayerReference(3, "Ink", "ink");
+        var meta = JsonSerializer.SerializeToElement(new { width = 2, height = 1, fullCanvas = true, layerId = 3, layerUuid = "ink" });
+        operationHistory.SeedBaseline(new("ink-seed", "fixture", "live", 1, 0, "", 2, 1, inkLayer, meta, [], 10, "recordingStart"),
+            Fixture("operation-original", originalPixels));
+        operationHistory.RegisterBaseline(new(4, "Ink copy", "repro"), Fixture("operation-reproduction", reproducedPixels), 15);
+        operationHistory.RecordOperation(operationHistory.Latest("ink", "live", 1)!, operationHistory.Latest("repro", "live", 1)!,
+            new(1, 18, "Ink copy", new(0, 0, 0, 0), [], new(4, "Ink copy", "repro"), TriggerKind: "memolineOperation") { BoundaryRequestId = "tx" },
+            1000, new { transactionId = "tx", editKind = "eventEditing", replacedLayerUuid = "ink" }, CancellationToken.None);
+        var operationPackets = LiveSessionReader.Read(path, operationRoot, 1).Packets;
+        var operationPacket = operationPackets.Single(p => p.Layer.Uuid == "repro");
+        Check(operationPacket is { Operation: { TransactionId: "tx", EditKind: "eventEditing", ReplacedLayerUuid: "ink" }, IsRecordingBaseline: false } &&
+              operationPacket.Before!.Bytes.AsSpan().SequenceEqual(originalPixels) && operationPacket.Current!.Bytes.AsSpan().SequenceEqual(reproducedPixels) &&
+              operationPacket.Images.Single().Mask.Contains(1, 0) && operationPackets.Any(p => p.Layer.Uuid == "ink" && p.IsRecordingBaseline),
+            "An operation packet is read as the reproduction's first packet, from the replaced layer's pixels to the reproduction's.");
         var accepted = new List<string>();
         foreach (var (format, colorType) in new[] { ("RGB", (byte)2), ("grayscale", (byte)0), ("indexed", (byte)3) })
         {

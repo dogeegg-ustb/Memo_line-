@@ -122,6 +122,47 @@ public class DriverMappingTests
     }
 
     [Fact]
+    public void MultipleMonitors_CandidateScreensPlaceTheRawPointOnEveryDisplay()
+    {
+        var mapping = Mapping(); mapping.ScreenArea = null; mapping.ScreenMapRatio = new(0, 0, 1, 1);
+        DisplayInfo[] displays = [Display, new(1, "left", false, new(-1600, -200, 0, 700))];
+        var candidates = Session(Profile(mapping), displays).CandidateScreens(20000, 10000).ToArray();
+        Assert.Equal([0, 1], candidates.Select(c => c.Index));
+        Assert.Equal(1000, candidates[0].X, 5); Assert.Equal(500, candidates[0].Y, 5);
+        Assert.Equal(-800, candidates[1].X, 5); Assert.Equal(250, candidates[1].Y, 5);
+        // A resolved session has nothing to calibrate.
+        Assert.Empty(Session(Profile(mapping), displays, screenIndex: 0).CandidateScreens(20000, 10000));
+    }
+
+    [Fact]
+    public void HoverCalibration_SelectsTheDisplayTheCursorFollows()
+    {
+        var calibration = new BehaviorRecognizer.Capture.DisplayCalibration();
+        int? chosen = null;
+        for (int step = 0; step < BehaviorRecognizer.Capture.DisplayCalibration.Matches; step++)
+        {
+            Assert.Null(chosen);
+            // The tablet drives display 0; display 1 would put the same raw point elsewhere.
+            chosen = calibration.Observe([(0, 100 + step * 10.4, 200), (1, -900 + step * 6, 120)], [0, 1], 100 + step * 10, 200);
+            // A parked cursor adds no evidence.
+            Assert.Null(calibration.Observe([(0, 999, 999), (1, 999, 999)], [0, 1], 100 + step * 10, 200));
+        }
+        Assert.Equal(0, chosen);
+    }
+
+    [Fact]
+    public void HoverCalibration_RefusesWhileDisplaysOverlapOrAMatchBreaks()
+    {
+        var calibration = new BehaviorRecognizer.Capture.DisplayCalibration();
+        // Mirrored displays map the point to the same place: no single answer.
+        for (int step = 0; step < 8; step++)
+            Assert.Null(calibration.Observe([(0, step, 0), (1, step, 0)], [0, 1], step, 0));
+        var broken = new BehaviorRecognizer.Capture.DisplayCalibration();
+        for (int step = 0; step < 8; step++)
+            Assert.Null(broken.Observe([(0, step * 10 + (step == 3 ? 50 : 0), 0)], [0, 1], step * 10, 0));
+    }
+
+    [Fact]
     public void RelativeMode_KeepsPressureButDoesNotInventAbsolutePosition()
     {
         var mapping = Mapping(); mapping.MappingMode = "Relative";

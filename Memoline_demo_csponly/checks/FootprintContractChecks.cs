@@ -55,8 +55,10 @@ internal static class FootprintContractChecks
             "Watcher labels serialize the actual CoverageSettings recipe used to compute the frozen radius.");
         if (frozen.ValueKind == JsonValueKind.Object)
         {
+            // The zoom is the canvas mapping's own (4 screen px per normalized unit on an 8 px wide canvas = 50 %), not the
+            // navigator digits (25 here): OCR misread 18.6 % as "6" (memolinetest13) and inflated every coverage radius.
             Check(frozen.GetProperty("brushUnit").GetString() == "mm" && frozen.GetProperty("dpi").GetDouble() == 144 &&
-                frozen.GetProperty("zoomPercent").GetDouble() == 25 && frozen.GetProperty("specifyBySizeOnScreen").GetBoolean(),
+                frozen.GetProperty("zoomPercent").GetDouble() == 50 && frozen.GetProperty("specifyBySizeOnScreen").GetBoolean(),
                 "The recipe preserves mm, DPI, zoom and screen-fixed brush sizing.");
             var restored = ReadLabels(manifest).Single();
             Check(restored.CoverageSettings is { } settings && settings.Radius == label.Coverage.Radius,

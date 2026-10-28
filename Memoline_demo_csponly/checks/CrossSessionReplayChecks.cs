@@ -82,6 +82,13 @@ internal static class CrossSessionReplayChecks
         Check(schedules[0].Strokes[0].OverrideBrush!.Numbers.Single().Value==7 &&
             schedules[0].Strokes[0].State.Brush!.Numbers.Single().Value==3,
             "An override must derive from its historical source without changing the original brush snapshot.");
+        Check(schedules.All(s=>s.Strokes.All(d=>d.OverrideColor.ValueKind==JsonValueKind.Undefined)),
+            "A change without a colour keeps every stroke's recorded colour.");
+        var recoloured=WindowsCspEditingActions.BuildSchedules(session,request,[new(a,change with {Rgb=[10,20,30]})],
+            ReplayMode.Concentrated,"Work","work-uuid").Single().Strokes.Single();
+        Check(ColorRestorer.Rgb(recoloured.OverrideColor) is [10,20,30] && ColorRestorer.Rgb(recoloured.Color) is [10,20,30] &&
+              recoloured.StrictColor && recoloured.State.Color.GetProperty("red").GetByte()==11,
+            "An edit's colour is replayed instead of the recorded one, strictly, without changing the historical state.");
         Check(schedules.All(s=>s.FollowingStrokeStartTicks is null),
             "Concentrated replay must not introduce native gaps between source recordings.");
         var undo=request with {Kind=EditKind.PreciseUndo,Changes=new Dictionary<EditableStrokeKey,EventChange> {

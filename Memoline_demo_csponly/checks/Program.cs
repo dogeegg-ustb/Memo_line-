@@ -161,6 +161,8 @@ try
     Console.WriteLine($"Compositor parity checks: {await CompositorParityChecks.RunAsync(root)}.");
     Console.WriteLine($"Reconstruction checks: {await ReconstructionChecks.RunAsync()}.");
     Console.WriteLine($"Precise undo checks: {PreciseUndoChecks.Run()}.");
+    Console.WriteLine($"Boundary current layer checks: {BoundaryLayerChecks.Run()}.");
+    Console.WriteLine($"Seal input checks: {SealInputChecks.Run()}.");
     Console.WriteLine($"Cross-layer reconstruction checks: {await ReconstructionCrossLayerChecks.RunAsync()}.");
     Console.WriteLine($"Edit index hardening checks: {EditIndexHardeningChecks.Run()}.");
     Console.WriteLine($"Footprint contract checks: {FootprintContractChecks.Run()}.");

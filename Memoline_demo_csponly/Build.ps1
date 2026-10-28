@@ -129,6 +129,12 @@ foreach ($file in Get-ChildItem -LiteralPath (Join-Path $stashSource 'vdd') -Fil
     Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $stashOutput "vdd/$($file.Name)") -Force
 }
 Copy-Item -LiteralPath (Join-Path $repository 'recognizer/csp_workspace_layout.py') -Destination (Join-Path $integrationOutput 'csp_workspace_layout.py') -Force
+# The window lookup the layout poll and the panel stash share (the package may predate its speed-up).
+$validatorOutput = Join-Path $integrationOutput 'csp_panel_validator/csp_panel_validator'
+New-Item -ItemType Directory -Path $validatorOutput -Force | Out-Null
+foreach ($name in @('__init__.py', 'models.py', 'window_service.py')) {
+    Copy-Item -LiteralPath (Join-Path $repository "recognizer/csp_panel_validator/csp_panel_validator/$name") -Destination (Join-Path $validatorOutput $name) -Force
+}
 # Compile the native recorder as well. The package supplies Python/native
 # dependencies; source changes must never silently run an older recorder DLL.
 $recorderStage = Join-Path $PSScriptRoot '.stage/recognizer'

@@ -85,8 +85,7 @@ internal static class ActualProjectProbeChecks
                             if (report.PreciseUndo is null)
                             {
                                 var undo = PreciseUndoSelector.Select(index, layer, selection);
-                                var request = new EditRequest(EditKind.PreciseUndo, layer, selection,
-                                    undo.Selected.ToDictionary(s => s.Key, _ => new EventChange(Delete: true)));
+                                var request = undo.Request(selection);
                                 var plan = ReconstructionPlanner.Build(index, request);
                                 attempt.PreciseUndo = PlanSummary(plan, undo.IsValid, undo.Issues);
                                 if (undo.IsValid && plan.IsValid)
@@ -236,6 +235,9 @@ internal static class ActualProjectProbeChecks
         }
         public Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected, CancellationToken token)
         { InstallCalls++; return Task.FromResult(expected.Copy()); }
+        // Precise undo's closure and selection replay in CSP after the paste; offline the paste is the result.
+        public Task<ImageRgba> InstallReproductionLayerAsync(LayerKey layer, ImageRgba expected, IReadOnlyList<ReplayEvent> finalReplay, CancellationToken token)
+            => InstallReproductionLayerAsync(layer, expected, token);
     }
 
     private sealed class ProbeReport

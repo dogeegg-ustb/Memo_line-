@@ -11,7 +11,7 @@ import history_size  # noqa: E402
 import panel_host  # noqa: E402
 import stash  # noqa: E402
 import virtual_display  # noqa: E402
-from test_interface import FakeRoot, PHYSICAL, SMALL, sync_job, window  # noqa: E402
+from test_interface import FakeRoot, FakeSwatch, PHYSICAL, SMALL, sync_job, window  # noqa: E402
 from workspace import Workspace  # noqa: E402
 
 HISTORY = "palettekindhistory"
@@ -43,7 +43,8 @@ class Base(unittest.TestCase):
         host.settings = dict(panel_host.DEFAULTS)
         host.closing = host.display_busy = host.provide_again = host.virtual_active = host.any_button = False
         host.virtual_error = host.empty_since = None
-        host.virtual_devices, host.pending = set(), {}
+        host.virtual_devices, host.pending, host.screen_waiters = set(), {}, []
+        host.swatch = FakeSwatch()
         host.display_job = sync_job
         host.hardware = tuple(host.settings["virtualHardwareIds"])
         host.history_rows, host.history_resizes, host.auto_tried = {11: (33, 28)}, {}, set()

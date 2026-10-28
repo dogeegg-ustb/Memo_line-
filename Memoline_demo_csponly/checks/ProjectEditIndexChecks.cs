@@ -185,9 +185,10 @@ internal static class ProjectEditIndexChecks
         var priorOnlyUuid = first with { Packets = [first.Packets[0] with { Layer = first.Packets[0].Layer with { Uuid = "unrouted" } }] };
         // No editable contact is resolved for that UUID; its capture still remains visible as unavailable history.
         priorOnlyUuid = priorOnlyUuid with { Packets = [priorOnlyUuid.Packets[0] with { Images = [] }], Replay = priorOnlyUuid.Replay with { Strokes = [] } };
-        Check(ProjectEditIndex.Build([priorOnlyUuid], current).Layers.Values.Any(l => l.Layer.Uuid == "unrouted" &&
-            l.Layer.SessionId == "old-a" && l.Issues.Any(i => i.Code == PlanIssueCode.LayerIdentityUnconfirmed)),
-            "A historical layer with no current route retains its original identity and an explicit local issue.");
+        var withDeleted = ProjectEditIndex.Build([priorOnlyUuid], current);
+        Check(withDeleted.Layers.Values.Any(l => l.Layer.Uuid == "unrouted" && l.Layer.SessionId == "old-a" && l.Deleted) &&
+              withDeleted.Layers[route] is { Deleted: false },
+            "A historical layer no longer in CSP and without a successor keeps its own identity, marked deleted.");
         var cached = new Dictionary<string, EditIndex>
         { [first.SessionId] = EditIndexBuilder.Build(first), [second.SessionId] = EditIndexBuilder.Build(second),
             [current.SessionId] = new(new Dictionary<LayerKey, LayerIndex>(), new Dictionary<EditableStrokeKey, EditableStroke>(),
@@ -220,6 +221,155 @@ internal static class ProjectEditIndexChecks
         var separate = ProjectEditIndex.Build([replacedA, unrelatedB], unrelatedNow);
         Check(separate.Strokes.Count == 2 && separate.Strokes.Values.All(s => s.Layer != unrelatedNow.Packets[0].Layer),
             "Without Memoline's own replacement record a different UUID stays a different layer: user-made layers are never joined.");
+        // The user's Ctrl+Z brought the original back after a precise undo: the edit is undone. The original is the
+        // layer again and the reproduction is a layer of its own, without the original's history.
+        var revokedNow = Session("rep-now", 43, 1000, 10, replacedA.Packets[0].Current!, null, "ink", alive: ["ink", "repro-1"]);
+        var revoked = ProjectEditIndex.Build([replacedA, replacedB], revokedNow);
+        var inkRoute = revokedNow.Packets[0].Layer;
+        Check(revoked.Strokes.Values.Single(s => s.Key.SessionId == "rep-a").Layer == inkRoute &&
+              revoked.Strokes.Values.Single(s => s.Key.SessionId == "rep-b").Layer.Uuid == "repro-1" &&
+              revoked.Layers.Values.Single(l => l.Layer.Uuid == "repro-1") is { Deleted: false } reproduction &&
+              reproduction.Strokes.All(s => s.Key.SessionId == "rep-b") && revoked.Layers[inkRoute].ChainValid,
+            "An original UUID seen again after its replacement revokes the replacement: each layer keeps only its own history.");
+        // A user-deleted layer: no successor, its events stay visible but leave editing.
+        var deletedNow = Session("rep-now", 43, 1000, 10, blank, null, "other", alive: ["other"]);
+        var deletedIndex = ProjectEditIndex.Build([replacedA], deletedNow);
+        var deletedInk = deletedIndex.Layers.Values.Single(l => l.Layer.Uuid == "ink");
+        Check(deletedInk.Deleted && deletedInk.Strokes.Count == 1 && !deletedIndex.Issues.Any(i => deletedInk.Issues.Contains(i)),
+            "A layer the user deleted keeps its strokes for display, and its issues do not count against the project.");
+        var deletedStroke = deletedInk.Strokes.Single();
+        var deletedPlan = ReconstructionPlanner.Build(deletedIndex, EditRequest.Event(deletedInk.Layer, selected,
+            new Dictionary<EditableStrokeKey, EventChange> { [deletedStroke.Key] = new(Delete: true) }));
+        Check(!deletedPlan.IsValid && deletedPlan.Issues.Any(i => i.Message.Contains("已被删除")),
+            "Events of a deleted layer cannot be edited.");
+        // Pasting Memoline's recycle bin copy of the replaced original makes the pasted layer its successor.
+        var pastedNow = Session("rep-now", 43, 1000, 10, replacedA.Packets[0].Current!, null, "pasted",
+            alive: ["pasted", "repro-1"], lineage: [("recyclePaste", "ink", "pasted")]);
+        var pasted = ProjectEditIndex.Build([replacedA, replacedB], pastedNow);
+        var pastedRoute = pastedNow.Packets[0].Layer;
+        Check(pasted.Strokes.Values.Single(s => s.Key.SessionId == "rep-a").Layer == pastedRoute && pasted.Layers[pastedRoute].ChainValid &&
+              pasted.Strokes.Values.Single(s => s.Key.SessionId == "rep-b").Layer.Uuid == "repro-1" &&
+              PreciseUndoSelector.Select(pasted, pastedRoute, selected) is { IsValid: true } pastedUndo &&
+              pastedUndo.Selected.Single().Key.SessionId == "rep-a",
+            "A layer pasted from the recycle bin continues the recycled original's history and can precise-undo it.");
+        // A merged layer's events join the layer it went into and stay selectable for precise undo.
+        var top = Session("m-a", 51, 1000, 100000, blank, 1, "top");
+        var bottomBefore = Session("m-b", 52, 1000, 100, blank, null, "bottom", alive: ["bottom"], lineage: [("merged", "top", "bottom")]);
+        var mergedPixels = top.Packets[0].Current!.Copy();
+        var mergeMask = new PixelMask(1, 1, 1, 1); mergeMask.Set(1, 1);
+        var mergeCrop = new ImageRgba(1, 1, mergedPixels.Bytes.AsSpan((1 + 8) * 4, 4).ToArray());
+        var mergeImage = new DirtyImage(new(bottomBefore.Packets[0].Layer, "packet", "merge"), mergeMask,
+            new(1, 1, new byte[4]), mergeCrop, []);
+        bottomBefore = bottomBefore with { Packets = [bottomBefore.Packets[0] with { Current = mergedPixels, Images = [mergeImage] }] };
+        var bottomNow = Session("m-now", 53, 1000, 10, mergedPixels, null, "bottom");
+        var merged = ProjectEditIndex.Build([top, bottomBefore], bottomNow);
+        var bottomRoute = bottomNow.Packets[0].Layer;
+        var mergedStroke = merged.Strokes.Values.Single(s => s.Key.SessionId == "m-a");
+        Check(merged.Layers.Count == 1 && merged.Layers[bottomRoute].ChainValid && mergedStroke.Layer == bottomRoute &&
+              mergedStroke.MergedFrom == "top" && new LayerTimeline(merged.Layers[bottomRoute].Packets, merged.Layers[bottomRoute].Current!).VerifyRoundTrip(),
+            "A merged layer's history folds into the target's pixel chain, which still round-trips exactly.");
+        var mergedUndo = PreciseUndoSelector.Select(merged, bottomRoute, selected);
+        Check(mergedUndo.IsValid && mergedUndo.Selected.Single().Key == mergedStroke.Key,
+            "Precise undo on the merge target selects the merged layer's stroke.");
+        var mergedPlan = ReconstructionPlanner.Build(merged, new EditRequest(EditKind.PreciseUndo, bottomRoute, selected,
+            new Dictionary<EditableStrokeKey, EventChange> { [mergedStroke.Key] = new(Delete: true) }));
+        var mergedResult = ReconstructionEngine.RunAsync(mergedPlan, new CompositionOnlyExecutor(), CancellationToken.None).GetAwaiter().GetResult();
+        Check(mergedPlan.IsValid && mergedResult.Status == ReconstructionStatus.Executed &&
+              mergedResult.Layers[bottomRoute].Bytes.AsSpan().SequenceEqual(blank.Bytes),
+            "Precise undo of a merged stroke rewinds the target to the merged layer's pixels before it.");
+        Check(!ReconstructionPlanner.Build(merged, EditRequest.Event(bottomRoute, selected,
+                new Dictionary<EditableStrokeKey, EventChange> { [mergedStroke.Key] = new(Delete: true) })).IsValid,
+            "Event editing refuses merged strokes: their pixels cannot be replayed on the target.");
+        // The user undid the merge (the merged layer is back): no fold, each layer is itself again.
+        var unmergedNow = Session("m-now", 53, 1000, 10, blank, null, "bottom", alive: ["bottom", "top"]);
+        var unmerged = ProjectEditIndex.Build([top, bottomBefore with { Packets = [bottomBefore.Packets[0] with { Current = blank, Images = [] }] }], unmergedNow);
+        Check(unmerged.Strokes.Values.Single(s => s.Key.SessionId == "m-a") is { MergedFrom: null } unmergedStroke &&
+              unmergedStroke.Layer.Uuid == "top" && !unmerged.Layers[unmergedStroke.Layer].Deleted,
+            "A merged layer seen again revokes the merge.");
+        // The user undid a precise undo all the way: the original is back and the reproduction gone. Memoline made it and
+        // the user did not want it, so it never existed: no deleted layer, nothing of it in the index.
+        var undoneNow = Session("rep-now", 43, 1000, 10, replacedA.Packets[0].Current!, null, "ink", alive: ["ink"]);
+        var undoneEdit = ProjectEditIndex.Build([replacedA, replacedB], undoneNow);
+        Check(undoneEdit.Layers.Values.All(l => l.Layer.Uuid != "repro-1") && undoneEdit.Strokes.Values.All(s => s.Key.SessionId != "rep-b") &&
+              undoneEdit.Layers[undoneNow.Packets[0].Layer] is { Deleted: false, ChainValid: true },
+            "A reproduction whose edit the user undid is dropped, not shown as a layer the user deleted.");
+        // Only a parse of a save shows the layers of its time. A parse of the file without one is CSP's last save
+        // (2026-10-20: after Ctrl+Z it still listed the reproduction); the boundary's own save is the current structure.
+        JsonElement Parse(int append, bool? bound, params string[] layers) => JsonSerializer.SerializeToElement(new
+        { appendId = append, kind = "coreStateUpdated", data = new { module = "clipState", status = "changed",
+            state = new { layers = layers.Select(u => new { name = u, uuid = u }).ToArray() },
+            evidence = bound is { } b ? (object)new { saveBound = b } : new { } } });
+        var parses = undoneNow with { Frames = [Parse(1, null, "ink", "old"), Parse(2, true, "ink", "repro"), Parse(3, false, "ink", "stale")],
+            BoundaryAppendId = 3 };
+        Check(LayerLineage.AliveAt(parses).SetEquals(["ink", "repro"]) &&
+              LayerLineage.AliveAt(parses with { BoundaryLayers = new HashSet<string> { "ink", "now" } }).SetEquals(["ink", "now"]) &&
+              LayerLineage.AliveAt(parses with { Frames = [Parse(1, null, "ink", "old")] }).SetEquals(["ink", "old"]),
+            "Alive layers come from the boundary's save, else the last parse of a save; recordings without the mark are read as before.");
+
+        // Memoline-operation packets and versions (user spec, 2026-10-20).
+        var aKey = chained.Strokes.Values.Single(s => s.Key.SessionId == "rep-a").Key;
+        var bKey = chained.Strokes.Values.Single(s => s.Key.SessionId == "rep-b").Key;
+        var opMask = new PixelMask(1, 1, 1, 1); opMask.Set(1, 1);
+        var opImage = new DirtyImage(new(nowRoute, "op-packet", "op-image"), opMask, new(1, 1, new byte[4]),
+            new(1, 1, new byte[] { 9, 9, 9, 255 }), [], HasUnreplayableEvents: true);
+        var opPacket = new LayerPacket("op-packet", nowRoute, 1_000_000, null, null, [opImage])
+        { SessionOrder = 1, Operation = new("tx-edit", "eventEditing", "ink") };
+        var withOperation = chained with
+        {
+            Layers = chained.Layers.ToDictionary(kv => kv.Key, kv => kv.Key == nowRoute ? kv.Value with { Packets = [.. kv.Value.Packets, opPacket] } : kv.Value),
+            Images = new Dictionary<DirtyImageKey, DirtyImage>(chained.Images) { [opImage.Key] = opImage },
+        };
+        var resized = new EventChange(Numbers: new Dictionary<string, double> { ["brush_size"] = 4 });
+        var edited = MemolineEdits.Apply(withOperation, [new("tx-edit", "eventEditing", 1, 0,
+            new Dictionary<EditableStrokeKey, EventChange> { [aKey] = resized }, new HashSet<EditableStrokeKey> { aKey, bKey }, [])]);
+        var aVersion = edited.Strokes[aKey];
+        Check(aVersion is { Version.TransactionId: "tx-edit", Eligible: true, MemolineInjected: false } && aVersion.Numbers["brush_size"] == 4 &&
+              aVersion.Images.Contains(opImage.Key) && edited.Images[opImage.Key] is { Operation.TransactionId: "tx-edit", UnknownHistoryInterval: false } operationImage &&
+              operationImage.Events.ToHashSet().SetEquals([aKey, bKey]) &&
+              edited.Images.Values.Single(i => i.Operation is null && i.Events.SequenceEqual([aKey])).SupersededBy == "tx-edit" &&
+              edited.Images.Values.Single(i => i.Operation is null && i.Events.SequenceEqual([bKey])).SupersededBy is null &&
+              edited.Layers[nowRoute].Packets.Single(p => p.PacketId == "op-packet").Images.Single().Events.Count == 2,
+            "An event edit makes the changed stroke a new version in its operation packet; an image of only that stroke is its old version.");
+        Check(MemolineEdits.Current(aVersion) == resized &&
+              MemolineEdits.Effective(aVersion, new(Numbers: new Dictionary<string, double> { ["opacity"] = 50 })) is { Delete: false } carried &&
+              carried.NumberValues["brush_size"] == 4 && carried.NumberValues["opacity"] == 50 &&
+              MemolineEdits.Effective(aVersion, new(Numbers: new Dictionary<string, double> { ["brush_size"] = 6 })).NumberValues["brush_size"] == 6 &&
+              MemolineEdits.Effective(aVersion, new(Delete: true)).Delete && MemolineEdits.Current(edited.Strokes[bKey]) is null,
+            "A new version is edited again with its earlier change carried along; a stroke replayed unchanged has no version.");
+        var recoloured = MemolineEdits.Apply(withOperation, [new("tx-edit", "eventEditing", 1, 0,
+            new Dictionary<EditableStrokeKey, EventChange> { [aKey] = resized with { Rgb = [10, 20, 30] } }, new HashSet<EditableStrokeKey> { aKey, bKey }, [])]).Strokes[aKey];
+        Check(MemolineEdits.Effective(recoloured, new(Numbers: new Dictionary<string, double> { ["opacity"] = 50 })).Rgb?.SequenceEqual([10, 20, 30]) == true &&
+              MemolineEdits.Effective(recoloured, new(BrushName: "Other pen")).Rgb?.SequenceEqual([10, 20, 30]) == true &&
+              MemolineEdits.Effective(recoloured, new() { Rgb = [1, 2, 3] }) is { Rgb: [1, 2, 3] } again && again.NumberValues["brush_size"] == 4 &&
+              MemolineEdits.Effective(recoloured, new(Delete: true)).Rgb is null,
+            "A recoloured version keeps its colour through later edits, a subtool change included, until one asks for another.");
+        var withoutPacket = MemolineEdits.Apply(chained, [new("tx-edit", "eventEditing", 1, 0,
+            new Dictionary<EditableStrokeKey, EventChange> { [aKey] = resized }, new HashSet<EditableStrokeKey> { aKey }, [])]);
+        Check(withoutPacket.Strokes[aKey].Version is not null && withoutPacket.Images.Values.All(i => i.SupersededBy is null),
+            "An edit recorded before operation packets existed versions its strokes but hides no image: there is no new version to show.");
+        var removed = MemolineEdits.Apply(withOperation, [new("tx-edit", "eventEditing", 1, 0,
+            new Dictionary<EditableStrokeKey, EventChange> { [aKey] = new(Delete: true) }, new HashSet<EditableStrokeKey> { bKey }, [])]);
+        Check(removed.Strokes[aKey] is { IsUndone: true, Version.Change.Delete: true } && MemolineEdits.Current(removed.Strokes[aKey]) is null &&
+              !removed.Images[opImage.Key].Events.Contains(aKey),
+            "A stroke an event edit deleted is gone from the current version.");
+        var injected = MemolineEdits.Apply(withOperation with { Layers = chained.Layers, Images = chained.Images }, [new("tx-undo", "preciseUndo", 1, 0,
+            new Dictionary<EditableStrokeKey, EventChange> { [aKey] = new(Delete: true) }, new HashSet<EditableStrokeKey> { aKey }, [])]);
+        var everywhere = PixelMask.Filled(0, 0, 8, 8);
+        Check(injected.Strokes[aKey] is { MemolineInjected: true, Eligible: false } && MemolineEdits.Current(injected.Strokes[aKey]) is null &&
+              !PreciseUndoSelector.Select(injected, nowRoute, undoneMask).IsValid &&
+              PreciseUndoSelector.Select(injected, nowRoute, everywhere) is { IsValid: true } rest && rest.Selected.Single().Key == bKey,
+            "Strokes a precise undo drew again are Memoline's: never selected, nor pulled in by a closure.");
+        // The native record: its changes (with the subtool snapshot) and the edits the user undid.
+        var recordNow = Session("rep-now", 43, 1000, 10, replacedB.Packets[0].Current!, null, "repro-2", [("repro-1", "repro-2")],
+            changes: [new { sessionId = "rep-a", beginAppendId = aKey.BeginAppendId, delete = false, brushName = (string?)null,
+                numbers = new Dictionary<string, double> { ["brush_size"] = 4 }, replacementBrushState = (object?)null, rgb = new[] { 10, 20, 30 } }], editKind: "eventEditing");
+        var records = MemolineEdits.Read([replacedA, replacedB, recordNow], LayerLineage.Build([replacedA, replacedB, recordNow]));
+        Check(records.Count == 2 && records[1] is { TransactionId: "tx-rep-now", PreciseUndo: false } record &&
+              record.Changes[aKey].NumberValues["brush_size"] == 4 && record.Changes[aKey].Rgb is [10, 20, 30] && record.Replayed.SetEquals([aKey]) &&
+              ProjectEditIndex.Build([replacedA, replacedB], recordNow).Strokes[aKey].Numbers["brush_size"] == 4,
+            "Executed edits are read from their native records; without a replayed list the kept changes are what was drawn again.");
+        Check(MemolineEdits.Read([replacedA, replacedB, revokedNow], LayerLineage.Build([replacedA, replacedB, revokedNow])).Count == 0,
+            "An edit the user undid in CSP is not read: it never happened.");
         Console.WriteLine($"Project edit index checks passed: {count}.");
         return count;
     }
@@ -234,7 +384,8 @@ internal static class ProjectEditIndexChecks
     }
 
     private static SessionSnapshot Session(string id, long generation, long frequency, long start, ImageRgba baseline, int? drawX = null,
-        string uuid = "ink", (string Replaced, string Reproduction)[]? replacements = null)
+        string uuid = "ink", (string Replaced, string Reproduction)[]? replacements = null, string[]? alive = null,
+        (string Kind, string Layer, string Target)[]? lineage = null, object[]? changes = null, string editKind = "preciseUndo")
     {
         var layer = new LayerKey(id, generation, uuid);
         JsonElement Update(string module, object state) => JsonSerializer.SerializeToElement(new
@@ -248,14 +399,18 @@ internal static class ProjectEditIndexChecks
             { new { id = "tool", kind = "tool", name = "Pen", parentId = "root", toolId = "tool" },
               new { id = "subtool", kind = "subtool", name = "G pen", parentId = "tool", toolId = "tool" } } } } }),
             Update("brushState", new { name = "G pen", properties = new[] { new { key = "brush_size", type = "number", status = "ok", value = 2 } } }),
-            Update("currentLayerState", "Ink"), Update("clipState", new { layers = new[] { new { name = "Ink", uuid } } }),
+            Update("currentLayerState", "Ink"),
+            Update("clipState", new { layers = (alive ?? [uuid]).Select(u => new { name = u == uuid ? "Ink" : u, uuid = u }).ToArray() }),
             Update("canvasViewState", new { canvasOriginScreenPx = new { x = 0, y = 0 }, ocrScalePercent = 100, ocrRotationDegrees = 0 })
         };
         if (drawX is not null) frames.AddRange([Pen("penBegin", 2, start), Pen("penSample", 3, start + 10), Pen("penEnd", 4, start + 20)]);
         if (replacements is not null)
             frames.Add(JsonSerializer.SerializeToElement(new { kind = "editingActionCompleted", ticks = start + 100, data = new
-            { transactionId = "tx-" + id, editKind = "preciseUndo", changes = Array.Empty<object>(),
+            { transactionId = "tx-" + id, editKind, changes = changes ?? Array.Empty<object>(),
               layerReplacements = replacements.Select(r => new { replaced = r.Replaced, reproduction = r.Reproduction }).ToArray() } }));
+        foreach (var (kind, from, into) in lineage ?? [])
+            frames.Add(JsonSerializer.SerializeToElement(new { kind = "layerLineage", ticks = start + 150, data = new
+            { kind, layer = from, target = into, evidence = new { triggerTicks = start + 100 } } }));
         frames.Add(JsonSerializer.SerializeToElement(new { kind = "editBoundaryRequested", ticks = start + 200, data = new { } }));
         var nativeFrames = frames.Select((f, i) =>
         {

@@ -57,7 +57,12 @@ internal sealed class FrozenCspDesktop : IDisposable
         }
         if (!CspSnapshotNative.TryClientBounds(target.Handle, out var client) || client.Width < 32 || client.Height < 32)
             throw new InvalidOperationException("无法确认 CSP 客户区，请展开当前绘画窗口。");
-        var frozen = new Bitmap(desktop.Width, desktop.Height);
+        // Only the monitors the CSP window is on. The virtual screen also spans the panel stash's monitor
+        // (up to 1536×6144 beside the main screen): freezing it made a ~100 MB snapshot, layered surface and
+        // back buffer each, and every pointer move redrew all of it.
+        desktop = MonitorsUnder(client, desktop);
+        windows.RemoveAll(w => !w.Bounds.IntersectsWith(desktop));
+        var frozen = new Bitmap(desktop.Width, desktop.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
         try
         {
             using var graphics = Graphics.FromImage(frozen);
@@ -76,6 +81,14 @@ internal sealed class FrozenCspDesktop : IDisposable
             return new(frozen, desktop, client, target.Handle,windows.Where(w=>w.ProcessId==target.ProcessId&&w.ThreadId==target.ThreadId).Select(w=>w.Bounds).ToArray());
         }
         catch { frozen.Dispose(); throw; }
+    }
+    internal static Rectangle MonitorsUnder(Rectangle window, Rectangle virtualScreen)
+        => MonitorsUnder(window, Screen.AllScreens.Select(screen => screen.Bounds), virtualScreen);
+    internal static Rectangle MonitorsUnder(Rectangle window, IEnumerable<Rectangle> monitors, Rectangle virtualScreen)
+    {
+        // A maximized window overhangs its monitor by its 8 px frame; such a sliver is not "on" the neighbour.
+        var under = monitors.Where(monitor => Rectangle.Intersect(monitor, window) is { Width: >= 16, Height: >= 16 }).ToArray();
+        return under.Length == 0 ? virtualScreen : under.Aggregate(Rectangle.Union);
     }
     internal bool IsTargetUnchanged() => TargetWindow == 0 || CspSnapshotNative.IsWindow(TargetWindow) &&
         CspSnapshotNative.IsWindowVisible(TargetWindow) && !CspSnapshotNative.IsIconic(TargetWindow) &&
@@ -264,7 +277,9 @@ internal class EventSelectionOverlay : Form
     }
     protected override void OnPaint(PaintEventArgs e)
     {
-        e.Graphics.DrawImageUnscaled(_frozen.Image, 0, 0);
+        e.Graphics.CompositingMode = CompositingMode.SourceCopy;
+        e.Graphics.DrawImage(_frozen.Image, e.ClipRectangle, e.ClipRectangle, GraphicsUnit.Pixel);
+        e.Graphics.CompositingMode = CompositingMode.SourceOver;
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         PointF Local(PointF p) => new(p.X - _frozen.Bounds.Left, p.Y - _frozen.Bounds.Top);
         var outline = (_drag.Count > 0 ? DragOutline() : _regionOutline).Select(Local).ToArray();

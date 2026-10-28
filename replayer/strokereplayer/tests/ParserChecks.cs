@@ -12,6 +12,7 @@ internal static class ParserChecks
         InterruptedStrokeIsLifted();
         UnknownCanvasInvalidatesEarlierView();
         InvalidCanvasOperationsAreSkippedUntilConfirmed();
+        AmbiguousViewAfterInertInputIsSettled();
         PendingCanvasIsBlockedButOtherCoresAreIgnored();
         NavigationAndUiPenClicksAreSkipped();
         KeyboardNavigationStateExcludesSparsePenOperations();
@@ -329,6 +330,41 @@ internal static class ParserChecks
             Reject(() => MemolineReplayReader.Read(corrupt), "The shared reader must reject CRC-corrupt records.");
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    // memoline test9 (2026-10-22): a Space-drag pan ended with mouseUp 220, the reading was captured while the
+    // Space release (221, unmapped) arrived, and the ten strokes after it were all skipped as "invalid view".
+    private static void AmbiguousViewAfterInertInputIsSettled()
+    {
+        List<JsonElement> Pan(string between, bool viewKey)
+        {
+            var records = ValidInitial();
+            records.Add(Hardware("mouseDown", 3, 1, 10, new { x = 500, y = 500 }, deviceType: "mouse"));
+            records.Add(Hardware("mouseUp", 4, 2, 15, new { x = 520, y = 500 }, 1, "mouse"));
+            records.Add(Reserved("pan", 5, 2, 15));
+            records.Add(between == "mouseDrag"
+                ? Hardware("mouseDrag", 6, 3, 16, new { x = 530, y = 500 }, deviceType: "mouse")
+                : Hardware("keyInput", 6, 3, 16, new { vk = 0x20 }, deviceType: "keyboard"));
+            records.Add(Frame("shortcutResolved", 7, 0, 16, new
+            {
+                matches = viewKey ? new object[] { new { targets = new[] { "画布视口" } } } : []
+            }, refs: [3]));
+            records.Add(Result("pan", 8, 2, new
+            {
+                module = "canvasViewState", status = "changed", state = State(166, 0, 1023, 226),
+                evidence = new { causalAmbiguous = true, observedAfterEventId = 3 }
+            }));
+            records.Add(Hardware("penBegin", 9, 4, 20, Pen(300, 400, .3)));
+            records.Add(Hardware("penEnd", 10, 5, 30, new { x = 310, y = 410 }, 4));
+            return records;
+        }
+        var settled = Read(Pan("keyInput", false)).Strokes.Single();
+        Check(settled.View.ScalePercent == 166 && settled.View.OriginX == 1023,
+            "A reading captured while only an unmapped key arrived shows the view after its anchor.");
+        Check(MemolineReplayReader.Parse("test.memoline", Pan("keyInput", true), allowEmpty: true).Strokes.Count == 0,
+            "A key that targets the canvas view keeps the reading ambiguous.");
+        Check(MemolineReplayReader.Parse("test.memoline", Pan("mouseDrag", false), allowEmpty: true).Strokes.Count == 0,
+            "A drag between trigger and capture keeps the reading ambiguous.");
     }
 
     private static List<JsonElement> Initial() =>

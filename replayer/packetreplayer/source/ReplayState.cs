@@ -86,7 +86,11 @@ internal sealed record HistoricalState(BrushSnapshot? Brush, string? Layer, Json
         _ => this
     };
 }
-internal sealed record HistorySlot(ulong Anchor, ulong Order, string Module, JsonElement Data);
+internal sealed record HistorySlot(ulong Anchor, ulong Order, string Module, JsonElement Data)
+{
+    /// <summary>The update as recorded; <see cref="Data"/> differs only when a canvas reading was settled.</summary>
+    internal JsonElement Recorded { get; init; } = Data;
+}
 
 internal static class StateHistory
 {
@@ -101,6 +105,18 @@ internal static class StateHistory
             .ToDictionary(g => g.Key, g => g.OrderBy(f => J.U64(f, "appendId")).Last());
         var covered = new HashSet<(string?, string?)>();
         Func<JsonElement, ulong>? lastInputBefore = null;
+        Func<ulong, bool>? viewInert = null;
+        // A canvas reading captured while only view-inert input arrived still shows the view at its anchor.
+        JsonElement Settled(JsonElement update, ulong anchor)
+        {
+            if (J.Text(update, "module") != "canvasViewState" ||
+                J.Get(J.Get(update, "evidence"), "causalAmbiguous").ValueKind != JsonValueKind.True ||
+                !MemolineReplayReader.ViewSettled(update, anchor, viewInert ??= MemolineReplayReader.ViewInertInputs(frames))) return update;
+            var node = System.Text.Json.Nodes.JsonNode.Parse(update.GetRawText())!;
+            node["evidence"]!["causalAmbiguous"] = false;
+            node["evidence"]!["settledAfterEventId"] = anchor;
+            return JsonSerializer.SerializeToElement(node);
+        }
         foreach (var result in frames.Where(f => J.Text(f, "kind") == "statePackageResult"))
         {
             var d = J.Get(result, "data");
@@ -112,7 +128,7 @@ internal static class StateHistory
             {
                 var module = J.Text(update, "module");
                 if (module is null) continue;
-                slots.Add(new(anchor, J.U64(reserved, "reservationOrder"), module, update));
+                slots.Add(new(anchor, J.U64(reserved, "reservationOrder"), module, Settled(update, anchor)) { Recorded = update });
                 covered.Add((id, module));
             }
         }
@@ -133,9 +149,13 @@ internal static class StateHistory
             // would move a late reading ahead of every input and replace the initial state.
             ulong anchor = J.Get(evidence, "observedAfterEventId").ValueKind == JsonValueKind.Number
                 ? J.U64(evidence, "observedAfterEventId") : (lastInputBefore ??= LastInputBefore(frames))(frame);
+            var settled = d;
             if (id is not null && reservations.TryGetValue(id, out var reserved))
-            { anchor = J.U64(reserved, "afterEventId"); order = J.U64(reserved, "reservationOrder"); }
-            slots.Add(new(anchor, order, module, d));
+            {
+                anchor = J.U64(reserved, "afterEventId"); order = J.U64(reserved, "reservationOrder");
+                settled = Settled(d, anchor);
+            }
+            slots.Add(new(anchor, order, module, settled) { Recorded = d });
         }
         return slots.OrderBy(s => s.Anchor).ThenBy(s => s.Order).ToArray();
     }

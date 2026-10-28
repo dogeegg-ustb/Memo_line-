@@ -159,10 +159,10 @@ internal static class EditingSelectionChecks
                 Invoke(panel,"SelectModeAsync",EditKind.PreciseUndo);model=Get<CanvasInteraction>(panel,"_interaction");
                 Check(tabs.TabPages.Count==2&&tabs.TabPages[1]==recycle&&images.Items.Count==0&&model.ChosenImage is null&&!execute.Visible,
                     "Precise undo does not expose the event-editing image and sweep stages, nor a separate execute step.");
-                bool frameDuringRun=false,boxFixed=false;
+                bool frameDuringRun=false,frameRecordable=false,boxFixed=false;
                 host.DuringExecute=()=>
                 {
-                    frameDuringRun=Get<SelectionProgressFrame?>(panel,"_progressFrame") is { Visible: true };
+                    if(Get<SelectionProgressFrame?>(panel,"_progressFrame") is { Visible: true } frame){frameDuringRun=true;frameRecordable=Affinity(frame)==0;}
                     boxFixed=Get<EventSelectionOverlay?>(panel,"_overlay") is { InteractionEnabled: false };
                 };
                 model.SetRegion(region);
@@ -173,6 +173,7 @@ internal static class EditingSelectionChecks
                 Check(host.CapacityConfirmed==true&&host.Plans==plansBeforeUndo,
                     "Precise undo runs without a preview or an undo-capacity confirmation.");
                 Check(frameDuringRun&&boxFixed,"While precise undo runs, the region box is fixed and the progress frame surrounds it.");
+                Check(frameRecordable,"The precise-undo progress frame stays in screen captures so screen recorders show it.");
                 Check(Get<SelectionProgressFrame?>(panel,"_progressFrame") is null&&Get<CanvasInteraction?>(panel,"_interaction") is null,
                     "When precise undo ends, the progress frame and the selection disappear.");
                 Invoke(panel,"SelectModeAsync",EditKind.EventEditing);model=Get<CanvasInteraction>(panel,"_interaction");

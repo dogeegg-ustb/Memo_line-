@@ -36,7 +36,14 @@ internal static class ReconstructionPlanner
                 !index.Layers.ContainsKey(stroke.Layer) || stroke.Images.Count == 0 ||
                 request.Kind == EditKind.PreciseUndo && stroke.Layer != request.CurrentLayer)
             { issues.Add(new(PlanIssueCode.UnreplayableEventInMatrix, "选中事件不是目标图层的完整合格笔接触。", Stroke: key)); continue; }
+            if (index.Layers[stroke.Layer].Deleted)
+            { issues.Add(new(PlanIssueCode.UnreplayableEventInMatrix, "选中事件所在的图层已被删除。", Stroke: key)); continue; }
+            // Its pixels were composited into the target layer; only rewinding them (precise undo) is exact.
+            if (stroke.MergedFrom is not null && request.Kind != EditKind.PreciseUndo)
+            { issues.Add(new(PlanIssueCode.UnsupportedOverride, "从已合并图层并入的事件只支持精确撤销。", Stroke: key)); continue; }
             if (change.Delete) continue;
+            if (change.Rgb is { } rgb && (rgb.Count != 3 || rgb.Any(v => v is < 0 or > 255)))
+                issues.Add(new(PlanIssueCode.UnsupportedOverride, "颜色覆盖必须是三个 0–255 的 RGB 数值。", Stroke: key));
             if (new ReplayEvent(stroke, change).RequiresReferenceScene && index.Layers.Values.Any(l => l.UndoCheckpoints.Count > 0))
                 issues.Add(new(PlanIssueCode.UndoRedoInRange,
                     "撤销后的有效检查点缺少逐步参考场景，无法将笔刷改为读取其他图层。", Stroke: key));
@@ -57,9 +64,15 @@ internal static class ReconstructionPlanner
                 (stroke.CoverageLabels.Count == 0 || stroke.CoverageLabels.Any(l => l.CoverageSettings is null && stroke.FrozenCoverageSettings is null)))
                 issues.Add(new(PlanIssueCode.UnsupportedOverride, "改笔刷尺寸需要录制时冻结的 CoverageSettings。", Stroke: key));
         }
+        // The closure is replayed as recorded: each stroke must be a whole eligible contact of the target layer too.
+        foreach (var key in request.Closure)
+            if (request.Kind != EditKind.PreciseUndo || request.Changes.ContainsKey(key) || !index.Strokes.TryGetValue(key, out var stroke) ||
+                !stroke.Eligible || stroke.IsUndone || stroke.Images.Count == 0 || stroke.Layer != request.CurrentLayer)
+                issues.Add(new(PlanIssueCode.UnreplayableEventInMatrix, "倒流闭包中的事件不是目标图层的完整合格笔接触。", Stroke: key));
         if (issues.Count > 0) return Invalid();
         if (request.Kind == EditKind.PreciseUndo) return PreciseUndo(index, request, issues);
-        var ordered = index.Layers.Values.SelectMany(l => l.Packets.Where(p => !p.IsRecordingBaseline))
+        // Deleted layers are no longer in CSP: nothing reads them and nothing can be reinstalled for them.
+        var ordered = index.Layers.Values.Where(l => !l.Deleted).SelectMany(l => l.Packets.Where(p => !p.IsRecordingBaseline))
             .OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray();
         var forced = new HashSet<DirtyImageKey>();
         var reasons = new Dictionary<DirtyImageKey, TrustReason>();
@@ -91,7 +104,7 @@ internal static class ReconstructionPlanner
         } while (changed);
         var plans = new List<LayerReconstructionPlan>();
         var firstAffected = ordered.FirstOrDefault(p => p.Images.Any(i => forced.Contains(i.Key)));
-        foreach (var layer in index.Layers.Values)
+        foreach (var layer in index.Layers.Values.Where(l => !l.Deleted))
         {
             var groups = layer.Packets.Where(p => !p.IsRecordingBaseline).OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks).ToArray();
             int first = Array.FindIndex(groups, p => p.Images.Any(i => forced.Contains(i.Key)));
@@ -130,19 +143,23 @@ internal static class ReconstructionPlanner
     }
 
     // Precise undo only touches the current layer: issues of other layers cannot block it. The layout is
-    // the one the engine executes (see ReconstructionEngine.LayoutPreciseUndo).
+    // the one the engine executes (see ReconstructionEngine.LayoutPreciseUndo): whole dirty images, pasted or replayed.
     private static ReconstructionPlan PreciseUndo(EditIndex index, EditRequest request, List<PlanIssue> issues)
     {
         var layer = index.Layers[request.CurrentLayer!.Value];
-        var selected = request.Changes.Keys.Select(k => index.Strokes[k]).ToArray();
         issues.AddRange(layer.Issues);
         if (!layer.ChainValid && layer.Issues.Count == 0) issues.Add(new(PlanIssueCode.ChainBroken, "当前图层的差异链无效。"));
         if (layer.Current is null) issues.Add(new(PlanIssueCode.CaptureMismatch, "编辑边界没有整层捕获。"));
-        if (ReconstructionEngine.LayoutPreciseUndo(layer, selected) is not { } layout)
+        if (ReconstructionEngine.LayoutPreciseUndo(layer, request.Changes.Keys.Select(k => index.Strokes[k]).ToArray()) is not { } layout)
         {
             issues.Add(new(PlanIssueCode.NoSelection, "被选笔画没有对应的脏矩阵。"));
             return new(index, request, [], issues.Distinct().ToArray());
         }
+        // The closure is whatever else the replayed images hold; a request built from another selection no longer matches.
+        if (!layout.Involvement.Closure.Select(s => s.Key).ToHashSet().SetEquals(request.Closure))
+            issues.Add(new(PlanIssueCode.NoSelection, "精确撤销闭包已改变，请刷新并检查选择。"));
+        issues.AddRange(layout.Involvement.Issues);
+        var selected = layout.Strokes;
         var groups = layer.Packets.Where(p => !p.IsRecordingBaseline).OrderBy(p => p.SessionOrder).ThenBy(p => p.TriggerTicks)
             .SkipWhile(p => p.PacketId != layout.SeedPacketId).ToArray();
         foreach (var image in groups.SelectMany(g => g.Images).Where(i => !i.FullResolution))
@@ -150,11 +167,11 @@ internal static class ReconstructionPlanner
         if (UndoRedoIssue(index, layer, selected.Select(s => s.Key)) is { } undoIssue) issues.Add(undoIssue);
         var reasons = layout.Replayed.ToDictionary(key => key, _ => new TrustReason("modifiedEvent", []));
         var untrusted = layout.Replayed.ToHashSet();
-        var events = selected.OrderBy(s => s.SessionOrder).ThenBy(s => s.BeginEventId).ThenBy(s => s.Key.BeginAppendId).Select(s => s.Key).ToArray();
-        // Every matrix from the seed on is composited (the selected ink rewound); only the selection is replayed.
+        var events = selected.Select(s => s.Key).ToArray();
+        // The other images from the seed on are pasted as recorded; the replayed ones are rebuilt by their strokes.
         ReconstructionSegment[] segments =
         [
-            new(ReconstructionSegmentKind.Compose, groups.SelectMany(g => g.Images).Select(i => i.Key).ToArray(), [], []),
+            new(ReconstructionSegmentKind.Compose, groups.SelectMany(g => g.Images).Select(i => i.Key).Where(k => !layout.Replayed.Contains(k)).ToArray(), [], []),
             new(ReconstructionSegmentKind.Replay, layout.Replayed.ToArray(), events, layout.Replayed.Select(k => reasons[k]).ToArray()),
         ];
         return new(index, request, [new(layer.Layer, groups, layout.SeedPacketId, untrusted, reasons, segments)], issues.Distinct().ToArray());
@@ -207,7 +224,7 @@ internal static class ReconstructionPlanner
         }
     }
 
-    private static PixelMask OverrideWriteMask(EditableStroke stroke, EventChange change, PixelMask bounds)
+    internal static PixelMask OverrideWriteMask(EditableStroke stroke, EventChange change, PixelMask bounds)
     {
         // A different subtool can spray, scatter or read beyond the original recipe.
         // Its route and readback are checked by the restorer; planning assumes no
@@ -221,7 +238,7 @@ internal static class ReconstructionPlanner
         return Footprints.RasterizeCoverage(labels, bounds.Width, bounds.Height);
     }
 
-    private static bool ChangesSubtool(EditableStroke stroke, EventChange change)
+    internal static bool ChangesSubtool(EditableStroke stroke, EventChange change)
         => change.BrushName is { } name && !PacketReplay.BrushSnapshot.SameName(name, stroke.BrushName ?? "");
 
     // Undo/redo never blocks a plan. Its pixel effect is recorded in later dirty images, which

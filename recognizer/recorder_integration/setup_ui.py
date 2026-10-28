@@ -12,6 +12,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from catalog import NAVIGATOR
+import floating_panels
 from csp_workspace_overlay import inspect
 from pipeline import analysis_workers, probe_numbers
 
@@ -191,27 +192,57 @@ class SetupDialog:
     def layout_key(self):
         # Check live geometry at use time, not only the last background poll.
         _, layout = inspect(self.runtime.path, self.runtime.hwnd)
-        signature = json.dumps({k: layout[k] for k in ("hwnd", "client_rect", "regions")}, sort_keys=True)
-        if signature != self.runtime.initial_signature:
-            raise ValueError("工作区位置已变化，请恢复启动时布局或重新启动记录器")
+        if self.runtime.initial_signature is not None and self.runtime.canvas_signature(layout) != self.runtime.initial_signature:
+            raise ValueError("CSP 画布区域刚刚变化，请稍候再试")
         user32 = self.runtime.user32
         user32.GetDpiForWindow.argtypes = [ctypes.c_void_p]
         user32.GetDpiForWindow.restype = ctypes.c_uint
-        return dict(clientRect=layout["client_rect"], regions=layout["regions"],
+        source = self.runtime.navigator_source()
+        return dict(clientRect=layout["client_rect"], regions=dict(self.runtime.engine.regions),
+                    navigator=None if source is None else [source[0], list(self.navigator_rect(source))],
                     dpi=int(user32.GetDpiForWindow(self.runtime.hwnd) or 96))
 
-    def cached_roi(self):
-        # Whether the workspace layout matches the saved one does not matter: probe_cached reuses the
-        # selection whenever it still reads both numbers. Only a selection that cannot lie inside the
-        # current navigator panel is discarded up front.
-        roi = self.runtime.settings.get("navigatorOcrSelection", {}).get("roi")
-        if not isinstance(roi, list) or len(roi) != 4:
+    @staticmethod
+    def navigator_rect(source):
+        return tuple(source[1].rect) if source[0] == "window" else tuple(source[1])
+
+    def navigator_image(self, source):
+        """The navigator panel's pixels (PIL RGB) and their screen rectangle."""
+        from PIL import Image
+        if source[0] == "window":
+            pixels, rect = floating_panels.capture(source[1].hwnd, source[1].rect)
+            return Image.fromarray(pixels[:, :, ::-1].copy()), rect
+        return self.csp_pixels(tuple(source[1])), tuple(source[1])
+
+    def csp_pixels(self, rect):
+        """Part of CSP's own window (PIL RGB) at the screen rectangle `rect`; nothing in front of CSP shows."""
+        return floating_panels.window_image(self.runtime.hwnd, tuple(rect))[0]
+
+    def save_reference(self, image):
+        """The navigator panel the digits were selected on: later views (docked elsewhere, floating with a
+        title bar) are aligned to it before the relative selection is applied."""
+        image.convert("RGB").save(self.runtime.reference_path())
+
+    def cached_relative(self):
+        """The last digit selection relative to the navigator panel, if it still fits inside it.
+
+        Whether the workspace layout matches the saved one does not matter: probe_cached reuses the
+        selection whenever it still reads both numbers, wherever the navigator now is.
+        """
+        source = self.runtime.navigator_source()
+        if source is None:
             return None
-        if not all(type(v) is int for v in roi) or min(roi[2:]) < 32:
+        nx,ny,nw,nh = self.navigator_rect(source)
+        saved = self.runtime.settings.get("navigatorOcrSelection", {})
+        relative = saved.get("relative")
+        if relative is None and source[0] == "dock" and isinstance(saved.get("roi"), list) and len(saved["roi"]) == 4:
+            # Older settings kept the screen position of a docked navigator.
+            rx,ry,rw,rh = saved["roi"]
+            relative = [rx-nx,ry-ny,rw,rh]
+        if not isinstance(relative, list) or len(relative) != 4 or not all(type(v) is int for v in relative):
             return None
-        x,y,w,h = self.runtime.engine.regions[NAVIGATOR]
-        rx,ry,rw,rh = roi
-        return roi if x <= rx and y <= ry and rx+rw <= x+w and ry+rh <= y+h else None
+        dx,dy,w,h = relative
+        return relative if min(w,h) >= 32 and dx >= 0 and dy >= 0 and dx+w <= nw and dy+h <= nh else None
 
     def begin(self, force_selection=False):
         if self.pending:
@@ -250,18 +281,13 @@ class SetupDialog:
             self.runtime.show_origin(False)
             self.runtime.show_core_rois(False)
             self.runtime.show_viewport(False)
-            # This explicit setup action brings CSP forward; the observer itself never does.
-            self.runtime.user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
+            # CSP's pixels come from its own window, which a minimized CSP does not draw; it need not be in front.
             self.runtime.user32.IsIconic.argtypes = [ctypes.c_void_p]
             if self.runtime.user32.IsIconic(self.runtime.hwnd):
                 self.runtime.user32.ShowWindow(self.runtime.hwnd, 9)
-            self.runtime.user32.SetForegroundWindow(self.runtime.hwnd)
-            if self.runtime.user32.GetForegroundWindow() != self.runtime.hwnd:
-                raise ValueError("无法将 CSP 窗口置于前台，请打开 CSP 后重试")
-            roi = None if force_selection else self.cached_roi()
+            roi = None if force_selection else self.cached_relative()
             if roi:
-                # Give the hidden overlays time to leave the navigator before reading it.
-                self.runtime.root.after(150,lambda: self.probe_cached(roi))
+                self.runtime.root.after_idle(lambda: self.probe_cached(roi))
             else:
                 self.runtime.root.after_idle(self.freeze)
         except Exception as ex:
@@ -271,21 +297,15 @@ class SetupDialog:
             self.status.set(str(ex))
             messagebox.showerror("尚未开始截图",str(ex),parent=self.window)
 
-    def probe_cached(self, roi):
+    def probe_cached(self, relative):
         """Reuse the last digit selection when it still reads scale and rotation; otherwise select again."""
         try:
-            if self.runtime.user32.GetForegroundWindow() != self.runtime.hwnd:
-                raise ValueError("CSP 窗口不在前台")
-            from PIL import Image
-            import mss
-            nav = tuple(self.runtime.engine.regions[NAVIGATOR])
-            x,y,w,h = nav
-            with mss.mss() as grabber:
-                pixels = grabber.grab(dict(left=x,top=y,width=w,height=h))
+            image, nav = self.navigator_image(self.runtime.navigator_source())
+            roi = [nav[0]+relative[0],nav[1]+relative[1],relative[2],relative[3]]
             descriptor, name = tempfile.mkstemp(prefix="memoline-numbers-",suffix=".png")
             os.close(descriptor)
             frame = Path(name)
-            Image.frombytes("RGB",pixels.size,pixels.bgra,"raw","BGRX").save(frame)
+            image.save(frame)
         except Exception as ex:
             print("[Initialization] 无法试读上次数字选区："+str(ex)+"；改为重新框选。",file=sys.stderr,flush=True)
             self.freeze()
@@ -308,8 +328,10 @@ class SetupDialog:
             if result.get("success"):
                 print(f"[Initialization] 上次数字选区仍读出缩放 {result['scalePercent']:g}% 和旋转 {result['rotationDegrees']:g}°，直接沿用。",
                       file=sys.stderr,flush=True)
+                if not self.runtime.reference_path().is_file():
+                    self.save_reference(image)
                 self.window.destroy()
-                self.runtime.start_pipeline(self.dimensions,roi,self.clip.get())
+                self.runtime.start_pipeline(self.dimensions,relative,self.clip.get())
             else:
                 detail = result.get("message") or f"缩放 '{result.get('scaleRawText','')}'，旋转 '{result.get('rotationRawText','')}'"
                 print("[Initialization] 上次数字选区没有读出两个数字（"+detail+"），请重新框选。",file=sys.stderr,flush=True)
@@ -319,18 +341,24 @@ class SetupDialog:
 
     def freeze(self):
         try:
-            if self.runtime.user32.GetForegroundWindow() != self.runtime.hwnd:
-                raise ValueError("无法将 CSP 窗口置于前台，请打开 CSP 后重试截图")
             if self.layout_key() != self.selection_layout or not self.runtime.engine.regions:
                 raise ValueError("工作区位置已变化，请恢复布局后重试")
-            from PIL import Image, ImageTk
-            import mss
-            self.nav = tuple(self.runtime.engine.regions[NAVIGATOR])
-            self.freeze_rect = tuple(self.selection_layout["clientRect"])
-            x,y,w,h = self.freeze_rect
-            with mss.mss() as grabber:
-                pixels = grabber.grab(dict(left=x,top=y,width=w,height=h))
-                self.frozen = Image.frombytes("RGB",pixels.size,pixels.bgra,"raw","BGRX")
+            from PIL import ImageTk
+            source = self.runtime.navigator_source()
+            if source is None:
+                raise ValueError("找不到导航器面板：请把它停靠在 CSP 里或拖成浮动窗口")
+            if source[0] == "window":
+                # A floating navigator (maybe on the virtual screen): its own pixels, shown over CSP.
+                self.frozen, _ = self.navigator_image(source)
+                client = self.selection_layout["clientRect"]
+                w,h = self.frozen.size
+                x,y = client[0]+(client[2]-w)//2, client[1]+(client[3]-h)//2
+                self.freeze_rect = self.nav = (x,y,w,h)
+            else:
+                self.nav = tuple(source[1])
+                self.freeze_rect = tuple(self.selection_layout["clientRect"])
+                x,y,w,h = self.freeze_rect
+                self.frozen = self.csp_pixels(self.freeze_rect)
             self.picker = tk.Toplevel(self.runtime.root)
             self.picker.title("冻结 CSP：框选导航器缩放和旋转数字，Enter 确认，Esc 取消")
             self.picker.overrideredirect(True)
@@ -388,11 +416,16 @@ class SetupDialog:
         if self.layout_key() != self.selection_layout or not self.runtime.engine.regions:
             messagebox.showerror("工作区已变化","请按 Esc 返回，恢复工作区后重新截图。",parent=self.picker)
             return
-        self.runtime.settings["navigatorOcrSelection"] = dict(layout=self.selection_layout,roi=roi)
+        relative = [roi[0]-nx,roi[1]-ny,w,h]
+        fx,fy = self.freeze_rect[:2]
+        self.save_reference(self.frozen.crop((nx-fx,ny-fy,nx-fx+nw,ny-fy+nh)))
+        self.runtime.settings["navigatorOcrSelection"] = dict(layout=self.selection_layout,roi=roi,
+                                                              relative=relative,navigatorSize=[nw,nh],
+                                                              reference=self.runtime.reference_path().name)
         self.runtime.settings_path.write_text(json.dumps(self.runtime.settings,ensure_ascii=False,indent=2),encoding="utf-8")
         self.picker.destroy(); self.window.destroy(); self.frozen.close()
         self.runtime.user32.SetForegroundWindow(self.runtime.hwnd)
-        self.runtime.start_pipeline(self.dimensions,roi,self.clip.get())
+        self.runtime.start_pipeline(self.dimensions,relative,self.clip.get())
 
     def back(self,event=None):
         self.picker.destroy(); self.frozen.close(); self.window.deiconify()

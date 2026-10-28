@@ -96,8 +96,8 @@ internal sealed class SnapshotHistory
             if (!ids.Add(id)) throw new InvalidDataException("baseline id 重复");
             string imageFile = "snapshots/" + id + ".png";
             if (File.Exists(Path.Combine(Root, imageFile))) throw new InvalidDataException("baseline id 已存在");
-            using var image = LayerDiff.Load(source);
-            if (image.Width != snapshot.Width || image.Height != snapshot.Height)
+            var (width, height) = BaselineSize(source);
+            if (width != snapshot.Width || height != snapshot.Height)
                 throw new InvalidDataException("baseline PNG 尺寸与快照元数据不一致");
             normalized.Add((seed, snapshot with { RunId = _run, ImageFile = imageFile }, imageFile, source));
         }
@@ -107,13 +107,15 @@ internal sealed class SnapshotHistory
         var written = new List<string>();
         try
         {
-            // Encode all images into private temporary files first. A corrupt
+            // Stage all images as private temporary files first. A corrupt
             // source or disk failure therefore leaves the existing history intact.
             foreach (var item in normalized)
             {
                 string staged = Path.Combine(stage, Path.GetFileName(item.ImageFile));
-                using var image = LayerDiff.Load(item.Source);
-                image.Save(staged, ImageFormat.Png);
+                // An 8-bit RGBA PNG whose chunks check out is kept byte for byte: decoding and re-encoding it with
+                // GDI+ gave the same pixels and cost about a second per full canvas.
+                if (FastPng.TryReadSize(File.ReadAllBytes(item.Source), out _, out _)) File.Copy(item.Source, staged);
+                else { using var image = LayerDiff.Load(item.Source); image.Save(staged, ImageFormat.Png); }
             }
             var nextStacks = new Dictionary<long, SnapshotPair>(_layerStacks);
             var nextBaselineIds = new HashSet<string>(_baselineIds, StringComparer.Ordinal);
@@ -152,10 +154,24 @@ internal sealed class SnapshotHistory
         finally { DeleteOwnDirectory(stage); }
     }
 
+    /// <summary>A baseline PNG's size: from its header when it is an 8-bit RGBA PNG with valid chunks, else decoded.</summary>
+    private static (int Width, int Height) BaselineSize(string path)
+    {
+        byte[] png = File.ReadAllBytes(path);
+        if (FastPng.TryReadSize(png, out int width, out int height))
+        {
+            if (!FastPng.ChunksValid(png)) throw new InvalidDataException("baseline PNG 数据块损坏");
+            return (width, height);
+        }
+        using var image = LayerDiff.Load(path);
+        return (image.Width, image.Height);
+    }
+
     public void RegisterBaseline(LayerReference layer, string fullPngPath, long triggerTicks)
     {
+        using var timing = StepTiming.Start("history", "registerBaseline");
         if (triggerTicks < 0) throw new InvalidDataException("baseline triggerTicks 必须非负");
-        using var image = LayerDiff.Load(fullPngPath);
+        var image = BaselineSize(fullPngPath);
         var current = _layerStacks.GetValueOrDefault(layer.Id)?.Now ?? _layerStacks.GetValueOrDefault(layer.Id)?.After
             ?? Pair.Now ?? Pair.After;
         if (current is null || string.IsNullOrWhiteSpace(current.SessionId))
@@ -166,6 +182,72 @@ internal sealed class SnapshotHistory
             current.SessionId, current.Generation, triggerTicks, string.Empty, image.Width, image.Height, layer,
             metadata, current.RecognizerStates, triggerTicks, "reproduction");
         SeedBaseline(snapshot, fullPngPath);
+    }
+
+    /// <summary>The newest snapshot of a layer UUID in this session's stacks (a capture or a baseline), or null.</summary>
+    public LayerSnapshot? Latest(string uuid, string session, long generation)
+        => _layerStacks.Values.Select(pair => pair.Now ?? pair.After).OfType<LayerSnapshot>()
+            .Where(s => s.SessionId == session && s.Generation == generation
+                && string.Equals(s.Layer.Uuid, uuid, StringComparison.OrdinalIgnoreCase)
+                && File.Exists(Path.Combine(Root, s.ImageFile)))
+            .MaxBy(s => s.TriggerTicks);
+
+    /// <summary>
+    /// The Memoline-operation packet: what an executed edit changed, from the replaced layer's last snapshot to its
+    /// reproduction's installed baseline. It belongs to the reproduction and is the new version of the packets the
+    /// edit rebuilt. It holds no recorded input (Memoline's own input never enters the native file), so its labels
+    /// are the coarse ones; readers attach the edit's events from its native record. The stacks do not change.
+    /// </summary>
+    public SnapshotUpdate RecordOperation(LayerSnapshot replaced, LayerSnapshot reproduction, CaptureRequest request,
+        long frequency, object operation, CancellationToken token)
+    {
+        if (replaced.Width != reproduction.Width || replaced.Height != reproduction.Height)
+            throw new InvalidDataException("复现层与被替换图层的画布尺寸不同，不能生成记艺线操作包");
+        if (replaced.SessionId != reproduction.SessionId || request.TriggerTicks < Math.Max(replaced.TriggerTicks, reproduction.TriggerTicks))
+            throw new InvalidDataException("记艺线操作包的会话或 triggerTicks 与两张快照不一致");
+        var size = new Size(reproduction.Width, reproduction.Height);
+        var window = new EvidenceWindow(reproduction.SessionId, frequency, replaced.TriggerTicks, request.TriggerTicks, true, [], [], []);
+        var evidence = RecognitionEvidence.Build(window, request, size);
+        string id = "memoline-op-" + request.TriggerTicks.ToString("D20", System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..8];
+        string stage = Path.Combine(Root, ".pending-" + id), packet = Path.Combine(Root, "packets", id);
+        string nowPath = Path.Combine(Root, reproduction.ImageFile);
+        bool published = false;
+        Directory.CreateDirectory(stage);
+        try
+        {
+            using var timing = StepTiming.Start("history", "recordOperation");
+            const string canvasPreviewImage = "canvas-preview.png";
+            var thumbnail = Task.Run(() => CanvasThumbnail.Save(nowPath, Path.Combine(stage, canvasPreviewImage), size, token), token);
+            LayerDiffResult diff;
+            try { diff = LayerDiff.Compare(Path.Combine(Root, replaced.ImageFile), nowPath, evidence, stage, token); }
+            catch { try { thumbnail.Wait(CancellationToken.None); } catch (Exception) { } throw; }
+            thumbnail.GetAwaiter().GetResult();
+            object Descriptor(LayerSnapshot s) => new { s.Id, s.SessionId, s.Generation, s.TriggerTicks, s.BaselineSource,
+                saveDispatchedTicks = s.SavedTicks, s.SavedTicks, s.Width, s.Height, s.Layer, s.RasterMetadata, s.RecognizerStates };
+            var manifest = new
+            {
+                schema = "dirty-matrix-image-diff/v1", comparison = "fullResolution/v2", kind = "diff", id,
+                after = Descriptor(replaced), now = Descriptor(reproduction), baselineSource = replaced.BaselineSource,
+                recognizer = new { window.SessionId, window.Frequency, window.FromTicks, window.ToTicks, window.Complete,
+                    window.States, window.CaptureStateIds, window.Inputs },
+                capture = new { request.TriggerTicks, request.Ticks, request.TimeSource, request.TriggerKind, request.ViewPending,
+                    layerName = reproduction.Layer.Name, layerId = reproduction.Layer.Id, layer = reproduction.Layer,
+                    replacedLayer = replaced.Layer, layerMapping = "memolineReproduction", request.View, request.Operations,
+                    saveDispatchedTicks = reproduction.SavedTicks },
+                memolineOperation = operation,
+                search = new { tileSize = LayerDiff.TileSize, outsideDownsampleFactor = 0, coarseWidth = 0, coarseHeight = 0,
+                    outsideInspection = "full-resolution every pixel", evidence.Warnings,
+                    fullResolutionComparedPixels = diff.FullResolutionComparedPixels, coarseComparedPixels = diff.CoarseComparedPixels,
+                    changedPixels = diff.ChangedPixels },
+                predictedMatrix = diff.PredictedMatrix, labels = diff.Labels, images = diff.Images, canvasPreviewImage,
+                imageConvention = "image is one original-RGBA now patch containing only pixels changed versus after, at full-canvas bounds; afterImage, maskImage and differenceImage are auxiliary; white mask pixels include erasure"
+            };
+            File.WriteAllText(Path.Combine(stage, "manifest.json"), JsonSerializer.Serialize(manifest, Json));
+            token.ThrowIfCancellationRequested();
+            Directory.CreateDirectory(Path.GetDirectoryName(packet)!); Directory.Move(stage, packet); published = true;
+            return new(nowPath, packet, false, diff.Images.Length, diff.Labels.Length);
+        }
+        finally { if (!published) DeleteOwnDirectory(stage); }
     }
 
     public ChainVerification VerifyChain(string layerUuid)
@@ -179,6 +261,8 @@ internal sealed class SnapshotHistory
             {
                 using var document = JsonDocument.Parse(File.ReadAllText(file));
                 var root = document.RootElement.Clone();
+                // An operation packet joins two layers' chains; each chain is proven from its own snapshots.
+                if (J.Text(J.Get(root, "capture"), "triggerKind") == "memolineOperation") continue;
                 var after = J.Get(root, "after");
                 var layer = after.TryGetProperty("layer", out var layerProperty) ? layerProperty : default;
                 string uuid = layer.ValueKind == JsonValueKind.Object ? J.Text(layer, "uuid") ?? string.Empty : string.Empty;
@@ -282,12 +366,17 @@ internal sealed class SnapshotHistory
         try
         {
             token.ThrowIfCancellationRequested();
-            LayerDiffResult? diff = baseline ? null : LayerDiff.Compare(Path.Combine(Root, previous!.ImageFile), result.PngPath, evidence, stage, token);
-            var labels = diff?.Labels ?? LayerDiff.Describe(evidence, new(width, height));
+            using var timing = StepTiming.Start("history", baseline ? "advance (baseline)" : "advance (diff)");
             // The locator owns a bounded thumbnail of the complete current
             // layer, so historical locations survive full snapshot rotation.
             const string canvasPreviewImage = "canvas-preview.png";
-            CanvasThumbnail.Save(result.PngPath, Path.Combine(stage, canvasPreviewImage), new(width, height), token);
+            // The thumbnail decodes the capture again and resamples it for about half a second: beside the comparison.
+            var thumbnail = Task.Run(() => CanvasThumbnail.Save(result.PngPath, Path.Combine(stage, canvasPreviewImage), new(width, height), token), token);
+            LayerDiffResult? diff;
+            try { diff = baseline ? null : LayerDiff.Compare(Path.Combine(Root, previous!.ImageFile), result.PngPath, evidence, stage, token); }
+            catch { try { thumbnail.Wait(CancellationToken.None); } catch (Exception) { } throw; }
+            thumbnail.GetAwaiter().GetResult();
+            var labels = diff?.Labels ?? LayerDiff.Describe(evidence, new(width, height));
             // Historical packets own their cropped before/now pixels. Each layer
             // rotates its own full-size sources independently.
             object Descriptor(LayerSnapshot s) => new { s.Id, s.SessionId, s.Generation, s.TriggerTicks, s.BaselineSource,

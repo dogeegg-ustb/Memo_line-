@@ -58,7 +58,7 @@ CSP 最多保留"撤销次数"那么多步（首选项 > 性能，存在用户�
 
 Windows 没有"某块显示器只允许某些程序画"的设置或 API：所有显示器拼成一整张桌面，任何程序都能把窗口放在任意位置。动态壁纸画在横跨所有显示器的桌面背景层上，系统也没法按显示器排除。`guard.py` 用两种办法尽量接近这个效果：
 
-- **窗口巡检**：每 0.4 秒检查一次，不在白名单（`virtualScreenAllowedProcesses`，默认只有 CSP）里的程序，如果有窗口的中心落在虚拟屏上，就把这个窗口挪回主屏，保持它相对屏幕左上角的位置。同一个窗口最多挪 3 次，免得和非要待在那里的程序来回抢。任务栏和桌面这类系统外壳窗口不动，它们是静态的，几乎不耗资源。这一项不依赖其它软件的配合。
+- **窗口巡检**：每 0.4 秒检查一次，不在白名单（`virtualScreenAllowedProcesses`，默认只有 CSP）里的程序，如果有窗口的中心落在虚拟屏上，就把这个窗口挪回主屏，保持它相对屏幕左上角的位置。同一个窗口最多挪 3 次，免得和非要待在那里的程序来回抢。任务栏和桌面这类系统外壳窗口不动，它们是静态的，几乎不耗资源；Windows 的笔迹输入层（TabTip）和输入法窗口也不动，它们覆盖整个桌面、承载笔输入。盖满整块虚拟屏的置顶窗口也不动，这是别的程序在每块显示器上各铺一层的覆盖层：比如按 Win+Shift+S 截图时，截图工具在每块屏上用一个这样的窗口显示冻结的画面。2026-10-25 实测，把虚拟屏上那一层挪到主屏后，它用虚拟屏的黑色画面盖住了主屏的大半，截图也没法正常进行。这一项不依赖其它软件的配合。
 - **最大化底板**（`wallpaperBackdrop`）：虚拟屏接入期间，在所有窗口最底下铺一块带"最大化"标记的黑色窗口，CSP 面板压在它上面。Wallpaper Engine 一类壁纸软件看到这块屏被最大化窗口盖住，就会暂停在这块屏上的渲染。实测 Wallpaper Engine 停了：没有底板时它在虚拟屏上约占 2.6% 到 2.9% GPU，有底板后低于统计阈值。
 
   这一项**依赖壁纸软件自己的"被最大化窗口盖住就暂停"逻辑**。本机的 Wallpaper Engine 设置的是"其它程序最大化时暂停"；如果设成"继续运行"，或者换成没有这种逻辑的软件，底板就不起作用。只用普通的全屏黑窗口盖住（不带最大化标记）也没用：Wallpaper Engine 被挡住后照样渲染，照样耗 GPU。
@@ -105,11 +105,13 @@ py -3 recognizer/virtual_panel_probe/panel_host.py --query "{\"command\":\"captu
 
 | 命令 | 参数 | 返回 |
 |---|---|---|
-| `getStatus` | 无 | `schemaVersion`、`pipeName`、`processId`、`csp{running, mainHwnd, processId}`、`virtualDisplay{attached, changing, error, monitors[{device, rect, dpi}]}`、`windows`、`stashed`、`remembered[{kinds, side}]` |
+| `getStatus` | 无 | `schemaVersion`、`pipeName`、`processId`、`csp{running, mainHwnd, processId}`、`virtualDisplay{attached, changing, error, monitors[{device, rect, dpi}]}`、`windows`、`stashed`、`remembered[{kinds, side}]`、`swatch`（显示中时为 `{rect, rgb}`，否则 null） |
 | `listWindows` | `stashedOnly`（可选，布尔） | `windows[]`：窗口对象 |
 | `captureWindow` | `hwnd` 或 `kind`；`format`：`png`（默认）或 `bgrx` | `window`、`format`、`width`、`height`、`rect`、`capturedAt`、`data` |
 | `stashWindow` | `hwnd` 或 `kind`；`side`：`left` / `right`（可选，不给时选离窗口较近的一侧） | `window`；需要接入或调大虚拟屏时，约 1 到 2 秒后才返回 |
 | `restoreWindow` | `hwnd` 或 `kind` | `window`；窗口没收纳、也不在虚拟屏上时报错。之后不再自动收纳它 |
+| `showSwatch` | `rgb`：3 个 0–255 的整数 | `rect`、`point`、`device`：色块在虚拟屏右上角的屏幕矩形（物理像素）和中心点；虚拟屏没接入时先接入（约 1 到 2 秒）。屏幕上读回的像素不是这个颜色时报错（HDR、颜色滤镜） |
+| `hideSwatch` | 无 | `hidden`：之前是否显示着。色块显示期间虚拟屏不会断开 |
 | `shutdown` | 无 | `closing: true`；随后取回全部面板（仍记着）、断开虚拟屏并退出。Memoline 退出时调用 |
 
 `captureWindow` 的返回字段说明：
@@ -118,6 +120,8 @@ py -3 recognizer/virtual_panel_probe/panel_host.py --query "{\"command\":\"captu
 - **`capturedAt`**：截图时间，Unix 秒。
 
 每次请求都在当时重新截图（`PrintWindow`），面板被遮住或在虚拟屏上都能截到。
+
+色块（`swatch.py`）给 CSP 的「获取屏幕颜色」（`applicationscreeneyecolorpicker`）吸色用：Memoline 显示目标颜色，把光标移到色块上按这个快捷键，再把光标移回去。色块窗口只创建一次、平时放在屏幕外，显示时只移动和改色，从不激活（新映射的 Tk 窗口会抢走 CSP 的前台）；它属于本进程，巡检不会把它移走。
 
 窗口对象的字段：
 
@@ -183,7 +187,7 @@ byte[] png = Convert.FromBase64String(response.RootElement.GetProperty("data").G
 py -3 -m unittest discover -s recognizer/virtual_panel_probe/tests
 ```
 
-单元测试共 54 项，覆盖：历史面板按撤销次数拉高、不超过虚拟屏、取回时恢复尺寸，重启后按记忆自动收纳、用户取回后不再自动收纳、按住按键或 CSP 有对话框时不动、认不出的面板不收纳，以及角落判定、排布、"放不放得下"、按面板选分辨率和缩放限制、取回位置、显示配置结构体与模式表压缩、命名管道的往返与错误处理（含 3 MB 响应）、接口命令和请求校验、按需接入/调大/空闲断开的流程，以及巡检时哪些窗口要挪、挪到哪里。
+单元测试共 55 项，覆盖：历史面板按撤销次数拉高、不超过虚拟屏、取回时恢复尺寸，重启后按记忆自动收纳、用户取回后不再自动收纳、按住按键或 CSP 有对话框时不动、认不出的面板不收纳，以及角落判定、排布、"放不放得下"、按面板选分辨率和缩放限制、取回位置、显示配置结构体与模式表压缩、命名管道的往返与错误处理（含 3 MB 响应）、接口命令和请求校验、按需接入/调大/空闲断开的流程，以及巡检时哪些窗口要挪（截图覆盖层不挪）、挪到哪里。
 
 2026-10-17 在本机做了端到端测试：一个假 CSP 进程配合真实驱动，28 项全部通过。覆盖内容如下：
 - **启动**：不接入虚拟屏。

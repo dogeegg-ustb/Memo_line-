@@ -20,10 +20,13 @@ internal static class FrozenEditPlan
             boundaryAppendId=session.LiveView.BoundaryAppendId,boundaryTicks=session.LiveView.BoundaryTicks,
             sources=session.Sources.Values.Select(s=>new{s.SessionId,s.Frequency,s.BoundaryAppendId,s.BoundaryTicks}).ToArray(),
             kind=plan.Request.Kind.ToString(),currentLayer=plan.Request.CurrentLayer,
-            selection=new {selection.Left,selection.Top,selection.Width,selection.Height,bitOrder="row-major-lsb/v1",bits=Convert.ToBase64String(bits)},
+            // Deflated: the canvas-sized bitset alone was 5.8 MB of base64 in every frozen plan, written, hashed and
+            // parsed again by each journal recovery; deflated it is a few kilobytes.
+            selection=new {selection.Left,selection.Top,selection.Width,selection.Height,bitOrder="row-major-lsb/v1",compression="deflate",bits=Convert.ToBase64String(Deflate(bits))},
             changes=plan.Request.Changes.OrderBy(c=>session.Index.Strokes.GetValueOrDefault(c.Key)?.SessionOrder??0).ThenBy(c=>c.Key.BeginAppendId).Select(c=>new
                 {key=c.Key,delete=c.Value.Delete,numbers=c.Value.NumberValues,brushName=c.Value.BrushName,
-                    replacementBrushState=c.Value.ReplacementBrushState.ValueKind==JsonValueKind.Undefined?(JsonElement?)null:c.Value.ReplacementBrushState}).ToArray(),
+                    replacementBrushState=c.Value.ReplacementBrushState.ValueKind==JsonValueKind.Undefined?(JsonElement?)null:c.Value.ReplacementBrushState,
+                    rgb=c.Value.Rgb}).ToArray(),
             layers=plan.Layers.Select(l=>new
             {
                 layer=l.Layer,l.SeedPacketId,
@@ -41,5 +44,12 @@ internal static class FrozenEditPlan
                     ?Convert.ToHexString(SHA256.HashData(current.Bytes)):null
             }).ToArray()
         });
+    }
+    private static byte[] Deflate(byte[] bytes)
+    {
+        using var output = new MemoryStream();
+        using (var deflate = new System.IO.Compression.DeflateStream(output, System.IO.Compression.CompressionLevel.Fastest, leaveOpen: true))
+            deflate.Write(bytes);
+        return output.ToArray();
     }
 }

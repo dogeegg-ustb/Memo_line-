@@ -3,8 +3,10 @@ using System.Text.Json;
 
 namespace BehaviorRecognizer.Capture;
 
+/// <param name="Background">Nobody waits for the result: the helper still captures at once, but analyzes one module at a
+/// time and not while the pen is down, so the OCR burst does not slow CSP while the user draws.</param>
 public sealed record RecorderStateRequest(string RequestId, string SessionId, string[] Modules, string? SaveId = null,
-    int[]? BrushPanelRoi = null)
+    int[]? BrushPanelRoi = null, bool Background = false)
 {
     public bool HasValidPanelSelection() => BrushPanelRoi is null ||
         Modules.Contains("brushState") && BrushPanelRoi is [var x, var y, >= 8 and <= 8192, >= 8 and <= 8192] &&

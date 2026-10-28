@@ -26,7 +26,7 @@ internal static class EditingHostContractChecks
         Check(DemoEditingHost.EditingBoundaryMatches(session,session),"An unchanged snapshot must retain its reviewed boundary.");
         var altered=pixels.Copy();altered.Bytes[0]=1;
         var after=session with {Index=index with {Layers=new Dictionary<LayerKey,LayerIndex>{[layer]=index.Layers[layer] with {Current=altered}}}};
-        Check(!DemoEditingHost.EditingBoundaryMatches(session,after),"Pixel changes during selection must require another review.");
+        Check(!DemoEditingHost.EditingBoundaryMatches(session,after),"Pixel changes during selection are reported as a changed boundary.");
         var selection=new PixelMask(2,1);selection.Set(1,0);
         var key=new EditableStrokeKey("s",7);var imageKey=new DirtyImageKey(layer,"p","i");
         var request=EditRequest.Event(layer,selection,new Dictionary<EditableStrokeKey,EventChange>{[key]=new(Delete:true)});
@@ -34,7 +34,12 @@ internal static class EditingHostContractChecks
         var plan=new ReconstructionPlan(index,request,[new(layer,[],"p",new HashSet<DirtyImageKey>{imageKey},
             new Dictionary<DirtyImageKey,TrustReason>{[imageKey]=segment.Reasons[0]},[segment])],[]);
         var frozen=FrozenEditPlan.Create(session,plan);
-        Check(frozen.GetProperty("selection").GetProperty("bits").GetString()=="Ag==","The journal must freeze the exact selected pixels.");
+        var frozenSelection=frozen.GetProperty("selection");
+        using var inflated=new MemoryStream();
+        using(var deflate=new System.IO.Compression.DeflateStream(new MemoryStream(Convert.FromBase64String(frozenSelection.GetProperty("bits").GetString()!)),
+            System.IO.Compression.CompressionMode.Decompress))deflate.CopyTo(inflated);
+        Check(frozenSelection.GetProperty("compression").GetString()=="deflate"&&inflated.ToArray().SequenceEqual(new byte[]{2}),
+            "The journal must freeze the exact selected pixels.");
         Check(frozen.GetProperty("layers")[0].GetProperty("segments")[0].GetProperty("reasons")[0].GetProperty("Rule").GetString()=="modifiedEvent",
             "The complete reviewed compose/replay segments and reasons must be frozen.");
         return count;

@@ -43,6 +43,24 @@ internal static class Stage12Checks
         seeded.RegisterBaseline(new(8, "Reproduction", "reproduction-stage12"), Png("reproduction"), 20);
         check(seeded.LayerStacks[8].After is { BaselineSource: "reproduction", SessionId: "stage12", Generation: 1 },
             "Reproduction baseline retains the active session and has a distinct source");
+        // The Memoline-operation packet: the replaced layer's last snapshot against the reproduction's baseline.
+        var replacedSnapshot = seeded.Latest(layer.Uuid!, "stage12", 1)!;
+        var reproductionSnapshot = seeded.Latest("reproduction-stage12", "stage12", 1)!;
+        var operationRequest = new CaptureRequest(1, 25, "Reproduction", new(0, 0, 0, 0), [], new(8, "Reproduction", "reproduction-stage12"),
+            TriggerKind: "memolineOperation") { BoundaryRequestId = "tx-stage12" };
+        var operation = seeded.RecordOperation(replacedSnapshot, reproductionSnapshot, operationRequest, 1000,
+            new { transactionId = "tx-stage12", editKind = "eventEditing" }, CancellationToken.None);
+        using (var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(operation.PacketDirectory, "manifest.json"))))
+        {
+            var root2 = document.RootElement;
+            check(operation.DiffImages == 1 && !operation.Baseline && J.Text(J.Get(root2, "capture"), "triggerKind") == "memolineOperation" &&
+                  J.Text(J.Get(root2, "after"), "id") == replacedSnapshot.Id && J.Text(J.Get(root2, "now"), "id") == reproductionSnapshot.Id &&
+                  J.Text(J.Get(root2, "memolineOperation"), "transactionId") == "tx-stage12" && J.Tick(J.Get(root2, "recognizer"), "toTicks", -1) == 25 &&
+                  seeded.LayerStacks[8].After?.Id == reproductionSnapshot.Id && seeded.VerifyChain(layer.Uuid!).Valid,
+                "An operation packet goes from the replaced layer's last pixels to its reproduction, leaving both chains as they were");
+        }
+        check(seeded.Latest("missing", "stage12", 1) is null && seeded.Latest(layer.Uuid!, "other-session", 1) is null,
+            "Only this session's snapshots of that UUID are candidates for an operation packet");
         var reproduction = seeded.Advance(new(Png("reproduction-next", true),
             JsonSerializer.Serialize(new { width = 32, height = 32, fullCanvas = true, layerId = 8, layerUuid = "reproduction-stage12" }),
             "Reproduction", 30, result.ControlResponse), request with { Ticks = 30, LayerName = "Reproduction", Layer = new(8, "Reproduction", "reproduction-stage12") },
@@ -194,7 +212,8 @@ internal static class Stage12Checks
         Clip(12, 12, "s12.clip", PaperRow, Raster(14, "图层 2", "uuid-old"), Raster(19, "图层 1", "uuid-new"));
         check(appearances.Count == 1, "A layer is seeded from the first save that lists it only");
         Clip(15, 15, null, PaperRow, Raster(20, "图层 3", "uuid-unsaved"));
-        check(appearances.Count == 1, "A save whose file the recorder did not keep cannot be a baseline");
+        check(appearances is [_, { TriggerTicks: 13, SnapshotPath: null, Layers: [{ Uuid: "uuid-unsaved" }] }],
+            "A new layer whose save the recorder did not keep starts empty, right after the previous structure");
         using var coordinator = new CaptureCoordinator();
         using var first = await coordinator.EnterAsync(CancellationToken.None);
         using var cancelled = new CancellationTokenSource(); cancelled.Cancel();

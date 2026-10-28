@@ -37,7 +37,12 @@ internal static class EditingProfiler
     private sealed class Scope(string name) : IDisposable
     {
         private readonly Stopwatch _watch = Stopwatch.StartNew();
-        public void Dispose() => Console.Error.WriteLine($"[profile] {name}: {_watch.Elapsed.TotalMilliseconds:0} ms");
+        private readonly long _before = Process.GetCurrentProcess().PrivateMemorySize64;
+        public void Dispose()
+        {
+            long after = Process.GetCurrentProcess().PrivateMemorySize64;
+            Console.Error.WriteLine($"[profile] {name}: {_watch.Elapsed.TotalMilliseconds:0} ms, private {_before >> 20}→{after >> 20} MB, managed {GC.GetTotalMemory(false) >> 20} MB");
+        }
     }
 
     private sealed class NoScope : IDisposable

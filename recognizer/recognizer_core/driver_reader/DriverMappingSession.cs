@@ -61,6 +61,7 @@ public sealed class DriverMappingSession
 {
     private readonly DriverProfile? _profile;
     private readonly AffineTransform2D? _physicalToScreen;
+    private readonly IReadOnlyList<DisplayInfo> _displays;
     public DriverConfigurationSnapshot Snapshot { get; }
 
     private DriverMappingSession(DriverProfile? profile, DriverConfigurationSnapshot snapshot)
@@ -68,6 +69,31 @@ public sealed class DriverMappingSession
         _profile = profile;
         Snapshot = snapshot;
         _physicalToScreen = snapshot.PhysicalToScreen;
+        _displays = snapshot.Displays;
+    }
+
+    /// <summary>Where a raw tablet position would land on each display, for a profile whose screen area is a
+    /// ratio of "its" display (ScreenNum conventions differ by vendor, so the display is not known).</summary>
+    public IEnumerable<(int Index, double X, double Y)> CandidateScreens(double rawX, double rawY)
+    {
+        if (Snapshot.CoordinateMappingStatus != "monitorSelectionRequired" || _profile?.CoordinateMapping is not { } mapping
+            || !double.IsFinite(rawX) || !double.IsFinite(rawY)) yield break;
+        double px, py;
+        if (mapping.PhysicalUnit.Equals("Counts", StringComparison.OrdinalIgnoreCase)) { px = rawX; py = rawY; }
+        else if (mapping.PhysicalUnit.Equals("mm", StringComparison.OrdinalIgnoreCase)
+            && Snapshot.Device is { MaxX: > 0, MaxY: > 0, WidthMm: > 0, HeightMm: > 0 } device)
+        { px = rawX * device.WidthMm / device.MaxX; py = rawY * device.HeightMm / device.MaxY; }
+        else yield break;
+        var area = mapping.PhysicalArea;
+        px = Math.Clamp(px, area.Left, area.Right); py = Math.Clamp(py, area.Top, area.Bottom);
+        foreach (var display in _displays)
+        {
+            var (transform, _, status) = CreateTransform(mapping,
+                new DriverInitializationOptions { Displays = _displays, ScreenIndexOverride = display.Index });
+            if (status != "ready" || transform is null) continue;
+            var (x, y) = transform.Apply(px, py);
+            yield return (display.Index, x, y);
+        }
     }
 
     public static DriverMappingSession Initialize(DriverInitializationOptions options)

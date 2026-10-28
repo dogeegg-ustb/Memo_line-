@@ -76,12 +76,19 @@ internal sealed class LivePacketFeed : IPacketStateFeed, IAsyncDisposable
         int[]? roi;lock(_sync)roi=modules.Contains("brushState")?_editingBrushPanelRoi?.ToArray():null;
         await RequestCoreAsync(modules,token,saveId,roi);
     }
+    /// <summary>A request nothing waits on: captured at once, analyzed by the recorder one module at a time and not while
+    /// the pen is down (a parallel OCR burst slows CSP's drawing even from another process).</summary>
+    public async Task RequestInBackgroundAsync(string[] modules, CancellationToken token)
+    {
+        int[]? roi;lock(_sync)roi=modules.Contains("brushState")?_editingBrushPanelRoi?.ToArray():null;
+        await RequestCoreAsync(modules,token,null,roi,background:true);
+    }
     internal async Task RequestBrushPanelAsync(System.Drawing.Rectangle region,CancellationToken token)
     {
         int[] roi=[region.X,region.Y,region.Width,region.Height];
         await RequestCoreAsync(["brushState"],token,null,roi);
     }
-    private async Task RequestCoreAsync(string[] modules,CancellationToken token,string? saveId,int[]? brushPanelRoi)
+    private async Task RequestCoreAsync(string[] modules,CancellationToken token,string? saveId,int[]? brushPanelRoi,bool background=false)
     {
         await _requestGate.WaitAsync(token);
         try
@@ -103,7 +110,8 @@ internal sealed class LivePacketFeed : IPacketStateFeed, IAsyncDisposable
             }
             var control=_controlOverride ?? new PacketRecorderControl(pid);
             string requestId="packet-state-"+Guid.NewGuid().ToString("N");
-            var results=brushPanelRoi is null?await control.RequestAsync(session,requestId,modules,saveId,token):
+            var results=background?await control.RequestBackgroundAsync(session,requestId,modules,brushPanelRoi,token):
+                brushPanelRoi is null?await control.RequestAsync(session,requestId,modules,saveId,token):
                 await control.RequestBrushPanelAsync(session,requestId,modules,saveId,brushPanelRoi,token);
             lock (_sync)
             {

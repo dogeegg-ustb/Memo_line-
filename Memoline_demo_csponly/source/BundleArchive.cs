@@ -431,7 +431,18 @@ public static partial class BundleArchive
                 {
                     bool end = row.TryGetProperty("boundaryKind", out var boundaryKind) && boundaryKind.GetString() == "recordingEnd";
                     bool editBoundary = row.TryGetProperty("boundaryKind", out var editKind)
-                        && editKind.GetString() is "editBoundary" or "recordingEndLayer";
+                        && editKind.GetString() is "editBoundary" or "recordingEndLayer" or "memolineOperation";
+                    // A Memoline-operation packet is sealed at the native record of the edit it shows; it owns no input.
+                    if (editKind.ValueKind == JsonValueKind.String && editKind.GetString() == "memolineOperation")
+                    {
+                        ulong operationRecord = Unsigned(row, "observationAppendId");
+                        if (to != Integer(row, "triggerTicks") || operationRecord == 0
+                            || !mechanical.Records.TryGetValue(operationRecord, out var operationMarker)
+                            || operationMarker.Kind != "editingActionCompleted" || operationMarker.Ticks != to
+                            || Array(row, "eventPointers").EnumerateArray().Any(pointer =>
+                                !pointer.TryGetProperty("context", out var context) || context.ValueKind != JsonValueKind.True))
+                            throw new InvalidDataException("A Memoline-operation packet is not a context packet at its native editing record.");
+                    }
                     if (editKind.ValueKind == JsonValueKind.String && editKind.GetString() == "recordingEndLayer")
                     {
                         long layerTrigger = Integer(row, "triggerTicks");

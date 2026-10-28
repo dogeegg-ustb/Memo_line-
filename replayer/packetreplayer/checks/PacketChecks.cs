@@ -20,7 +20,7 @@ internal static partial class PacketChecks
     internal static async Task RunAsync(string? sample)
     {
         NumericRegions();
-        await RgbRestoreAsync();
+        await ColorPickAsync();
         CausalHistory();
         SettledViews();
         PacketBoundaries();

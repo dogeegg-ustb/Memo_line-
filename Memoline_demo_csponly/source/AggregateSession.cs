@@ -30,6 +30,8 @@ internal sealed class AggregateSession : IDisposable
         public string? Failure { get; set; }
         public string? EditingId { get; init; }
         public bool RecordingEndLayer { get; init; }
+        /// <summary>A Memoline-operation packet: what an executed edit changed on one layer (sealed at its native record).</summary>
+        public bool MemolineOperation { get; init; }
     }
     private readonly object _sync = new();
     private readonly StreamWriter _output;
@@ -140,6 +142,25 @@ internal sealed class AggregateSession : IDisposable
         }
     }
 
+    /// <summary>
+    /// The native editingActionCompleted frame of an executed edit, as the recorder's control reply gives it (the frame
+    /// is not published on the realtime pipe). Its operation packets are side packets sealed at this frame, like the
+    /// edit boundary's: they own no window of their own.
+    /// </summary>
+    internal void ObserveMemolineOperation(string transactionId, ulong appendId, long ticks)
+    {
+        lock (_sync)
+        {
+            Active();
+            if (string.IsNullOrWhiteSpace(transactionId) || appendId == 0 || ticks < 0)
+                throw new InvalidDataException("记艺线操作记录缺少事务身份或原生位置。");
+            _editingObservations[OperationKey(transactionId)] = new(1, SessionId, 0, "system", "editingActionCompleted", false,
+                appendId, 0, ticks, ticks, ticks, null, null, null,
+                JsonSerializer.SerializeToElement(new { transactionId }));
+        }
+    }
+    private static string OperationKey(string transactionId) => "memoline-op:" + transactionId;
+
     internal void ObserveEditingBoundary(RecorderRealtimeEvent message)
     {
         lock (_sync)
@@ -198,12 +219,15 @@ internal sealed class AggregateSession : IDisposable
                 var assets = paths.Select(relative => (Relative: relative,
                     Path: CheckedAssetPath(root, relative, requirePng: true), Id: packetId + "/" + relative.Replace('\\', '/'))).ToArray();
                 long diffFromTicks = J.Tick(recognizer, "fromTicks", -1);
-                var matrices = labels.Select(label => Matrix(label, inputs, states, boundary, diffFromTicks)).ToArray();
+                // Each label reads only its own operation's inputs, in their original order.
+                var byOperation = inputs.GroupBy(input => J.Tick(input, "operationId", -1)).ToDictionary(g => g.Key, g => g.ToArray());
+                var matrices = labels.Select(label => Matrix(label, byOperation, states, boundary, diffFromTicks)).ToArray();
                 var imageAssets = assets.Select(a => new { path = a.Relative, assetId = AppendAsset(a.Path, a.Id) }).ToArray();
                 string? fullCanvasAssetId = string.IsNullOrEmpty(update.ImagePath) ? null : AppendAsset(update.ImagePath, packetId + "/full-canvas.png");
                 Write(new { kind = "packet", SessionId, id = packetId, fromTicks = boundary.FromTicks,
                     toTicks = boundary.ToTicks, triggerTicks = boundary.TriggerTicks,
-                    boundaryKind = boundary.RecordingEndLayer ? "recordingEndLayer" : boundary.EditingId is not null ? "editBoundary" : boundary.RecordingEnd ? "recordingEnd" : "canvasViewportChanged",
+                    boundaryKind = boundary.RecordingEndLayer ? "recordingEndLayer" : boundary.MemolineOperation ? "memolineOperation"
+                        : boundary.EditingId is not null ? "editBoundary" : boundary.RecordingEnd ? "recordingEnd" : "canvasViewportChanged",
                     observationAppendId = boundary.Observation.Message.AppendId,
                     status = update.Baseline ? "baseline" : "captured", reason = update.Baseline ? "firstLayerSnapshot" : (string?)null,
                     eventPointers = WindowPointers(boundary), penContacts = WindowPenContacts(boundary), dirtyMatrices = matrices,
@@ -299,6 +323,12 @@ internal sealed class AggregateSession : IDisposable
         }
     }
 
+    /// <summary>The Windows key alone or in a chord (Win+Shift+S for a screenshot, Win+D, …): Windows handles these
+    /// itself and never delivers them to CSP as a keystroke.</summary>
+    internal static bool SystemChord(JsonElement data)
+        => J.Text(data, "key") is "Win" || J.Number(data, "vk") is 91.0 or 92.0
+           || J.Get(data, "modifiers") is { ValueKind: JsonValueKind.Array } modifiers && modifiers.EnumerateArray().Any(m => m.ValueKind == JsonValueKind.String && m.GetString() == "Win");
+
     private void ValidateFinalCapture(bool required)
     {
         if (!required) return; // Explicit diagnostic archives remain readable.
@@ -331,14 +361,14 @@ internal sealed class AggregateSession : IDisposable
         _packets++;
     }
 
-    private object Matrix(JsonElement label, JsonElement[] inputs, JsonElement[] states, Boundary boundary, long diffFromTicks)
+    private object Matrix(JsonElement label, IReadOnlyDictionary<long, JsonElement[]> inputsByOperation, JsonElement[] states, Boundary boundary, long diffFromTicks)
     {
         long from = J.Tick(label, "fromTicks", boundary.FromTicks), to = J.Tick(label, "toTicks", boundary.ToTicks);
         long? operation = J.Get(label, "operationId") is { ValueKind: JsonValueKind.Number } op && op.TryGetInt64(out long value) ? value : null;
         bool unresolved = operation is null || operation <= 0 || J.Text(label, "source") == "low-resolution-fallback";
         var pointers = new Dictionary<ulong, object>();
         if (!unresolved)
-            foreach (var input in inputs)
+            foreach (var input in inputsByOperation.GetValueOrDefault(operation!.Value) ?? [])
             {
                 long ticks = J.Tick(input, "ticks", -1);
                 bool context = J.Get(input, "continuity").ValueKind == JsonValueKind.True;
@@ -401,6 +431,15 @@ internal sealed class AggregateSession : IDisposable
             _recordingEndLayers.Add(finalLayer.Id, created);
             return created;
         }
+        if (request.TriggerKind == "memolineOperation" && request.BoundaryRequestId is { } transactionId && request.Layer is { } reproduction)
+        {
+            string key = OperationKey(transactionId) + "/" + reproduction.Id;
+            if (_editingBoundaries.TryGetValue(key, out var existing)) return existing;
+            if (!_editingObservations.TryGetValue(OperationKey(transactionId), out var observed) || observed.Ticks != request.TriggerTicks)
+                throw new InvalidDataException("记艺线操作包没有对应的原生编辑记录。");
+            var created = new Boundary(new(observed, observed.Ticks, 0, false, true), 0) { EditingId = key, MemolineOperation = true };
+            _editingBoundaries.Add(key, created); return created;
+        }
         if (request.TriggerKind == "editBoundary" && request.BoundaryRequestId is { } editId && request.Layer is { } layer)
         {
             string key = editId + "/" + layer.Id;
@@ -414,7 +453,8 @@ internal sealed class AggregateSession : IDisposable
             : _boundaries.GetValueOrDefault(request.TriggerTicks)
             ?? throw new InvalidDataException("保存任务没有已确认的画布变化边界");
     }
-    private string PacketId(Boundary boundary) => boundary.EditingId is not null ? "edit-" + boundary.EditingId.Replace('/', '-') : (boundary.RecordingEnd ? "recording-end-" : "viewport-")
+    private string PacketId(Boundary boundary) => boundary.MemolineOperation ? boundary.EditingId!.Replace(':', '-').Replace('/', '-')
+        : boundary.EditingId is not null ? "edit-" + boundary.EditingId.Replace('/', '-') : (boundary.RecordingEnd ? "recording-end-" : "viewport-")
         + boundary.TriggerTicks.ToString("D20", System.Globalization.CultureInfo.InvariantCulture);
 
     private void WaitForObservation(Boundary boundary)
@@ -494,7 +534,7 @@ internal sealed class AggregateSession : IDisposable
                 if (physical && kind is "mouseDown" or "mouseDrag")
                     canvas |= _canvasMouseOperations.Contains(contact) || _canvasMouseContact;
                 if (physical && kind is "mouseUp" or "mouseInterrupted") _canvasMouseContact = false;
-                bool mayMutate = canvas || J.Get(data, "inCsp").ValueKind != JsonValueKind.False
+                bool mayMutate = canvas || J.Get(data, "inCsp").ValueKind != JsonValueKind.False && !SystemChord(data)
                     && (hardware && kind is "keyInput" or "keyDown" or "mouseDown" or "penBegin"
                         || kind == "keyboardStateChanged" && J.Text(data, "action") is "keyDown" or "down");
                 var pointer = new NativePointer(appendId, eventId, operation, ticks, hardware, kind, location, canvas, mayMutate);

@@ -8,4 +8,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>DirtyMatrixPaster</AssemblyName>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../Organizer/canvas layer watcher/source/FastPng.cs" Link="FastPng.cs" />
+  </ItemGroup>
 </Project>

@@ -239,39 +239,41 @@ internal static class ReconstructionChecks
             Check(r.Status==ReconstructionStatus.Executed&&r.Issues.Count==0,"precise undo retains actual final discrete capture");
             Bytes(r,s.Layer,10,0,0,0,0,0,0,0);
         }
-        // Precise undo is a local rewind: only the selected strokes' pixels go back to the snapshot before the
-        // earliest selected packet; every later dirty matrix is composited elsewhere; the paste comes first and
-        // only the selection is replayed afterwards (by the transaction), nothing else.
+        // Precise undo works on whole dirty images: an image the selection inked goes back to the snapshot before the
+        // earliest such packet and is replayed by all its strokes, the others before the selection; every other dirty
+        // image is pasted as recorded. The paste comes first; the replay is the transaction's.
+        EditRequest Undo(Scene s,PixelMask region,EditableStrokeKey[] selected,params EditableStrokeKey[] closure)
+            =>new(EditKind.PreciseUndo,s.Layer,region,selected.ToDictionary(k=>k,_=>new EventChange(Delete:true))){Closure=closure.ToHashSet()};
         {
             var s=new Scene();var a=s.Stroke(10,10,Mask(0));var b=s.Stroke(20,30,Mask(1));
             s.Group(s.Image("ab",Mask(0,1),Pixels(10,30,0,0,0,0,0,0),a,b));
-            var precise=s.Plan(a);precise=precise with{Request=precise.Request with{Kind=EditKind.PreciseUndo}};
+            var precise=ReconstructionPlanner.Build(s.Index(),Undo(s,Mask(0),[a],b));
             var f=new Fake(s);var r=await ReconstructionEngine.RunAsync(precise,f,CancellationToken.None);
-            Check(r.Status==ReconstructionStatus.Executed&&f.Calls.SequenceEqual(new[]{"install"})&&f.Deferred.Count==0,
-                "precise undo pastes without any replay before it and replays no unselected contact");
-            Bytes(r,s.Layer,0,30,0,0,0,0,0,0);
+            Check(r.Status==ReconstructionStatus.Executed&&f.Calls.SequenceEqual(new[]{"install"})&&f.Deferred.SequenceEqual(new[]{b}),
+                "precise undo pastes without any replay before it, then hands over the rest of the selected image");
+            Bytes(r,s.Layer,0,0,0,0,0,0,0,0);
+            var stale=ReconstructionPlanner.Build(s.Index(),Undo(s,Mask(0),[a]));
+            Check(!stale.IsValid,"a request without the replayed image's other strokes is refused");
         }
         {
-            // c precedes the snapshot; d and e are composited as recorded, e over where b wrote included.
+            // c precedes the snapshot; d is pasted as recorded; e, drawn over the replayed image, is replayed too.
             var s=new Scene();var c=s.Stroke(5,70,Mask(5));s.Group(s.Image("c",Mask(5),Pixels(0,0,0,0,0,70,0,0),c));
             var a=s.Stroke(10,10,Mask(0));var b=s.Stroke(20,20,Mask(1));
             s.Group(s.Image("ab",Mask(0,1),Pixels(10,20,0,0,0,70,0,0),a,b));
             var d=s.Stroke(30,40,Mask(3));s.Group(s.Image("d",Mask(3),Pixels(10,20,0,40,0,70,0,0),d));
             var e=s.Stroke(40,60,Mask(1));s.Group(s.Image("e",Mask(1),Pixels(10,60,0,40,0,70,0,0),e));
-            var precise=s.Plan(a);precise=precise with{Request=precise.Request with{Kind=EditKind.PreciseUndo}};
+            var precise=ReconstructionPlanner.Build(s.Index(),Undo(s,Mask(0),[a],b,e));
             var f=new Fake(s);var r=await ReconstructionEngine.RunAsync(precise,f,CancellationToken.None);
-            Check(r.Status==ReconstructionStatus.Executed&&f.Deferred.Count==0,"only the selection is replayed");
-            Bytes(r,s.Layer,0,60,0,40,0,70,0,0);
-            // Selecting b brings e (drawn on b) along: pixel 1 stays rewound through e's packet too.
-            var both=ReconstructionPlanner.Build(s.Index(),new EditRequest(EditKind.PreciseUndo,s.Layer,Mask(1),
-                new Dictionary<EditableStrokeKey,EventChange>{{b,new(Delete:true)},{e,new(Delete:true)}}));
-            Check(both.IsValid&&both.Layers.Single().SeedPacketId=="p1","seed is the earliest selected packet");
+            Check(r.Status==ReconstructionStatus.Executed&&f.Deferred.SequenceEqual(new[]{b,e}),"the replayed images' other strokes are replayed, in order");
+            Bytes(r,s.Layer,0,0,0,40,0,70,0,0);
+            var both=ReconstructionPlanner.Build(s.Index(),Undo(s,Mask(1),[b,e],a));
+            Check(both.IsValid&&both.Layers.Single().SeedPacketId=="p1","seed is the earliest replayed packet");
             r=await ReconstructionEngine.RunAsync(both,new Fake(s),CancellationToken.None);
-            Bytes(r,s.Layer,10,0,0,40,0,70,0,0);
+            Bytes(r,s.Layer,0,0,0,40,0,70,0,0);
         }
         {
-            // u is unselected and drawn between two selected strokes. Its packet precedes a's, so where a later
-            // drew over it, the composite keeps u's ink: a pixel rewinds only from the selected stroke that inked it.
+            // u is unselected and drawn between two selected strokes. Its image precedes a's, so it is what lies beneath
+            // a's image: pasted as recorded, not replayed.
             var s=new Scene();var z=s.Stroke(5,80,Mask(7));s.Group(s.Image("z",Mask(7),Pixels(0,0,0,0,0,0,0,80),z));
             var u=s.Stroke(10,70,Mask(1));s.Group(s.Image("u",Mask(1),Pixels(0,70,0,0,0,0,0,80),u));
             var a=s.Stroke(20,10,Mask(0,1));s.Group(s.Image("a",Mask(0,1),Pixels(10,10,0,0,0,0,0,80),a));

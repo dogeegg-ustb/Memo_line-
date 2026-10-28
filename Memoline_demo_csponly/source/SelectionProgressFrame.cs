@@ -6,8 +6,9 @@ namespace MemolineDemo;
 
 /// <summary>
 /// The fixed selection box while an edit runs, with an orange glow around it that fills with progress.
-/// Per-pixel alpha, click-through, never activated and absent from screen captures: CSP keeps every
-/// injected pointer event and the Recognizer never sees it in a panel screenshot.
+/// Per-pixel alpha, click-through and never activated, so CSP keeps every injected pointer event. It stays
+/// in screen captures so screen recorders show it: the Recognizer reads CSP's own window (window DC or
+/// PrintWindow), which never contains this frame.
 /// </summary>
 internal sealed class SelectionProgressFrame : Form
 {
@@ -55,7 +56,6 @@ internal sealed class SelectionProgressFrame : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        CspSnapshotNative.ExcludeFromCapture(this, true);
         Render(); _timer.Start();
     }
 

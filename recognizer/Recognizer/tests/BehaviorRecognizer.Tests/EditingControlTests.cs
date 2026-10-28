@@ -327,11 +327,17 @@ public sealed partial class InputControlTests
         capture.PostKey(65,30,false,true,injected:true);
         capture.PostKey(65,30,false,false,injected:true);
         await capture.EndEditTransactionAsync("semantic","executed",session.Guard);
-        var first=await capture.RecordEditingActionAsync("semantic",kind,changes.RootElement,default);
-        var duplicate=await capture.RecordEditingActionAsync("semantic",kind,changes.RootElement,default);
+        using var replayed=JsonDocument.Parse("[{\"sessionId\":\"s\",\"beginAppendId\":1}]");
+        using var malformed=JsonDocument.Parse("[{\"sessionId\":\"s\",\"beginAppendId\":0}]");
+        await Assert.ThrowsAsync<ArgumentException>(()=>capture.RecordEditingActionAsync("semantic",kind,changes.RootElement,default,default,malformed.RootElement));
+        var first=await capture.RecordEditingActionAsync("semantic",kind,changes.RootElement,default,default,replayed.RootElement);
+        var duplicate=await capture.RecordEditingActionAsync("semantic",kind,changes.RootElement,default,default,replayed.RootElement);
+        await Assert.ThrowsAsync<InvalidOperationException>(()=>capture.RecordEditingActionAsync("semantic",kind,changes.RootElement,default));
         Assert.Equal(first.AppendId,duplicate.AppendId);
         Assert.Single(frames,f=>f.Kind=="editingActionCompleted");
         Assert.Equal(kind,first.Data.GetProperty("editKind").GetString());
+        // The contacts Memoline drew again are kept with the record: they make its Memoline-operation packet.
+        Assert.Equal(1UL,first.Data.GetProperty("replayed")[0].GetProperty("beginAppendId").GetUInt64());
         Assert.DoesNotContain(frames,f=>f.Path=="hardware");
         capture.PostKey(0x11,29,false,true);
         capture.PostKey(90,44,false,true);

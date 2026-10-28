@@ -101,17 +101,20 @@ internal static class OfflineEditProbe
         }
         string project = Path.GetFullPath(args[1]), work = Path.GetFullPath(args[2]);
         string? layerPrefix = Option(args, "--layer"), rect = Option(args, "--rect");
+        if (args.Contains("--trace")) EditIndexBuilder.Trace = text => Console.WriteLine("  [索引] " + text);
         var clock = Stopwatch.StartNew();
         void Log(string text) => Console.WriteLine(
             $"[{clock.Elapsed.TotalSeconds,7:0.0}s {Process.GetCurrentProcess().PrivateMemorySize64 >> 20,5} MB 堆 {GC.GetTotalMemory(Environment.GetEnvironmentVariable("MEMOLINE_PROBE_LIVE") == "1") >> 20,5} MB] {text}");
 
         Log("读取工程：" + project);
         // --use-cache：与 Alt+M 相同，读写工程旁的 .memoline.cache（忽略工作目录）。
-        var sessions = args.Contains("--use-cache") ? ProjectSessionReader.ReadProjectCached(project) : ProjectSessionReader.ReadProject(project, work);
+        // A project's first recording has no sealed file yet: with --live it is the only session.
+        var sessions = !File.Exists(project) && Option(args, "--live") is not null ? []
+            : args.Contains("--use-cache") ? ProjectSessionReader.ReadProjectCached(project) : ProjectSessionReader.ReadProject(project, work);
         Log($"会话数 {sessions.Count}：" + string.Join("，", sessions.Select(s =>
             $"{s.SessionId[..8]}（帧 {s.Frames.Count}，包 {s.Packets.Count}，笔画 {s.Replay.Strokes.Count}）")));
-        if (sessions.Count == 0) throw new InvalidDataException("工程中没有会话。");
-        var current = sessions[^1];
+        if (sessions.Count == 0 && Option(args, "--live") is null) throw new InvalidDataException("工程中没有会话。");
+        var current = sessions.Count > 0 ? sessions[^1] : null!;
         var prior = sessions.Take(sessions.Count - 1).ToArray();
         // --live 机械流.memoline.part layer-diffs目录：与 Alt+M 相同，工程全部会话作为历史，接上正在录制的会话。
         if (Option(args, "--live") is { } live)
@@ -119,21 +122,32 @@ internal static class OfflineEditProbe
             int at = Array.IndexOf(args, "--live");
             // --boundary appendId：只读到该编辑边界为止，与当时 Alt+M 看到的一样。
             current = LiveSessionReader.Read(live, args[at + 2], Option(args, "--boundary") is { } boundary ? ulong.Parse(boundary) : 0);
+            // As DemoEditingHost: the structure of the boundary's own save, read right after the boundary.
+            var saved = BehaviorRecognizer.Storage.Memoline.MemolineReader.Read(Path.GetFullPath(live))
+                .Where(f => PacketReplay.J.U64(f, "appendId") > current.BoundaryAppendId && PacketReplay.J.Text(f, "kind") == "coreStateUpdated")
+                .Select(f => PacketReplay.J.Get(f, "data"))
+                .FirstOrDefault(d => PacketReplay.J.Text(d, "module") == "clipState" &&
+                    PacketReplay.J.Text(PacketReplay.J.Get(d, "evidence"), "saveId")?.StartsWith("boundary-", StringComparison.Ordinal) == true);
+            if (saved.ValueKind == System.Text.Json.JsonValueKind.Object)
+                current = current with { BoundaryLayers = LayerLineage.Layers(PacketReplay.J.Get(saved, "state")) };
             prior = sessions.ToArray();
             Log($"实时会话 {current.SessionId[..8]}：帧 {current.Frames.Count}，包 {current.Packets.Count}，笔画 {current.Replay.Strokes.Count}");
         }
         // History is indexed as the recorder does when recording starts.
-        var index = prior.Length == 0 && !ProjectEditIndex.HasReplacements(current) ? EditIndexBuilder.Build(current)
+        var index = prior.Length == 0 && !LayerLineage.Joins(current) ? EditIndexBuilder.Build(current)
             : ProjectEditIndex.Build(prior, current, ProjectEditIndex.BuildHistory(prior));
         EditingMemory.Park(index); EditingMemory.Compact();
         Log($"索引：图层 {index.Layers.Count}，合格/全部笔画 {index.Strokes.Values.Count(s => s.Eligible)}/{index.Strokes.Count}，图片 {index.Images.Count}，问题 {index.Issues.Count}");
         foreach (var issue in index.Issues.Take(20)) Log($"  索引问题 {issue.Code}：{issue.Message}");
+        Log($"  当前会话捕获：{string.Join("、", current.Packets.GroupBy(p => p.Layer.Uuid).Select(g => $"{g.Key[..8]}×{g.Count()}({string.Join("/", g.Select(p => p.BaselineSource ?? "diff").Distinct())})"))}；" +
+            $"边界时 CSP 图层：{string.Join("、", LayerLineage.AliveAt(current).Select(u => u[..Math.Min(8, u.Length)]))}");
         foreach (var reason in index.Strokes.Values.Where(s => !s.Eligible).GroupBy(s => s.IneligibleReason ?? "?").Take(10))
             Log($"  不合格笔画 ×{reason.Count()}：{reason.Key}");
         foreach (var layer in index.Layers.Values)
             Log($"  图层 {layer.Layer.Uuid} 会话 {layer.Layer.SessionId[..8]}：包 {layer.Packets.Count}，图片 {layer.Packets.Sum(p => p.Images.Count)}，" +
                 $"笔画 {layer.Strokes.Count}（因果 {layer.Strokes.Count(s => s.IsCausal)}），链 {(layer.ChainValid ? "有效" : "无效")}，" +
-                $"当前捕获 {(layer.Current is null ? "无" : layer.Current.Width + "×" + layer.Current.Height)}");
+                $"当前捕获 {(layer.Current is null ? "无" : layer.Current.Width + "×" + layer.Current.Height)}{(layer.Deleted ? "，已被删除" : "")}" +
+                string.Concat(layer.Issues.Take(6).Select(i => $"\n      {i.Code}：{i.Message}")));
 
         foreach (var stroke in current.Replay.Strokes)
             Log($"  实时笔画 op {stroke.OperationId}：样本 {stroke.Samples.Count}，" +
@@ -196,8 +210,7 @@ internal static class OfflineEditProbe
         Log($"精确撤销选择：{undo.CountDisplay} 笔（候选 {undo.CandidateCount}，涉及图片 {undo.Images.Count}），问题 {undo.Issues.Count}");
         foreach (var issue in undo.Issues) Log($"  {issue.Code}：{issue.Message}");
         if (undo.IsValid)
-            ok &= Execute("精确撤销", index, new EditRequest(EditKind.PreciseUndo, target.Layer, selection,
-                undo.Selected.ToDictionary(s => s.Key, _ => new EventChange(Delete: true))), Log);
+            ok &= Execute("精确撤销", index, undo.Request(selection), Log);
         else ok = false;
 
         // 2. 事件编辑：在含多笔的最早图片中删除一笔；再在同一图片中修改另一笔的笔刷尺寸
@@ -223,7 +236,13 @@ internal static class OfflineEditProbe
         log($"== {name}：修改 {request.Changes.Count} 笔 ==");
         var plan = ReconstructionPlanner.Build(index, request);
         log($"计划：{(plan.IsValid ? "有效" : "无效")}，问题 {plan.Issues.Count}");
-        foreach (var issue in plan.Issues.Take(20)) log($"  {issue.Code}：{issue.Message}");
+        foreach (var issue in plan.Issues.Take(20))
+        {
+            log($"  {issue.Code}：{issue.Message}");
+            if (issue.Stroke is { } key && index.Strokes.TryGetValue(key, out var bad))
+                log($"    笔画 {key.SessionId[..8]}/{key.BeginAppendId} 事件 {bad.BeginEventId}：图层 {bad.Layer.Uuid[..8]}（来源 {bad.SourceLayer?.Uuid[..8]}），" +
+                    $"合格 {bad.Eligible}，已撤销 {bad.IsUndone}，图片 {bad.Images.Count}（{string.Join("、", bad.Images.Select(i => i.Layer.Uuid[..8] + "/" + i.PacketId[^20..] + (index.Images.ContainsKey(i) ? "" : "×")))}）{bad.IneligibleReason}");
+        }
         foreach (var layer in plan.Layers)
         {
             log($"  图层 {layer.Layer.Uuid}：种子包 {layer.SeedPacketId}，组 {layer.Groups.Count}，不可信图片 {layer.Untrusted.Count}");
@@ -294,10 +313,10 @@ internal static class OfflineEditProbe
         {
             int undoCount = request.Kind == EditKind.PreciseUndo ? request.Changes.Count : 0;
             log($"    安装复现层 {layer.Uuid[..8]}" + (undoCount + finalReplay.Count > 0
-                ? $"，随后离散重放 {undoCount} 笔撤销笔画 + {finalReplay.Count} 笔推迟笔画" : ""));
+                ? $"，随后离散重放 {finalReplay.Count} 笔闭包笔画、再 {undoCount} 笔撤销笔画" : ""));
             if (undoCount + finalReplay.Count == 0) return Task.FromResult(expected);
             // Same order as the CSP transaction: reverted contacts first, the undone strokes last.
-            var undone = request.Changes.Keys.Where(_ => undoCount > 0).Select(k => new ReplayEvent(index.Strokes[k], null)).ToArray();
+            var undone = request.Changes.Keys.Where(_ => undoCount > 0).Select(k => new ReplayEvent(index.Strokes[k], MemolineEdits.Current(index.Strokes[k]))).ToArray();
             var restored = finalReplay.Where(e => !request.Changes.ContainsKey(e.Stroke.Key)).DistinctBy(e => e.Stroke.Key).ToArray();
             int flushes = Flushes, replayed = Replayed;
             var result = expected.Copy();

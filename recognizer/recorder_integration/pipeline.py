@@ -17,8 +17,12 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
+import numpy as np
+
 from catalog import BRUSH, CANVAS, NAVIGATOR, LAYERS, COLOR, COLOR_INPUT, TOOLGROUP
 from state_timeline import StateTimeline, MODULES
+from clip_witness import ClipWitness, link_or_copy
+import floating_panels
 
 CANVAS_FRAME = "__canvas_frame__"
 
@@ -29,6 +33,18 @@ def now_ticks():
     return value.value - int(os.environ["MEMOLINE_CLOCK_ORIGIN"])
 
 
+_QPC_FREQUENCY = None
+
+
+def qpc_frequency():
+    global _QPC_FREQUENCY
+    if _QPC_FREQUENCY is None:
+        value = ctypes.c_longlong()
+        ctypes.windll.kernel32.QueryPerformanceFrequency(ctypes.byref(value))
+        _QPC_FREQUENCY = value.value
+    return _QPC_FREQUENCY
+
+
 def transform_host_path():
     host = Path(__file__).parent / "transform_host" / "TransformHost.exe"
     return host if host.is_file() else host.parent / "publish" / host.name
@@ -36,11 +52,20 @@ def transform_host_path():
 
 def analysis_workers(settings):
     """Analysis jobs that may run at once. Each core stays serial, so more than one job per
-    module never helps; 0 (the default) follows the CPU and leaves cores for CSP and the recorder."""
+    module never helps; 0 (the default) follows the CPU and leaves cores for CSP and the recorder.
+    While the user draws, Pipeline._dispatch lowers it to one (see POINTER_QUIET_S)."""
     configured = int(settings.get("analysisConcurrency", 0) or 0)
     if configured > 0:
         return min(configured, len(MODULES))
     return max(2, min(len(MODULES), (os.cpu_count() or 4) // 4))
+
+
+# OCR jobs side by side slow CSP's drawing however many cores are free and whatever their priority: they share
+# the memory bandwidth and caches. Measured 2026-10-24 (Ryzen 9 8940HX, 16 cores, recorded panel crops): with four
+# OCR jobs at once a single-threaded image operation the size of a few canvas tiles ran at 36-44 % of its speed,
+# and below-normal, idle priority or EcoQoS changed that by a few points; one job at a time left it 78-83 %.
+# So from pen down until this long after the last pointer release only one analysis runs at a time.
+POINTER_QUIET_S = 0.7
 
 
 class TransformHost:
@@ -152,6 +177,12 @@ def probe_numbers(frame_path, frame_roi, numbers_roi, dpi, timeout=30):
 
 OCR_PARAMS = {"EngineConfig.onnxruntime.intra_op_num_threads":2,
               "EngineConfig.onnxruntime.inter_op_num_threads":1,"Global.log_level":"warning"}
+# RapidOCR enlarges every image to a 736 px short side before detection; a 282 px wide layer panel
+# became 736x1712 and one read took 3.4 s. Detecting at the panel's own size gave the same results
+# on every recorded layer, sub tool and colour-slider panel (the layer reader re-reads the faint
+# highlighted row enlarged) at 0.9 / 0.6 / 0.3 s. The brush panel keeps the enlargement: at its own
+# size the palette menu glyph was read as the brush name.
+FAST_DETECTION = {**OCR_PARAMS, "Det.limit_type":"max", "Det.limit_side_len":960}
 PREPARED_MODULES = (LAYERS, BRUSH, TOOLGROUP, COLOR_INPUT, COLOR)
 
 
@@ -172,7 +203,7 @@ def _build_core(module):
         from recognizer_core.color_state import ColorStateCore
         return ColorStateCore(), None
     from rapidocr import RapidOCR
-    ocr = RapidOCR(params=OCR_PARAMS)
+    ocr = RapidOCR(params=OCR_PARAMS if module == BRUSH else FAST_DETECTION)
     if module == BRUSH:
         from recognizer_core.panel_state import PanelStateCore
         return PanelStateCore(ocr_engine=ocr), ocr
@@ -263,7 +294,17 @@ class Pipeline:
         self.canvas_roi = None
         self.navigator_roi = None
         self.dimensions = None
-        self.numbers_roi = None
+        # The digit selection relative to the navigator panel's top-left (dx, dy, w, h), and the panel
+        # image it was selected on (RGB, or None): the navigator may now be docked elsewhere or floating.
+        self.numbers_relative = None
+        self.numbers_reference = None
+        # Where the navigator panel was in the frame when the canvas core was initialized, and its pixels
+        # then: {"rect": (x, y, w, h), "image": RGB array}. Later frames put the navigator back there,
+        # aligned, so the core keeps its thumbnail and digit ROIs wherever the panel has gone since.
+        self.navigator_reference = None
+        self.numbers_frame_roi = None
+        # Floating palette windows by panel (floating_panels.FloatingPanel), set by the runtime.
+        self.floating = {}
         self.clip_path = None
         self.sequence = 0
         self.active = set()
@@ -274,9 +315,16 @@ class Pipeline:
         self.analysis_lock = threading.RLock()
         self.analysis_sequence = 0
         self.panel_activity = {}
+        # A pen or mouse button down on CSP (UpdateEngine.pointer_operations), and when that last changed.
+        self.pointer_down = False
+        self.pointer_changed = float("-inf")
         self.closing = False
         self.executor = ThreadPoolExecutor(max_workers=analysis_workers(settings), thread_name_prefix="state-core")
+        # The recorder's own saves wait for CSP's write in request order; requests that need no write of their own
+        # (Memoline waited for its save, or none was made) must not queue behind those waits.
         self.clip_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clip-parser")
+        self.clip_settled_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clip-settled")
+        self.clip_witness = None
         self.capture_thread = threading.Thread(target=self._capture_loop, name="roi-capture")
         self.dispatch_thread = threading.Thread(target=self._dispatch, name="state-dispatch")
         self.evidence_thread = threading.Thread(target=self._persist_loop, name="roi-evidence")
@@ -334,15 +382,20 @@ class Pipeline:
     def set_tool_catalog(self, catalog):
         self.tool_catalog = catalog
 
-    def configure(self, dimensions, numbers_roi, clip_path,initial_package_id,subtools_available=False):
-        self.dimensions, self.numbers_roi, self.clip_path = dimensions, numbers_roi, clip_path
+    def configure(self, dimensions, numbers_relative, clip_path,initial_package_id,subtools_available=False,
+                  numbers_reference=None):
+        self.dimensions, self.clip_path = dimensions, clip_path
+        self.numbers_relative = list(numbers_relative) if numbers_relative is not None else None
+        self.numbers_reference = numbers_reference
         self.initial_package_id = initial_package_id
         modules = set(MODULES.values()) - {'subtoolState'}
         if subtools_available:
             modules.add('subtoolState')
         self.timeline.expect(initial_package_id,modules | ({"clipState"} if clip_path else set()),True)
         if clip_path:
-            self.clip_executor.submit(self._parse_clip,uuid.uuid4().hex,0,initial_package_id)
+            self.clip_witness = ClipWitness(clip_path,self.directory,self.record,now_ticks)
+            self.clip_witness.start()
+            self.request_clip_state(uuid.uuid4().hex,0,initial_package_id,saved=False)
 
     def expect_package(self,package_id,panels,initial=False):
         panels = set(panels)
@@ -451,41 +504,54 @@ class Pipeline:
             self.record("clipParseError",ticks,[],dict(saveId=save_id,error="尚未选择 .clip 路径；保存请求仍已登记"),"delayed")
             self.timeline.observe("clipState",None,dict(saveId=save_id,triggerTicks=ticks),"尚未选择 .clip 路径")
 
-    def _parse_clip(self, save_id, ticks,package_id=None):
+    # CSP prepares 0.4-0.9 s after Ctrl+S before it writes (about 2 s right after a full-canvas paste).
+    CLIP_WRITE_TIMEOUT_S = 2.5
+    # The witness keeps a version about 0.1 s after CSP wrote it; a request that needs no write of its own waits that long.
+    CLIP_CATCH_UP_S = 1.0
+
+    def request_clip_state(self, save_id, ticks, package_id, saved):
+        """A requested clipState: `saved` when the requester made a save and waited for it (Memoline's bound request)."""
+        self.clip_settled_executor.submit(self._parse_clip,save_id,ticks,package_id,saved,saved)
+
+    def _parse_clip(self, save_id, ticks,package_id=None,settled=False,bound=True):
+        """Parses a version the witness kept (clip_witness), evidence first.
+        A save of the recorder's own (`bound`, not `settled`): the first version CSP wrote after its trigger that no
+        earlier save took. Without one CSP wrote nothing for it (an unmodified document, a dropped Ctrl+S, or another
+        document): the latest version is parsed as what it is, the document as of that write (writeObserved=false,
+        saveBound=false), never as a save made at `ticks`.
+        `settled`: the requester saved and waited for the .clip already (Memoline's bound request): the version on
+        disk now. Not `bound`: no save was made; the file shows the layers as of CSP's last write, not of `ticks`."""
         try:
             from recognizer_core.clip_layers_core import read_clip_layers
-            source = Path(self.clip_path)
-            snapshot = self.directory / (save_id+".clip")
-            deadline = time.monotonic()+15
-            previous = None
-            stable_since = time.monotonic()
-            while time.monotonic()<deadline:
-                try:
-                    stat = source.stat()
-                    signature = (stat.st_size,stat.st_mtime_ns)
-                    if signature!=previous:
-                        previous,stable_since = signature,time.monotonic()
-                    elif time.monotonic()-stable_since>=0.6:
-                        shutil.copyfile(source,snapshot)
-                        after = source.stat()
-                        if (after.st_size,after.st_mtime_ns)==signature:
-                            result = read_clip_layers(snapshot)
-                            with snapshot.open("rb") as stream:
-                                digest = hashlib.file_digest(stream,"sha256").hexdigest()
-                            self.record("clipParseResult",ticks,[],dict(saveId=save_id,result=result,
-                                snapshotPath=str(snapshot),sourcePath=str(source),observedTicks=now_ticks(),
-                                sha256=digest,
-                                saveCompletionConfirmed=False),"delayed")
-                            if package_id:
-                                self.timeline.complete(package_id,"clipState",result,dict(saveId=save_id,observedTicks=now_ticks()))
-                            else:
-                                self.timeline.observe("clipState",result,dict(saveId=save_id,observedTicks=now_ticks(),
-                                    triggerTicks=ticks,saveCompletionConfirmed=False))
-                            return
-                except (OSError,ValueError):
-                    pass
-                time.sleep(0.1)
-            raise RuntimeError("15 秒内未取得可解析且写入稳定的 .clip 副本")
+            witness = self.clip_witness
+            if witness is None:
+                raise RuntimeError(".clip 存证尚未开始")
+            if bound and not settled:
+                write, observed = witness.bind_save(ticks,self.CLIP_WRITE_TIMEOUT_S)
+            else:
+                write = witness.current(self.CLIP_CATCH_UP_S)
+                observed = write is not None and not write.preexisting and write.observed_ticks > ticks
+            if write is None:
+                raise RuntimeError("没有可解析的 .clip 版本：文件不存在或一直在被写入")
+            if bound and not settled and not observed:
+                self.record("clipSaveUnwritten",ticks,[],dict(saveId=save_id,triggerTicks=ticks,
+                    waitedMs=int(self.CLIP_WRITE_TIMEOUT_S*1000),latestWriteId=write.id,
+                    latestObservedTicks=write.observed_ticks),"delayed")
+            # The save's own name for the kept version goes with the structure: the watcher exports a layer that
+            # first appears in it as that layer's starting pixels (layerCreated baseline).
+            snapshot = link_or_copy(write.path,self.directory / (save_id+".clip"))
+            result = {**read_clip_layers(snapshot), "snapshotPath": str(snapshot)}
+            saved = bound and (settled or observed)
+            written = dict(writeId=write.id,writeObserved=observed,contentAsOfTicks=write.observed_ticks)
+            self.record("clipParseResult",ticks,[],dict(saveId=save_id,result=result,
+                snapshotPath=str(snapshot),sourcePath=str(self.clip_path),observedTicks=now_ticks(),
+                sha256=write.sha256,saveBound=saved,saveCompletionConfirmed=observed,**written),"delayed")
+            if package_id:
+                self.timeline.complete(package_id,"clipState",result,dict(saveId=save_id,observedTicks=now_ticks(),
+                    saveBound=saved,**written))
+            else:
+                self.timeline.observe("clipState",result,dict(saveId=save_id,observedTicks=now_ticks(),
+                    triggerTicks=ticks,saveCompletionConfirmed=observed,saveBound=saved,**written))
         except Exception as ex:
             self.record("clipParseError",ticks,[],dict(saveId=save_id,error=str(ex)),"delayed")
             if package_id:
@@ -494,91 +560,170 @@ class Pipeline:
                 self.timeline.observe("clipState",None,dict(saveId=save_id,triggerTicks=ticks),str(ex))
 
     def capture(self, panels, regions, ticks, refs=(), reason="operation", initialize=False,package_id=None,
-                analysis_token=None, final=True):
+                analysis_token=None, final=True, background=False):
+        """`background`: nobody waits for the result (Memoline's refresh after an edit); its analysis runs alone
+        and never starts while a pointer is down. The capture itself is never delayed."""
         if not self.stop.is_set():
             panels = set(panels)
             if BRUSH in panels and TOOLGROUP in regions:
                 panels.add(TOOLGROUP)
             self.capture_queue.put((panels, dict(regions), ticks, list(refs), reason, initialize,package_id,
-                                   dict(analysisToken=analysis_token,finalEvidence=final)))
+                                   dict(analysisToken=analysis_token,finalEvidence=final,background=background)))
+
+    def observe_pointer(self, down):
+        if down != self.pointer_down:
+            self.pointer_down, self.pointer_changed = down, time.monotonic()
+
+    def _drawing(self):
+        return self.pointer_down or time.monotonic() - self.pointer_changed < POINTER_QUIET_S
 
     def _capture_loop(self):
         from PIL import Image
-        import mss
-        grabber = mss.mss()
         frequency = ctypes.c_longlong()
         ctypes.windll.kernel32.QueryPerformanceFrequency(ctypes.byref(frequency))
         while True:
             request = self.capture_queue.get()
             if request is None:
-                grabber.close()
                 return
             panels, regions, ticks, refs, reason, initialize,package_id, analysis = request
             frames, capture_times = {}, {}
             captured_success = False
+            csp_image = None
             try:
                 hwnd = int(os.environ.get("MEMOLINE_CSP_HWND", "0"))
+                if not hwnd:
+                    raise RuntimeError("未找到 CSP 主窗口，未截图")
                 user = ctypes.windll.user32
-                user.GetForegroundWindow.restype = ctypes.c_void_p
-                if not hwnd or user.GetForegroundWindow() != hwnd:
-                    raise RuntimeError("CSP 主窗口不在前台，未截图；返回 CSP 后重新触发")
                 if CANVAS in panels or NAVIGATOR in panels:
                     panels.update((CANVAS, NAVIGATOR))
-                selected = {p: tuple(regions[p]) for p in panels if p in regions}
+                floating = dict(self.floating)
+                # Floating palettes are rendered from their own window (covered or on the virtual screen).
+                windows = {p: floating[p] for p in panels if p in floating and p not in (CANVAS, NAVIGATOR)}
+                selected = {p: tuple(regions[p]) for p in panels if p in regions and p not in windows and p != NAVIGATOR}
+                navigator_window, pasted = None, False
                 if CANVAS in selected:
-                    if not self.initialized:
+                    # The canvas core stays where it was initialized: the navigator's current pixels are
+                    # put back, aligned, at the place it had in the frame then. Moving, docking elsewhere,
+                    # floating or stashing it changes no ROI; only a failed alignment re-initializes.
+                    navigator_window = floating.get(NAVIGATOR)
+                    dock = tuple(regions[NAVIGATOR]) if navigator_window is None and NAVIGATOR in regions else None
+                    if navigator_window is None and dock is None:
+                        raise RuntimeError("导航器面板既不在停靠栏也不是浮动窗口，无法读取画布视图")
+                    if not self.initialized or self.navigator_reference is None:
                         initialize = True
+                    monitor = floating_panels.monitor_rect(hwnd)
+                    if initialize:
+                        # A floating navigator gets a strip right of the monitor; it is never on screen there.
+                        target = dock if dock is not None else (monitor[0] + monitor[2], monitor[1], *navigator_window.rect[2:])
+                    else:
+                        target = tuple(self.navigator_reference["rect"])
+                    pasted = navigator_window is not None or dock != target
+                    right = max(monitor[0] + monitor[2], target[0] + target[2])
+                    bottom = max(monitor[1] + monitor[3], target[1] + target[3])
+                    frame_rect = (monitor[0], monitor[1], right - monitor[0], bottom - monitor[1])
+                    selected[NAVIGATOR] = target if initialize else tuple(self.navigator_roi)
                     if not initialize:
                         selected[CANVAS] = tuple(self.canvas_roi)
-                        selected[NAVIGATOR] = tuple(self.navigator_roi)
-                    selected["导航器数字"] = tuple(self.numbers_roi)
-                if not selected:
+                elif NAVIGATOR in regions and NAVIGATOR in panels and NAVIGATOR not in floating:
+                    selected[NAVIGATOR] = tuple(regions[NAVIGATOR])
+                if not selected and not windows:
                     raise RuntimeError("请求的面板 ROI 当前不可用")
-                desktop = grabber.monitors[0]
-                for x,y,w,h in selected.values():
-                    if (w <= 0 or h <= 0 or x < desktop["left"] or y < desktop["top"] or
-                            x+w > desktop["left"]+desktop["width"] or y+h > desktop["top"]+desktop["height"]):
-                        raise RuntimeError("请求的面板 ROI 超出屏幕，未扩张或截断 ROI")
                 captured = now_ticks()
-                raw_frames = {}
-                def acquire(panel):
-                    if user.GetForegroundWindow() != hwnd:
-                        raise RuntimeError("ROI 截图过程中 CSP 失去前台，已丢弃该批截图")
-                    x,y,w,h = selected[panel]
-                    start = now_ticks()
-                    pixels = grabber.grab(dict(left=x,top=y,width=w,height=h))
-                    return pixels, (start,now_ticks())
+                capture_end = captured
                 canvas_validation = None
-                capture_backend = "MSS_ROI"
+                capture_backend = "PrintWindow_ROI"
+                if selected:
+                    # Docked panels and the canvas come from CSP's own window, never from the screen: windows in
+                    # front of CSP (Memoline's panels, the watcher, other applications) and CSP not being the
+                    # foreground window change nothing. Only simulated input needs CSP in front.
+                    window_rect = floating_panels.window_rect(hwnd)
+                    def contains(box, roi):
+                        x, y, w, h = roi
+                        return w > 0 and h > 0 and x >= box[0] and y >= box[1] and x+w <= box[0]+box[2] and y+h <= box[1]+box[3]
+                    for panel, roi in selected.items():
+                        if panel == NAVIGATOR and pasted:
+                            # Put back at its initialization place, which may lie beyond the window (the strip).
+                            inside = contains(frame_rect, roi)
+                        else:
+                            inside = contains(window_rect, roi) and (CANVAS not in selected or contains(frame_rect, roi))
+                        if not inside:
+                            raise RuntimeError("请求的面板 ROI 超出 CSP 窗口，未扩张或截断 ROI")
+                    # The canvas frame needs the whole window; panels alone only the part holding them.
+                    region = None
+                    if CANVAS not in selected:
+                        left = min(x for x, _, _, _ in selected.values()); top = min(y for _, y, _, _ in selected.values())
+                        region = (left, top, max(x+w for x, _, w, _ in selected.values()) - left,
+                                  max(y+h for _, y, _, h in selected.values()) - top)
+                    start = now_ticks()
+                    csp_image, bounds = floating_panels.window_image(hwnd, region)
+                    span = (start, now_ticks())
                 if CANVAS in selected:
-                    # The native solver uses true pixels beyond its thumbnail ROI.
-                    # Capture once; ROI evidence and native context share this frame,
-                    # with no resize, padding, synthetic gaps or navigator expansion.
-                    selected[CANVAS_FRAME] = tuple(desktop[k] for k in ("left","top","width","height"))
-                    pixels,span = acquire(CANVAS_FRAME)
-                    image = Image.frombytes("RGB",pixels.size,pixels.bgra,"raw","BGRX")
+                    # The native solver uses true pixels beyond its thumbnail ROI: the monitor CSP is on (never
+                    # the virtual screen), drawn from CSP's window; whatever is not CSP stays black.
+                    selected[CANVAS_FRAME] = frame_rect
+                    image = Image.new("RGB",frame_rect[2:],(0,0,0))
+                    image.paste(csp_image,(bounds[0]-frame_rect[0],bounds[1]-frame_rect[1]))
+                    alignment = None
+                    if pasted:
+                        if navigator_window is not None:
+                            bgr,_ = floating_panels.capture(navigator_window.hwnd,navigator_window.rect)
+                            panel_now = np.ascontiguousarray(bgr[:,:,::-1])
+                        else:
+                            x,y,w,h = dock
+                            panel_now = np.asarray(image.crop((x-frame_rect[0],y-frame_rect[1],x-frame_rect[0]+w,y-frame_rect[1]+h)))
+                        if initialize:
+                            placed = panel_now
+                        else:
+                            reference = self.navigator_reference["image"]
+                            alignment = floating_panels.align_panel(reference, panel_now)
+                            if alignment[2] < floating_panels.ALIGNMENT_SCORE:
+                                # Resized or another tab in front: initialize again on the next canvas capture.
+                                self.initialized = False
+                                raise RuntimeError(f"导航器画面与初始化时对不上（匹配度 {alignment[2]:.2f}），下一次画布操作重新初始化")
+                            placed = floating_panels.shifted(panel_now, alignment[0], alignment[1], *reference.shape[1::-1])
+                        image.paste(Image.fromarray(placed), (target[0]-frame_rect[0], target[1]-frame_rect[1]))
+                    if initialize:
+                        dx, dy, nw, nh = self.numbers_relative
+                        if self.numbers_reference is not None:
+                            # The digits were selected on another view of the panel (docked vs floating chrome).
+                            x,y,w,h = target
+                            here = np.asarray(image.crop((x-frame_rect[0],y-frame_rect[1],x-frame_rect[0]+w,y-frame_rect[1]+h)))
+                            ox, oy, score = floating_panels.align_panel(self.numbers_reference, here)
+                            if score >= floating_panels.ALIGNMENT_SCORE:
+                                dx, dy = dx + ox, dy + oy
+                        selected["导航器数字"] = (target[0] + dx, target[1] + dy, nw, nh)
+                    else:
+                        selected["导航器数字"] = tuple(self.numbers_frame_roi)
+                    span = (start,now_ticks())
                     frames[CANVAS_FRAME] = image
                     captured,capture_end = span
-                    if user.GetForegroundWindow() != hwnd:
-                        raise RuntimeError("完整帧截图过程中 CSP 失去前台，已丢弃该批截图")
                     for panel,(x,y,w,h) in selected.items():
                         capture_times[panel] = span
                         if panel != CANVAS_FRAME:
-                            left,top = x-desktop["left"],y-desktop["top"]
+                            left,top = x-frame_rect[0],y-frame_rect[1]
                             frames[panel] = image.crop((left,top,left+w,top+h))
-                    canvas_validation = dict(sameFrame=True,verifiedTicks=capture_end,
-                        stabilityChecked=False,settleWaitMs=0,policy="immediateEvidenceThenQuietAnalysis")
-                    capture_backend = "MSS_FRAME_ROI"
-                else:
-                    acquired_rois = {}
-                    for panel in selected:
-                        roi = selected[panel]
-                        if roi not in acquired_rois:
-                            acquired_rois[roi] = acquire(panel)
-                        raw_frames[panel],capture_times[panel] = acquired_rois[roi]
-                    capture_end = now_ticks()
-                for panel,pixels in raw_frames.items():
-                    frames[panel] = Image.frombytes("RGB",pixels.size,pixels.bgra,"raw","BGRX")
+                    canvas_validation = dict(sameFrame=not pasted,verifiedTicks=capture_end,
+                        stabilityChecked=False,settleWaitMs=0,policy="immediateEvidenceThenQuietAnalysis",
+                        navigatorSource="floatingWindow" if navigator_window is not None else "dock",
+                        navigatorPanelRect=list(navigator_window.rect if navigator_window is not None else dock),
+                        navigatorPlacedAt=list(target) if pasted else None,
+                        navigatorAlignment=list(alignment) if alignment else None)
+                    capture_backend = ("PrintWindow_FRAME_ROI+floatingNavigator" if navigator_window is not None
+                                       else "PrintWindow_FRAME_ROI+moved" if pasted else "PrintWindow_FRAME_ROI")
+                elif selected:
+                    for panel,(x,y,w,h) in selected.items():
+                        left,top = x-bounds[0],y-bounds[1]
+                        frames[panel] = csp_image.crop((left,top,left+w,top+h))
+                        capture_times[panel] = span
+                    captured,capture_end = span
+                for panel, window in windows.items():
+                    start = now_ticks()
+                    pixels, rect = floating_panels.capture(window.hwnd, window.rect)
+                    frames[panel] = Image.fromarray(np.ascontiguousarray(pixels[:,:,::-1]))
+                    selected[panel] = rect
+                    capture_times[panel] = (start, now_ticks())
+                    capture_end = max(capture_end, capture_times[panel][1])
+                    capture_backend += "+floatingPanel"
                 user.GetDpiForWindow.argtypes = [ctypes.c_void_p]
                 user.GetDpiForWindow.restype = ctypes.c_uint
                 dpi = user.GetDpiForWindow(hwnd) or 96
@@ -609,6 +754,8 @@ class Pipeline:
                         if p in MODULES:
                             self.timeline.complete_if_pending(package_id,MODULES[p],None,dict(triggerTicks=ticks),str(ex))
             finally:
+                if csp_image is not None:
+                    csp_image.close()
                 if not captured_success:
                     for image in frames.values():
                         image.close()
@@ -692,13 +839,15 @@ class Pipeline:
     def _dispatch(self):
         running = {}
         while not self.stop.is_set() or any(self.directory.glob("*.job")) or running:
-            for future, (file, module) in list(running.items()):
+            for future, (file, module, _) in list(running.items()):
                 if future.done():
                     running.pop(future)
                     self.active.discard(module)
                     # Keep failed job inputs on disk for diagnosis; consumed metadata is marked.
                     file.replace(file.with_suffix(".done"))
-            workers = analysis_workers(self.settings)
+            drawing = self._drawing() and not self.closing
+            workers = 1 if drawing else analysis_workers(self.settings)
+            background_running = any(entry[2] for entry in running.values())
             if len(running) < workers:
                 for file in sorted(self.directory.glob("*.job")):
                     if any(file == entry[0] for entry in running.values()):
@@ -718,8 +867,12 @@ class Pipeline:
                             continue
                         if action == "wait":
                             continue
+                        background = bool(job.get("background"))
+                        if background and not self.closing and (self.pointer_down or background_running):
+                            continue
                         self.active.add(module)
-                        running[self.executor.submit(self._analyze, job)] = (file, module)
+                        running[self.executor.submit(self._analyze, job)] = (file, module, background)
+                        background_running = background_running or background
                     if len(running) >= workers:
                         break
             time.sleep(0.025)
@@ -759,16 +912,21 @@ class Pipeline:
                         self.navigator_roi = [r["left"],r["top"],r["width"],r["height"]]
                         if self.navigator_roi[2] <= 0 or self.navigator_roi[3] <= 0:
                             raise RuntimeError("画布核心返回了无效的导航器缩略图 ROI")
+                        navigator = crops[NAVIGATOR]
+                        from PIL import Image
+                        with Image.open(navigator["path"]) as image:
+                            self.navigator_reference = dict(rect=tuple(navigator["roi"]), image=np.asarray(image.convert("RGB")).copy())
+                        self.numbers_frame_roi = tuple(crops["导航器数字"]["roi"])
                         self.initialized = True
                         self.transform_ready = True
                         if payload["initialize"]:
                             self.transform_initial_payload = payload
-                        self.notify(dict(type="canvasInitialized", roi=self.canvas_roi,navigatorRoi=self.navigator_roi))
+                        self.notify(dict(type="canvasInitialized", roi=self.canvas_roi,navigatorRoi=self.navigator_roi,
+                                         navigatorPanelRect=list(navigator["roi"])))
                     else:
                         self.notify(dict(type="initializationFailed", message=result.get("message", "画布初始化失败")))
             else:
                 import cv2
-                import numpy as np
                 if module not in self.cores and module != COLOR_INPUT:
                     self.cores[module] = take_core(module)
                 pixels = cv2.imdecode(np.fromfile(crops[module]["path"], dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -785,6 +943,7 @@ class Pipeline:
                 elif module == LAYERS:
                     result = self.cores[module].process_with_locator(pixels,
                         panel_roi=list(crops[module]['roi']), capture_frame_id=job['captureId'])
+                    job, result = self._follow_layer_command(job, result, pixels)
                 elif module == COLOR_INPUT:
                     result = self._process_color_input(pixels, list(crops[module]['roi']), job['captureId'])
                 elif module == COLOR and COLOR_INPUT in crops:
@@ -843,7 +1002,7 @@ class Pipeline:
                 captureDurationMs=job["captureDurationMs"],captureBudgetExceeded=job["captureBudgetExceeded"],
                 captureBackend=job.get("captureBackend"),dpi=job.get("dpi"),
                 canvasCaptureValidation=job.get("canvasCaptureValidation"),
-                retryOfCaptureId=job["reason"].partition(":")[2] if job["reason"].startswith(("canvasRetry:","layerRetry:")) else None,
+                retryOfCaptureId=job["reason"].partition(":")[2] if job["reason"].startswith(("canvasRetry:","layerRetry:","viewSettle","layerFollowUp")) else None,
                 triggerReason=job["reason"],initialization=job["initialize"]),"delayed")
             if not current:
                 self._defer_job(job)
@@ -853,6 +1012,8 @@ class Pipeline:
                 self.notify(dict(type="canvasViewport",points=result.get("completedViewportScreenPx") if result.get("success") else None))
                 if (not job["initialize"] and not result.get("success") and result.get("failedStage") == 9
                         and self._retry_canvas(job)):
+                    return
+                if self._settle_view(job, result):
                     return
             if module == LAYERS and self._retry_layers(job, result):
                 return
@@ -878,6 +1039,90 @@ class Pipeline:
                          packageId=job.get("packageId"),captureId=job["captureId"]))
         return True
 
+    # A view shortcut or wheel step is applied by CSP when it gets to it: right after a save (the layer guard's
+    # Ctrl+S) the first screenshot still shows the old view (2026-10-20: Ctrl+= read as unchanged 105 ms later,
+    # and 77 s of strokes were mapped through the old zoom). Such a capture is not the command's result.
+    VIEW_SETTLE_DELAYS_MS = (150, 300, 600, 1200)
+
+    def _settle_view(self, job, result):
+        """Look again, for the same package, while a view command still shows the old view."""
+        reason = job["reason"]
+        if (self.closing or job["initialize"] or not job.get("packageId") or not result.get("success")
+                or not (reason in ("shortcut", "mouseWheel") or reason.startswith("viewSettle"))
+                or not self.timeline.repeats(MODULES[CANVAS], result)):
+            return False
+        attempt = int(reason[len("viewSettle"):].partition(":")[0]) if reason.startswith("viewSettle") else 0
+        if attempt >= len(self.VIEW_SETTLE_DELAYS_MS):
+            return False
+        self.notify(dict(type="viewSettle", ticks=job["triggerTicks"], refs=job["refs"], packageId=job["packageId"],
+                         captureId=job["captureId"] if attempt == 0 else reason.partition(":")[2],
+                         attempt=attempt+1, delayMs=self.VIEW_SETTLE_DELAYS_MS[attempt],
+                         analysisToken=job.get("analysisToken")))
+        return True
+
+    # A layer command (a layer palette button, a layer shortcut) shows in the panel when CSP gets to it. Tapped right
+    # after the layer guard's Ctrl+S, 新建栅格图层 had not shown 190 ms later (2026-10-24): the panel read then listed
+    # the old layers as "unchanged" and six strokes were filed under the old layer. So the runtime takes the panel again
+    # at these offsets after the command, as evidence at once (Runtime.follow_up_layers); only an analysis that still
+    # shows the previous state looks at those captures.
+    LAYER_COMMAND_REASONS = ("pointerReleased", "shortcut")
+    LAYER_FOLLOW_UP_MS = (150, 300, 600, 1200)
+
+    def _follow_layer_command(self, job, result, pixels):
+        """The command's capture, or the earliest follow-up showing what the panel finally showed when that differs.
+        The follow-up keeps the command's package, trigger and inputs; its own capture time and causal ambiguity
+        say when the state was seen. Pixels equal to an analysed capture are not analysed again."""
+        if (self.closing or job["initialize"] or job["reason"] not in self.LAYER_COMMAND_REASONS
+                or job.get("analysisToken") is None or not job.get("packageId") or not isinstance(result, dict)
+                or not self.timeline.repeats(MODULES[LAYERS], result)):
+            return job, result
+        import cv2
+        wanted = len(self.LAYER_FOLLOW_UP_MS)
+        waited = (now_ticks() - job["triggerTicks"]) / qpc_frequency()
+        deadline = time.monotonic() + max(0.0, (self.LAYER_FOLLOW_UP_MS[-1] + 500) / 1000 - waited)
+        while True:
+            follow = self._layer_follow_ups(job["analysisToken"])
+            if len(follow) >= wanted or self.closing or time.monotonic() >= deadline:
+                break
+            time.sleep(0.05)
+        if not follow:
+            return job, result
+        seen = []
+        for other in follow:
+            image = cv2.imdecode(np.fromfile(other["crops"][LAYERS]["path"], dtype=np.uint8), cv2.IMREAD_COLOR)
+            if image is not None:
+                seen.append((other, image))
+        def same(a, b):
+            return a is not None and b is not None and a.shape == b.shape and np.array_equal(a, b)
+        if not seen or same(seen[-1][1], pixels):
+            return job, result
+        final = seen[-1][1]
+        other, image = next(item for item in seen if same(item[1], final))
+        crop = other["crops"][LAYERS]
+        try:
+            later = self.cores[LAYERS].process_with_locator(image, panel_roi=list(crop["roi"]), capture_frame_id=other["captureId"])
+        except Exception as ex:  # the command's own reading still stands
+            self.record("analysisError", other["ticks"], job["refs"], dict(module=LAYERS, error=str(ex),
+                screenshotIds=[crop["screenshotId"]], triggerTicks=job["triggerTicks"], followUpOf=job["captureId"]), "delayed")
+            return job, result
+        if not isinstance(later, dict) or not later.get("selectedName") or self.timeline.repeats(MODULES[LAYERS], later):
+            return job, result
+        return dict(other, packageId=job["packageId"], triggerTicks=job["triggerTicks"], refs=job["refs"],
+                    reason=other["reason"] + ":" + job["captureId"], finalEvidence=True), later
+
+    def _layer_follow_ups(self, token):
+        """Follow-up captures of one layer command (evidence jobs, analysed or not), oldest first."""
+        found = []
+        for file in list(self.directory.glob("*.job")) + list(self.directory.glob("*.evidence")):
+            try:
+                other = json.loads(file.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue  # renamed by the dispatcher meanwhile; found under its new name next time
+            if (other.get("module") == LAYERS and other.get("analysisToken") == token
+                    and str(other.get("reason", "")).startswith("layerFollowUp") and LAYERS in other.get("crops", {})):
+                found.append(other)
+        return sorted({o["captureId"]: o for o in found}.values(), key=lambda o: o["ticks"])
+
     def _retry_layers(self, job, result):
         # Rows without a selected one: CSP was still redrawing the layer panel (after a delete, a paste,
         # a scroll). Read one fresh frame for the same package instead of publishing an unknown layer.
@@ -902,6 +1147,11 @@ class Pipeline:
             self.transform_ready = False
             raise RuntimeError("画布核心进程已退出") from None
 
+    def reinitialize_canvas(self):
+        """The canvas viewport moved: the next canvas capture initializes the core again."""
+        self.initialized = False
+        self.navigator_reference = None
+
     def request_history(self, ticks, event_id, command):
         """Undo or redo reached CSP: read the History palette once the keyboard is quiet."""
         if not self.closing:
@@ -919,6 +1169,9 @@ class Pipeline:
         self.dispatch_thread.join()
         self.executor.shutdown(wait=True)
         self.clip_executor.shutdown(wait=True)
+        self.clip_settled_executor.shutdown(wait=True)
+        if self.clip_witness is not None:
+            self.clip_witness.close()
         self.timeline.close(now_ticks())
         if self.transform:
             self.transform.close()

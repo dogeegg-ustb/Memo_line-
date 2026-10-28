@@ -31,12 +31,17 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
     {
         if (_stopping || !_recordingReady) throw new IOException("State capture helper is unavailable or not initialized.");
         long ticks = _writer.NowTicks;
-        string package = _writer.ReserveStatePackage(_writer.LastHardwareEventId, ticks, "externalStateRequest");
+        // The helper compares this with the input watermark at its screenshot: without input in between, the
+        // states it reads are the ones at this request, not of uncertain cause.
+        var afterEventId = _writer.LastHardwareEventId;
+        string package = _writer.ReserveStatePackage(afterEventId, ticks, "externalStateRequest");
         var completion = _stateRequests.Add(package, request, ticks);
         try
         {
             if (!_outgoing.Writer.TryWrite(new { type = "requestStates", requestId = request.RequestId, packageId = package,
-                modules = request.Modules, saveId = request.SaveId, brushPanelRoi = request.BrushPanelRoi, ticks })) throw new IOException("State capture helper has stopped.");
+                modules = request.Modules, saveId = request.SaveId, brushPanelRoi = request.BrushPanelRoi, background = request.Background,
+                ticks, afterEventId }))
+                throw new IOException("State capture helper has stopped.");
             return await completion.WaitAsync(TimeSpan.FromSeconds(30), token);
         }
         finally { _stateRequests.Remove(package); }
@@ -211,7 +216,8 @@ public sealed class UpdateActivatorBridge : IAsyncDisposable
                 if (kind is not ("shortcutConfiguration" or "workspaceStatus" or "workspaceSuspended" or
                     "panelUpdateRequested" or "panelActivationEnded" or "shortcutResolved" or "updateActivatorError" or
                     "screenshotBlob" or "captureUnavailable" or "stateResult" or "coreStateUpdated" or "coreEvidenceCaptured" or "analysisError" or
-                    "initializationConfiguration" or "initializationStatus" or "clipParseResult" or "clipParseError"))
+                    "initializationConfiguration" or "initializationStatus" or "clipParseResult" or "clipParseError" or
+                    "clipWriteObserved" or "clipSaveUnwritten" or "documentMismatchWarning"))
                     throw new InvalidDataException($"Unknown update message: {kind}");
                 var refs = msg.GetProperty("relatedEventIds").EnumerateArray().Select(v => v.GetUInt64()).ToArray();
                 _writer.AppendState(kind, msg.GetProperty("ticks").GetInt64(), refs, msg.GetProperty("data"),

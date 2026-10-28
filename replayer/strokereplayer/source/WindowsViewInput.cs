@@ -17,31 +17,62 @@ internal sealed class WindowsViewInput : IViewInput
 
     internal WindowsViewInput()
     {
-        using var process = Process.GetProcessesByName("CLIPStudioPaint")
-            .FirstOrDefault(p => p.MainWindowHandle != 0)
-            ?? throw new InvalidOperationException("请先打开 CSP 画布。");
-        _processId = (uint)process.Id;
-        _window = process.MainWindowHandle;
-        if (Native.IsIconic(_window)) Native.ShowWindow(_window, 9);
-        Native.SetForegroundWindow(_window);
+        var processes = Process.GetProcessesByName("CLIPStudioPaint");
+        try
+        {
+            foreach (var process in processes)
+                if ((_window = MainWindow((uint)process.Id)) != 0) { _processId = (uint)process.Id; break; }
+        }
+        finally { foreach (var process in processes) process.Dispose(); }
+        if (_window == 0) throw new InvalidOperationException("请先打开 CSP 画布。");
         EnsureTarget();
+    }
+
+    /// <summary>CSP's frame window. Process.MainWindowHandle is the first visible unowned window in Z order, and on .NET 10
+    /// that includes a layered tool window above the frame (tested 2026-10-26), which is what the drop shadow of a CSP
+    /// floating panel or menu is (class SysShadow, unowned). The shadow goes with its popup; every check after that read
+    /// as "CSP closed" at once: an event edit failed 164 ms into its first stroke (2026-10-26 14:03:44).</summary>
+    private static nint MainWindow(uint processId)
+    {
+        const int ExStyle = -20, ToolWindow = 0x80;
+        const uint Owner = 4;
+        nint found = 0;
+        Native.EnumWindows((window, _) =>
+        {
+            Native.GetWindowThreadProcessId(window, out uint pid);
+            if (pid != processId || Native.GetWindow(window, Owner) != 0 || !Native.IsWindowVisible(window) ||
+                (Native.GetWindowLongPtr(window, ExStyle) & ToolWindow) != 0) return true;
+            found = window;
+            return false;
+        }, 0);
+        return found;
     }
 
     internal static void PrepareDpiAwareness() => Native.SetProcessDpiAwarenessContext(new nint(-4));
 
+    /// <summary>Brings CSP to the front before every injected input: the user has usually just clicked Memoline, and a
+    /// transient window (status panel, screenshot tool) can take the foreground between inputs; physical input aborts
+    /// elsewhere. The switch is asynchronous (CSP activates when its UI thread next pumps messages), so poll for it.</summary>
     public void EnsureTarget()
     {
         if (IsTargetForeground()) return;
-        // A transient window (status panel, screenshot tool) can take the foreground between
-        // inputs. Try once to bring CSP back before stopping; physical input aborts elsewhere.
         if (Native.IsWindow(_window))
         {
-            if (Native.IsIconic(_window)) Native.ShowWindow(_window, 9);
-            Native.SetForegroundWindow(_window);
-            Thread.Sleep(60);
+            Activate();
+            for (int i = 0; i < 25 && !IsTargetForeground(); i++) Thread.Sleep(30);
         }
         if (!IsTargetForeground())
-            throw new InvalidOperationException("CSP 已关闭或失去前台焦点，回放已停止。");
+            throw new InvalidOperationException("无法把 CSP 切到前台（CSP 已关闭或 Windows 拒绝切换），回放已停止。");
+    }
+
+    private void Activate()
+    {
+        if (Native.IsIconic(_window)) Native.ShowWindow(_window, 9);
+        if (Native.SetForegroundWindow(_window)) return;
+        // Windows lets only the process that sent the last input take the foreground. An empty mouse input (no move,
+        // no button) makes it this one; it reaches no window, so it is not counted in SentInputs.
+        Native.SendInput(1, [WithRecorderTag(new Input { Type = 0 })], Marshal.SizeOf<Input>());
+        Native.SetForegroundWindow(_window);
     }
 
     private bool IsTargetForeground()
@@ -63,7 +94,8 @@ internal sealed class WindowsViewInput : IViewInput
     {
         if (!System.Windows.Forms.SystemInformation.VirtualScreen.Contains(point))
             throw new InvalidOperationException("Recognizer 提供的输入位置超出当前桌面。");
-        var window = Native.WindowFromPoint(new NativePoint(point.X, point.Y));
+        // What the point is over, as if the input shield were not there: injected input reaches it through a hole.
+        var window = InputShield.WindowFromPoint(point);
         Native.GetWindowThreadProcessId(window, out uint pid);
         if (pid != _processId) throw new InvalidOperationException("目标输入区域被其他窗口遮挡，回放已停止。");
     }
@@ -72,6 +104,7 @@ internal sealed class WindowsViewInput : IViewInput
     {
         token.ThrowIfCancellationRequested();
         var point = PanelPoint(input);
+        using var hole = InputShield.Active?.OpenHole(point);
         Move(point);
         try { Mouse(0x0002); }
         finally { Mouse(0x0004); }
@@ -83,6 +116,7 @@ internal sealed class WindowsViewInput : IViewInput
     {
         token.ThrowIfCancellationRequested();
         var point = PanelPoint(panel);
+        using var hole = InputShield.Active?.OpenHole(point);
         Move(point);
         Send(new Input { Type = 0, Data = new InputUnion { Mouse = new MouseInput { Flags = 0x0800, Data = unchecked((uint)delta) } } });
         await Task.Delay(100, token);
@@ -105,6 +139,7 @@ internal sealed class WindowsViewInput : IViewInput
         if (input.Width <= 0 || input.Height <= 0) throw new InvalidOperationException("数值输入区域无效。");
         var point = new Point(input.Left + input.Width / 2, input.Top + input.Height / 2);
         EnsurePoint(point);
+        using var hole = InputShield.Active?.OpenHole(point);
         Move(point);
         Mouse(0x0002);
         Mouse(0x0004);
@@ -139,6 +174,8 @@ internal sealed class WindowsViewInput : IViewInput
         EnsureTarget();
         EnsurePoint(from);
         EnsurePoint(to);
+        // The hole follows the cursor: the drag reaches CSP wherever it is, captured or not.
+        using var hole = InputShield.Active?.OpenHole(from);
         Move(from);
         bool spaceDown = false, mouseDown = false;
         try
@@ -155,6 +192,7 @@ internal sealed class WindowsViewInput : IViewInput
                 EnsureTarget();
                 var point = new Point(from.X + (to.X - from.X) * step / 12, from.Y + (to.Y - from.Y) * step / 12);
                 EnsurePoint(point);
+                hole?.MoveTo(point);
                 Move(point);
             }
         }
@@ -189,6 +227,46 @@ internal sealed class WindowsViewInput : IViewInput
                 try { Key(key, false); } catch (Exception ex) { failure ??= ex; }
             if (failure is not null) throw failure;
         }
+        await Task.Run(() => WaitForInputHandled(held.Count * 2), token);
+    }
+
+    /// <summary>
+    /// Presses a shortcut with the cursor parked on <paramref name="target"/>, anywhere on the desktop, and then puts the
+    /// cursor back. CSP's screen colour picker (applicationscreeneyecolorpicker) takes the pixel under the cursor when its
+    /// shortcut is pressed. Memoline's swatch is on the virtual screen, which touches the main screen at one corner only:
+    /// moving the mouse never gets there, absolute input does. Keys still go to CSP, the foreground window.
+    /// </summary>
+    internal async Task SendShortcutAtAsync(Rectangle target, IReadOnlyList<ushort> keys, TimeSpan dwell, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        EnsureTarget();
+        if (target.Width <= 0 || target.Height <= 0) throw new InvalidOperationException("取色位置无效。");
+        if (!Native.GetCursorPos(out var before)) throw new Win32Exception(Marshal.GetLastWin32Error(), "无法读取光标位置。");
+        try
+        {
+            Move(new Point(target.Left + target.Width / 2, target.Top + target.Height / 2));
+            var at = before;
+            for (int i = 0; i < 10 && (!Native.GetCursorPos(out at) || !target.Contains(at.X, at.Y)); i++)
+                await Task.Delay(10, token);
+            if (!target.Contains(at.X, at.Y))
+                throw new InvalidOperationException($"光标没能移到色块 {target}（停在 {at.X},{at.Y}），没有按下取色快捷键。");
+            await SendShortcutAsync(keys, token);
+            await Task.Delay(dwell, token);
+        }
+        finally { Move(new Point(before.X, before.Y)); }
+    }
+
+    /// <summary>
+    /// Returns once CSP's UI thread has handled the input sent so far. A sent message is handled only when that thread
+    /// asks for its next message, between the queued key messages, so a WM_NULL per key transition comes back after
+    /// them. Right after a save CSP keeps its UI thread for up to a second: a layer panel read 140 ms after two
+    /// select-layer presses still showed the first (2026-10-24) and the next press overshot the target.
+    /// </summary>
+    internal void WaitForInputHandled(int rounds)
+    {
+        const uint WmNull = 0, SmtoAbortIfHung = 2;
+        for (int i = 0; i < rounds && Native.IsWindow(_window); i++)
+            Native.SendMessageTimeout(_window, WmNull, 0, 0, SmtoAbortIfHung, 3000, out _);
     }
 
     private void Move(Point point)
@@ -252,11 +330,19 @@ internal sealed class WindowsViewInput : IViewInput
         [DllImport("user32.dll", SetLastError = true)] internal static extern uint SendInput(uint count, Input[] inputs, int size);
         [DllImport("user32.dll")] internal static extern bool SetProcessDpiAwarenessContext(nint context);
         [DllImport("user32.dll")] internal static extern bool IsWindow(nint window);
+        internal delegate bool EnumWindowsProc(nint window, nint parameter);
+        [DllImport("user32.dll")] internal static extern bool EnumWindows(EnumWindowsProc callback, nint parameter);
+        [DllImport("user32.dll")] internal static extern nint GetWindow(nint window, uint command);
+        [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint window);
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] internal static extern nint GetWindowLongPtr(nint window, int index);
         [DllImport("user32.dll")] internal static extern bool IsIconic(nint window);
         [DllImport("user32.dll")] internal static extern bool ShowWindow(nint window, int command);
         [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint window);
         [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
         [DllImport("user32.dll")] internal static extern nint WindowFromPoint(NativePoint point);
+        [DllImport("user32.dll", SetLastError = true)] internal static extern bool GetCursorPos(out NativePoint point);
         [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(nint window, out uint pid);
+        [DllImport("user32.dll", SetLastError = true)]
+        internal static extern nint SendMessageTimeout(nint window, uint message, nint wParam, nint lParam, uint flags, uint timeoutMs, out nint result);
     }
 }

@@ -144,8 +144,9 @@ internal static class LifecycleChecks
 
     private static MainWindow Window(FakeHost host, string[]? args = null)
         => new(args ?? [], host) { ShowInTaskbar = false, Opacity = 0 };
+    // mayContinue: false, as closing stops: these checks have no CSP, so a final-save dialog must not appear.
     private static Task Stop(MainWindow window) => (Task)(typeof(MainWindow).GetMethod("StopAsync", Private)!
-        .Invoke(window, null) ?? throw new InvalidOperationException("Missing stop task."));
+        .Invoke(window, [false]) ?? throw new InvalidOperationException("Missing stop task."));
     private static T Get<T>(MainWindow window, string name) => (T)(typeof(MainWindow).GetField(name, Private)!
         .GetValue(window) ?? throw new InvalidOperationException("Missing lifecycle field: " + name));
     private static void Set(MainWindow window, string name, object value) => typeof(MainWindow).GetField(name, Private)!.SetValue(window, value);

@@ -153,25 +153,31 @@ internal static unsafe class LayerDiff
                     evidence.Recognizer.CaptureStateIds, null, MatrixData.From(impact, size), ["outsidePredictedStrokeCoverage"], [id]));
             }
             string[] files = [id + "-after.png", id + "-now.png", id + "-mask.png", id + "-difference.png"];
+            // All four patches in one pass, written by FastPng (the same BGRA pixels GDI+ saved, ~10x faster).
+            var patches = new byte[files.Length][];
+            for (int kind = 0; kind < files.Length; kind++) patches[kind] = new byte[checked(bounds.Width * bounds.Height * 4)];
+            fixed (byte* afterPatch = patches[0], nowPatch = patches[1], maskPatch = patches[2], differencePatch = patches[3])
+                for (int y = bounds.Top; y < bounds.Bottom; y++)
+                {
+                    if ((y & 63) == 0) token.ThrowIfCancellationRequested();
+                    for (int x = bounds.Left; x < bounds.Right; x++)
+                    {
+                        int cell = y / TileSize * matrix.Columns + x / TileSize;
+                        byte* a = fullAfter.At(x, y), b = fullNow.At(x, y);
+                        if (!component.Contains(cell) || !Different(a, b)) continue;
+                        long offset = ((long)(y - bounds.Top) * bounds.Width + (x - bounds.Left)) * 4;
+                        *(uint*)(afterPatch + offset) = *(uint*)a;
+                        *(uint*)(nowPatch + offset) = *(uint*)b;
+                        *(uint*)(maskPatch + offset) = 0xffffffff;
+                        byte* difference = differencePatch + offset;
+                        for (int c = 0; c < 3; c++) difference[c] = (byte)Math.Max(Math.Abs(a[c] - b[c]), Math.Abs(a[3] - b[3]));
+                        difference[3] = 255;
+                    }
+                }
             for (int kind = 0; kind < files.Length; kind++)
             {
-                token.ThrowIfCancellationRequested(); using var image = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
-                using (var pixels = new Pixels(image, ImageLockMode.WriteOnly))
-                    for (int y = bounds.Top; y < bounds.Bottom; y++)
-                    {
-                        if ((y & 63) == 0) token.ThrowIfCancellationRequested();
-                        for (int x = bounds.Left; x < bounds.Right; x++)
-                        {
-                            int cell = y / TileSize * matrix.Columns + x / TileSize;
-                            byte* a = fullAfter.At(x, y), b = fullNow.At(x, y), target = pixels.At(x - bounds.Left, y - bounds.Top);
-                            if (!component.Contains(cell) || !Different(a, b)) { *(uint*)target = 0; continue; }
-                            if (kind == 0) *(uint*)target = *(uint*)a;
-                            else if (kind == 1) *(uint*)target = *(uint*)b;
-                            else if (kind == 2) *(uint*)target = 0xffffffff;
-                            else { for (int c = 0; c < 3; c++) target[c] = (byte)Math.Max(Math.Abs(a[c] - b[c]), Math.Abs(a[3] - b[3])); target[3] = 255; }
-                        }
-                    }
-                image.Save(Path.Combine(outputDirectory, files[kind]), ImageFormat.Png);
+                token.ThrowIfCancellationRequested();
+                File.WriteAllBytes(Path.Combine(outputDirectory, files[kind]), FastPng.Encode(bounds.Width, bounds.Height, patches[kind], bgra: true));
             }
             images.Add(new(id, bounds, component.Sum(c => changedCells[c].Count), files[0], files[1], files[2], files[3], ids.Order().ToArray()));
         }

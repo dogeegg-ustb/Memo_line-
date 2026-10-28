@@ -87,6 +87,18 @@ public static class Footprints
         return result;
     }
 
+    /// <summary>The brush's own reach for a label: its recorded radius less the screen-pixel safety padding, which is
+    /// divided by the zoom and so swells far past the ink when the navigator digits are misread (6 % read for 18.6 %
+    /// gave 226 px around a 20 px brush, memolinetest13). A brush sized on screen depends on that zoom itself, and a
+    /// label without its recipe has nothing to subtract: those keep the recorded radius.</summary>
+    internal static double InkRadius(LabelEvidence label)
+        => label.CoverageSettings is { SpecifyBySizeOnScreen: false } settings
+            ? Math.Min(label.Radius, settings.BrushRadius + settings.AntiAliasRadius + settings.SafetyRadius)
+            : label.Radius;
+
+    internal static PixelMask RasterizeInkBounded(IEnumerable<LabelEvidence> labels, int width, int height)
+        => RasterizeCoverageBounded(labels.Select(l => l with { Radius = InkRadius(l) }), width, height);
+
     internal static PixelMask RasterizeCenterlineBounded(IReadOnlyList<(double X, double Y)> points, int width, int height)
     {
         var capsules = points.Select((p,i) => (A: i == 0 ? p : points[i-1], B: p, Radius: .75)).ToArray();

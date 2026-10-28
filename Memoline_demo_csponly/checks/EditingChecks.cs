@@ -131,7 +131,8 @@ internal static class EditingChecks
         var broken = EditIndexBuilder.Build(session with { Packets = [p1, p2 with { AfterSnapshotId = "missing" }] });
         Check(broken.Issues.Any(i => i.Code == PlanIssueCode.ChainBroken), "A snapshot link breakpoint is reported explicitly.");
         var noBaseline = EditIndexBuilder.Build(session with { Packets = [p1 with { BaselineSource = null }, p2] });
-        Check(noBaseline.Issues.Any(i => i.Code == PlanIssueCode.NoBaseline), "An unproven first snapshot cannot be used as a baseline.");
+        // Without a seeded baseline the first capture is the layer's starting pixels; contacts before it are part of them.
+        Check(!noBaseline.Issues.Any(i => i.Code == PlanIssueCode.NoBaseline), "A first snapshot without a seeded source still starts the layer's chain.");
         checks += LiveReaderChecks.Run(root);
         Console.WriteLine($"Editing core checks passed: {checks}.");
         return checks;

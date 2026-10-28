@@ -6,6 +6,7 @@ internal static class PenReplayChecks
     internal static async Task RunAsync()
     {
         ChecksRecordedGaps();
+        await CompressesContactsAsync();
         await PreservesConcentratedAsync();
         await FinishesLastStrokeWithoutIdleAsync();
         await SeparatesContactsAsync();
@@ -43,6 +44,24 @@ internal static class PenReplayChecks
             "Gap conversion must use the memoline clock frequency.");
         Check(new ReplayOptions(ReplayMode.Discrete, .05).GapBetween(0, 1000, 1000) == TimeSpan.FromMilliseconds(50),
             "A lower selected limit may reduce, but never enlarge, the recorded gap.");
+    }
+
+    private static async Task CompressesContactsAsync()
+    {
+        // 400 samples over two recorded seconds, replayed in a 20 ms budget at the recorded speed setting 1.
+        var samples = Enumerable.Range(0, 400).Select(i => new MemolineReplaySample(i * 5L, 100 + i % 50, 200, .5, 0, 0, i < 399)).ToArray();
+        var stroke = new MemolineReplayStroke(1, 0, samples[^1].Ticks, new CanvasViewSnapshot(100, 0, 0, 0), samples);
+        var options = new ReplayOptions(ReplayMode.Discrete, .015, FixedGap: true, StrokeSeconds: .02);
+        Check(Math.Abs(options.SpeedFor(stroke.StartTicks, stroke.EndTicks, 1000, 1) - 1995 / 20d) < 1e-9 &&
+              new ReplayOptions(StrokeSeconds: 5).SpeedFor(0, 1995, 1000, 1) == 1 && new ReplayOptions().SpeedFor(0, 1995, 1000, 1) == 1,
+            "A contact is sped up to fit the stroke budget, never slowed below its recorded speed.");
+        var pen = new FakePen();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        await ReplayStrokeCoreAsync(stroke, 1000, 1, _ => Task.CompletedTask, default, options, () => pen, pen.IdleAsync);
+        Check(watch.ElapsedMilliseconds < 250 && pen.Events.Count(e => e == "Update") == 398 && pen.Events[0] == "Down" && pen.Events[^2] == "UpAndLeave",
+            $"A compressed contact still sends every sample, in order, within its budget (took {watch.ElapsedMilliseconds} ms).");
+        try { new ReplayOptions(StrokeSeconds: 0).Validate(); throw new Exception("A zero stroke budget was accepted."); }
+        catch (ArgumentException) { }
     }
 
     private static async Task FinishesLastStrokeWithoutIdleAsync()
@@ -126,7 +145,7 @@ internal static class PenReplayChecks
 
     private static async Task RejectsInvalidBeforeDeviceAsync()
     {
-        foreach (var gap in new[] { double.NaN, double.PositiveInfinity, -.1, .201, 1 })
+        foreach (var gap in new[] { double.NaN, double.PositiveInfinity, -.1, 1.001, 2 })
         {
             bool created = false;
             try

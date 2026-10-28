@@ -76,6 +76,16 @@ internal static class CanvasInteractionChecks
         lassoModel.SelectImage(lassoModel.Candidates.Single(c => c.Image.Key.Layer.Uuid == "ink").Image.Key);
         lassoModel.BeginSweep(transform.CanvasToScreen(new(30, 8))); lassoModel.ContinueSweep(transform.CanvasToScreen(new(40, 8))); lassoModel.EndSweep();
         Check(selectionEvents == 2, "One sweep must notify exactly one whole-event toggle even if the cursor stays on the path.");
+        // Main screen plus the panel stash's tall virtual monitor beside it (live layout at 21:49 on 2026-10-18).
+        Rectangle main = new(0, 0, 2560, 1600), stash = new(2560, 0, 1536, 6144), virtualScreen = Rectangle.Union(main, stash);
+        Check(FrozenCspDesktop.MonitorsUnder(new(-8, -8, 2576, 1543), [main, stash], virtualScreen) == main,
+            "A maximized CSP window freezes only its own monitor, never the panel stash monitor.");
+        Check(FrozenCspDesktop.MonitorsUnder(new(0, 0, 2560, 1527), [main, stash], virtualScreen) == main,
+            "The live CSP client area freezes only the main screen.");
+        Check(FrozenCspDesktop.MonitorsUnder(new(2000, 100, 1000, 800), [main, stash], virtualScreen) == virtualScreen,
+            "A CSP window spanning two monitors freezes both.");
+        Check(FrozenCspDesktop.MonitorsUnder(new(9000, 9000, 100, 100), [main, stash], virtualScreen) == virtualScreen,
+            "A window on no known monitor falls back to the whole virtual screen.");
         Exception? error = null;
         var thread = new Thread(() =>
         {

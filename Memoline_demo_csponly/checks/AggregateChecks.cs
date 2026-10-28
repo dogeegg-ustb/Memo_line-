@@ -130,6 +130,34 @@ internal static class AggregateChecks
             aggregate.CaptureCommitted(request, new(Path.Combine(packetRoot, "patch.png"), packetRoot, false, 1, 2));
             aggregate.CaptureCommitted(request, new(Path.Combine(packetRoot, "patch.png"), packetRoot, false, 1, 2));
 
+            // A Memoline-operation packet is a side packet sealed at the edit's native record: it owns no window.
+            writer.AppendState("editingActionCompleted", NextTick(), [], new { transactionId = "tx-fixture", editKind = "eventEditing" }, "immediate");
+            var action = records[^1];
+            string operationRoot = Path.Combine(root, "operation-packet"); Directory.CreateDirectory(operationRoot);
+            foreach (string file in new[] { "patch.png", "patch-alias.png", "canvas-preview.png" })
+                File.Copy(Path.Combine(packetRoot, file), Path.Combine(operationRoot, file));
+            var operationManifest = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(packetRoot, "manifest.json")))!;
+            operationManifest["id"] = "operation-fixture";
+            operationManifest["recognizer"]!["fromTicks"] = secondTick;
+            operationManifest["recognizer"]!["toTicks"] = action.Ticks;
+            operationManifest["recognizer"]!["inputs"] = new System.Text.Json.Nodes.JsonArray();
+            operationManifest["capture"]!["triggerTicks"] = action.Ticks;
+            operationManifest["capture"]!["triggerKind"] = "memolineOperation";
+            operationManifest["labels"] = new System.Text.Json.Nodes.JsonArray(operationManifest["labels"]![1]!.DeepClone());
+            operationManifest["images"]![0]!["labelIds"] = new System.Text.Json.Nodes.JsonArray("coarse");
+            operationManifest["memolineOperation"] = new System.Text.Json.Nodes.JsonObject { ["transactionId"] = "tx-fixture", ["editKind"] = "eventEditing" };
+            File.WriteAllText(Path.Combine(operationRoot, "manifest.json"), operationManifest.ToJsonString());
+            writer.FlushAsync().GetAwaiter().GetResult();
+            var operationRequest = new CaptureRequest(1, action.Ticks, "Ink copy", new(0, 0, 0, 0), [], new(9, "Ink copy", "repro"),
+                TriggerKind: "memolineOperation") { BoundaryRequestId = "tx-fixture" };
+            Invalid(() => aggregate.CaptureCommitted(operationRequest, new(Path.Combine(operationRoot, "patch.png"), operationRoot, false, 1, 1)),
+                "An operation packet needs the edit's native record first");
+            aggregate.ObserveMemolineOperation("tx-fixture", action.AppendId, action.Ticks);
+            Invalid(() => aggregate.CaptureCommitted(operationRequest with { Ticks = action.Ticks - 1 },
+                new(Path.Combine(operationRoot, "patch.png"), operationRoot, false, 1, 1)), "An operation packet is sealed at its record's own ticks");
+            aggregate.CaptureQueued(operationRequest);
+            aggregate.CaptureCommitted(operationRequest, new(Path.Combine(operationRoot, "patch.png"), operationRoot, false, 1, 1));
+
             long thirdTick = NextTick();
             var third = State(thirdTick);
             aggregate.ObserveViewport(new(Realtime(third), thirdTick, 1, false, false));
@@ -190,8 +218,13 @@ internal static class AggregateChecks
             Check(samples.All(s => new[] { "actionPatternContinuity", "toolContinuity", "layerContinuity", "regionContinuity", "timeContinuity" }
                 .All(key => J.Get(s, key).ValueKind == JsonValueKind.Null)), "Future algorithms have empty numeric fields");
             Check(samples.All(s => J.Text(s, "algorithmVersion") == "csponly-dimensions/v1"), "Dimension algorithm is versioned separately");
-            var packets = lines.Where(e => J.Text(e, "kind") == "packet" && J.Text(e, "boundaryKind") != "recordingEnd").ToArray();
+            var packets = lines.Where(e => J.Text(e, "kind") == "packet" && J.Text(e, "boundaryKind") is not ("recordingEnd" or "memolineOperation")).ToArray();
             Check(packets.Length == 4, "Only true changes produce packets, including empty boundaries");
+            var operationPacket = lines.Single(e => J.Text(e, "kind") == "packet" && J.Text(e, "boundaryKind") == "memolineOperation");
+            Check(J.Text(operationPacket, "id") == "memoline-op-tx-fixture-9" && J.Tick(operationPacket, "observationAppendId", -1) == (long)action.AppendId &&
+                  J.Tick(operationPacket, "toTicks", -1) == action.Ticks &&
+                  J.Get(operationPacket, "eventPointers").EnumerateArray().All(p => p.GetProperty("context").GetBoolean()),
+                "The Memoline-operation packet is a context packet at the edit's native record");
             var final = lines.Single(e => J.Text(e, "kind") == "packet" && J.Text(e, "boundaryKind") == "recordingEnd");
             Check(J.Tick(final, "toTicks", -1) == J.Tick(MemolineReader.Read(writer.FilePath).Last(), "ticks", -2),
                 "Every session has a final packet closed at the native footer");
@@ -251,7 +284,7 @@ internal static class AggregateChecks
             string sealedPath = Path.Combine(root, "integrated.memoline");
             BundleArchive.Seal(writer.FilePath, aggregatePath, sealedPath);
             var verified = BundleArchive.Verify(sealedPath);
-            Check(verified.PacketCount == 5 && verified.DimensionSampleCount == 7 && verified.AssetCount == assets.Length,
+            Check(verified.PacketCount == 6 && verified.DimensionSampleCount == 7 && verified.AssetCount == assets.Length,
                 "Real aggregate pointers and chunked images pass final single-file sealing validation");
             var alteredContacts = File.ReadAllLines(aggregatePath).Select(line => System.Text.Json.Nodes.JsonNode.Parse(line)!).ToArray();
             var alteredPacket = alteredContacts.First(row => row["kind"]!.GetValue<string>() == "packet" && row["penContacts"]!.AsArray().Count > 0);

@@ -52,7 +52,7 @@ class LayerOcrReader:
         if panel_image.ndim != 3 or panel_image.shape[2] != 3 or panel_image.dtype != np.uint8:
             raise ValueError("panel_image must be a uint8 BGR image with shape (height, width, 3)")
         image = self._prepare_resolution(panel_image)
-        boxes = self._recognize(image)
+        boxes = self._recover_highlighted_rows(image, self._recognize(image))
         # CSP renders each row as two text lines: opacity/blend above, name below.
         # Require the property line as an anchor so toolbar text is not a layer.
         line_rows = []
@@ -666,6 +666,41 @@ class LayerOcrReader:
         offset = float(np.median(background_gray))
         normalized = np.clip(gray.astype(np.float32) - offset + 128.0, 0, 255)
         return [int(value) for value in normalized.reshape(-1)]
+
+    # The selected row's white text on CSP's blue highlight is the faintest line for the detector. At
+    # the panel's own size (the fast setting) it is often read badly ("图层" without its number, low
+    # confidence), so that band alone is always read again enlarged and replaces what was read there,
+    # instead of detecting the whole panel enlarged (about 4x slower).
+    HIGHLIGHT_BAND_SCALE = 2.5
+
+    @staticmethod
+    def _highlight_bands(image: np.ndarray) -> list[tuple[int, int]]:
+        if image.ndim != 3 or image.shape[0] < 10:
+            return []
+        width = image.shape[1]
+        region = image[:, int(width * 0.3):int(width * 0.95)].astype(np.int16)
+        blue = (region[:, :, 0] - region[:, :, 2] >= 18) & (region[:, :, 0] - region[:, :, 1] >= 10)
+        rows = blue.mean(axis=1) >= 0.5
+        bands, start = [], None
+        for y, on in enumerate(list(rows) + [False]):
+            if on and start is None:
+                start = y
+            elif not on and start is not None:
+                if y - start >= 10:
+                    bands.append((start, y))
+                start = None
+        return bands
+
+    def _recover_highlighted_rows(self, image: np.ndarray, boxes: list[TextBox]) -> list[TextBox]:
+        for band_top, band_bottom in self._highlight_bands(image):
+            top, bottom = max(0, band_top - 2), min(image.shape[0], band_bottom + 2)
+            scale = self.HIGHLIGHT_BAND_SCALE
+            band = cv2.resize(image[top:bottom], None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+            reread = [TextBox(box.text, [[x / scale, y / scale + top] for x, y in box.points], box.score)
+                      for box in self._recognize(band)]
+            if reread:
+                boxes = [box for box in boxes if not band_top <= box.bounds[1] + box.bounds[3] / 2 < band_bottom] + reread
+        return boxes
 
     def _recognize(self, image: np.ndarray) -> list[TextBox]:
         if self.method == "rapidocr":

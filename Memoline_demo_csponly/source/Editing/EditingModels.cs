@@ -35,6 +35,10 @@ public sealed record EventChange(bool Delete = false, string? BrushName = null,
 {
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingDefault)]
     public JsonElement ReplacementBrushState { get; init; }
+    /// <summary>The colour (three 0–255 values) the stroke is drawn in instead of its recorded one; null keeps it.
+    /// Replay sets it with CSP's screen colour picker (PacketReplay.ColorRestorer), so it must be exact RGB.</summary>
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<int>? Rgb { get; init; }
     public IReadOnlyDictionary<string, double> NumberValues { get; } =
         Numbers ?? ImmutableDictionary<string, double>.Empty;
 }
@@ -308,6 +312,18 @@ public sealed record ImageRgba(int Width, int Height, byte[] Bytes)
             };
     }
 
+    /// <summary>A parked copy with its own storage, so it is not <see cref="Equals(ImageRgba?)"/> to this one.</summary>
+    public ImageRgba DetachedParkedCopy()
+    {
+        lock (_gate)
+            return new ImageRgba(Width, Height, [])
+            {
+                _bytes = null,
+                _packed = _packed is { } packed ? packed.ToArray() : Pack(_bytes!),
+                _digest = _bytes is null ? _digest : SHA256.HashData(_bytes),
+            };
+    }
+
     /// <summary>Compares pixels; parked images compare by digest without being restored.</summary>
     public bool SamePixels(ImageRgba other)
     {
@@ -370,6 +386,17 @@ public sealed record DirtyImage(
     public PixelMask W { get; init; } = new PixelMask(Mask.Left, Mask.Top, Mask.Width, Mask.Height);
     public PixelMask Probe { get; init; } = new PixelMask(Mask.Left, Mask.Top, Mask.Width, Mask.Height);
     public PixelMask Impact { get; init; } = new PixelMask(Mask.Left, Mask.Top, Mask.Width, Mask.Height);
+    /// <summary>The image shows what a Memoline edit changed (it is in that edit's Memoline-operation packet).</summary>
+    public MemolineOperationInfo? Operation { get; init; }
+    /// <summary>The Memoline edit this image is an old version for: every event in it was changed by that edit,
+    /// whose operation packet is the new version. Listed only on request ("旧版本"), never editable.</summary>
+    public string? SupersededBy { get; init; }
+}
+
+/// <summary>An executed Memoline edit as its Memoline-operation packet names it.</summary>
+public sealed record MemolineOperationInfo(string TransactionId, string EditKind, string ReplacedLayerUuid)
+{
+    public bool PreciseUndo => EditKind == "preciseUndo";
 }
 
 public sealed record CoverageSegment(double StartX, double StartY, double EndX, double EndY);
@@ -391,6 +418,8 @@ public sealed record LayerPacket(string PacketId, LayerKey Layer, long TriggerTi
     public IReadOnlyList<LabelEvidence> Labels { get; init; } = [];
     public JsonElement AfterDescriptor { get; init; }
     public JsonElement NowDescriptor { get; init; }
+    /// <summary>A Memoline-operation packet ("记艺线操作包"): the new version of the packets its edit rebuilt.</summary>
+    public MemolineOperationInfo? Operation { get; init; }
 }
 
 internal sealed record EditableStroke(EditableStrokeKey Key, ulong OperationId, long StartTicks,
@@ -401,18 +430,32 @@ internal sealed record EditableStroke(EditableStrokeKey Key, ulong OperationId, 
     internal int SessionOrder { get; init; }
     internal LayerKey? SourceLayer { get; init; }
     internal bool IsUndone { get; init; }
+    /// <summary>The UUID of the layer this stroke was drawn on when that layer was later merged into <see cref="Layer"/>.</summary>
+    internal string? MergedFrom { get; init; }
+    /// <summary>The latest executed Memoline edit that changed this stroke; the stroke as indexed is that new version.</summary>
+    internal StrokeVersion? Version { get; init; }
+    /// <summary>Precise undo drew this stroke again so CSP's undo steps back through it: a Memoline event, not the
+    /// user's. Never selected again; once the user undoes it, it never happened.</summary>
+    internal bool MemolineInjected { get; init; }
     public ulong BeginEventId { get; init; }
     public JsonElement BrushState { get; init; }
     public BrushClassification? Classification { get; init; }
     public IReadOnlyList<DirtyImageKey> Images { get; init; } = [];
-    public IReadOnlyDictionary<string, double> Numbers { get; } = BrushNumbers ?? ImmutableDictionary<string, double>.Empty;
+    public IReadOnlyDictionary<string, double> Numbers { get; init; } = BrushNumbers ?? ImmutableDictionary<string, double>.Empty;
     public PixelMask WriteMask { get; init; } = new(0, 0, 0, 0);
+    /// <summary>Where the brush itself inked (<see cref="Footprints.InkRadius"/>), without the safety padding of
+    /// <see cref="WriteMask"/>. Empty when the recording has no recipe; <see cref="Ink"/> then uses the write footprint.</summary>
+    public PixelMask InkMask { get; init; } = new(0, 0, 0, 0);
+    internal PixelMask Ink => InkMask.IsEmpty ? WriteMask : InkMask;
     public PixelMask ProbeMask { get; init; } = new(0, 0, 0, 0);
     public PixelMask ImpactMask { get; init; } = new(0, 0, 0, 0);
     public IReadOnlyList<LabelEvidence> CoverageLabels { get; init; } = [];
     // A size override requires the recipe recorded by the watcher, not guessed defaults.
     public DirtyMatrix.Core.CoverageSettings? FrozenCoverageSettings { get; init; }
 }
+
+/// <summary>The edit a stroke's current version comes from, with the change relative to its recording.</summary>
+internal sealed record StrokeVersion(string TransactionId, string EditKind, EventChange Change);
 
 internal sealed record UndoRedoEvidence(ulong InputAppendId,string Command,bool Ambiguous)
 {
@@ -426,6 +469,8 @@ internal sealed record LayerIndex(LayerKey Layer, IReadOnlyList<LayerPacket> Pac
 {
     internal IReadOnlyList<UndoRedoEvidence> UndoRedo { get; init; } = [];
     internal IReadOnlyList<UndoCheckpoint> UndoCheckpoints { get; init; } = [];
+    /// <summary>The user deleted this layer (no successor is in CSP): its events are shown, never edited.</summary>
+    internal bool Deleted { get; init; }
 }
 
 internal sealed record EditIndex(IReadOnlyDictionary<LayerKey, LayerIndex> Layers,
@@ -434,7 +479,7 @@ internal sealed record EditIndex(IReadOnlyDictionary<LayerKey, LayerIndex> Layer
     IReadOnlyList<PlanIssue> Issues)
 {
     internal NativeUndoTimelineResult? UndoTimeline { get; init; }
-    public bool IsValid => Issues.Count == 0 && Layers.Values.All(l => l.ChainValid);
+    public bool IsValid => Issues.Count == 0 && Layers.Values.Where(l => !l.Deleted).All(l => l.ChainValid);
     public LayerIndex ForLayer(LayerKey key) => Layers.TryGetValue(key, out var layer)
         ? layer : throw new KeyNotFoundException("找不到编辑图层 " + key);
 }
@@ -442,6 +487,11 @@ internal sealed record EditIndex(IReadOnlyDictionary<LayerKey, LayerIndex> Layer
 public sealed record EditRequest(EditKind Kind, LayerKey? CurrentLayer, PixelMask Selection,
     IReadOnlyDictionary<EditableStrokeKey, EventChange> Changes)
 {
+    /// <summary>Precise undo: strokes the rewind wipes although the region did not select them (drawn on or under the
+    /// selected ink). Their pixels go back to the baseline with the selection's; they are replayed unchanged, before
+    /// the selection, so CSP's undo steps back through the selection first. They stay the user's events.</summary>
+    public IReadOnlySet<EditableStrokeKey> Closure { get; init; } = new HashSet<EditableStrokeKey>();
+
     public static EditRequest Event(LayerKey layer, PixelMask selection,
         IReadOnlyDictionary<EditableStrokeKey, EventChange> changes)
         => new(EditKind.EventEditing, layer, selection, changes);
@@ -452,6 +502,8 @@ internal sealed record SessionSnapshot(string MechanicalPath, string SessionId, 
     IReadOnlyList<LayerPacket> Packets, ulong BoundaryAppendId, long BoundaryTicks)
 {
     public IReadOnlyList<PacketReplay.HistorySlot> History { get; init; } = [];
+    /// <summary>Layer UUIDs the editing boundary's own save lists; null for sealed sessions (see LayerLineage.AliveAt).</summary>
+    public IReadOnlySet<string>? BoundaryLayers { get; init; }
 }
 
 internal sealed record EditSession(SessionSnapshot LiveView, EditIndex Index, LayerKey? CurrentLayer)
@@ -462,6 +514,9 @@ internal sealed record EditSession(SessionSnapshot LiveView, EditIndex Index, La
         Sources.TryGetValue(sessionId, out var source) ? source :
         throw new InvalidDataException("历史笔画缺少对应的原生会话：" + sessionId);
     internal JsonElement CanvasViewEvidence { get; init; }
+    /// <summary>The layer panel showed <see cref="CurrentLayer"/> when the boundary was built. CSP does not write the
+    /// document for a selection change alone, so the boundary save may still name a layer selected earlier.</summary>
+    internal bool CurrentLayerShownOnPanel { get; init; }
     internal IReadOnlyList<string> BrushChoices { get; init; } = [];
     internal int? VerifiedUndoCapacity { get; init; }
     internal JsonElement LiveBrushEvidence { get; init; }

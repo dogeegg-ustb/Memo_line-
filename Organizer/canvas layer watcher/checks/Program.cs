@@ -322,6 +322,18 @@ signature = SaveCapture.Stat(source);
 using (var timeout = new CancellationTokenSource(3000))
     await SaveCapture.StableSnapshotAsync(source, target, signature, timeout.Token, allowUnchanged: true);
 Check(await File.ReadAllTextAsync(target) == "after-save", "Final save can read a clean document after a stable quiet period");
+// 2026-10-24: CSP had another document open; an edited document whose .clip never changed was handed on as saved.
+int resaves = 0;
+using (var timeout = new CancellationTokenSource(10000))
+{
+    try
+    {
+        await SaveCapture.StableSnapshotAsync(source, target, signature, timeout.Token, allowUnchanged: true, expectChange: true,
+            resave: _ => { resaves++; return Task.CompletedTask; }, requireWrite: true);
+        throw new Exception("An edited document that was never written was accepted");
+    }
+    catch (ClipNotWrittenException error) { Check(resaves == 1 && error.Message.Contains(source), "An edit boundary refuses an edited document CSP never wrote, after one resend"); }
+}
 
 string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../"));
 string bridge = Path.Combine(root, "bridge/target/release/clip-layer-bridge.exe");
@@ -426,6 +438,7 @@ var integratedWriter = new MemolineWriter(Path.Combine(artifacts, "integrated-ip
 var integratedHub = new RecorderRealtimeHub(integratedWriter);
 var integratedServer = new RecorderRealtimePipeServer(integratedHub);
 using var integratedStop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+bool failFinalSave = false; int endMarkers = 0;
 var integratedControl = Task.Run(async () =>
 {
     try
@@ -439,8 +452,12 @@ var integratedControl = Task.Run(async () =>
             await using var output = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
             using var request = JsonDocument.Parse((await reader.ReadLineAsync(integratedStop.Token))!);
             object response;
-            if (J.Text(request.RootElement, "command") == "prepareRecordingEnd")
+            if (J.Text(request.RootElement, "command") == "requestClipSave" && Volatile.Read(ref failFinalSave))
+                response = new { success = false, requestId = J.Text(request.RootElement, "requestId"), saveInputDispatched = false,
+                    error = "Could not activate the CSP window for the final save: Windows refused to bring CSP to the front." };
+            else if (J.Text(request.RootElement, "command") == "prepareRecordingEnd")
             {
+                Interlocked.Increment(ref endMarkers);
                 MemolineEvent? marker = null;
                 void Observe(MemolineEvent frame) { if (frame.Kind == "recordingEndRequested") marker = frame; }
                 integratedWriter.RecordAppended += Observe;
@@ -523,6 +540,13 @@ try
     int observedBeforeEnd = integratedObservations.Count;
     var tailBegin = integratedWriter.AppendHardware("penBegin", new { heldKeys = Array.Empty<int>() }, new("tablet", "fixture", "fixture", "fixture"));
     integratedWriter.AppendHardware("penEnd", new { heldKeys = Array.Empty<int>() }, new("tablet", "fixture", "fixture", "fixture"), tailBegin.EventId);
+    Volatile.Write(ref failFinalSave, true);
+    bool deferred = false;
+    try { await integratedMonitor.PrepareRecordingEndLayersAsync(integratedStop.Token); }
+    catch (RecordingEndNotStartedException error) { deferred = error.Message.Contains("Could not activate", StringComparison.Ordinal); }
+    Volatile.Write(ref failFinalSave, false);
+    Check(deferred && Volatile.Read(ref endMarkers) == 0,
+        "A final save that fails before the native end marker writes no marker, so the recording can go on and stop again");
     ViewportObservation? endObserved = null;
     integratedMonitor.RecordingEndObserved += observation => endObserved = observation;
     var endCapture = await integratedMonitor.PrepareRecordingEndAsync(integratedStop.Token);

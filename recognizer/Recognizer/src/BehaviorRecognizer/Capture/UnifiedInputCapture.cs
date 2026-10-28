@@ -89,10 +89,14 @@ public sealed partial class UnifiedInputCapture : IAsyncDisposable
         }
     }
 
+    private readonly DriverInitializationService? _driver;
+
     public UnifiedInputCapture(MemolineWriter writer, UpdateActivatorBridge? updates = null,
-        IInputTargetProbe? targetProbe = null, Func<int, int, PenDownLocation>? locatePenDown = null)
+        IInputTargetProbe? targetProbe = null, Func<int, int, PenDownLocation>? locatePenDown = null,
+        DriverInitializationService? driver = null)
     {
         _writer = writer;
+        _driver = driver;
         _updates = updates;
         _targetProbe = targetProbe ?? new CspInputTargetProbe();
         _locatePenDown = locatePenDown ?? ((x, y) => _updates?.ClassifyPenDown(x, y) ?? PanelRegionMap.Unavailable().Classify(x, y));
@@ -236,6 +240,8 @@ public sealed partial class UnifiedInputCapture : IAsyncDisposable
                     _lastTabletHoverTicks = now;
                 }
                 _tabletNearCsp = near;
+                if (near && _driver?.ObserveHover(evt.Position?.X, evt.Position?.Y, cursor.X, cursor.Y) is { } calibrated)
+                    _writer.AppendState("driverConfiguration", _writer.NowTicks, [], calibrated, "immediate");
             }
             else _tabletNearCsp = hovering && evt.ContactState != ContactState.OutOfRange;
             bool down = evt.ContactState == ContactState.Contact && evt.Type != InputEventType.PenUp;

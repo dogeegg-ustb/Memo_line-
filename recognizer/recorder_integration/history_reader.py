@@ -1,7 +1,8 @@
 """Read CSP's History palette after undo and redo, through the panel stash's interface.
 
 The palette is not read on a screen region: it sits on the virtual screen (or anywhere else as a
-floating window) and the panel stash program renders it on request (`captureWindow`). Only
+floating window). The panel stash names its window; this process renders it with PrintWindow (a
+fully stretched History palette is several megapixels, too much to move through the pipe). Only
 undo/redo trigger a read. A burst of presses is read once, after the keyboard has been quiet for
 `historyQuietMs`; that reading names every press of the burst in `relatedEventIds`.
 """
@@ -104,7 +105,12 @@ class HistoryReader:
         captured = now_ticks()
         evidence = dict(triggerTicks=ticks, relatedEventIds=list(refs), commands=list(commands), triggerReason="undoRedo")
         try:
-            shot = self.client.request(command="captureWindow", kind=HISTORY_KIND, format="bgrx")
+            import floating_panels
+            window = floating_panels.find_window(self.client, HISTORY_KIND)
+            if window is None:
+                raise RuntimeError("没有浮动的历史记录面板")
+            pixels, rect = floating_panels.capture(window.hwnd, window.rect)
+            shot = dict(rect=[rect[0], rect[1], rect[0] + rect[2], rect[1] + rect[3]], window=dict(hwnd=window.hwnd))
         except (ConnectionError, RuntimeError, OSError, ValueError) as ex:
             self.pipeline.finish_capture_watermark(ticket)
             evidence.update(capturedTicks=captured, captureEndTicks=now_ticks())
@@ -113,8 +119,6 @@ class HistoryReader:
             return
         captured_end = now_ticks()
         watermark = self.pipeline.finish_capture_watermark(ticket)
-        width, height = shot["width"], shot["height"]
-        pixels = np.frombuffer(base64.b64decode(shot["data"]), np.uint8).reshape(height, width, 4)[:, :, :3]
         screenshot_id = self._persist(pixels, shot, ticks, refs, captured, captured_end)
         if self.core is None:
             from pipeline import build_history_core
@@ -123,7 +127,8 @@ class HistoryReader:
         evidence.update(capturedTicks=captured, captureEndTicks=captured_end, screenshotIds=[screenshot_id],
                         panelRect=shot.get("rect"), window=shot.get("window", {}).get("hwnd"),
                         observedAfterEventId=watermark,
-                        causalAmbiguous=watermark is None or watermark > max(refs), completedTicks=now_ticks())
+                        causalAmbiguous=watermark is None or watermark > max(refs), completedTicks=now_ticks(),
+                captureBackend="PrintWindow")
         error = None if result.get("status") == "ok" else f"历史面板读取不完整：{result.get('status')} {result.get('reason', '')}".strip()
         self.pipeline.timeline.observe(MODULE, result, evidence, error)
 
