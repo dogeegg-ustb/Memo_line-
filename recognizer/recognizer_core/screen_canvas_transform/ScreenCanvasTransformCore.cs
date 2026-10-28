@@ -65,6 +65,9 @@ public sealed class ScreenCanvasTransformFrameInput
 /// <summary>Point in ScreenPhysicalPx; the canvas origin is its top-left (0, 0).</summary>
 public readonly record struct ScreenPoint(double X, double Y);
 
+/// <summary>Calibrated Navigator numeric OCR windows in ScreenPhysicalPx, with half-open bounds.</summary>
+public readonly record struct NavigatorNumericOcrBoxes(IntRect ScaleBoxScreenPx, IntRect RotationBoxScreenPx);
+
 public sealed class ScreenCanvasTransformCoreResult
 {
     public bool Success { get; init; }
@@ -80,6 +83,17 @@ public sealed class ScreenCanvasTransformCoreResult
     public float? OcrScalePercent { get; init; }
     /// <summary>Rotation read by OCR, in degrees; null when OCR did not read it reliably.</summary>
     public float? OcrRotationDegrees { get; init; }
+    /// <summary>
+    /// Frozen Navigator scale/rotation OCR regions in ScreenPhysicalPx.
+    /// DigitsScreen rectangles are the calibrated first-pass windows (when available);
+    /// SlotScreen rectangles are the full-row fallback windows. Null when no layout was returned.
+    /// </summary>
+    public OcrLayoutScreen? OcrLayoutScreenPx { get; init; }
+    /// <summary>Only the two calibrated numeric windows; null when either window is unavailable.</summary>
+    public NavigatorNumericOcrBoxes? NavigatorNumericOcrBoxesScreenPx
+        => Success && OcrLayoutScreenPx is
+            { ScaleDigitsScreen: { IsEmpty: false } scale, RotationDigitsScreen: { IsEmpty: false } rotation }
+                ? new NavigatorNumericOcrBoxes(scale, rotation) : null;
     /// <summary>Detailed solver state retained for archive and diagnostics.</summary>
     public TransformSnapshotDto? Snapshot { get; init; }
     public TransformStage? FailedStage { get; init; }
@@ -99,6 +113,14 @@ public sealed class ScreenCanvasTransformCore : IDisposable
     {
         _pipeline = new TransformPipelineService(config?.RapidOcrModelDirectory);
     }
+
+    /// <summary>
+    /// Return the frozen numeric OCR windows from the last successful calibrated initialization/recompute.
+    /// Does not capture, run OCR or re-solve the transform. Returns null before calibration succeeds.
+    /// Failed recomputations retain the calibrated positions; starting a new initialization clears them.
+    /// </summary>
+    public NavigatorNumericOcrBoxes? GetNavigatorNumericOcrBoxesScreenPx()
+        => _lastResult?.NavigatorNumericOcrBoxesScreenPx;
 
     /// <summary>Initialize from three crops of one frozen screen frame, using the original OCR calibration path.</summary>
     public async Task<ScreenCanvasTransformCoreResult> InitializeAsync(
@@ -383,6 +405,7 @@ public sealed class ScreenCanvasTransformCore : IDisposable
             OcrRotationDegrees = snapshot.Numbers.RotationConfidence >= 0.2f
                 && float.IsFinite(snapshot.Numbers.RotationDegrees)
                     ? snapshot.Numbers.RotationDegrees : null,
+            OcrLayoutScreenPx = result.OcrLayoutUsed,
             Snapshot = snapshot,
             PipelineState = result,
         };

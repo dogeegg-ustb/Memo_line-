@@ -35,6 +35,7 @@ public sealed class CapabilityOrchestrator
     private UnifiedInputCapture? _unifiedCapture;
     private WindowsInputHooks? _windowsHooks;
     private UpdateActivatorBridge? _updateActivator;
+    private RecorderInputControlServer? _inputControlServer;
     private InputEventNormalizer? _normalizer; // 事件归一化
     private ulong _sequence; // 会话序号
     private ConfigurationSnapshot? _configSnapshot; // 配置快照
@@ -70,6 +71,8 @@ public sealed class CapabilityOrchestrator
 
     public EnvironmentSnapshot? LastEnvironment => _environmentSnapshot;
     public ConfigurationSnapshot? LastConfiguration => _configSnapshot;
+    public IRecorderInputControl? InputControl => _updateActivator?.Guard;
+    public string? InputControlPipeName => _inputControlServer?.PipeName;
 
     /// <summary>启动统一输入采集与 .memoline 写入。</summary>
     public async Task<SessionInfo> StartAsync(CancellationToken cancellationToken = default)
@@ -113,6 +116,8 @@ public sealed class CapabilityOrchestrator
         _updateActivator = UpdateActivatorBridge.Start(_memoline);
         _unifiedCapture = new UnifiedInputCapture(_memoline, _updateActivator);
         _windowsHooks = new WindowsInputHooks(_unifiedCapture, passivePen: !_captureOptions.EnableOtdHid, _updateActivator?.Guard);
+        if (_updateActivator is not null)
+            _inputControlServer = new RecorderInputControlServer(_updateActivator.Guard, () => _updateActivator.RecordingReady);
 
         _normalizer = new InputEventNormalizer(profile);
         _inputSource.ReportReceived += OnReport;
@@ -131,6 +136,7 @@ public sealed class CapabilityOrchestrator
             : "笔来源: Windows 被动笔事件（不打开数位板 HID；压力可能不可用）");
         Console.WriteLine($"会话: {_memoline.SessionId}");
         Console.WriteLine($"输出: {_memoline.FilePath}");
+        if (_inputControlServer is not null) Console.WriteLine($"输入控制管道: {_inputControlServer.PipeName}");
         Console.WriteLine("按 Enter 停止。");
 
         return session;
@@ -141,6 +147,8 @@ public sealed class CapabilityOrchestrator
     {
         _inputSource.ReportReceived -= OnReport;
         _inputSource.DeviceChanged -= OnDeviceChanged;
+        if (_inputControlServer is not null) await _inputControlServer.DisposeAsync();
+        _inputControlServer = null;
         _windowsHooks?.Dispose();
         _windowsHooks = null;
         await _inputSource.StopAsync(cancellationToken);

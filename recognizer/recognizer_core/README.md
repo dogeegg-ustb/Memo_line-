@@ -16,6 +16,18 @@ The input semantics remain distinct. Layer State returns only the selected layer
 
 For Screen/Canvas integration, read `result.CanvasWindowRoiScreenPx` (corrected workspace, also called canvas-window ROI), `result.NavigatorThumbnailRoiScreenPx`, `result.ScreenCoordinateOriginScreenPx` (top-left screen position of the supplied frame, including a possibly negative virtual-desktop origin), `result.CanvasOriginScreenPx` (solved position of canvas coordinate `(0, 0)`), `result.OcrScalePercent` (100 means 100%), and `result.OcrRotationDegrees` (degrees). These returned points and rectangles use ScreenPhysicalPx; the canvas origin may lie outside the captured viewport. Initialization ROIs passed in `ScreenCanvasTransformInput` instead use CapturePx relative to the supplied frame origin. Unreadable OCR values are `null`; an injected scale remains distinct from an OCR reading. `result.Snapshot` remains available for archives and diagnostics.
 
+`result.OcrLayoutScreenPx` exposes the frozen Navigator OCR positions as one layout: `ScaleDigitsScreen` and `RotationDigitsScreen` are the calibrated numeric windows used first; `ScaleSlotScreen` and `RotationSlotScreen` are the full-row fallback regions. All four are half-open `IntRect` rectangles in ScreenPhysicalPx, already including the capture's screen origin; do not add the origin or apply DPI scaling again. Initialization, session recompute and archive recompute return the layout used by that call without shifting its frozen positions. `ProcessAsync` uses uncalibrated full-row slots, so its digits rectangles are `null`; failed results have a `null` layout. The layout describes OCR input regions, not current-frame text bounding boxes.
+
+For the dedicated numeric-box interface, call `core.GetNavigatorNumericOcrBoxesScreenPx()`. Its `ScaleBoxScreenPx` and `RotationBoxScreenPx` are the two calibrated numeric OCR rectangles, already in ScreenPhysicalPx. The same pair is available as `result.NavigatorNumericOcrBoxesScreenPx` in each successful result. The query performs no capture, OCR or transform solve; it returns `null` until both nonempty numeric windows have been calibrated. It never substitutes full-row fallback regions for numeric boxes. Failed recomputations retain the last calibrated positions; a new initialization clears them. Older archives without both calibrated windows and uncalibrated `ProcessAsync` results return `null`.
+
+```csharp
+if (core.GetNavigatorNumericOcrBoxesScreenPx() is { } boxes)
+{
+    var scaleBox = boxes.ScaleBoxScreenPx;
+    var rotationBox = boxes.RotationBoxScreenPx;
+}
+```
+
 ```csharp
 using var core = new ScreenCanvasTransformCore();
 var input = new ScreenCanvasTransformInput

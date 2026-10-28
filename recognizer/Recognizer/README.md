@@ -59,6 +59,28 @@ BehaviorRecognizer --recover
 
 录制中输入 `V` + Enter 可打开 vMulti 安装引导。
 
+## 输入控制接口
+
+初始化完成后，可通过 `CapabilityOrchestrator.InputControl`（`IRecorderInputControl`）或启动日志中的本地命名管道 `memoline-recorder-input-<PID>` 控制输入保护。管道为 UTF-8 JSONL，一条请求对应一条响应，仅接受当前 Windows 用户的连接。
+
+```json
+{"command":"getInputControlStatus"}
+{"command":"configureInputInterception","enabled":true}
+{"command":"configureInputInterception","enabled":false}
+{"command":"restoreAutomaticInputProtection"}
+{"command":"requestClipSave","expectedClipPath":"D:\\art\\drawing.clip","requestId":"viewport-change-001"}
+```
+
+`requestClipSave` 在初始化完成后立即请求一次保存，无需等下一次键鼠输入，不改变输入拦截策略。也可调用 `IRecorderInputControl.RequestClipSaveAsync`。请求由常驻保存线程执行，与原保存队列串行；工作线程忙、前台不属于 CSP 或标题与预期文档不匹配时，返回 `success=false`。路径必须是绝对 `.clip` 路径，`requestId` 必须非空且不超过 128 字符。标题核对只能匹配文档名称，不能区分不同目录中的同名文档。
+
+一次性回执包含 `success`、`requestId`、`saveInputDispatched`、`saveInputDispatchedTicks`、`saveCompletionConfirmed=false` 和 `error`。这表示保存按键已派发，并非文件写入完成；调用方必须继续检查指定文件的更新与稳定性，然后读取保存副本。`clipSaveRequest` / `saveGuardResult` 保存相同请求 ID，并使用 `reason=externalControl`。
+
+控制范围为 CSP 前台时的键盘（含修饰键及驱动转换按键）、鼠标移动／按钮／滚轮。键鼠输入进入同一队列，先直接派发 Ctrl+S，再按队列顺序释放原输入；Recorder 自己的注入带专用标记，不会再次记录或拦截。新控制模式放行带笔签名的鼠标兼容消息，原始笔压、倾斜及 Windows Ink/Wintab 包不在该接口的拦截范围内；OTD 原始报告继续用于记录。
+
+控制策略不会被工作区辅助进程的周期配置覆盖。关闭控制模式停止新的拦截，已经排队的输入及其配对释放继续排空；`restoreAutomaticInputProtection` 恢复现有图层操作保护。保存失败时，只要原 CSP 仍在前台就释放原指令；切换前台窗口时取消向其他程序回放。响应的 `enabled` 为配置意图，实际是否能够拦截还要看 `saveWorkerReady`、录制初始化状态和 CSP 前台状态。
+
+新控制模式采用常驻专用线程、进程内 `SendInput` 和队列信号，省去 AHK 的 IPC 往返，不增加固定 sleep，也不为每次输入启动工作线程。保存派发前临时释放用户已按住的修饰键，派发 Ctrl+S 后恢复，再释放原键鼠事件。已有自动图层保护仍使用原 AHK 通道。`clipSaveRequest` / `saveGuardResult` 在独立日志队列中写入，退出时排空，避免阻塞后续输入释放；日志保留 `interceptionDurationMs` 和新增的 `saveDispatchToReleaseMs`。这条快路径确认保存输入已派发，`saveCompletionConfirmed` 仍为 false；没有 CSP 文件保存完成回执，不能承诺固定毫秒数或已经完成写盘。
+
 默认沿用原有 OTD 笔报告采集。若设备环境不适合 OTD 直接采集，可用 `BehaviorRecognizer --passive-pen` 改用 Windows 笔兼容事件；这一模式不打开数位板 HID，压力与倾斜值可能不可用。系统输入钩子仅排队通知，窗口判断与写盘在后台执行。
 
 ## 目录布局（自动创建）

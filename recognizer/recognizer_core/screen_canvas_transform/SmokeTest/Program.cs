@@ -30,6 +30,8 @@ static void Print(ScreenCanvasTransformCoreResult result) => Console.WriteLine(J
     result.CanvasOriginScreenPx,
     result.OcrScalePercent,
     result.OcrRotationDegrees,
+    result.OcrLayoutScreenPx,
+    result.NavigatorNumericOcrBoxesScreenPx,
     result.FailedStage,
     result.Status,
     result.Message

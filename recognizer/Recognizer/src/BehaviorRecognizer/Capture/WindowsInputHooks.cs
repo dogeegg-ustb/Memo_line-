@@ -100,6 +100,8 @@ public sealed class WindowsInputHooks : IDisposable
             if (code >= 0)
             {
                 var input = Marshal.PtrToStructure<MouseData>(data);
+                if (input.extraInfo == RecorderInputTag)
+                    return Native.CallNextHookEx(0, code, message, data);
                 // Windows marks synthetic mouse messages from pen/touch with MI_WP_SIGNATURE.
                 bool penOrTouch = (input.extraInfo & (nuint)0xFFFFFF00) == (nuint)0xFF515700;
                 bool touch = (input.extraInfo & (nuint)0x80) != 0;
@@ -110,14 +112,13 @@ public sealed class WindowsInputHooks : IDisposable
                     if (msg != 0x0200 || _passivePenDown)
                         _capture.PostMouse(msg, input.point.X, input.point.Y, (int)input.mouseData, passivePen: true);
                     if (msg == 0x0202) _passivePenDown = false;
-                    if (_guard?.Mouse(msg, input.point.X, input.point.Y, input.mouseData) == true) return 1;
+                    if (_guard?.Mouse(msg, input.point.X, input.point.Y, input.mouseData, penCompatibility: true) == true) return 1;
                 }
                 else if (penOrTouch && !touch)
                 {
-                    if (_guard?.Mouse((int)message, input.point.X, input.point.Y, input.mouseData) == true) return 1;
+                    if (_guard?.Mouse((int)message, input.point.X, input.point.Y, input.mouseData, penCompatibility: true) == true) return 1;
                 }
-                else if (!penOrTouch && ((input.flags & 1) == 0 ||
-                    ((int)message is 0x020A or 0x020E && input.extraInfo != RecorderInputTag)))
+                else if (!penOrTouch)
                 {
                     int msg = (int)message;
                     int button = msg switch

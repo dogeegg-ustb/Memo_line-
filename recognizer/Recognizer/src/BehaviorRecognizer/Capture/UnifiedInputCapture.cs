@@ -296,7 +296,7 @@ public sealed class UnifiedInputCapture : IAsyncDisposable
                 _writer.AppendHardware("keyInput", new { key = KeyName(vk), vk, scanCode, extended, injected, extraInfo = $"0x{extraInfo:X}", guardIntercepted, nextHookResult = nextHookResult.ToInt64(),
                     modifiers, combination = modifiers.Length > 0, repeat, heldKeys = HeldKeys(),
                     shortcutMatch = (string?)null }, KeyboardSource);
-                Console.WriteLine($"[键盘监视] {string.Join("+", modifiers.Append(KeyName(vk)))} 注入={injected} 图层保护拦截={guardIntercepted} 后续Hook阻止={!guardIntercepted && nextHookResult != 0} 来源标记=0x{extraInfo:X}");
+                Console.WriteLine($"[键盘监视] {string.Join("+", modifiers.Append(KeyName(vk)))} 注入={injected} 保存保护拦截={guardIntercepted} 后续Hook阻止={!guardIntercepted && nextHookResult != 0} 来源标记=0x{extraInfo:X}");
             }
             else
             {

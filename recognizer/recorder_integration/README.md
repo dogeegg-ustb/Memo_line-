@@ -79,9 +79,15 @@ py -3 recognizer/recorder_integration/tests/test_engine.py
 
 保存保护通过 `saveInputDispatchedTicks`、`releasedTicks` 和 `interceptionDurationMs` 记录发出保存输入与回放的时刻和实际拦截延迟。`saveSettleMs` 为兼容旧配置保留为 0，Recorder 不再使用此项增加延迟；2–3ms 需要实机测量，线程调度和 IPC 不提供硬实时保证。
 
+记录器新增独立输入控制管道与 `IRecorderInputControl`，见 [输入控制接口](../Recognizer/README.md#输入控制接口)。控制策略覆盖自动图层策略，辅助进程的周期 `guardConfig` 只更新自动策略。新控制模式只拦截键盘、鼠标和滚轮，放行带笔签名的鼠标兼容消息。它使用常驻专用线程和进程内 `SendInput` 保存派发，省去 AHK IPC；日志使用独立队列，避免阻塞后续输入。`saveGuardResult.saveDispatchToReleaseMs` 记录保存派发至释放的实际耗时。
+
 工具栏作为笔刷属性的关联激活区域，从保存的 `palettekindtool` 停靠列读取位置。悬停时只准备监视，鼠标/数位笔操作松开并静默 150ms 后更新笔刷状态；仅截取笔刷属性 ROI 送往笔刷核心，初始化不额外产生工具栏状态或工具栏截图。触发记录的 `activationPanels` 保留工具栏来源。
 
 画布 Host 使用 `recognizer_core/screen_canvas_transform` 核心及其 Native DLL，完整虚拟桌面原始帧传入 `InitializeFrameAsync` / 完整帧 `RecomputeAsync`。初始化的 ROI 转为相对此帧原点的 CapturePx；返回及显示的 ROI 保持 ScreenPhysicalPx。完整帧原点来自虚拟桌面，可以为负坐标，输入 DPI 来自 CSP 主窗口；截图与分析结果保留 `captureBackend` 和 `dpi`。笔刷、当前图层和色彩核心继续使用各自面板 ROI 原图。日志输出有效状态更新触发和采集失败。
+
+画布结果新增 `ocrLayoutScreenPx`，提供导航器缩放与旋转角度的 OCR 位置：`scaleDigitsScreen` / `rotationDigitsScreen` 为初始化校准后优先读取的数字区域，`scaleSlotScreen` / `rotationSlotScreen` 为整行后备区域。矩形均为屏幕物理像素的 `left/top/right/bottom`，右、下边界不包含在区域内，已包含完整帧的屏幕原点，无需再次做原点或 DPI 换算。重算沿用初始化／存档中的固定位置；分析失败时该字段为 `null`。
+
+数字 OCR 框有独立接口：C# 调用 `core.GetNavigatorNumericOcrBoxesScreenPx()`；Host 的 JSONL 查询为 `{"command":"getNavigatorNumericOcrBoxes"}`，无需传入图片、ROI 或文档尺寸。响应的 `navigatorNumericOcrBoxesScreenPx.scaleBoxScreenPx` / `rotationBoxScreenPx` 分别给出缩放与旋转数字框的屏幕位置；常规画布结果也包含同名字段。只返回已校准的数字框，不用整行后备区域代替。初始化前、校准不完整或旧存档缺少数字框时，查询返回 `success: false` 和 `navigatorNumericOcrBoxesScreenPx: null`。重算失败仍可查询已校准的固定位置，新的初始化会清除旧位置。
 
 ## 操作结束与工具属性合并
 

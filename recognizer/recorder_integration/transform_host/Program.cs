@@ -18,6 +18,14 @@ while (Console.ReadLine() is { } line)
     {
         using var doc = JsonDocument.Parse(line);
         var root = doc.RootElement;
+        if (root.TryGetProperty("command", out var command)
+            && command.GetString() == "getNavigatorNumericOcrBoxes")
+        {
+            var boxes = core.GetNavigatorNumericOcrBoxesScreenPx();
+            Console.WriteLine(JsonSerializer.Serialize(new {
+                success = boxes is not null, navigatorNumericOcrBoxesScreenPx = boxes }, options));
+            continue;
+        }
         var crops = root.GetProperty("crops");
         var frameEvidence = root.GetProperty("frame");
         using var frame = new Bitmap(frameEvidence.GetProperty("path").GetString()!);
@@ -64,6 +72,8 @@ while (Console.ReadLine() is { } line)
         Console.WriteLine(JsonSerializer.Serialize(new { result.Success, result.CanvasWindowRoiScreenPx,
             result.NavigatorThumbnailRoiScreenPx, result.ScreenCoordinateOriginScreenPx,
             result.CanvasOriginScreenPx, result.OcrScalePercent, result.OcrRotationDegrees,
+            result.OcrLayoutScreenPx,
+            result.NavigatorNumericOcrBoxesScreenPx,
             completedViewportScreenPx = completedViewport,
             result.Snapshot, result.FailedStage, result.Status, result.Message }, options));
     }
