@@ -1,0 +1,4228 @@
+{
+  "version": 1,
+  "notes": "Calibration images are excluded from test. ROIs refer to original pixel coordinates. Labels are manually read by the assistant and need human review before production validation. Numeric ground truth removes typographic spaces between digits and percent; the minus sign is represented as ASCII hyphen. Manual orange callouts are excluded from ROIs where possible. Title, channel-label and manually enlarged examples are tagged separately.",
+  "samples": [
+    {
+      "id": "en-us-001",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Pen",
+      "roi": [
+        27,
+        29,
+        31,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-002",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Marker",
+      "roi": [
+        186,
+        29,
+        49,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-003",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "G-pen",
+      "roi": [
+        108,
+        78,
+        39,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-004",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Real G-Pen",
+      "roi": [
+        229,
+        78,
+        69,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-005",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Mapping pen",
+      "roi": [
+        75,
+        119,
+        75,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-006",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Turnip pen",
+      "roi": [
+        236,
+        119,
+        62,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-007",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Calligraphy",
+      "roi": [
+        81,
+        160,
+        69,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-008",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Textured pen",
+      "roi": [
+        220,
+        160,
+        80,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-009",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Add sub tool",
+      "roi": [
+        127,
+        198,
+        75,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-010",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Brush Size",
+      "roi": [
+        16,
+        360,
+        83,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-011",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Opacity",
+      "roi": [
+        16,
+        396,
+        55,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-012",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Anti-aliasing",
+      "roi": [
+        16,
+        440,
+        82,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-013",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Stabilization",
+      "roi": [
+        16,
+        472,
+        82,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-014",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Adjust by speed",
+      "roi": [
+        37,
+        506,
+        91,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-015",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Vector magnet",
+      "roi": [
+        36,
+        536,
+        84,
+        19
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-016",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "calibration",
+      "text": "10.0",
+      "roi": [
+        235,
+        368,
+        27,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-017",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "calibration",
+      "text": "100",
+      "roi": [
+        239,
+        403,
+        24,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-018",
+      "source_id": "en-us/150_tools_0010.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "calibration",
+      "text": "6",
+      "roi": [
+        251,
+        478,
+        12,
+        19
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-019",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "calibration",
+      "text": "水彩圓筆",
+      "roi": [
+        44,
+        19,
+        55,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-020",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "calibration",
+      "text": "筆刷尺寸",
+      "roi": [
+        58,
+        62,
+        72,
+        14
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-021",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "calibration",
+      "text": "不透明度",
+      "roi": [
+        58,
+        94,
+        63,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-022",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "calibration",
+      "text": "混合模式",
+      "roi": [
+        58,
+        132,
+        55,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-023",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "calibration",
+      "text": "色彩增值",
+      "roi": [
+        168,
+        132,
+        57,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-024",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "calibration",
+      "text": "紙質",
+      "roi": [
+        58,
+        162,
+        30,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-025",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "calibration",
+      "text": "Paper",
+      "roi": [
+        175,
+        163,
+        34,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-026",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "calibration",
+      "text": "紙質濃度",
+      "roi": [
+        58,
+        184,
+        61,
+        14
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-027",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "calibration",
+      "text": "水彩邊界",
+      "roi": [
+        78,
+        218,
+        58,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-028",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "calibration",
+      "text": "透明度影響",
+      "roi": [
+        58,
+        249,
+        64,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-029",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "calibration",
+      "text": "明度影響",
+      "roi": [
+        58,
+        272,
+        51,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-030",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "calibration",
+      "text": "在拖拽後處理",
+      "roi": [
+        78,
+        293,
+        80,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-031",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "calibration",
+      "text": "80.0",
+      "roi": [
+        237,
+        65,
+        24,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-032",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "calibration",
+      "text": "100",
+      "roi": [
+        238,
+        100,
+        23,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-033",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "calibration",
+      "text": "70",
+      "roi": [
+        245,
+        189,
+        17,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-034",
+      "source_id": "zh-tw/150_tools_0010.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "calibration",
+      "text": "2.0",
+      "roi": [
+        243,
+        225,
+        17,
+        19
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-035",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "calibration",
+      "text": "水彩丸筆",
+      "roi": [
+        44,
+        19,
+        57,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-036",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "calibration",
+      "text": "ブラシサイズ",
+      "roi": [
+        58,
+        62,
+        72,
+        14
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-037",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "calibration",
+      "text": "不透明度",
+      "roi": [
+        58,
+        94,
+        63,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-038",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "calibration",
+      "text": "合成モード",
+      "roi": [
+        58,
+        132,
+        56,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-039",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "calibration",
+      "text": "乗算",
+      "roi": [
+        180,
+        132,
+        35,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-040",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "calibration",
+      "text": "紙質",
+      "roi": [
+        58,
+        162,
+        30,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-041",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "calibration",
+      "text": "画用紙",
+      "roi": [
+        171,
+        162,
+        47,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-042",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "calibration",
+      "text": "紙質濃度",
+      "roi": [
+        58,
+        184,
+        61,
+        14
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-043",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "calibration",
+      "text": "水彩境界",
+      "roi": [
+        78,
+        218,
+        58,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-044",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "calibration",
+      "text": "透明度影響",
+      "roi": [
+        58,
+        249,
+        64,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-045",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "calibration",
+      "text": "明度影響",
+      "roi": [
+        58,
+        272,
+        51,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-046",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "calibration",
+      "text": "ドラッグ後に処理",
+      "roi": [
+        78,
+        293,
+        89,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-047",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "calibration",
+      "text": "80.0",
+      "roi": [
+        237,
+        65,
+        24,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-048",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "calibration",
+      "text": "100",
+      "roi": [
+        238,
+        100,
+        23,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-049",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "calibration",
+      "text": "70",
+      "roi": [
+        245,
+        189,
+        17,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-050",
+      "source_id": "ja-jp/150_tools_0010.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "calibration",
+      "text": "2.0",
+      "roi": [
+        243,
+        225,
+        17,
+        19
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-051",
+      "source_id": "en-us/180_layers_0004.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Normal",
+      "roi": [
+        101,
+        56,
+        42,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-052",
+      "source_id": "en-us/180_layers_0004.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "pattern",
+      "roi": [
+        208,
+        146,
+        43,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-053",
+      "source_id": "en-us/180_layers_0004.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Line art",
+      "roi": [
+        120,
+        177,
+        47,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-054",
+      "source_id": "en-us/180_layers_0004.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Line art 2",
+      "roi": [
+        140,
+        216,
+        55,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-055",
+      "source_id": "en-us/180_layers_0004.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Line art 1",
+      "roi": [
+        175,
+        257,
+        55,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-056",
+      "source_id": "en-us/180_layers_0004.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Coloring",
+      "roi": [
+        122,
+        297,
+        50,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-057",
+      "source_id": "en-us/180_layers_0004.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Draft",
+      "roi": [
+        150,
+        328,
+        33,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-058",
+      "source_id": "en-us/180_layers_0004.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Paper",
+      "roi": [
+        124,
+        367,
+        35,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-059",
+      "source_id": "en-us/180_layers_0004.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "100",
+      "roi": [
+        270,
+        55,
+        19,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-060",
+      "source_id": "en-us/180_layers_0004.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "100%",
+      "roi": [
+        210,
+        127,
+        30,
+        14
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-061",
+      "source_id": "en-us/180_layers_0004.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "43%",
+      "roi": [
+        121,
+        164,
+        24,
+        14
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-062",
+      "source_id": "zh-tw/180_layers_0003.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "普通",
+      "roi": [
+        105,
+        56,
+        29,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-063",
+      "source_id": "zh-tw/180_layers_0003.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "服裝1",
+      "roi": [
+        209,
+        145,
+        39,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-064",
+      "source_id": "zh-tw/180_layers_0003.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "線稿",
+      "roi": [
+        120,
+        177,
+        32,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-065",
+      "source_id": "zh-tw/180_layers_0003.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "線稿2",
+      "roi": [
+        140,
+        215,
+        37,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-066",
+      "source_id": "zh-tw/180_layers_0003.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "線稿",
+      "roi": [
+        175,
+        255,
+        34,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-067",
+      "source_id": "zh-tw/180_layers_0003.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "顏色",
+      "roi": [
+        123,
+        297,
+        34,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-068",
+      "source_id": "zh-tw/180_layers_0003.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "底稿",
+      "roi": [
+        149,
+        329,
+        34,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-069",
+      "source_id": "zh-tw/180_layers_0003.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "紙張",
+      "roi": [
+        123,
+        367,
+        34,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-070",
+      "source_id": "zh-tw/180_layers_0003.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "100",
+      "roi": [
+        266,
+        55,
+        19,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-071",
+      "source_id": "zh-tw/180_layers_0003.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "100%",
+      "roi": [
+        209,
+        127,
+        31,
+        14
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-072",
+      "source_id": "zh-tw/180_layers_0003.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "43%",
+      "roi": [
+        121,
+        164,
+        24,
+        14
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-073",
+      "source_id": "ja-jp/180_layers_0003.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "通常",
+      "roi": [
+        105,
+        56,
+        29,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-074",
+      "source_id": "ja-jp/180_layers_0003.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "服の柄",
+      "roi": [
+        208,
+        145,
+        43,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-075",
+      "source_id": "ja-jp/180_layers_0003.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "線画",
+      "roi": [
+        120,
+        177,
+        32,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-076",
+      "source_id": "ja-jp/180_layers_0003.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "線画2",
+      "roi": [
+        140,
+        215,
+        37,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-077",
+      "source_id": "ja-jp/180_layers_0003.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "線画",
+      "roi": [
+        175,
+        255,
+        34,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-078",
+      "source_id": "ja-jp/180_layers_0003.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "塗り",
+      "roi": [
+        123,
+        297,
+        30,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-079",
+      "source_id": "ja-jp/180_layers_0003.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "下描き",
+      "roi": [
+        149,
+        329,
+        42,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-080",
+      "source_id": "ja-jp/180_layers_0003.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "用紙",
+      "roi": [
+        123,
+        367,
+        34,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-081",
+      "source_id": "ja-jp/180_layers_0003.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "100",
+      "roi": [
+        264,
+        55,
+        19,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-082",
+      "source_id": "ja-jp/180_layers_0003.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "100%",
+      "roi": [
+        209,
+        127,
+        31,
+        14
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-083",
+      "source_id": "ja-jp/180_layers_0003.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "43%",
+      "roi": [
+        121,
+        164,
+        24,
+        14
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-084",
+      "source_id": "en-us/300_color_0005.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "R",
+      "roi": [
+        23,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-085",
+      "source_id": "en-us/300_color_0005.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "G",
+      "roi": [
+        23,
+        56,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-086",
+      "source_id": "en-us/300_color_0005.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "B",
+      "roi": [
+        23,
+        80,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-087",
+      "source_id": "en-us/300_color_0005.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        228,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-088",
+      "source_id": "en-us/300_color_0005.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        228,
+        55,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-089",
+      "source_id": "en-us/300_color_0005.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        228,
+        80,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-090",
+      "source_id": "en-us/300_color_0006.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "H",
+      "roi": [
+        23,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-091",
+      "source_id": "en-us/300_color_0006.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "S",
+      "roi": [
+        23,
+        56,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-092",
+      "source_id": "en-us/300_color_0006.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "V",
+      "roi": [
+        23,
+        80,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-093",
+      "source_id": "en-us/300_color_0006.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "H",
+      "roi": [
+        321,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-094",
+      "source_id": "en-us/300_color_0006.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "L",
+      "roi": [
+        321,
+        56,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-095",
+      "source_id": "en-us/300_color_0006.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "S",
+      "roi": [
+        321,
+        80,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-096",
+      "source_id": "en-us/300_color_0006.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        228,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-097",
+      "source_id": "en-us/300_color_0006.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        55,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-098",
+      "source_id": "en-us/300_color_0006.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        80,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-099",
+      "source_id": "en-us/300_color_0006.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        526,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-100",
+      "source_id": "en-us/300_color_0006.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        526,
+        55,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-101",
+      "source_id": "en-us/300_color_0006.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        526,
+        80,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-102",
+      "source_id": "en-us/300_color_0007.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "C",
+      "roi": [
+        23,
+        25,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-103",
+      "source_id": "en-us/300_color_0007.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "M",
+      "roi": [
+        23,
+        45,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-104",
+      "source_id": "en-us/300_color_0007.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "Y",
+      "roi": [
+        23,
+        65,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-105",
+      "source_id": "en-us/300_color_0007.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "K",
+      "roi": [
+        23,
+        85,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-106",
+      "source_id": "en-us/300_color_0007.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        25,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-107",
+      "source_id": "en-us/300_color_0007.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        45,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-108",
+      "source_id": "en-us/300_color_0007.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        65,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-109",
+      "source_id": "en-us/300_color_0007.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        85,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-110",
+      "source_id": "zh-tw/300_color_0004.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "R",
+      "roi": [
+        23,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-111",
+      "source_id": "zh-tw/300_color_0004.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "G",
+      "roi": [
+        23,
+        56,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-112",
+      "source_id": "zh-tw/300_color_0004.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "B",
+      "roi": [
+        23,
+        80,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-113",
+      "source_id": "zh-tw/300_color_0004.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        228,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-114",
+      "source_id": "zh-tw/300_color_0004.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        228,
+        55,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-115",
+      "source_id": "zh-tw/300_color_0004.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        228,
+        80,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-116",
+      "source_id": "zh-tw/300_color_0005.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "H",
+      "roi": [
+        23,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-117",
+      "source_id": "zh-tw/300_color_0005.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "S",
+      "roi": [
+        23,
+        56,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-118",
+      "source_id": "zh-tw/300_color_0005.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "V",
+      "roi": [
+        23,
+        80,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-119",
+      "source_id": "zh-tw/300_color_0005.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "H",
+      "roi": [
+        321,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-120",
+      "source_id": "zh-tw/300_color_0005.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "L",
+      "roi": [
+        321,
+        56,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-121",
+      "source_id": "zh-tw/300_color_0005.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "S",
+      "roi": [
+        321,
+        80,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-122",
+      "source_id": "zh-tw/300_color_0005.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        228,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-123",
+      "source_id": "zh-tw/300_color_0005.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        55,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-124",
+      "source_id": "zh-tw/300_color_0005.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        80,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-125",
+      "source_id": "zh-tw/300_color_0005.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        526,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-126",
+      "source_id": "zh-tw/300_color_0005.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        526,
+        55,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-127",
+      "source_id": "zh-tw/300_color_0005.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        526,
+        80,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-128",
+      "source_id": "zh-tw/300_color_0006.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "C",
+      "roi": [
+        23,
+        25,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-129",
+      "source_id": "zh-tw/300_color_0006.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "M",
+      "roi": [
+        23,
+        45,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-130",
+      "source_id": "zh-tw/300_color_0006.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "Y",
+      "roi": [
+        23,
+        65,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-131",
+      "source_id": "zh-tw/300_color_0006.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "K",
+      "roi": [
+        23,
+        85,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-132",
+      "source_id": "zh-tw/300_color_0006.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        25,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-133",
+      "source_id": "zh-tw/300_color_0006.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        45,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-134",
+      "source_id": "zh-tw/300_color_0006.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        65,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-135",
+      "source_id": "zh-tw/300_color_0006.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        85,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-136",
+      "source_id": "ja-jp/300_color_0004.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "R",
+      "roi": [
+        23,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-137",
+      "source_id": "ja-jp/300_color_0004.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "G",
+      "roi": [
+        23,
+        56,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-138",
+      "source_id": "ja-jp/300_color_0004.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "B",
+      "roi": [
+        23,
+        80,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-139",
+      "source_id": "ja-jp/300_color_0004.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        228,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-140",
+      "source_id": "ja-jp/300_color_0004.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        228,
+        55,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-141",
+      "source_id": "ja-jp/300_color_0004.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        228,
+        80,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-142",
+      "source_id": "ja-jp/300_color_0005.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "H",
+      "roi": [
+        23,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-143",
+      "source_id": "ja-jp/300_color_0005.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "S",
+      "roi": [
+        23,
+        56,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-144",
+      "source_id": "ja-jp/300_color_0005.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "V",
+      "roi": [
+        23,
+        80,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-145",
+      "source_id": "ja-jp/300_color_0005.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "H",
+      "roi": [
+        321,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-146",
+      "source_id": "ja-jp/300_color_0005.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "L",
+      "roi": [
+        321,
+        56,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-147",
+      "source_id": "ja-jp/300_color_0005.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "S",
+      "roi": [
+        321,
+        80,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-148",
+      "source_id": "ja-jp/300_color_0005.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        228,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-149",
+      "source_id": "ja-jp/300_color_0005.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        55,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-150",
+      "source_id": "ja-jp/300_color_0005.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        80,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-151",
+      "source_id": "ja-jp/300_color_0005.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0",
+      "roi": [
+        526,
+        30,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-152",
+      "source_id": "ja-jp/300_color_0005.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        526,
+        55,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-153",
+      "source_id": "ja-jp/300_color_0005.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        526,
+        80,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-154",
+      "source_id": "ja-jp/300_color_0006.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "C",
+      "roi": [
+        23,
+        25,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-155",
+      "source_id": "ja-jp/300_color_0006.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "M",
+      "roi": [
+        23,
+        45,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-156",
+      "source_id": "ja-jp/300_color_0006.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "Y",
+      "roi": [
+        23,
+        65,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-157",
+      "source_id": "ja-jp/300_color_0006.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "channel_label",
+      "text": "K",
+      "roi": [
+        23,
+        85,
+        12,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-158",
+      "source_id": "ja-jp/300_color_0006.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        25,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-159",
+      "source_id": "ja-jp/300_color_0006.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        45,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-160",
+      "source_id": "ja-jp/300_color_0006.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        65,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-161",
+      "source_id": "ja-jp/300_color_0006.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "0%",
+      "roi": [
+        228,
+        85,
+        16,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-162",
+      "source_id": "zh-tw/270_canvas_0023.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "25.0",
+      "roi": [
+        244,
+        259,
+        25,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-163",
+      "source_id": "zh-tw/270_canvas_0023.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "15.0",
+      "roi": [
+        244,
+        279,
+        25,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-164",
+      "source_id": "zh-tw/270_canvas_0023.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "manual_enlargement",
+      "text": "25.0",
+      "roi": [
+        740,
+        124,
+        33,
+        21
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-165",
+      "source_id": "zh-tw/270_canvas_0023.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "manual_enlargement",
+      "text": "15.0",
+      "roi": [
+        740,
+        155,
+        33,
+        21
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-166",
+      "source_id": "ja-jp/270_canvas_0023.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "25.0",
+      "roi": [
+        244,
+        259,
+        25,
+        16
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-167",
+      "source_id": "ja-jp/270_canvas_0023.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "15.0",
+      "roi": [
+        244,
+        279,
+        25,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-168",
+      "source_id": "ja-jp/270_canvas_0023.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "manual_enlargement",
+      "text": "25.0",
+      "roi": [
+        740,
+        124,
+        33,
+        21
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-169",
+      "source_id": "ja-jp/270_canvas_0023.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "manual_enlargement",
+      "text": "15.0",
+      "roi": [
+        740,
+        155,
+        33,
+        21
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-170",
+      "source_id": "en-us/270_canvas_0008.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "manual_enlargement",
+      "text": "60.5",
+      "roi": [
+        178,
+        305,
+        37,
+        19
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-171",
+      "source_id": "en-us/270_canvas_0008.png",
+      "language": "en-us",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "manual_enlargement",
+      "text": "-27.7",
+      "roi": [
+        169,
+        340,
+        47,
+        21
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-172",
+      "source_id": "en-us/180_layers_0004.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "small_title",
+      "text": "Layer",
+      "roi": [
+        157,
+        37,
+        27,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-173",
+      "source_id": "en-us/300_color_0005.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "small_title",
+      "text": "Color Slider",
+      "roi": [
+        110,
+        2,
+        50,
+        13
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-174",
+      "source_id": "en-us/270_canvas_0008.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "small_title",
+      "text": "Navigator",
+      "roi": [
+        186,
+        6,
+        66,
+        19
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-175",
+      "source_id": "zh-tw/180_layers_0003.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "small_title",
+      "text": "圖層",
+      "roi": [
+        157,
+        37,
+        23,
+        12
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-176",
+      "source_id": "zh-tw/300_color_0004.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "small_title",
+      "text": "顏色滑桿",
+      "roi": [
+        111,
+        2,
+        49,
+        13
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-177",
+      "source_id": "ja-jp/180_layers_0003.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "small_title",
+      "text": "レイヤー",
+      "roi": [
+        154,
+        37,
+        31,
+        12
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-178",
+      "source_id": "ja-jp/300_color_0004.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "small_title",
+      "text": "カラースライダー",
+      "roi": [
+        107,
+        2,
+        55,
+        13
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-179",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Brush Size",
+      "roi": [
+        8,
+        122,
+        72,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-180",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Ink",
+      "roi": [
+        8,
+        140,
+        22,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-181",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Color Jitter",
+      "roi": [
+        8,
+        158,
+        74,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-182",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Anti-aliasing",
+      "roi": [
+        8,
+        176,
+        82,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-183",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Brush shape",
+      "roi": [
+        8,
+        194,
+        88,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-184",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Brush tip",
+      "roi": [
+        16,
+        212,
+        63,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-185",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Spraying effect",
+      "roi": [
+        16,
+        230,
+        89,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-186",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Stroke",
+      "roi": [
+        16,
+        248,
+        49,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-187",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Texture",
+      "roi": [
+        16,
+        266,
+        52,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-188",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Watercolor edge",
+      "roi": [
+        8,
+        374,
+        100,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-189",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Erase",
+      "roi": [
+        8,
+        392,
+        42,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-190",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Correction",
+      "roi": [
+        8,
+        410,
+        70,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-191",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Starting and ending",
+      "roi": [
+        8,
+        428,
+        117,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-192",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Anti-overflow",
+      "roi": [
+        8,
+        446,
+        86,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-193",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Brush Size",
+      "roi": [
+        185,
+        172,
+        69,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-194",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Specify by size on screen",
+      "roi": [
+        218,
+        201,
+        139,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-195",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "At least 1 pixel",
+      "roi": [
+        219,
+        221,
+        89,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-196",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "About parameter help",
+      "roi": [
+        175,
+        459,
+        118,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "en-us-197",
+      "source_id": "en-us/150_tools_0009.png",
+      "language": "en-us",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "Show category",
+      "roi": [
+        24,
+        579,
+        85,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-198",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "筆刷尺寸",
+      "roi": [
+        44,
+        122,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-199",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "墨水",
+      "roi": [
+        44,
+        140,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-200",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "顏色變化",
+      "roi": [
+        44,
+        158,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-201",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "消除鋸齒",
+      "roi": [
+        44,
+        176,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-202",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "筆刷形狀",
+      "roi": [
+        44,
+        194,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-203",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "筆刷前端",
+      "roi": [
+        44,
+        212,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-204",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "散佈效果",
+      "roi": [
+        44,
+        230,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-205",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "筆劃",
+      "roi": [
+        44,
+        248,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-206",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "紙質",
+      "roi": [
+        44,
+        266,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-207",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "水彩邊界",
+      "roi": [
+        44,
+        374,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-208",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "刪除",
+      "roi": [
+        44,
+        392,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-209",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "修正",
+      "roi": [
+        44,
+        410,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-210",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "起筆收筆",
+      "roi": [
+        44,
+        428,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-211",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "防止溢出",
+      "roi": [
+        44,
+        446,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-212",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "ブラシサイズ",
+      "roi": [
+        44,
+        122,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-213",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "インク",
+      "roi": [
+        44,
+        140,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-214",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "色の変化",
+      "roi": [
+        44,
+        158,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-215",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "アンチエイリアス",
+      "roi": [
+        44,
+        176,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-216",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "ブラシ形状",
+      "roi": [
+        44,
+        194,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-217",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "ブラシ先端",
+      "roi": [
+        44,
+        212,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-218",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "散布効果",
+      "roi": [
+        44,
+        230,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-219",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "ストローク",
+      "roi": [
+        44,
+        248,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-220",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "紙質",
+      "roi": [
+        44,
+        266,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-221",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "水彩境界",
+      "roi": [
+        44,
+        374,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-222",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "消去",
+      "roi": [
+        44,
+        392,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-223",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "補正",
+      "roi": [
+        44,
+        410,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-224",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "入り抜き",
+      "roi": [
+        44,
+        428,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-225",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "はみ出し防止",
+      "roi": [
+        44,
+        446,
+        78,
+        15
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-226",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "不透明度",
+      "roi": [
+        177,
+        173,
+        61,
+        14
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-227",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "混合模式",
+      "roi": [
+        177,
+        203,
+        54,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-228",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "底子混色",
+      "roi": [
+        195,
+        230,
+        60,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-229",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "顏料量",
+      "roi": [
+        177,
+        255,
+        41,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-230",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "顏料濃度",
+      "roi": [
+        177,
+        284,
+        60,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-231",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "色延伸",
+      "roi": [
+        177,
+        313,
+        41,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-232",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "滲出品質",
+      "roi": [
+        177,
+        346,
+        55,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-233",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "普通",
+      "roi": [
+        253,
+        345,
+        31,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-234",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "高品質",
+      "roi": [
+        351,
+        345,
+        47,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-235",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "滲出強度",
+      "roi": [
+        177,
+        375,
+        55,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-236",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "自動設定",
+      "roi": [
+        253,
+        375,
+        61,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-237",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "固定值",
+      "roi": [
+        351,
+        375,
+        47,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-238",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "混色模式",
+      "roi": [
+        177,
+        422,
+        55,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-239",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "直覺",
+      "roi": [
+        310,
+        422,
+        37,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-240",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "修正硬度",
+      "roi": [
+        191,
+        451,
+        60,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-241",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "顯示類別",
+      "roi": [
+        62,
+        585,
+        65,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-242",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "不透明度",
+      "roi": [
+        177,
+        173,
+        61,
+        14
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-243",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "合成モード",
+      "roi": [
+        177,
+        203,
+        58,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-244",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "下地混色",
+      "roi": [
+        195,
+        230,
+        60,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-245",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "絵の具量",
+      "roi": [
+        177,
+        255,
+        58,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-246",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "絵の具濃度",
+      "roi": [
+        177,
+        284,
+        70,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-247",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "色延び",
+      "roi": [
+        177,
+        313,
+        41,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-248",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "にじみ品質",
+      "roi": [
+        177,
+        346,
+        56,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-249",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "通常",
+      "roi": [
+        254,
+        345,
+        31,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-250",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "高品質",
+      "roi": [
+        352,
+        345,
+        47,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-251",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "にじみ強さ",
+      "roi": [
+        177,
+        375,
+        56,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-252",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "自動設定",
+      "roi": [
+        254,
+        375,
+        61,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-253",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "固定値",
+      "roi": [
+        352,
+        375,
+        47,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-254",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "混色モード",
+      "roi": [
+        177,
+        422,
+        55,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-255",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "知覚的",
+      "roi": [
+        307,
+        422,
+        47,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-256",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "硬度の補正",
+      "roi": [
+        191,
+        451,
+        72,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-257",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "words",
+      "split": "test",
+      "kind": "body",
+      "text": "カテゴリ表示",
+      "roi": [
+        62,
+        591,
+        72,
+        18
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-258",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "100",
+      "roi": [
+        382,
+        176,
+        22,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-259",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "30",
+      "roi": [
+        388,
+        259,
+        16,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-260",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "50",
+      "roi": [
+        388,
+        288,
+        16,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-261",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "10",
+      "roi": [
+        388,
+        317,
+        16,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "zh-tw-262",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "language": "zh-tw",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "2.5",
+      "roi": [
+        387,
+        399,
+        17,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-263",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "100",
+      "roi": [
+        386,
+        176,
+        20,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-264",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "30",
+      "roi": [
+        391,
+        259,
+        15,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-265",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "50",
+      "roi": [
+        391,
+        288,
+        15,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-266",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "10",
+      "roi": [
+        391,
+        317,
+        15,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    },
+    {
+      "id": "ja-jp-267",
+      "source_id": "ja-jp/150_tools_0014.png",
+      "language": "ja-jp",
+      "mode": "numbers",
+      "split": "test",
+      "kind": "body",
+      "text": "2.5",
+      "roi": [
+        389,
+        399,
+        17,
+        17
+      ],
+      "annotation": "visual transcription; no OCR/prediction used as ground truth"
+    }
+  ]
+}

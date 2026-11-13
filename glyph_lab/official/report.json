@@ -1,0 +1,588 @@
+{
+  "environment": {
+    "platform": "macOS-26.5-arm64-arm-64bit",
+    "python": "3.12.13",
+    "opencv": "5.0.0",
+    "numpy": "2.3.5"
+  },
+  "annotation_sha256": "1e53ff82cd87fc8e59f1ba20c24008177132793c1722381a833a415d0dda4426",
+  "matcher_sha256": "ad277138687bd461066718b0770310a53e9026190eb6ad51367c21633bcd4110",
+  "database_sha256": "039bd3972570e3c4b8eb1040349310f2e49bd2e2a69486c34e6256b47e9d45e4",
+  "test_regions": 217,
+  "test_images": 18,
+  "unique_visual_crops": 144,
+  "unique_texts": 125,
+  "scope": "Fixed font candidates and unchanged matcher thresholds; current image-collection smoke test, not deployment acceptance.",
+  "timing": "Warm complete recognize() calls; ground-truth characters incl. punctuation; excludes image I/O, manual ROI selection, font calibration and template initialization.",
+  "limitation": "Assistant visually transcribed ROIs; not independently human-reviewed. Some UI regions repeat across languages. MS UI Gothic from prior experiments is unavailable on this Mac; the actual font of this collected set remains unverified.",
+  "runs": {
+    "previous_default": {
+      "en-us/words": {
+        "samples": 43,
+        "known": 39,
+        "correct": 0,
+        "wrong_accepts": 0,
+        "known_rejected": 39,
+        "oov_rejected": 4,
+        "oov_accepted": 0,
+        "correct_coverage": 0.0,
+        "accepted_precision": 0.0,
+        "line_ms_p50": 0.5775419995188713,
+        "line_ms_p95": 1.251658209366723,
+        "ms_per_char_weighted": 0.0819323750770171,
+        "ms_per_char_p50": 0.08799159550108016,
+        "ms_per_char_p95": 0.29920429806225,
+        "within_1ms_per_char": 1.0,
+        "rounds": 5,
+        "timed_calls": 215,
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 18,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "dictionary_words": 6764,
+        "requested_words": 6823,
+        "exact_correct": 0,
+        "safe_rejections": 43,
+        "wrong_predictions": 0,
+        "by_kind": {
+          "body": {
+            "samples": 27,
+            "known": 23,
+            "correct": 0,
+            "wrong": 0
+          },
+          "channel_label": {
+            "samples": 13,
+            "known": 13,
+            "correct": 0,
+            "wrong": 0
+          },
+          "small_title": {
+            "samples": 3,
+            "known": 3,
+            "correct": 0,
+            "wrong": 0
+          }
+        }
+      },
+      "en-us/numbers": {
+        "samples": 18,
+        "known": 18,
+        "correct": 0,
+        "wrong_accepts": 0,
+        "known_rejected": 18,
+        "oov_rejected": 0,
+        "oov_accepted": 0,
+        "correct_coverage": 0.0,
+        "accepted_precision": 0.0,
+        "line_ms_p50": 0.7487289985874668,
+        "line_ms_p95": 1.313529195613227,
+        "ms_per_char_weighted": 0.3472331394732464,
+        "ms_per_char_p50": 0.3743644992937334,
+        "ms_per_char_p95": 0.5339751398423687,
+        "within_1ms_per_char": 1.0,
+        "rounds": 5,
+        "timed_calls": 90,
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 18,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "dictionary_words": 16,
+        "requested_words": 16,
+        "exact_correct": 0,
+        "safe_rejections": 18,
+        "wrong_predictions": 0,
+        "by_kind": {
+          "body": {
+            "samples": 16,
+            "known": 16,
+            "correct": 0,
+            "wrong": 0
+          },
+          "manual_enlargement": {
+            "samples": 2,
+            "known": 2,
+            "correct": 0,
+            "wrong": 0
+          }
+        }
+      },
+      "zh-tw/words": {
+        "samples": 53,
+        "known": 47,
+        "correct": 0,
+        "wrong_accepts": 0,
+        "known_rejected": 47,
+        "oov_rejected": 6,
+        "oov_accepted": 0,
+        "correct_coverage": 0.0,
+        "accepted_precision": 0.0,
+        "line_ms_p50": 0.5117499968037009,
+        "line_ms_p95": 0.9063171979505569,
+        "ms_per_char_weighted": 0.22232541734882022,
+        "ms_per_char_p50": 0.22185400302987546,
+        "ms_per_char_p95": 0.2976667950861156,
+        "within_1ms_per_char": 1.0,
+        "rounds": 5,
+        "timed_calls": 265,
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 18,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "dictionary_words": 9029,
+        "requested_words": 9289,
+        "exact_correct": 0,
+        "safe_rejections": 53,
+        "wrong_predictions": 0,
+        "by_kind": {
+          "body": {
+            "samples": 38,
+            "known": 32,
+            "correct": 0,
+            "wrong": 0
+          },
+          "channel_label": {
+            "samples": 13,
+            "known": 13,
+            "correct": 0,
+            "wrong": 0
+          },
+          "small_title": {
+            "samples": 2,
+            "known": 2,
+            "correct": 0,
+            "wrong": 0
+          }
+        }
+      },
+      "zh-tw/numbers": {
+        "samples": 25,
+        "known": 25,
+        "correct": 0,
+        "wrong_accepts": 0,
+        "known_rejected": 25,
+        "oov_rejected": 0,
+        "oov_accepted": 0,
+        "correct_coverage": 0.0,
+        "accepted_precision": 0.0,
+        "line_ms_p50": 0.7526249974034727,
+        "line_ms_p95": 1.0232003929559141,
+        "ms_per_char_weighted": 0.31847644368407585,
+        "ms_per_char_p50": 0.368125009117648,
+        "ms_per_char_p95": 0.5336913978680968,
+        "within_1ms_per_char": 1.0,
+        "rounds": 5,
+        "timed_calls": 125,
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 18,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "dictionary_words": 16,
+        "requested_words": 16,
+        "exact_correct": 0,
+        "safe_rejections": 25,
+        "wrong_predictions": 0,
+        "by_kind": {
+          "body": {
+            "samples": 23,
+            "known": 23,
+            "correct": 0,
+            "wrong": 0
+          },
+          "manual_enlargement": {
+            "samples": 2,
+            "known": 2,
+            "correct": 0,
+            "wrong": 0
+          }
+        }
+      },
+      "ja-jp/words": {
+        "samples": 53,
+        "known": 45,
+        "correct": 0,
+        "wrong_accepts": 0,
+        "known_rejected": 45,
+        "oov_rejected": 8,
+        "oov_accepted": 0,
+        "correct_coverage": 0.0,
+        "accepted_precision": 0.0,
+        "line_ms_p50": 0.6032499950379133,
+        "line_ms_p95": 0.9862756007350981,
+        "ms_per_char_weighted": 0.18488935523611658,
+        "ms_per_char_p50": 0.21479149290826172,
+        "ms_per_char_p95": 0.2932581992354244,
+        "within_1ms_per_char": 1.0,
+        "rounds": 5,
+        "timed_calls": 265,
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 18,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "dictionary_words": 8784,
+        "requested_words": 9041,
+        "exact_correct": 0,
+        "safe_rejections": 53,
+        "wrong_predictions": 0,
+        "by_kind": {
+          "body": {
+            "samples": 38,
+            "known": 30,
+            "correct": 0,
+            "wrong": 0
+          },
+          "channel_label": {
+            "samples": 13,
+            "known": 13,
+            "correct": 0,
+            "wrong": 0
+          },
+          "small_title": {
+            "samples": 2,
+            "known": 2,
+            "correct": 0,
+            "wrong": 0
+          }
+        }
+      },
+      "ja-jp/numbers": {
+        "samples": 25,
+        "known": 25,
+        "correct": 0,
+        "wrong_accepts": 0,
+        "known_rejected": 25,
+        "oov_rejected": 0,
+        "oov_accepted": 0,
+        "correct_coverage": 0.0,
+        "accepted_precision": 0.0,
+        "line_ms_p50": 0.7559160003438592,
+        "line_ms_p95": 1.037083606934175,
+        "ms_per_char_weighted": 0.32042415932973184,
+        "ms_per_char_p50": 0.3725834976648912,
+        "ms_per_char_p95": 0.520824984414503,
+        "within_1ms_per_char": 1.0,
+        "rounds": 5,
+        "timed_calls": 125,
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 18,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "dictionary_words": 16,
+        "requested_words": 16,
+        "exact_correct": 0,
+        "safe_rejections": 25,
+        "wrong_predictions": 0,
+        "by_kind": {
+          "body": {
+            "samples": 23,
+            "known": 23,
+            "correct": 0,
+            "wrong": 0
+          },
+          "manual_enlargement": {
+            "samples": 2,
+            "known": 2,
+            "correct": 0,
+            "wrong": 0
+          }
+        }
+      }
+    },
+    "calibrated_available_font": {
+      "en-us/words": {
+        "samples": 43,
+        "known": 39,
+        "correct": 3,
+        "wrong_accepts": 0,
+        "known_rejected": 36,
+        "oov_rejected": 4,
+        "oov_accepted": 0,
+        "correct_coverage": 0.07692307692307693,
+        "accepted_precision": 1.0,
+        "line_ms_p50": 0.6247920100577176,
+        "line_ms_p95": 1.3440579001326112,
+        "ms_per_char_weighted": 0.08858050775333223,
+        "ms_per_char_p50": 0.09427500190213323,
+        "ms_per_char_p95": 0.31180020596366376,
+        "within_1ms_per_char": 1.0,
+        "rounds": 5,
+        "timed_calls": 215,
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "dictionary_words": 6520,
+        "requested_words": 6823,
+        "exact_correct": 3,
+        "safe_rejections": 40,
+        "wrong_predictions": 0,
+        "by_kind": {
+          "body": {
+            "samples": 27,
+            "known": 23,
+            "correct": 0,
+            "wrong": 0
+          },
+          "channel_label": {
+            "samples": 13,
+            "known": 13,
+            "correct": 3,
+            "wrong": 0
+          },
+          "small_title": {
+            "samples": 3,
+            "known": 3,
+            "correct": 0,
+            "wrong": 0
+          }
+        }
+      },
+      "en-us/numbers": {
+        "samples": 18,
+        "known": 18,
+        "correct": 0,
+        "wrong_accepts": 0,
+        "known_rejected": 18,
+        "oov_rejected": 0,
+        "oov_accepted": 0,
+        "correct_coverage": 0.0,
+        "accepted_precision": 0.0,
+        "line_ms_p50": 0.7405210053548217,
+        "line_ms_p95": 1.3769376542768432,
+        "ms_per_char_weighted": 0.34858855011407286,
+        "ms_per_char_p50": 0.37026050267741084,
+        "ms_per_char_p95": 0.5459187421365641,
+        "within_1ms_per_char": 1.0,
+        "rounds": 5,
+        "timed_calls": 90,
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "dictionary_words": 16,
+        "requested_words": 16,
+        "exact_correct": 0,
+        "safe_rejections": 18,
+        "wrong_predictions": 0,
+        "by_kind": {
+          "body": {
+            "samples": 16,
+            "known": 16,
+            "correct": 0,
+            "wrong": 0
+          },
+          "manual_enlargement": {
+            "samples": 2,
+            "known": 2,
+            "correct": 0,
+            "wrong": 0
+          }
+        }
+      },
+      "zh-tw/words": {
+        "samples": 53,
+        "known": 47,
+        "correct": 2,
+        "wrong_accepts": 0,
+        "known_rejected": 45,
+        "oov_rejected": 6,
+        "oov_accepted": 0,
+        "correct_coverage": 0.0425531914893617,
+        "accepted_precision": 1.0,
+        "line_ms_p50": 0.6876249972265214,
+        "line_ms_p95": 1.1913087975699452,
+        "ms_per_char_weighted": 0.2809870694579704,
+        "ms_per_char_p50": 0.30741700902581215,
+        "ms_per_char_p95": 0.3762167994864285,
+        "within_1ms_per_char": 1.0,
+        "rounds": 5,
+        "timed_calls": 265,
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 12,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "dictionary_words": 9029,
+        "requested_words": 9289,
+        "exact_correct": 2,
+        "safe_rejections": 51,
+        "wrong_predictions": 0,
+        "by_kind": {
+          "body": {
+            "samples": 38,
+            "known": 32,
+            "correct": 0,
+            "wrong": 0
+          },
+          "channel_label": {
+            "samples": 13,
+            "known": 13,
+            "correct": 2,
+            "wrong": 0
+          },
+          "small_title": {
+            "samples": 2,
+            "known": 2,
+            "correct": 0,
+            "wrong": 0
+          }
+        }
+      },
+      "zh-tw/numbers": {
+        "samples": 25,
+        "known": 25,
+        "correct": 0,
+        "wrong_accepts": 6,
+        "known_rejected": 19,
+        "oov_rejected": 0,
+        "oov_accepted": 0,
+        "correct_coverage": 0.0,
+        "accepted_precision": 0.0,
+        "line_ms_p50": 0.8044579881243408,
+        "line_ms_p95": 1.1021580139640719,
+        "ms_per_char_weighted": 0.3473203486202569,
+        "ms_per_char_p50": 0.3944169875467196,
+        "ms_per_char_p95": 0.63499960815534,
+        "within_1ms_per_char": 1.0,
+        "rounds": 5,
+        "timed_calls": 125,
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 12,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "dictionary_words": 16,
+        "requested_words": 16,
+        "exact_correct": 0,
+        "safe_rejections": 19,
+        "wrong_predictions": 6,
+        "by_kind": {
+          "body": {
+            "samples": 23,
+            "known": 23,
+            "correct": 0,
+            "wrong": 6
+          },
+          "manual_enlargement": {
+            "samples": 2,
+            "known": 2,
+            "correct": 0,
+            "wrong": 0
+          }
+        }
+      },
+      "ja-jp/words": {
+        "samples": 53,
+        "known": 45,
+        "correct": 5,
+        "wrong_accepts": 0,
+        "known_rejected": 40,
+        "oov_rejected": 8,
+        "oov_accepted": 0,
+        "correct_coverage": 0.1111111111111111,
+        "accepted_precision": 1.0,
+        "line_ms_p50": 0.7281250145751983,
+        "line_ms_p95": 1.3666418148204684,
+        "ms_per_char_weighted": 0.2211292739957571,
+        "ms_per_char_p50": 0.24910425418056548,
+        "ms_per_char_p95": 0.3296330862212926,
+        "within_1ms_per_char": 1.0,
+        "rounds": 5,
+        "timed_calls": 265,
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "dictionary_words": 9041,
+        "requested_words": 9041,
+        "exact_correct": 5,
+        "safe_rejections": 48,
+        "wrong_predictions": 0,
+        "by_kind": {
+          "body": {
+            "samples": 38,
+            "known": 30,
+            "correct": 0,
+            "wrong": 0
+          },
+          "channel_label": {
+            "samples": 13,
+            "known": 13,
+            "correct": 5,
+            "wrong": 0
+          },
+          "small_title": {
+            "samples": 2,
+            "known": 2,
+            "correct": 0,
+            "wrong": 0
+          }
+        }
+      },
+      "ja-jp/numbers": {
+        "samples": 25,
+        "known": 25,
+        "correct": 0,
+        "wrong_accepts": 0,
+        "known_rejected": 25,
+        "oov_rejected": 0,
+        "oov_accepted": 0,
+        "correct_coverage": 0.0,
+        "accepted_precision": 0.0,
+        "line_ms_p50": 0.751416984712705,
+        "line_ms_p95": 1.045057812007144,
+        "ms_per_char_weighted": 0.3202847525737864,
+        "ms_per_char_p50": 0.3691669990075752,
+        "ms_per_char_p95": 0.5329170031473041,
+        "within_1ms_per_char": 1.0,
+        "rounds": 5,
+        "timed_calls": 125,
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "dictionary_words": 16,
+        "requested_words": 16,
+        "exact_correct": 0,
+        "safe_rejections": 25,
+        "wrong_predictions": 0,
+        "by_kind": {
+          "body": {
+            "samples": 23,
+            "known": 23,
+            "correct": 0,
+            "wrong": 0
+          },
+          "manual_enlargement": {
+            "samples": 2,
+            "known": 2,
+            "correct": 0,
+            "wrong": 0
+          }
+        }
+      }
+    }
+  }
+}

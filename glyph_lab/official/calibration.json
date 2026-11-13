@@ -1,0 +1,2503 @@
+{
+  "method": "Choose installed font/size using calibration images only; not proof of the screenshot's actual font.",
+  "profiles": {
+    "en-us/words": {
+      "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+      "px": 13,
+      "index": 0,
+      "backend": "pillow"
+    },
+    "en-us/numbers": {
+      "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+      "px": 12,
+      "index": 0,
+      "backend": "pillow"
+    },
+    "zh-tw/words": {
+      "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+      "px": 12,
+      "index": 6,
+      "backend": "pillow"
+    },
+    "zh-tw/numbers": {
+      "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+      "px": 12,
+      "index": 6,
+      "backend": "pillow"
+    },
+    "ja-jp/words": {
+      "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+      "px": 12,
+      "index": 0,
+      "backend": "pillow"
+    },
+    "ja-jp/numbers": {
+      "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+      "px": 12,
+      "index": 0,
+      "backend": "pillow"
+    }
+  },
+  "scores": {
+    "en-us/words": [
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.5360223333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.5083655333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.385441
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.38530773333333335
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.38341533333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.38250626666666665
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 14,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.35411060000000005
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.35174326666666667
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 13,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.3348984
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.2470966
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.242284
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.24218766666666666
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.14796693333333336
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 15,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0763486
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.07474739999999999
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.07474739999999999
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.06421513333333334
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.06421513333333334
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.03333333333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0252402
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 10,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 11,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 12,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 15,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      }
+    ],
+    "en-us/numbers": [
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 1,
+        "wrong": 0,
+        "mean_true_score": 0.291759451230367
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 1,
+        "wrong": 0,
+        "mean_true_score": 0.291759451230367
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 10,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 11,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 12,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 13,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 14,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 15,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 3,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      }
+    ],
+    "zh-tw/words": [
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 12,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.5152674166666666
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.4711880000000001
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.41309208333333336
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.38151641666666664
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 13,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.19669533333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.09495541666666667
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.09131191666666667
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 11,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.09089566666666667
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.08959116666666667
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.08333333333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.06541433333333334
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.041666666666666664
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.041666666666666664
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.041666666666666664
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.041666666666666664
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.041666666666666664
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.041666666666666664
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.041666666666666664
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.041666666666666664
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.041666666666666664
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0253785
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.018793583333333332
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0187935
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 14,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.017556
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 10,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 15,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      }
+    ],
+    "zh-tw/numbers": [
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 10,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 11,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 12,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 13,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 14,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 15,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      }
+    ],
+    "ja-jp/words": [
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.3887375833333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.3743925000000001
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 12,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.3584340833333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.307283
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 13,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.23192758333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.1750016666666667
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.13633691666666667
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.13448275
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 11,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.13097866666666666
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.08333333333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.08333333333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.06676683333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.06453183333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.05905391666666667
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.05901041666666667
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 14,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.03999433333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 10,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.024962583333333333
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.023353166666666664
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.023326749999999997
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.019616916666666668
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 15,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 12,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      }
+    ],
+    "ja-jp/numbers": [
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 10,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 11,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 12,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 13,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 14,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+          "px": 15,
+          "index": 6,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 10,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 11,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 12,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 13,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 14,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      },
+      {
+        "font": {
+          "source": "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+          "px": 15,
+          "index": 0,
+          "backend": "pillow"
+        },
+        "samples": 4,
+        "correct": 0,
+        "wrong": 0,
+        "mean_true_score": 0.0
+      }
+    ]
+  }
+}

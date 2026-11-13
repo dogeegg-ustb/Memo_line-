@@ -1,0 +1,131 @@
+{
+  "note": "Known failures kept for future regression; repeated crops are not independent failures.",
+  "cases": [
+    {
+      "id": "zh-tw-113",
+      "source_id": "zh-tw/300_color_0004.png",
+      "truth": "0",
+      "predicted": "1.1",
+      "roi": [
+        228,
+        30,
+        12,
+        15
+      ],
+      "image_sha256": "302ade2de0f486a29dfdd11c416a288c02de260e3046be050629fbfa65839cbf",
+      "font": {
+        "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "px": 12,
+        "index": 6,
+        "backend": "pillow"
+      },
+      "score": 0.8554840087890625,
+      "fixed": false
+    },
+    {
+      "id": "zh-tw-114",
+      "source_id": "zh-tw/300_color_0004.png",
+      "truth": "0",
+      "predicted": "1.1",
+      "roi": [
+        228,
+        55,
+        12,
+        15
+      ],
+      "image_sha256": "302ade2de0f486a29dfdd11c416a288c02de260e3046be050629fbfa65839cbf",
+      "font": {
+        "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "px": 12,
+        "index": 6,
+        "backend": "pillow"
+      },
+      "score": 0.8554840087890625,
+      "fixed": false
+    },
+    {
+      "id": "zh-tw-115",
+      "source_id": "zh-tw/300_color_0004.png",
+      "truth": "0",
+      "predicted": "1.1",
+      "roi": [
+        228,
+        80,
+        12,
+        15
+      ],
+      "image_sha256": "302ade2de0f486a29dfdd11c416a288c02de260e3046be050629fbfa65839cbf",
+      "font": {
+        "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "px": 12,
+        "index": 6,
+        "backend": "pillow"
+      },
+      "score": 0.8554840087890625,
+      "fixed": false
+    },
+    {
+      "id": "zh-tw-122",
+      "source_id": "zh-tw/300_color_0005.png",
+      "truth": "0",
+      "predicted": "1.1",
+      "roi": [
+        228,
+        30,
+        12,
+        15
+      ],
+      "image_sha256": "45384bb81f4dbdbc868b0e4d52e8a3db3b5966b4e282fd773a44728a0c9499db",
+      "font": {
+        "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "px": 12,
+        "index": 6,
+        "backend": "pillow"
+      },
+      "score": 0.8554840087890625,
+      "fixed": false
+    },
+    {
+      "id": "zh-tw-125",
+      "source_id": "zh-tw/300_color_0005.png",
+      "truth": "0",
+      "predicted": "1.1",
+      "roi": [
+        526,
+        30,
+        12,
+        15
+      ],
+      "image_sha256": "45384bb81f4dbdbc868b0e4d52e8a3db3b5966b4e282fd773a44728a0c9499db",
+      "font": {
+        "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "px": 12,
+        "index": 6,
+        "backend": "pillow"
+      },
+      "score": 0.8554840087890625,
+      "fixed": false
+    },
+    {
+      "id": "zh-tw-261",
+      "source_id": "zh-tw/150_tools_0014.png",
+      "truth": "10",
+      "predicted": "11.1",
+      "roi": [
+        388,
+        317,
+        16,
+        17
+      ],
+      "image_sha256": "93e68ff463afaad1b4599a4a257ee8c3a6f95bacb9767a5fbab5f72ca1cc2062",
+      "font": {
+        "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "px": 12,
+        "index": 6,
+        "backend": "pillow"
+      },
+      "score": 0.8554840087890625,
+      "fixed": false
+    }
+  ]
+}

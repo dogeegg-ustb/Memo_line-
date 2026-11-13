@@ -1,0 +1,5 @@
+# Exact environment used for the published macOS / Python 3.12 benchmark.
+numpy==2.3.5
+opencv-python-headless==5.0.0.93
+Pillow==12.2.0
+fonttools==4.68.0

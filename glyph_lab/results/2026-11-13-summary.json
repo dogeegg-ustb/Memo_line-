@@ -1,0 +1,363 @@
+{
+  "date": "2026-11-13",
+  "cpu": "Apple M5",
+  "scope": "Synthetic single-line screenshots; no real CSP/PS or Windows validation.",
+  "runs": {
+    "words_18px": {
+      "environment": {
+        "platform": "macOS-26.5-arm64-arm-64bit",
+        "machine": "arm64",
+        "python": "3.12.13",
+        "opencv": "5.0.0",
+        "numpy": "2.3.5"
+      },
+      "font": {
+        "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "px": 18,
+        "index": 6,
+        "backend": "pillow",
+        "sha256": "6873ac2ccab5c2e74d87d6b690f3773098dd6a6238805363a3b3567f2caf6f47",
+        "pillow": "12.2.0"
+      },
+      "dictionary_words": 1350,
+      "requested_dictionary_words": 1350,
+      "unsupported_dictionary_words": 0,
+      "build_ms": 48.608874989440665,
+      "cache_hit": true,
+      "template_memory_bytes": 45141816,
+      "settings": {
+        "top_k": 16,
+        "threshold": 0.84,
+        "margin": 0.04
+      },
+      "timing": "Warm full recognize() calls incl. preprocessing, retrieval, exact matching; excludes disk I/O, rendering, dictionary initialization, UI and IPC. Denominator is ground-truth input length, incl. rejected cases. No answer cache.",
+      "limitation": "Synthetic screenshots are not actual CSP/PS screenshots. Alternate raster uses 3x rendering then downsampling from the same font file.",
+      "groups": {
+        "synthetic_words": {
+          "samples": 1350,
+          "known": 1350,
+          "correct": 1326,
+          "wrong_accepts": 0,
+          "known_rejected": 24,
+          "oov_rejected": 0,
+          "oov_accepted": 0,
+          "correct_coverage": 0.9822222222222222,
+          "accepted_precision": 1.0,
+          "line_ms_p50": 1.8073334940709174,
+          "line_ms_p95": 4.314097703900181,
+          "ms_per_char_weighted": 0.23342593145514903,
+          "ms_per_char_p50": 0.23719196386602043,
+          "ms_per_char_p95": 0.36337500205263495,
+          "within_1ms_per_char": 1.0,
+          "rounds": 5,
+          "timed_calls": 6750
+        },
+        "native_raster_perturbed": {
+          "samples": 900,
+          "correct": 900,
+          "wrong_accepts": 0
+        },
+        "alternate_raster": {
+          "samples": 450,
+          "correct": 426,
+          "wrong_accepts": 0
+        },
+        "synthetic_oov": {
+          "samples": 2000,
+          "known": 0,
+          "correct": 0,
+          "wrong_accepts": 0,
+          "known_rejected": 0,
+          "oov_rejected": 2000,
+          "oov_accepted": 0,
+          "correct_coverage": 0.0,
+          "accepted_precision": 0.0,
+          "line_ms_p50": 1.2843750009778887,
+          "line_ms_p95": 3.211734001524746,
+          "ms_per_char_weighted": 0.1960195535232175,
+          "ms_per_char_p50": 0.22297860669386393,
+          "ms_per_char_p95": 0.342313751752954,
+          "within_1ms_per_char": 1.0,
+          "rounds": 5,
+          "timed_calls": 10000
+        },
+        "synthetic_numbers": {
+          "samples": 412,
+          "known": 412,
+          "correct": 395,
+          "wrong_accepts": 0,
+          "known_rejected": 17,
+          "oov_rejected": 0,
+          "oov_accepted": 0,
+          "correct_coverage": 0.9587378640776699,
+          "accepted_precision": 1.0,
+          "line_ms_p50": 1.3212914927862585,
+          "line_ms_p95": 1.5657854179153219,
+          "ms_per_char_weighted": 0.27426189079865276,
+          "ms_per_char_p50": 0.2729375002672896,
+          "ms_per_char_p95": 0.3320362517843023,
+          "within_1ms_per_char": 1.0,
+          "rounds": 5,
+          "timed_calls": 2060
+        },
+        "invalid_numbers": {
+          "samples": 56,
+          "known": 0,
+          "correct": 0,
+          "wrong_accepts": 0,
+          "known_rejected": 0,
+          "oov_rejected": 56,
+          "oov_accepted": 0,
+          "correct_coverage": 0.0,
+          "accepted_precision": 0.0,
+          "line_ms_p50": 1.167979498859495,
+          "line_ms_p95": 1.6523705096915364,
+          "ms_per_char_weighted": 0.3352015936236947,
+          "ms_per_char_p50": 0.33971386534782744,
+          "ms_per_char_p95": 0.8128669869620353,
+          "within_1ms_per_char": 1.0,
+          "rounds": 5,
+          "timed_calls": 280
+        }
+      }
+    },
+    "words_21px": {
+      "environment": {
+        "platform": "macOS-26.5-arm64-arm-64bit",
+        "machine": "arm64",
+        "python": "3.12.13",
+        "opencv": "5.0.0",
+        "numpy": "2.3.5"
+      },
+      "font": {
+        "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "px": 21,
+        "index": 6,
+        "backend": "pillow",
+        "sha256": "6873ac2ccab5c2e74d87d6b690f3773098dd6a6238805363a3b3567f2caf6f47",
+        "pillow": "12.2.0"
+      },
+      "dictionary_words": 1350,
+      "requested_dictionary_words": 1350,
+      "unsupported_dictionary_words": 0,
+      "build_ms": 53.55191699345596,
+      "cache_hit": true,
+      "template_memory_bytes": 58156504,
+      "settings": {
+        "top_k": 16,
+        "threshold": 0.84,
+        "margin": 0.04
+      },
+      "timing": "Warm full recognize() calls incl. preprocessing, retrieval, exact matching; excludes disk I/O, rendering, dictionary initialization, UI and IPC. Denominator is ground-truth input length, incl. rejected cases. No answer cache.",
+      "limitation": "Synthetic screenshots are not actual CSP/PS screenshots. Alternate raster uses 3x rendering then downsampling from the same font file.",
+      "groups": {
+        "synthetic_words": {
+          "samples": 400,
+          "known": 400,
+          "correct": 388,
+          "wrong_accepts": 0,
+          "known_rejected": 12,
+          "oov_rejected": 0,
+          "oov_accepted": 0,
+          "correct_coverage": 0.97,
+          "accepted_precision": 1.0,
+          "line_ms_p50": 2.0817915064981207,
+          "line_ms_p95": 4.924068729451392,
+          "ms_per_char_weighted": 0.2851816951958141,
+          "ms_per_char_p50": 0.2967042595888155,
+          "ms_per_char_p95": 0.41363750569871627,
+          "within_1ms_per_char": 0.9983333333333333,
+          "rounds": 3,
+          "timed_calls": 1200
+        },
+        "native_raster_perturbed": {
+          "samples": 266,
+          "correct": 266,
+          "wrong_accepts": 0
+        },
+        "alternate_raster": {
+          "samples": 134,
+          "correct": 122,
+          "wrong_accepts": 0
+        },
+        "synthetic_oov": {
+          "samples": 400,
+          "known": 0,
+          "correct": 0,
+          "wrong_accepts": 0,
+          "known_rejected": 0,
+          "oov_rejected": 400,
+          "oov_accepted": 0,
+          "correct_coverage": 0.0,
+          "accepted_precision": 0.0,
+          "line_ms_p50": 1.6286040045088157,
+          "line_ms_p95": 4.185089621751103,
+          "ms_per_char_weighted": 0.2408523080498158,
+          "ms_per_char_p50": 0.27818905246455133,
+          "ms_per_char_p95": 0.3665038349087505,
+          "within_1ms_per_char": 1.0,
+          "rounds": 3,
+          "timed_calls": 1200
+        },
+        "synthetic_numbers": {
+          "samples": 412,
+          "known": 412,
+          "correct": 406,
+          "wrong_accepts": 0,
+          "known_rejected": 6,
+          "oov_rejected": 0,
+          "oov_accepted": 0,
+          "correct_coverage": 0.9854368932038835,
+          "accepted_precision": 1.0,
+          "line_ms_p50": 1.627020988962613,
+          "line_ms_p95": 1.7915832650032826,
+          "ms_per_char_weighted": 0.33384494738267084,
+          "ms_per_char_p50": 0.33456239907536656,
+          "ms_per_char_p95": 0.37307290331227705,
+          "within_1ms_per_char": 1.0,
+          "rounds": 3,
+          "timed_calls": 1236
+        },
+        "invalid_numbers": {
+          "samples": 56,
+          "known": 0,
+          "correct": 0,
+          "wrong_accepts": 0,
+          "known_rejected": 0,
+          "oov_rejected": 56,
+          "oov_accepted": 0,
+          "correct_coverage": 0.0,
+          "accepted_precision": 0.0,
+          "line_ms_p50": 1.3050004927208647,
+          "line_ms_p95": 1.9373522969544865,
+          "ms_per_char_weighted": 0.40724910490201616,
+          "ms_per_char_p50": 0.4061562503920868,
+          "ms_per_char_p95": 0.9286937594879419,
+          "within_1ms_per_char": 1.0,
+          "rounds": 3,
+          "timed_calls": 168
+        }
+      }
+    },
+    "large_lexicon_18px": {
+      "environment": {
+        "platform": "macOS-26.5-arm64-arm-64bit",
+        "machine": "arm64",
+        "python": "3.12.13",
+        "opencv": "5.0.0",
+        "numpy": "2.3.5"
+      },
+      "font": {
+        "source": "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "px": 18,
+        "index": 6,
+        "backend": "pillow",
+        "sha256": "6873ac2ccab5c2e74d87d6b690f3773098dd6a6238805363a3b3567f2caf6f47",
+        "pillow": "12.2.0"
+      },
+      "dictionary_words": 9029,
+      "requested_dictionary_words": 9289,
+      "unsupported_dictionary_words": 260,
+      "build_ms": 172.88724999525584,
+      "cache_hit": true,
+      "template_memory_bytes": 286602259,
+      "settings": {
+        "top_k": 16,
+        "threshold": 0.84,
+        "margin": 0.04
+      },
+      "timing": "Warm full recognize() calls incl. preprocessing, retrieval, exact matching; excludes disk I/O, rendering, dictionary initialization, UI and IPC. Denominator is ground-truth input length, incl. rejected cases. No answer cache.",
+      "limitation": "Synthetic screenshots are not actual CSP/PS screenshots. Alternate raster uses 3x rendering then downsampling from the same font file.",
+      "groups": {
+        "synthetic_words": {
+          "samples": 800,
+          "known": 800,
+          "correct": 750,
+          "wrong_accepts": 0,
+          "known_rejected": 50,
+          "oov_rejected": 0,
+          "oov_accepted": 0,
+          "correct_coverage": 0.9375,
+          "accepted_precision": 1.0,
+          "line_ms_p50": 1.7678754957159981,
+          "line_ms_p95": 6.621262191038097,
+          "ms_per_char_weighted": 0.2861588379711462,
+          "ms_per_char_p50": 0.2901298512976306,
+          "ms_per_char_p95": 0.4564164992189035,
+          "within_1ms_per_char": 1.0,
+          "rounds": 3,
+          "timed_calls": 2400
+        },
+        "native_raster_perturbed": {
+          "samples": 533,
+          "correct": 533,
+          "wrong_accepts": 0
+        },
+        "alternate_raster": {
+          "samples": 267,
+          "correct": 217,
+          "wrong_accepts": 0
+        },
+        "synthetic_oov": {
+          "samples": 800,
+          "known": 0,
+          "correct": 0,
+          "wrong_accepts": 0,
+          "known_rejected": 0,
+          "oov_rejected": 800,
+          "oov_accepted": 0,
+          "correct_coverage": 0.0,
+          "accepted_precision": 0.0,
+          "line_ms_p50": 1.5001039864728227,
+          "line_ms_p95": 5.24723961570998,
+          "ms_per_char_weighted": 0.265020108427343,
+          "ms_per_char_p50": 0.2771250263322145,
+          "ms_per_char_p95": 0.4268699969785907,
+          "within_1ms_per_char": 0.99875,
+          "rounds": 3,
+          "timed_calls": 2400
+        },
+        "synthetic_numbers": {
+          "samples": 412,
+          "known": 412,
+          "correct": 395,
+          "wrong_accepts": 0,
+          "known_rejected": 17,
+          "oov_rejected": 0,
+          "oov_accepted": 0,
+          "correct_coverage": 0.9587378640776699,
+          "accepted_precision": 1.0,
+          "line_ms_p50": 1.3458125031320378,
+          "line_ms_p95": 1.6257914903690107,
+          "ms_per_char_weighted": 0.2791733104019073,
+          "ms_per_char_p50": 0.2767083002254367,
+          "ms_per_char_p95": 0.33649905017227866,
+          "within_1ms_per_char": 1.0,
+          "rounds": 3,
+          "timed_calls": 1236
+        },
+        "invalid_numbers": {
+          "samples": 56,
+          "known": 0,
+          "correct": 0,
+          "wrong_accepts": 0,
+          "known_rejected": 0,
+          "oov_rejected": 56,
+          "oov_accepted": 0,
+          "correct_coverage": 0.0,
+          "accepted_precision": 0.0,
+          "line_ms_p50": 1.1730414989870042,
+          "line_ms_p95": 1.662878945353441,
+          "ms_per_char_weighted": 0.33744636683432544,
+          "ms_per_char_p50": 0.34481803207503015,
+          "ms_per_char_p95": 0.8248351005022415,
+          "within_1ms_per_char": 1.0,
+          "rounds": 3,
+          "timed_calls": 168
+        }
+      }
+    }
+  },
+  "initialization_note": "Historical build_ms fields measure raw template build/cache load before fine-template preparation; current UI build_ms measures complete GlyphMatcher initialization. Recognition timings are unaffected.",
+  "validation_note": "Fixed synthetic cases were used during development/regression, not an independent blinded evaluation."
+}

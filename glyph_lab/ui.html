@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>记艺线 · 字形实验台</title>
+<style>
+:root{color-scheme:light;--ink:#1f313b;--muted:#667982;--line:#d9e2e5;--accent:#167f71}
+*{box-sizing:border-box}body{margin:0;background:#f3f6f5;color:var(--ink);font:15px/1.6 system-ui,sans-serif}main{max-width:1250px;margin:35px auto;padding:0 24px}header{display:flex;justify-content:space-between;align-items:center}h1{font-size:29px;margin:0}h2{font-size:17px;margin:0 0 16px}.sub{color:var(--muted);margin:8px 0 24px}.tag{background:#e0eeea;color:#236755;border-radius:20px;padding:4px 14px;font-size:13px}.layout{display:grid;grid-template-columns:310px 1fr;gap:20px}.card{background:white;border:1px solid var(--line);border-radius:14px;padding:22px}.card+.card{margin-top:18px}label{display:block;font-size:13px;color:var(--muted);margin-top:12px}input,select,button{font:inherit;border:1px solid var(--line);border-radius:7px;padding:8px 10px;background:white;color:var(--ink)}input,select{width:100%;margin-top:4px}button{cursor:pointer}button:hover{border-color:var(--accent)}button:disabled{opacity:.5;cursor:wait}.primary{background:var(--accent);color:white;border-color:var(--accent)}.row{display:flex;gap:12px}.row>*{flex:1;min-width:0}.small{font-size:12px;color:var(--muted)}#status{margin-top:14px;overflow-wrap:anywhere}.canvas-wrap{margin-top:18px;min-height:190px;max-height:480px;overflow:auto;background:repeating-conic-gradient(#edf1f1 0% 25%,#f7f9f9 0% 50%) 50%/18px 18px;border:1px solid var(--line);border-radius:8px;display:grid;place-items:start}canvas{display:block;max-width:100%;touch-action:none;cursor:crosshair}.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}#result{font-size:26px;letter-spacing:.02em;overflow-wrap:anywhere;margin:12px 0}.metrics{display:flex;gap:25px;margin:14px 0}.metric b{font-size:23px;color:var(--accent);display:block}.metric span{font-size:12px;color:var(--muted)}table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}td,th{padding:7px;border-bottom:1px solid var(--line)}details{margin-top:15px}pre{font-size:12px;white-space:pre-wrap}#message{color:#8c4f20;margin-top:10px}#file{display:none}@media(max-width:800px){.layout{grid-template-columns:1fr}header{align-items:start}.metrics{flex-wrap:wrap}}
+</style>
+<main>
+<header><h1>记艺线 · 字形实验台</h1><span class="tag">目标 ≤ 1 ms / 字</span></header>
+<p class="sub">载入截图，框选一行文字，检验字形匹配的速度与结果。图片在本机处理。</p>
+<div class="layout">
+<aside class="card"><h2>字体与词表</h2>
+<label>字体渲染<select id="backend"><option value="pillow">字体文件 · Windows / macOS</option><option value="gdi">Windows GDI · 字体名称</option></select></label>
+<label>字体文件 / 字体名称<input id="font"></label>
+<div class="row"><label>像素字号<input id="px" type="number" min="6" max="128" value="18"></label><label>TTC 字体序号<input id="index" type="number" min="0" value="0"></label></div>
+<label>词表文件<input id="words"></label><label>词表语言<input id="language" value="chinese_sc"></label>
+<div class="row"><label>接受阈值<input id="threshold" type="number" step=".01" min=".01" max="1" value=".84"></label><label>候选分差<input id="margin" type="number" step=".01" min="0" max="1" value=".04"></label></div>
+<button id="build" style="margin-top:20px;width:100%">应用并建立字形库</button>
+<div id="status" class="small">正在载入配置…</div>
+<p class="small">字体须与截图一致。默认 Mac 宋体用于实验；Windows CSP 的宋体、Mac 宋体不能视为同一字体。首次建库耗时另计。</p>
+</aside>
+<section>
+<div class="card"><h2>截图与识别区域</h2><div class="toolbar"><button id="upload">打开截图</button><input id="file" type="file" accept="image/*"><button id="demo">载入合成示例</button><button id="full">选取整张</button></div>
+<div class="canvas-wrap"><canvas id="canvas" width="700" height="190"></canvas></div>
+<p id="selection" class="small">尚未载入截图。支持拖拽框选，边缘保留少量空白。</p>
+<div class="row"><label>识别模式<select id="mode"><option value="words">词表文字</option><option value="numbers">数字与小数（实验）</option></select></label><label>已知真值（选填，用于计算每字耗时）<input id="truth" placeholder="例如：不透明度"></label></div>
+<button class="primary" id="read" style="margin-top:18px" disabled>识别选中区域</button><div id="message" role="status"></div>
+</div>
+<div class="card"><h2>识别结果</h2><div id="result">等待截图</div>
+<div class="metrics"><div class="metric"><b id="elapsed">—</b><span>完整识别 · ms / 行</span></div><div class="metric"><b id="perchar">—</b><span>按真值长度 · ms / 字</span></div><div class="metric"><b id="score">—</b><span>匹配得分（非概率）</span></div></div>
+<p class="small">耗时包含预处理、初筛、精匹配；不含读图、界面通信与建库。请用批量 benchmark 检验 P95 和准确率。</p>
+<table><thead><tr><th>候选</th><th>得分</th></tr></thead><tbody id="candidates"></tbody></table><details><summary>查看原始结果</summary><pre id="raw"></pre></details>
+</div></section></div></main>
+<script>
+const $=id=>document.getElementById(id);let img=null,imageData='',roi=null,start=null;
+const canvas=$('canvas'),ctx=canvas.getContext('2d');
+async function api(path,data){const response=await fetch(path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{});const out=await response.json();if(!response.ok)throw Error(out.error||'请求失败');return out}
+function message(text){$('message').textContent=text}
+function draw(){ctx.clearRect(0,0,canvas.width,canvas.height);if(img){ctx.drawImage(img,0,0);if(roi){const[x,y,w,h]=roi;ctx.strokeStyle='#00c8a4';ctx.lineWidth=Math.max(1,canvas.width/700)*2;ctx.strokeRect(x,y,w,h)}}else{ctx.fillStyle='#667982';ctx.font='16px system-ui';ctx.fillText('打开一张截图，或载入合成示例',24,65)}$('selection').textContent=roi?`区域：x ${roi[0]} · y ${roi[1]} · 宽 ${roi[2]} · 高 ${roi[3]} px`:'尚未选择区域';$('read').disabled=!roi}
+async function loadImage(data){imageData=data;img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('无法打开此图片'));img.src=data});canvas.width=img.width;canvas.height=img.height;roi=[0,0,img.width,img.height];draw()}
+function point(e){const r=canvas.getBoundingClientRect();return[Math.max(0,Math.min(canvas.width,Math.round((e.clientX-r.left)*canvas.width/r.width))),Math.max(0,Math.min(canvas.height,Math.round((e.clientY-r.top)*canvas.height/r.height)))]}
+canvas.onpointerdown=e=>{if(!img)return;start=point(e);canvas.setPointerCapture(e.pointerId)};
+canvas.onpointermove=e=>{if(!start)return;const p=point(e);roi=[Math.min(start[0],p[0]),Math.min(start[1],p[1]),Math.abs(start[0]-p[0]),Math.abs(start[1]-p[1])];draw()};
+canvas.onpointerup=e=>{if(start){const p=point(e);roi=[Math.min(start[0],p[0]),Math.min(start[1],p[1]),Math.abs(start[0]-p[0]),Math.abs(start[1]-p[1])];if(!roi[2]||!roi[3])roi=null;start=null;draw()}};
+canvas.onpointercancel=()=>{start=null};
+$('upload').onclick=()=>$('file').click();$('file').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file)});await loadImage(data);$('truth').value='';message('请框选单行文字，并确认字体与字号。')}catch(e){message(e.message)}};
+$('full').onclick=()=>{if(img){roi=[0,0,img.width,img.height];draw()}};
+$('demo').onclick=async()=>{try{const r=await api('/api/demo');await loadImage(r.image);$('truth').value=r.truth;$('mode').value='words';message('这是合成示例，用于演示；不能代表真实 CSP / PS 准确率。')}catch(e){message(e.message)}};
+$('build').onclick=async()=>{const b=$('build');b.disabled=true;$('status').textContent='正在建立字形库…';try{const data={};for(const k of ['font','px','index','backend','words','language','threshold','margin'])data[k]=$(k).value;const r=await api('/api/config',data);$('status').textContent=`已就绪 · ${r.words} 词 · ${r.build_ms} ms 建库${r.cache_hit?'（缓存）':''} · 跳过 ${r.skipped_words} 个缺字词`;message('配置已应用。')}catch(e){$('status').textContent=e.message}finally{b.disabled=false}};
+$('read').onclick=async()=>{const b=$('read');b.disabled=true;try{const r=await api('/api/read',{image:imageData,roi,truth:$('truth').value,mode:$('mode').value});$('result').textContent=r.accepted?r.text:'未能可靠识别';$('elapsed').textContent=r.elapsed_ms.toFixed(3);$('perchar').textContent=r.ms_per_char===null?'—':r.ms_per_char.toFixed(3);$('score').textContent=r.score.toFixed(3);$('candidates').replaceChildren();for(const c of (r.candidates||[]).slice(0,5)){const tr=document.createElement('tr');for(const t of [c.text,c.score?.toFixed(3)]){const td=document.createElement('td');td.textContent=t;tr.append(td)}$('candidates').append(tr)}$('raw').textContent=JSON.stringify(r,null,2);message(r.accepted?($('truth').value&&r.text!==$('truth').value?'识别结果与真值不一致。':'已接受匹配结果。'):`已拒识：${r.reason}`)}catch(e){message(e.message)}finally{b.disabled=false}};
+api('/api/config').then(r=>{for(const k of ['source','px','index','backend'])$(k==='source'?'font':k).value=r.font[k];$('words').value=r.word_path;$('language').value=r.language;$('threshold').value=r.threshold;$('margin').value=r.margin;$('status').textContent=`已就绪 · ${r.words} 词 · ${r.build_ms} ms 建库${r.cache_hit?'（缓存）':''}`}).catch(e=>message(e.message));draw();
+</script></html>
