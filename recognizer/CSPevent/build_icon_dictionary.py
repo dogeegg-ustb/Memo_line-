@@ -18,6 +18,7 @@ import argparse
 import base64
 from collections import Counter, defaultdict
 import hashlib
+import html
 import io
 import json
 import os
@@ -187,6 +188,60 @@ def named_templates(db_path: Path):
     return out
 
 
+def mask_digest(alpha: np.ndarray) -> str:
+    """Include dimensions so differently shaped masks cannot share an identity."""
+    return hashlib.sha256(str(alpha.shape).encode("ascii") + alpha.tobytes()).hexdigest()
+
+
+def merge_manual_meanings(icons: list[dict], meanings: dict) -> dict:
+    """Merge evidence by source cell, never by a build's sequential icon ID.
+
+    Keep every accepted meaning for review. Only a single, confidently read meaning
+    may supply a missing name; hand-checked labels are applied afterwards.
+    """
+    where = defaultdict(list)
+    for ic in icons:
+        for loc in [ic] + ic.get("copies", []):
+            where[(loc["sheet"], loc["slot"])].append(ic)
+    stats = Counter()
+    for entries in meanings.values():
+        for entry in entries:
+            loc = entry.get("match", {})
+            candidates = where.get((loc.get("sheet"), loc.get("slot")), [])
+            # Legacy ID-only results cannot establish which build they came from.
+            if len(candidates) != 1:
+                stats["skipped"] += 1
+                continue
+            ic = candidates[0]
+            if entry.get("mask_sha256") and entry["mask_sha256"] != ic.get("mask_sha256"):
+                stats["skipped"] += 1
+                continue
+            if not entry.get("name"):
+                stats["skipped"] += 1
+                continue
+            evidence = ic.setdefault("manual_meanings", [])
+            if entry not in evidence:
+                evidence.append(dict(entry))
+                stats["merged"] += 1
+    for ic in icons:
+        evidence = ic.get("manual_meanings", [])
+        if not evidence:
+            continue
+        names = sorted({e["name"] for e in evidence})
+        ic["manual_names"] = names
+        # An icon may mean different things in different panels. Preserve the
+        # alternatives rather than turning the highest score into a global name.
+        confident = any(e.get("score", 0) >= 0.9 and
+                        ((e.get("number_method") == "ocr" and e.get("number_score", 0) >= 0.9) or
+                         (e.get("number_method") == "glyph" and e.get("number_score", 0) >= 0.85 and
+                          e.get("number_margin", 0) >= 0.08)) for e in evidence)
+        ic["manual_review_required"] = len(names) != 1 or not confident
+        if len(names) == 1 and confident and not ic.get("name"):
+            ic.update(name=names[0], name_source="manual")
+            stats["named"] += 1
+    return dict(stats)
+
+
 def thumb(rgba: np.ndarray, px: int = 40) -> str:
     if is_mono(rgba):  # stored mid-grey and tinted by CSP; show it light
         rgba = rgba.copy(); rgba[:, :, :3] = 225
@@ -211,8 +266,8 @@ def write_html(path: Path, icons: list[dict], thumbs: dict[str, str], summary: d
         items = [i for i in icons if pred(i)]
         cells = "".join(
             f'<figure title="{i["id"]}&#10;{i["sheet"]} #{i["slot"]}&#10;{len(i["variants"])} 个尺寸'
-            f'{("&#10;" + i["name"]) if i.get("name") else ""}"><img src="data:image/png;base64,{thumbs[i["id"]]}">'
-            f'<figcaption>{i.get("name") or i["id"]}</figcaption></figure>' for i in items)
+            f'{("&#10;" + html.escape(i["name"], quote=True)) if i.get("name") else ""}"><img src="data:image/png;base64,{thumbs[i["id"]]}">'
+            f'<figcaption>{html.escape(i.get("name") or i["id"])}</figcaption></figure>' for i in items)
         parts.append(f"<h2>{title} <small>{len(items)}</small></h2><div class=grid>{cells}</div>")
     stats = " · ".join(f"{k} {v}" for k, v in summary.items())
     path.write_text(f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>CSP 图标字典</title>
@@ -229,17 +284,23 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     ap.add_argument("--db", type=Path, default=DEFAULT_DB)
     ap.add_argument("--sightings", type=Path, help="JSON from check_icon_dictionary.py to mark icons seen live")
+    ap.add_argument("--manual-meanings", type=Path, help="default: manual_meanings.json in --out")
+    ap.add_argument("--scan", type=Path, nargs="+", default=DEFAULT_SCAN, help="local CSP resource files/directories")
+    ap.add_argument("--legacy-template-names", action="store_true", help="opt in to unverified hand-drawn DB template names")
     # labels.json in --out: hand-checked names keyed by (sheet, slot), applied on every build
     args = ap.parse_args()
+    sheets = sorted(args.sheets.glob("*.png"))
+    if not sheets:
+        ap.error(f"no master-sheet PNGs in {args.sheets}; extract CSP resources first (existing dictionary kept)")
     args.out.mkdir(parents=True, exist_ok=True)
 
     src_cache = args.out / "sources.json"
-    sources = json.loads(src_cache.read_text(encoding="utf-8")) if src_cache.exists() else carve_sources(args.sheets, DEFAULT_SCAN)
+    sources = json.loads(src_cache.read_text(encoding="utf-8")) if src_cache.exists() else carve_sources(args.sheets, args.scan)
     src_cache.write_text(json.dumps(sources, ensure_ascii=False, indent=1), encoding="utf-8")
 
     raw = []
     skipped = Counter()
-    for p in sorted(args.sheets.glob("*.png")):
+    for p in sheets:
         im = np.asarray(Image.open(p).convert("RGBA"))
         if atlas_slots(im.shape[1], im.shape[0])[0] is not None:
             raw += list(atlas_icons(p.name, im))
@@ -253,6 +314,8 @@ def main() -> None:
     # order of atlas sheets inside their CSP file -> running icon index (for NodeIcon experiments)
     order = defaultdict(list)
     for name, locs in sources.items():
+        if not (args.sheets / name).is_file():
+            continue
         for fp, off in locs:
             order[(fp, atlas_slots(*Image.open(args.sheets / name).size)[0])].append((off, name))
     rank = {}
@@ -279,18 +342,30 @@ def main() -> None:
                       "source": (sources.get(it["sheet"]) or [[None]])[0][0],
                       "resource_index": r * (len(atlas_slots(*Image.open(args.sheets / it["sheet"]).size)[1] or [])) + it["slot"]
                       if r is not None and it["layout"] == "atlas" else None,
-                      "copies": []})
+                      "mask_sha256": mask_digest(big[:, :, 3]), "copies": []})
         sig_list.append(sig)
         for k, c in enumerate(it["crops"]):
             masks[f"{iid}_{k}"] = c[:, :, 3].copy()
         masks[f"{iid}_rgba"] = big.copy()
 
-    for t in named_templates(args.db):
+    if not icons:
+        ap.error("no icons extracted; existing dictionary kept")
+
+    # The old hand-drawn templates did not agree with real CSP icons in the
+    # dictionary experiment. Keep that experiment explicitly opt-in.
+    for t in named_templates(args.db) if args.legacy_template_names else []:
         scored = sorted(((ncc(t["sig"], g), k) for k, g in enumerate(sig_list)), reverse=True)
-        if scored and scored[0][0] >= 0.6 and scored[0][0] - scored[1][0] >= 0.05:
+        if len(scored) >= 2 and scored[0][0] >= 0.6 and scored[0][0] - scored[1][0] >= 0.05:
             ic = icons[scored[0][1]]
             ic.update(name=t["name_zh"], name_en=t["name_en"], command_hint=t["command_hint"],
                       template_id=t["icon_id"], template_score=round(scored[0][0], 3))
+
+    meanings_path = args.manual_meanings or args.out / "manual_meanings.json"
+    if args.manual_meanings and not meanings_path.is_file():
+        ap.error(f"manual meanings not found: {meanings_path}")
+    if meanings_path.exists():
+        stats = merge_manual_meanings(icons, json.loads(meanings_path.read_text(encoding="utf-8")))
+        print("manual meanings:", json.dumps(stats, ensure_ascii=False))
 
     labels_path = args.out / "labels.json"
     if labels_path.exists():
@@ -301,7 +376,7 @@ def main() -> None:
         for lb in json.loads(labels_path.read_text(encoding="utf-8")):
             ic = where.get((lb["match"]["sheet"], lb["match"]["slot"]))
             if ic is not None:
-                ic.update(name=lb["name"], name_en=lb["name_en"], category=lb["category"])
+                ic.update(name=lb["name"], name_en=lb["name_en"], category=lb["category"], name_source="label")
 
     if args.sightings and args.sightings.exists():
         seen = json.loads(args.sightings.read_text(encoding="utf-8"))
@@ -312,11 +387,13 @@ def main() -> None:
             if ic["id"] in by:
                 ic["seen"] = by[ic["id"]]
 
-    summary = {"母版图": len(list(args.sheets.glob("*.png"))), "图标": len(icons),
+    summary = {"母版图": len(sheets), "图标": len(icons),
                "跨图重复已合并": sum(len(i["copies"]) for i in icons),
                "三级图集": sum(i["layout"] == "atlas" for i in icons),
                "单色": sum(i["mono"] for i in icons),
                "已命名": sum(bool(i.get("name")) for i in icons),
+               "手册有释义": sum(bool(i.get("manual_meanings")) for i in icons),
+               "手册需复核": sum(bool(i.get("manual_review_required")) for i in icons),
                "实时界面出现": sum(bool(i.get("seen")) for i in icons), **dict(skipped)}
     np.savez_compressed(args.out / "masks.npz", **masks)
     (args.out / "icons.json").write_text(json.dumps({"summary": summary, "icons": icons}, ensure_ascii=False, indent=1), encoding="utf-8")

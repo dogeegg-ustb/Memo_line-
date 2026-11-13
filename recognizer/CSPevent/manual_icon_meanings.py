@@ -32,6 +32,8 @@ import urllib.request
 import cv2
 import numpy as np
 
+from build_icon_dictionary import mask_digest
+
 HERE = Path(__file__).resolve().parent
 MANUAL = "https://help.clip-studio.com/zh-tw/"
 CIRCLED = {chr(0x2460 + i): i + 1 for i in range(20)}  # ① .. ⑳
@@ -53,7 +55,8 @@ def fetch(url: str, dst: Path) -> bool:
 
 def page_urls(cache: Path) -> list[str]:
     brs = cache / "brsdata.js"
-    fetch(MANUAL + "whxdata/brsdata.js", brs)
+    if not fetch(MANUAL + "whxdata/brsdata.js", brs):
+        raise RuntimeError("could not fetch manual page index; check network or --cache")
     text = brs.read_text(encoding="utf-8")
     return sorted(set(re.findall(r'"link":"([^"#]+\.htm)', text)))
 
@@ -102,7 +105,7 @@ def strokes(gray: np.ndarray, k: int) -> np.ndarray:
 ORANGE = ((5, 150, 170), (25, 255, 255))  # HSV range of the manual's callout fill
 
 
-def callout_discs(img: np.ndarray) -> list[tuple[int, int, int, str]]:
+def callout_discs(img: np.ndarray, min_radius: int = 6, max_radius: int = 24) -> list[tuple[int, int, int, str]]:
     """Numbered callouts: dark discs, or orange teardrops whose tip points at the item.
     Returns (cx, cy, r, kind) of the round body."""
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -115,36 +118,44 @@ def callout_discs(img: np.ndarray) -> list[tuple[int, int, int, str]]:
         cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in cnts:
             x, y, w, h = cv2.boundingRect(c)
-            if not (12 <= w <= 40 and 12 <= h <= 48 and 0.6 <= w / h <= 1.4):
+            if not (2 * min_radius <= w <= 2 * max_radius + 2 and
+                    2 * min_radius <= h <= 3 * max_radius and 0.6 <= w / h <= 1.4):
                 continue
             filled = np.zeros((h, w), np.uint8)
             cv2.drawContours(filled, [c - [x, y]], -1, 1, -1)
             r = int(cv2.distanceTransform(filled, cv2.DIST_L2, 5).max())
-            if r < 6 or filled.mean() < 0.6:
+            if not min_radius <= r <= max_radius or not 0.6 <= filled.mean() <= 0.87:
                 continue
             # round body = the inscribed circle; the glyph inside has the opposite brightness
             dt = cv2.distanceTransform(filled, cv2.DIST_L2, 5)
             cy, cx = (int(v) for v in np.unravel_index(int(dt.argmax()), dt.shape))
             inner = gray[max(0, y + cy - r // 2):y + cy + r // 2 + 1, max(0, x + cx - r // 2):x + cx + r // 2 + 1]
             glyph = (inner > 150).mean() if kind == "dark" else (inner < 90).mean()
-            if 0.05 < glyph < 0.6:
+            if (0.025 if kind == "dark" else 0.05) < glyph < 0.6:
                 out.append((x + int(cx), y + int(cy), r, kind))
     # dark discs that touch other dark UI (sliders, frames) merge into one blob above;
     # find them as circles instead: dark ring of radius r around a light glyph
-    radii = [d[2] for d in out if d[3] == "dark"]
-    if radii:
-        r0 = int(np.median(radii))
-        circles = cv2.HoughCircles(cv2.medianBlur(gray, 3), cv2.HOUGH_GRADIENT, 1, r0 * 1.6,
-                                   param1=120, param2=12, minRadius=r0 - 2, maxRadius=r0 + 2)
+    # Use the configured range even when *all* discs are connected to UI lines.
+    # A median derived only from isolated discs cannot recover that case.
+    for kind, mask in masks.items():
+        source = gray if kind == "dark" else mask * 255
+        circles = cv2.HoughCircles(cv2.medianBlur(source, 3), cv2.HOUGH_GRADIENT, 1, min_radius * 1.6,
+                                   param1=120, param2=12, minRadius=min_radius, maxRadius=max_radius)
         for cx, cy, r in ([] if circles is None else np.round(circles[0]).astype(int)):
-            if any(abs(cx - d[0]) <= r0 and abs(cy - d[1]) <= r0 for d in out):
+            if any(np.hypot(cx - d[0], cy - d[1]) <= max(r, d[2]) for d in out):
                 continue
-            ring = gray[max(0, cy - r):cy + r + 1, max(0, cx - r):cx + r + 1]
-            yy, xx = np.mgrid[:ring.shape[0], :ring.shape[1]]
-            dist = np.hypot(yy - r, xx - r)
-            body = ring[(dist <= r - 1)]
-            if len(body) and (body < 60).mean() > 0.55 and 0.05 < (body > 150).mean() < 0.4:
-                out.append((int(cx), int(cy), int(r), "dark"))
+            if cx - r < 0 or cy - r < 0 or cx + r >= gray.shape[1] or cy + r >= gray.shape[0]:
+                continue  # clipped digits cannot be read reliably
+            crop = gray[cy - r:cy + r + 1, cx - r:cx + r + 1]
+            fill = mask[cy - r:cy + r + 1, cx - r:cx + r + 1]
+            yy, xx = np.mgrid[-r:r + 1, -r:r + 1]
+            dist = np.hypot(yy, xx)
+            body = dist <= r - 1
+            ring = (dist >= r * 0.65) & (dist <= r * 0.9)
+            glyph = (crop[body] > 150).mean() if kind == "dark" else (crop[body] < 90).mean()
+            # A narrow '1' occupies fewer pixels than other digits.
+            if fill[body].mean() > 0.55 and (0.025 if kind == "dark" else 0.05) < glyph < 0.4 and fill[ring].mean() > 0.75:
+                out.append((int(cx), int(cy), int(r), kind))
     return out
 
 
@@ -162,8 +173,9 @@ def read_disc_ocr(ocr, glyph: np.ndarray) -> tuple[int | None, float]:
     g = cv2.copyMakeBorder(cv2.resize(glyph, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC), 12, 12, 12, 12,
                            cv2.BORDER_CONSTANT, value=255)
     res = ocr(cv2.cvtColor(g, cv2.COLOR_GRAY2BGR), use_det=False, use_cls=False, use_rec=True)
-    txt = "".join(res.txts or []) if getattr(res, "txts", None) else ""
-    sc = float(min(res.scores)) if getattr(res, "scores", None) else 0.0
+    texts, scores = getattr(res, "txts", None), getattr(res, "scores", None)
+    txt = "".join(texts) if texts is not None else ""
+    sc = float(min(scores)) if scores is not None and len(scores) else 0.0
     d = re.sub(r"\D", "", txt.translate(str.maketrans("OoIl", "0011")))
     return (int(d) if d and 0 < int(d) <= 40 else None), sc
 
@@ -227,6 +239,38 @@ def reading_order(discs):
     return [d for row in rows for d in sorted(row, key=lambda d: d[0])]
 
 
+def number_discs(discs, items, book, allow_reading_order=False):
+    """Return numbered discs and their evidence; uncertain/duplicate reads abstain."""
+    reads = []
+    for x, y, r, glyph, ocr_n, ocr_score in discs:
+        if ocr_n in items and ocr_score >= 0.9:
+            reads.append((ocr_n, x, y, r, {"number_method": "ocr", "number_score": round(ocr_score, 3)}))
+            continue
+        n, score, margin = book.read(glyph)
+        if n in items and score >= 0.85 and margin >= 0.08:
+            reads.append((n, x, y, r, {"number_method": "glyph", "number_score": round(score, 3),
+                                      "number_margin": round(margin, 3)}))
+    counts = defaultdict(int)
+    for n, *_ in reads:
+        counts[n] += 1
+    reads = [d for d in reads if counts[d[0]] == 1]
+    numbers = sorted(items)
+    if allow_reading_order and not reads and len(discs) == len(numbers) and numbers == list(range(1, len(numbers) + 1)):
+        reads = [(n, x, y, r, {"number_method": "reading_order", "number_score": 0.0})
+                 for n, (x, y, r, *_) in zip(numbers, reading_order(discs))]
+    return [(n, x, y, r) for n, x, y, r, _ in reads], {n: evidence for n, _, _, _, evidence in reads}
+
+
+def merge_page_results(existing: dict, found: dict, processed: set[tuple[str, str]]) -> dict:
+    """A --only run replaces just the screenshots it actually processed."""
+    merged = defaultdict(list)
+    for iid, entries in existing.items():
+        merged[iid].extend(e for e in entries if (e.get("url"), e.get("image")) not in processed)
+    for iid, entries in found.items():
+        merged[iid].extend(entries)
+    return {iid: sorted(v, key=lambda e: -e["score"]) for iid, v in merged.items() if v}
+
+
 def assign(icons, discs):
     """Nearest numbered disc that sits in the icon's column or row, within a few icon sizes."""
     out = []
@@ -256,13 +300,48 @@ def main() -> None:
     ap.add_argument("--cache", type=Path, default=HERE / "icon_dictionary" / "manual_cache")
     ap.add_argument("--threshold", type=float, default=0.8)
     ap.add_argument("--only", help="substring of page URL to process")
+    ap.add_argument("--min-icon-px", type=int, default=12)
+    ap.add_argument("--max-icon-px", type=int, default=64)
+    ap.add_argument("--icon-step", type=int, default=2)
+    ap.add_argument("--min-disc-radius", type=int, default=6)
+    ap.add_argument("--max-disc-radius", type=int, default=24)
+    ap.add_argument("--allow-reading-order", action="store_true", help="emit unverified order-based candidates for review")
     args = ap.parse_args()
+    if not 0 < args.threshold <= 1 or not 4 <= args.min_icon_px <= args.max_icon_px or args.icon_step < 1:
+        ap.error("invalid icon size range, step or threshold")
+    if not 3 <= args.min_disc_radius <= args.max_disc_radius:
+        ap.error("invalid disc radius range")
+    for name in ("icons.json", "masks.npz"):
+        if not (args.dictionary / name).is_file():
+            ap.error(f"missing {args.dictionary / name}; rebuild the icon dictionary from master sheets first")
+    try:
+        from rapidocr import RapidOCR
+    except ImportError:
+        ap.error("RapidOCR is required only to bootstrap manual callout digits; install rapidocr and onnxruntime")
+
+    icons = json.loads((args.dictionary / "icons.json").read_text(encoding="utf-8"))["icons"]
+    by_id = {ic["id"]: ic for ic in icons}
+    templates = []
+    with np.load(args.dictionary / "masks.npz") as masks:
+        for ic in icons:
+            if not ic["mono"] or ic["layout"] not in ("atlas", "states"):
+                continue
+            big = masks[f'{ic["id"]}_0' if ic["layout"] == "states" else f'{ic["id"]}_2']
+            ic["mask_sha256"] = mask_digest(big)
+            for px in range(args.min_icon_px, args.max_icon_px + 1, args.icon_step):
+                t = cv2.resize(big.astype(np.float32), (px, px), interpolation=cv2.INTER_AREA)
+                if t.std() > 1:
+                    templates.append((ic["id"], px, t))
+    if not templates:
+        ap.error("dictionary has no usable monochrome atlas/button masks")
     (args.cache / "pages").mkdir(parents=True, exist_ok=True)
     (args.cache / "images").mkdir(parents=True, exist_ok=True)
 
     urls = page_urls(args.cache)
     if args.only:
         urls = [u for u in urls if args.only in u]
+    if not urls:
+        ap.error("no manual pages match --only")
 
     def load(u):
         dst = args.cache / "pages" / (hashlib.md5(u.encode()).hexdigest()[:12] + ".htm")
@@ -275,62 +354,60 @@ def main() -> None:
 
     with cf.ThreadPoolExecutor(8) as ex:
         pages = [p for p in ex.map(load, urls) if p[1]]
-    print(f"pages {len(pages)}, screenshots with numbered items {sum(len(p[2]) for p in pages)}", flush=True)
+    print(f"pages loaded {len(pages)}/{len(urls)}, screenshots with numbered items {sum(len(p[2]) for p in pages)}", flush=True)
 
-    icons = json.loads((args.dictionary / "icons.json").read_text(encoding="utf-8"))["icons"]
-    masks = np.load(args.dictionary / "masks.npz")
-    mono = [i for i in icons if i["mono"] and i["layout"] in ("atlas", "states")]
-    templates = []
-    for ic in mono:
-        big = masks[f'{ic["id"]}_0' if ic["layout"] == "states" else f'{ic["id"]}_2'].astype(np.float32)
-        for px in range(18, 33, 2):  # manual screenshots: UI at 90-160 %, zoom-ins at 2x of 100 %
-            t = cv2.resize(big, (px, px), interpolation=cv2.INTER_AREA)
-            if t.std() > 1:
-                templates.append((ic["id"], px, t))
-
-    from rapidocr import RapidOCR
     ocr = RapidOCR(params={"Global.log_level": "warning"})
     shots = []
+    failed_images = 0
     for u, title, secs in pages:
         for s in secs:
             p = args.cache / "images" / s["image"]
             img = cv2.imdecode(np.fromfile(str(p), np.uint8), cv2.IMREAD_COLOR) if p.exists() else None
             if img is not None:
-                shots.append((u, title, s, img, [(x, y, r, disc_glyph(img, x, y, r, k)) for x, y, r, k in callout_discs(img)]))
+                discs = [(x, y, r, disc_glyph(img, x, y, r, k)) for x, y, r, k in
+                         callout_discs(img, args.min_disc_radius, args.max_disc_radius)]
+                # Keep small digit crops between passes; do not retain every full screenshot.
+                shots.append((u, title, s, p, [(x, y, r, g, *read_disc_ocr(ocr, g)) for x, y, r, g in discs]))
+            else:
+                failed_images += 1
+    if not shots:
+        ap.error("no manual screenshots could be loaded; existing meanings kept")
     # pass 1: OCR the callouts, keep confident reads that the page's numbered list confirms as digit templates
     book = DigitBook()
-    for u, title, s, img, discs in shots:
-        for x, y, r, g in discs:
-            n, sc = read_disc_ocr(ocr, g)
+    for u, title, s, p, discs in shots:
+        for x, y, r, g, n, sc in discs:
             if n in s["items"] and sc >= 0.9:
                 book.add(n, g)
     print("digit templates:", {n: len(v) for n, v in sorted(book.samples.items())}, flush=True)
 
     found = defaultdict(list)
-    stats = defaultdict(int)
-    for u, title, s, img, discs in shots:
-        if True:
-            n_items = sorted(s["items"])
-            if len(discs) == len(n_items) and n_items == list(range(1, len(n_items) + 1)):
-                # callouts are numbered in reading order: rows top to bottom, left to right
-                discs = [(n, x, y, r) for n, (x, y, r, _) in zip(n_items, reading_order(discs))]
-                stats["by order"] += 1
-            else:
-                discs = [(n, x, y, r) for x, y, r, g in discs
-                         if (rd := book.read(g))[0] in s["items"] and rd[1] >= 0.75 and rd[2] >= 0.05 and (n := rd[0])]
-                stats["by digit"] += bool(discs)
-            if not discs:
-                continue
-            hits = find_icons(img, templates, args.threshold)
-            for a in assign(hits, discs):
-                item = s["items"][a["number"]]
-                found[a["icon"]].append({"name": item["name"], "description": item["description"],
-                                         "section": s["heading"], "page": title, "url": MANUAL + u,
-                                         "image": s["image"], "number": a["number"], "score": a["score"]})
-            print(f"{title} / {s['image']}: discs {len(discs)}, icons {len(hits)}, linked {len(assign(hits, discs))}", flush=True)
-    out = {iid: sorted(v, key=lambda e: -e["score"]) for iid, v in found.items()}
-    (args.dictionary / "manual_meanings.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
-    print("icons with a manual meaning:", len(out), dict(stats))
+    processed = set()
+    for u, title, s, p, discs in shots:
+        img = cv2.imdecode(np.fromfile(str(p), np.uint8), cv2.IMREAD_COLOR)
+        if img is None:
+            continue
+        processed.add((MANUAL + u, s["image"]))
+        numbered, evidence = number_discs(discs, s["items"], book, args.allow_reading_order)
+        if not numbered:
+            continue
+        hits = find_icons(img, templates, args.threshold)
+        linked = assign(hits, numbered)
+        for a in linked:
+            item, ic = s["items"][a["number"]], by_id[a["icon"]]
+            found[a["icon"]].append({"name": item["name"], "description": item["description"],
+                                     "section": s["heading"], "page": title, "url": MANUAL + u,
+                                     "image": s["image"], "number": a["number"], "score": a["score"],
+                                     "box": a["box"], "match": {"sheet": ic["sheet"], "slot": ic["slot"]},
+                                     "mask_sha256": ic["mask_sha256"], **evidence[a["number"]]})
+        print(f"{title} / {s['image']}: discs {len(numbered)}, icons {len(hits)}, linked {len(linked)}", flush=True)
+    target = args.dictionary / "manual_meanings.json"
+    existing = json.loads(target.read_text(encoding="utf-8")) if target.exists() else {}
+    out = merge_page_results(existing, found, processed)
+    temporary = target.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    temporary.replace(target)
+    print("icons with a manual meaning:", len(out), "screenshots processed:", len(processed),
+          "unreadable/missing images:", failed_images)
 
 
 if __name__ == "__main__":
