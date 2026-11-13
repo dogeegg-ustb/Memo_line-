@@ -1,0 +1,2432 @@
+[
+ {
+  "icon": "icon_00766",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 36,
+  "y": 121,
+  "px": 30,
+  "score": 0.999,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00767",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 162,
+  "y": 121,
+  "px": 30,
+  "score": 0.999,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00347",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 41,
+  "y": 165,
+  "px": 30,
+  "score": 0.998,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 6,
+  "y": 210,
+  "px": 30,
+  "score": 0.997,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 6,
+  "y": 165,
+  "px": 30,
+  "score": 0.997,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00768",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 120,
+  "y": 121,
+  "px": 30,
+  "score": 0.995,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00475",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 62,
+  "y": 82,
+  "px": 30,
+  "score": 0.977,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 246,
+  "y": 121,
+  "px": 30,
+  "score": 0.956,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00474",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 42,
+  "y": 12,
+  "px": 30,
+  "score": 0.938,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.921,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00362",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 204,
+  "y": 121,
+  "px": 30,
+  "score": 0.903,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00753",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 146,
+  "y": 82,
+  "px": 30,
+  "score": 0.899,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00763",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 20,
+  "y": 82,
+  "px": 30,
+  "score": 0.888,
+  "capture": "c2de4c9585884cfdacfc9bb5d2f5df52.png"
+ },
+ {
+  "icon": "icon_00767",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 162,
+  "y": 121,
+  "px": 30,
+  "score": 0.999,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00766",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 36,
+  "y": 121,
+  "px": 30,
+  "score": 0.999,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00347",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 41,
+  "y": 165,
+  "px": 30,
+  "score": 0.998,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 6,
+  "y": 165,
+  "px": 30,
+  "score": 0.997,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 6,
+  "y": 255,
+  "px": 30,
+  "score": 0.997,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00768",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 120,
+  "y": 121,
+  "px": 30,
+  "score": 0.995,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00475",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 62,
+  "y": 82,
+  "px": 30,
+  "score": 0.977,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 246,
+  "y": 121,
+  "px": 30,
+  "score": 0.956,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00474",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 42,
+  "y": 12,
+  "px": 30,
+  "score": 0.938,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.921,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00362",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 204,
+  "y": 121,
+  "px": 30,
+  "score": 0.903,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00753",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 146,
+  "y": 82,
+  "px": 30,
+  "score": 0.899,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00763",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 20,
+  "y": 82,
+  "px": 30,
+  "score": 0.888,
+  "capture": "ca072cbe95334c439dcfcb60b01538e5.png"
+ },
+ {
+  "icon": "icon_00766",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 36,
+  "y": 121,
+  "px": 30,
+  "score": 0.999,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00767",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 162,
+  "y": 121,
+  "px": 30,
+  "score": 0.999,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00347",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 41,
+  "y": 165,
+  "px": 30,
+  "score": 0.998,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 6,
+  "y": 165,
+  "px": 30,
+  "score": 0.997,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 6,
+  "y": 255,
+  "px": 30,
+  "score": 0.997,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00768",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 120,
+  "y": 121,
+  "px": 30,
+  "score": 0.995,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00475",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 62,
+  "y": 82,
+  "px": 30,
+  "score": 0.977,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 246,
+  "y": 121,
+  "px": 30,
+  "score": 0.956,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00474",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 42,
+  "y": 12,
+  "px": 30,
+  "score": 0.938,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.921,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00362",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 204,
+  "y": 121,
+  "px": 30,
+  "score": 0.903,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00753",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 146,
+  "y": 82,
+  "px": 30,
+  "score": 0.899,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00763",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 20,
+  "y": 82,
+  "px": 30,
+  "score": 0.888,
+  "capture": "8ec133edd4da45e7aa46814684532e6f.png"
+ },
+ {
+  "icon": "icon_00766",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 36,
+  "y": 121,
+  "px": 30,
+  "score": 0.999,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00767",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 162,
+  "y": 121,
+  "px": 30,
+  "score": 0.999,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00347",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 41,
+  "y": 165,
+  "px": 30,
+  "score": 0.998,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 6,
+  "y": 165,
+  "px": 30,
+  "score": 0.997,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 6,
+  "y": 255,
+  "px": 30,
+  "score": 0.997,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00768",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 120,
+  "y": 121,
+  "px": 30,
+  "score": 0.995,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00475",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 62,
+  "y": 82,
+  "px": 30,
+  "score": 0.977,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 246,
+  "y": 121,
+  "px": 30,
+  "score": 0.956,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00474",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 42,
+  "y": 12,
+  "px": 30,
+  "score": 0.938,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.921,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00362",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 204,
+  "y": 121,
+  "px": 30,
+  "score": 0.903,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00753",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 146,
+  "y": 82,
+  "px": 30,
+  "score": 0.899,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00763",
+  "panel": "图层",
+  "dpi": 144,
+  "x": 20,
+  "y": 82,
+  "px": 30,
+  "score": 0.888,
+  "capture": "cc6badddb0774fbbb6686af96c6204a3.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 291,
+  "px": 35,
+  "score": 0.962,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 241,
+  "px": 35,
+  "score": 0.962,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 191,
+  "px": 35,
+  "score": 0.962,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00347",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 46,
+  "y": 241,
+  "px": 35,
+  "score": 0.945,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00475",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 73,
+  "y": 97,
+  "px": 35,
+  "score": 0.941,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00766",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 42,
+  "y": 142,
+  "px": 35,
+  "score": 0.94,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00767",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 189,
+  "y": 142,
+  "px": 35,
+  "score": 0.933,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00768",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 140,
+  "y": 142,
+  "px": 35,
+  "score": 0.925,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 287,
+  "y": 142,
+  "px": 35,
+  "score": 0.912,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00474",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 47,
+  "y": 15,
+  "px": 35,
+  "score": 0.897,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00362",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 238,
+  "y": 142,
+  "px": 35,
+  "score": 0.878,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 8,
+  "px": 35,
+  "score": 0.863,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00753",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 171,
+  "y": 97,
+  "px": 35,
+  "score": 0.862,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00763",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 24,
+  "y": 97,
+  "px": 35,
+  "score": 0.854,
+  "capture": "aa0dd78ef08c42a38c8a38d3cbdb1ed2.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 291,
+  "px": 35,
+  "score": 0.962,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 241,
+  "px": 35,
+  "score": 0.962,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00347",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 46,
+  "y": 241,
+  "px": 35,
+  "score": 0.945,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00475",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 73,
+  "y": 97,
+  "px": 35,
+  "score": 0.941,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00766",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 42,
+  "y": 142,
+  "px": 35,
+  "score": 0.94,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00767",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 189,
+  "y": 142,
+  "px": 35,
+  "score": 0.933,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00768",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 140,
+  "y": 142,
+  "px": 35,
+  "score": 0.925,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 287,
+  "y": 142,
+  "px": 35,
+  "score": 0.912,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00474",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 47,
+  "y": 15,
+  "px": 35,
+  "score": 0.897,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00362",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 238,
+  "y": 142,
+  "px": 35,
+  "score": 0.878,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 8,
+  "px": 35,
+  "score": 0.863,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00753",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 171,
+  "y": 97,
+  "px": 35,
+  "score": 0.862,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00763",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 24,
+  "y": 97,
+  "px": 35,
+  "score": 0.854,
+  "capture": "43fba399c16f4d5382e329e0860cbed4.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 291,
+  "px": 35,
+  "score": 0.962,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 241,
+  "px": 35,
+  "score": 0.962,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 341,
+  "px": 35,
+  "score": 0.962,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00347",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 46,
+  "y": 241,
+  "px": 35,
+  "score": 0.945,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00475",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 73,
+  "y": 97,
+  "px": 35,
+  "score": 0.941,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00766",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 42,
+  "y": 142,
+  "px": 35,
+  "score": 0.94,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00767",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 189,
+  "y": 142,
+  "px": 35,
+  "score": 0.933,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00768",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 140,
+  "y": 142,
+  "px": 35,
+  "score": 0.922,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 287,
+  "y": 142,
+  "px": 35,
+  "score": 0.912,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00474",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 47,
+  "y": 15,
+  "px": 35,
+  "score": 0.897,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00362",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 238,
+  "y": 142,
+  "px": 35,
+  "score": 0.878,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 8,
+  "px": 35,
+  "score": 0.863,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00753",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 171,
+  "y": 97,
+  "px": 35,
+  "score": 0.862,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00763",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 24,
+  "y": 97,
+  "px": 35,
+  "score": 0.854,
+  "capture": "95a47be3415a47058101092100d927aa.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 291,
+  "px": 35,
+  "score": 0.962,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 341,
+  "px": 35,
+  "score": 0.962,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00670",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 241,
+  "px": 35,
+  "score": 0.962,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00347",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 46,
+  "y": 291,
+  "px": 35,
+  "score": 0.945,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00475",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 73,
+  "y": 97,
+  "px": 35,
+  "score": 0.941,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00766",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 42,
+  "y": 142,
+  "px": 35,
+  "score": 0.94,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00767",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 189,
+  "y": 142,
+  "px": 35,
+  "score": 0.933,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00768",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 140,
+  "y": 142,
+  "px": 35,
+  "score": 0.925,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 287,
+  "y": 142,
+  "px": 35,
+  "score": 0.912,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00474",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 47,
+  "y": 15,
+  "px": 35,
+  "score": 0.897,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00362",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 238,
+  "y": 142,
+  "px": 35,
+  "score": 0.878,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 6,
+  "y": 8,
+  "px": 35,
+  "score": 0.863,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00753",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 171,
+  "y": 97,
+  "px": 35,
+  "score": 0.862,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00763",
+  "panel": "图层",
+  "dpi": 168,
+  "x": 24,
+  "y": 97,
+  "px": 35,
+  "score": 0.854,
+  "capture": "dbf149488c904a8bb6bb9c9364a699a3.png"
+ },
+ {
+  "icon": "icon_00354",
+  "panel": "导航器",
+  "dpi": 144,
+  "x": 247,
+  "y": 509,
+  "px": 30,
+  "score": 0.999,
+  "capture": "4eb084d5fa254f53a979fef240d13927.png"
+ },
+ {
+  "icon": "icon_00497",
+  "panel": "导航器",
+  "dpi": 144,
+  "x": 120,
+  "y": 545,
+  "px": 30,
+  "score": 0.998,
+  "capture": "4eb084d5fa254f53a979fef240d13927.png"
+ },
+ {
+  "icon": "icon_00496",
+  "panel": "导航器",
+  "dpi": 144,
+  "x": 79,
+  "y": 545,
+  "px": 30,
+  "score": 0.998,
+  "capture": "4eb084d5fa254f53a979fef240d13927.png"
+ },
+ {
+  "icon": "icon_00148",
+  "panel": "导航器",
+  "dpi": 144,
+  "x": 161,
+  "y": 545,
+  "px": 30,
+  "score": 0.997,
+  "capture": "4eb084d5fa254f53a979fef240d13927.png"
+ },
+ {
+  "icon": "icon_00493",
+  "panel": "导航器",
+  "dpi": 144,
+  "x": 79,
+  "y": 509,
+  "px": 30,
+  "score": 0.995,
+  "capture": "4eb084d5fa254f53a979fef240d13927.png"
+ },
+ {
+  "icon": "icon_00492",
+  "panel": "导航器",
+  "dpi": 144,
+  "x": 120,
+  "y": 509,
+  "px": 30,
+  "score": 0.993,
+  "capture": "4eb084d5fa254f53a979fef240d13927.png"
+ },
+ {
+  "icon": "icon_00499",
+  "panel": "导航器",
+  "dpi": 144,
+  "x": 247,
+  "y": 545,
+  "px": 30,
+  "score": 0.991,
+  "capture": "4eb084d5fa254f53a979fef240d13927.png"
+ },
+ {
+  "icon": "icon_00498",
+  "panel": "导航器",
+  "dpi": 144,
+  "x": 206,
+  "y": 545,
+  "px": 30,
+  "score": 0.991,
+  "capture": "4eb084d5fa254f53a979fef240d13927.png"
+ },
+ {
+  "icon": "icon_00495",
+  "panel": "导航器",
+  "dpi": 144,
+  "x": 206,
+  "y": 509,
+  "px": 30,
+  "score": 0.974,
+  "capture": "4eb084d5fa254f53a979fef240d13927.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "导航器",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.912,
+  "capture": "4eb084d5fa254f53a979fef240d13927.png"
+ },
+ {
+  "icon": "icon_00493",
+  "panel": "导航器",
+  "dpi": 144,
+  "x": 161,
+  "y": 509,
+  "px": 30,
+  "score": 0.89,
+  "capture": "4eb084d5fa254f53a979fef240d13927.png"
+ },
+ {
+  "icon": "icon_00497",
+  "panel": "导航器",
+  "dpi": 168,
+  "x": 140,
+  "y": 716,
+  "px": 35,
+  "score": 0.972,
+  "capture": "44edf323f531414fab1e820caa44db1b.png"
+ },
+ {
+  "icon": "icon_00498",
+  "panel": "导航器",
+  "dpi": 168,
+  "x": 240,
+  "y": 716,
+  "px": 35,
+  "score": 0.965,
+  "capture": "44edf323f531414fab1e820caa44db1b.png"
+ },
+ {
+  "icon": "icon_00499",
+  "panel": "导航器",
+  "dpi": 168,
+  "x": 288,
+  "y": 716,
+  "px": 35,
+  "score": 0.961,
+  "capture": "44edf323f531414fab1e820caa44db1b.png"
+ },
+ {
+  "icon": "icon_00496",
+  "panel": "导航器",
+  "dpi": 168,
+  "x": 92,
+  "y": 716,
+  "px": 35,
+  "score": 0.946,
+  "capture": "44edf323f531414fab1e820caa44db1b.png"
+ },
+ {
+  "icon": "icon_00148",
+  "panel": "导航器",
+  "dpi": 168,
+  "x": 188,
+  "y": 716,
+  "px": 35,
+  "score": 0.941,
+  "capture": "44edf323f531414fab1e820caa44db1b.png"
+ },
+ {
+  "icon": "icon_00492",
+  "panel": "导航器",
+  "dpi": 168,
+  "x": 140,
+  "y": 674,
+  "px": 35,
+  "score": 0.938,
+  "capture": "44edf323f531414fab1e820caa44db1b.png"
+ },
+ {
+  "icon": "icon_00493",
+  "panel": "导航器",
+  "dpi": 168,
+  "x": 92,
+  "y": 674,
+  "px": 35,
+  "score": 0.936,
+  "capture": "44edf323f531414fab1e820caa44db1b.png"
+ },
+ {
+  "icon": "icon_00354",
+  "panel": "导航器",
+  "dpi": 168,
+  "x": 288,
+  "y": 674,
+  "px": 35,
+  "score": 0.933,
+  "capture": "44edf323f531414fab1e820caa44db1b.png"
+ },
+ {
+  "icon": "icon_00495",
+  "panel": "导航器",
+  "dpi": 168,
+  "x": 240,
+  "y": 674,
+  "px": 35,
+  "score": 0.91,
+  "capture": "44edf323f531414fab1e820caa44db1b.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "导航器",
+  "dpi": 168,
+  "x": 6,
+  "y": 7,
+  "px": 35,
+  "score": 0.854,
+  "capture": "44edf323f531414fab1e820caa44db1b.png"
+ },
+ {
+  "icon": "icon_00308",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 267,
+  "y": 389,
+  "px": 30,
+  "score": 0.998,
+  "capture": "04654bbfffac4c1586fc477939bd85b9.png"
+ },
+ {
+  "icon": "icon_00142",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 225,
+  "y": 389,
+  "px": 30,
+  "score": 0.995,
+  "capture": "04654bbfffac4c1586fc477939bd85b9.png"
+ },
+ {
+  "icon": "icon_00458",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 8,
+  "y": 389,
+  "px": 30,
+  "score": 0.976,
+  "capture": "04654bbfffac4c1586fc477939bd85b9.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 309,
+  "y": 389,
+  "px": 30,
+  "score": 0.956,
+  "capture": "04654bbfffac4c1586fc477939bd85b9.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.917,
+  "capture": "04654bbfffac4c1586fc477939bd85b9.png"
+ },
+ {
+  "icon": "icon_00308",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 267,
+  "y": 389,
+  "px": 30,
+  "score": 0.998,
+  "capture": "07073a54a2df45f8b73006d35d76392c.png"
+ },
+ {
+  "icon": "icon_00142",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 225,
+  "y": 389,
+  "px": 30,
+  "score": 0.995,
+  "capture": "07073a54a2df45f8b73006d35d76392c.png"
+ },
+ {
+  "icon": "icon_00458",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 8,
+  "y": 389,
+  "px": 30,
+  "score": 0.976,
+  "capture": "07073a54a2df45f8b73006d35d76392c.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 309,
+  "y": 389,
+  "px": 30,
+  "score": 0.956,
+  "capture": "07073a54a2df45f8b73006d35d76392c.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.917,
+  "capture": "07073a54a2df45f8b73006d35d76392c.png"
+ },
+ {
+  "icon": "icon_00308",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 267,
+  "y": 389,
+  "px": 30,
+  "score": 0.998,
+  "capture": "3f0c964ca97747d1a2977af87d082b6f.png"
+ },
+ {
+  "icon": "icon_00142",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 225,
+  "y": 389,
+  "px": 30,
+  "score": 0.995,
+  "capture": "3f0c964ca97747d1a2977af87d082b6f.png"
+ },
+ {
+  "icon": "icon_00458",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 8,
+  "y": 389,
+  "px": 30,
+  "score": 0.976,
+  "capture": "3f0c964ca97747d1a2977af87d082b6f.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 309,
+  "y": 389,
+  "px": 30,
+  "score": 0.956,
+  "capture": "3f0c964ca97747d1a2977af87d082b6f.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.917,
+  "capture": "3f0c964ca97747d1a2977af87d082b6f.png"
+ },
+ {
+  "icon": "icon_00308",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 267,
+  "y": 389,
+  "px": 30,
+  "score": 0.998,
+  "capture": "16c5f27d95054a91bd2e488add8c97f6.png"
+ },
+ {
+  "icon": "icon_00142",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 225,
+  "y": 389,
+  "px": 30,
+  "score": 0.995,
+  "capture": "16c5f27d95054a91bd2e488add8c97f6.png"
+ },
+ {
+  "icon": "icon_00458",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 8,
+  "y": 389,
+  "px": 30,
+  "score": 0.976,
+  "capture": "16c5f27d95054a91bd2e488add8c97f6.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 309,
+  "y": 389,
+  "px": 30,
+  "score": 0.956,
+  "capture": "16c5f27d95054a91bd2e488add8c97f6.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "工具组",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.917,
+  "capture": "16c5f27d95054a91bd2e488add8c97f6.png"
+ },
+ {
+  "icon": "icon_00308",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 312,
+  "y": 187,
+  "px": 35,
+  "score": 0.929,
+  "capture": "324bae26e0b5400cafd85f0cab21f27b.png"
+ },
+ {
+  "icon": "icon_00142",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 263,
+  "y": 187,
+  "px": 35,
+  "score": 0.921,
+  "capture": "324bae26e0b5400cafd85f0cab21f27b.png"
+ },
+ {
+  "icon": "icon_00458",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 9,
+  "y": 187,
+  "px": 35,
+  "score": 0.918,
+  "capture": "324bae26e0b5400cafd85f0cab21f27b.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 361,
+  "y": 187,
+  "px": 35,
+  "score": 0.912,
+  "capture": "324bae26e0b5400cafd85f0cab21f27b.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 6,
+  "y": 7,
+  "px": 35,
+  "score": 0.858,
+  "capture": "324bae26e0b5400cafd85f0cab21f27b.png"
+ },
+ {
+  "icon": "icon_00308",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 312,
+  "y": 187,
+  "px": 35,
+  "score": 0.929,
+  "capture": "f37fb5370a054557a36f219eceadf018.png"
+ },
+ {
+  "icon": "icon_00142",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 263,
+  "y": 187,
+  "px": 35,
+  "score": 0.921,
+  "capture": "f37fb5370a054557a36f219eceadf018.png"
+ },
+ {
+  "icon": "icon_00458",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 9,
+  "y": 187,
+  "px": 35,
+  "score": 0.918,
+  "capture": "f37fb5370a054557a36f219eceadf018.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 361,
+  "y": 187,
+  "px": 35,
+  "score": 0.912,
+  "capture": "f37fb5370a054557a36f219eceadf018.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 6,
+  "y": 7,
+  "px": 35,
+  "score": 0.858,
+  "capture": "f37fb5370a054557a36f219eceadf018.png"
+ },
+ {
+  "icon": "icon_00308",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 312,
+  "y": 187,
+  "px": 35,
+  "score": 0.929,
+  "capture": "41e82060d433493eba7c8dc2a84a1977.png"
+ },
+ {
+  "icon": "icon_00142",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 263,
+  "y": 187,
+  "px": 35,
+  "score": 0.921,
+  "capture": "41e82060d433493eba7c8dc2a84a1977.png"
+ },
+ {
+  "icon": "icon_00458",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 9,
+  "y": 187,
+  "px": 35,
+  "score": 0.918,
+  "capture": "41e82060d433493eba7c8dc2a84a1977.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 361,
+  "y": 187,
+  "px": 35,
+  "score": 0.912,
+  "capture": "41e82060d433493eba7c8dc2a84a1977.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 6,
+  "y": 7,
+  "px": 35,
+  "score": 0.858,
+  "capture": "41e82060d433493eba7c8dc2a84a1977.png"
+ },
+ {
+  "icon": "icon_00308",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 312,
+  "y": 187,
+  "px": 35,
+  "score": 0.929,
+  "capture": "5ab3173b8adb4277bfa6900be7a09531.png"
+ },
+ {
+  "icon": "icon_00142",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 263,
+  "y": 187,
+  "px": 35,
+  "score": 0.921,
+  "capture": "5ab3173b8adb4277bfa6900be7a09531.png"
+ },
+ {
+  "icon": "icon_00458",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 9,
+  "y": 187,
+  "px": 35,
+  "score": 0.918,
+  "capture": "5ab3173b8adb4277bfa6900be7a09531.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 361,
+  "y": 187,
+  "px": 35,
+  "score": 0.912,
+  "capture": "5ab3173b8adb4277bfa6900be7a09531.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "工具组",
+  "dpi": 168,
+  "x": 6,
+  "y": 7,
+  "px": 35,
+  "score": 0.858,
+  "capture": "5ab3173b8adb4277bfa6900be7a09531.png"
+ },
+ {
+  "icon": "icon_00141",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 309,
+  "y": 497,
+  "px": 30,
+  "score": 0.997,
+  "capture": "1afe4334586f433d90f502a02ae66124.png"
+ },
+ {
+  "icon": "icon_00148",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 267,
+  "y": 497,
+  "px": 30,
+  "score": 0.997,
+  "capture": "1afe4334586f433d90f502a02ae66124.png"
+ },
+ {
+  "icon": "icon_00829",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 347,
+  "px": 30,
+  "score": 0.984,
+  "capture": "1afe4334586f433d90f502a02ae66124.png"
+ },
+ {
+  "icon": "icon_00149",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 65,
+  "px": 30,
+  "score": 0.962,
+  "capture": "1afe4334586f433d90f502a02ae66124.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 293,
+  "y": 303,
+  "px": 30,
+  "score": 0.956,
+  "capture": "1afe4334586f433d90f502a02ae66124.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.918,
+  "capture": "1afe4334586f433d90f502a02ae66124.png"
+ },
+ {
+  "icon": "icon_00832",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 110,
+  "px": 30,
+  "score": 0.913,
+  "capture": "1afe4334586f433d90f502a02ae66124.png"
+ },
+ {
+  "icon": "icon_00836",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 257,
+  "px": 30,
+  "score": 0.892,
+  "capture": "1afe4334586f433d90f502a02ae66124.png"
+ },
+ {
+  "icon": "icon_00830",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 159,
+  "px": 30,
+  "score": 0.876,
+  "capture": "1afe4334586f433d90f502a02ae66124.png"
+ },
+ {
+  "icon": "icon_00141",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 309,
+  "y": 497,
+  "px": 30,
+  "score": 0.997,
+  "capture": "fac6fede5b144704b294ec92940a3991.png"
+ },
+ {
+  "icon": "icon_00148",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 267,
+  "y": 497,
+  "px": 30,
+  "score": 0.997,
+  "capture": "fac6fede5b144704b294ec92940a3991.png"
+ },
+ {
+  "icon": "icon_00149",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 65,
+  "px": 30,
+  "score": 0.962,
+  "capture": "fac6fede5b144704b294ec92940a3991.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.918,
+  "capture": "fac6fede5b144704b294ec92940a3991.png"
+ },
+ {
+  "icon": "icon_00773",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 167,
+  "y": 205,
+  "px": 30,
+  "score": 0.904,
+  "capture": "fac6fede5b144704b294ec92940a3991.png"
+ },
+ {
+  "icon": "icon_00829",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 159,
+  "px": 30,
+  "score": 0.901,
+  "capture": "fac6fede5b144704b294ec92940a3991.png"
+ },
+ {
+  "icon": "icon_00830",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 110,
+  "px": 30,
+  "score": 0.876,
+  "capture": "fac6fede5b144704b294ec92940a3991.png"
+ },
+ {
+  "icon": "icon_00371",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 309,
+  "y": 343,
+  "px": 30,
+  "score": 0.854,
+  "capture": "fac6fede5b144704b294ec92940a3991.png"
+ },
+ {
+  "icon": "icon_00141",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 309,
+  "y": 497,
+  "px": 30,
+  "score": 0.997,
+  "capture": "3f817bbcd0e349e3b785bf4afdd62ffc.png"
+ },
+ {
+  "icon": "icon_00148",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 267,
+  "y": 497,
+  "px": 30,
+  "score": 0.997,
+  "capture": "3f817bbcd0e349e3b785bf4afdd62ffc.png"
+ },
+ {
+  "icon": "icon_00149",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 65,
+  "px": 30,
+  "score": 0.962,
+  "capture": "3f817bbcd0e349e3b785bf4afdd62ffc.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.918,
+  "capture": "3f817bbcd0e349e3b785bf4afdd62ffc.png"
+ },
+ {
+  "icon": "icon_00773",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 167,
+  "y": 205,
+  "px": 30,
+  "score": 0.904,
+  "capture": "3f817bbcd0e349e3b785bf4afdd62ffc.png"
+ },
+ {
+  "icon": "icon_00829",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 159,
+  "px": 30,
+  "score": 0.901,
+  "capture": "3f817bbcd0e349e3b785bf4afdd62ffc.png"
+ },
+ {
+  "icon": "icon_00830",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 110,
+  "px": 30,
+  "score": 0.876,
+  "capture": "3f817bbcd0e349e3b785bf4afdd62ffc.png"
+ },
+ {
+  "icon": "icon_00371",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 309,
+  "y": 343,
+  "px": 30,
+  "score": 0.854,
+  "capture": "3f817bbcd0e349e3b785bf4afdd62ffc.png"
+ },
+ {
+  "icon": "icon_00141",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 309,
+  "y": 497,
+  "px": 30,
+  "score": 0.997,
+  "capture": "610c707d1ece43b78c45ae27526baf31.png"
+ },
+ {
+  "icon": "icon_00148",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 267,
+  "y": 497,
+  "px": 30,
+  "score": 0.997,
+  "capture": "610c707d1ece43b78c45ae27526baf31.png"
+ },
+ {
+  "icon": "icon_00149",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 65,
+  "px": 30,
+  "score": 0.962,
+  "capture": "610c707d1ece43b78c45ae27526baf31.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.918,
+  "capture": "610c707d1ece43b78c45ae27526baf31.png"
+ },
+ {
+  "icon": "icon_00773",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 167,
+  "y": 205,
+  "px": 30,
+  "score": 0.904,
+  "capture": "610c707d1ece43b78c45ae27526baf31.png"
+ },
+ {
+  "icon": "icon_00829",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 159,
+  "px": 30,
+  "score": 0.901,
+  "capture": "610c707d1ece43b78c45ae27526baf31.png"
+ },
+ {
+  "icon": "icon_00830",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 306,
+  "y": 110,
+  "px": 30,
+  "score": 0.876,
+  "capture": "610c707d1ece43b78c45ae27526baf31.png"
+ },
+ {
+  "icon": "icon_00371",
+  "panel": "笔刷属性",
+  "dpi": 144,
+  "x": 309,
+  "y": 343,
+  "px": 30,
+  "score": 0.854,
+  "capture": "610c707d1ece43b78c45ae27526baf31.png"
+ },
+ {
+  "icon": "icon_00141",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 361,
+  "y": 569,
+  "px": 35,
+  "score": 0.965,
+  "capture": "7563ad7dea33419991eb71b9ce66f0c7.png"
+ },
+ {
+  "icon": "icon_00148",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 312,
+  "y": 569,
+  "px": 35,
+  "score": 0.941,
+  "capture": "7563ad7dea33419991eb71b9ce66f0c7.png"
+ },
+ {
+  "icon": "icon_00149",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 358,
+  "y": 77,
+  "px": 35,
+  "score": 0.871,
+  "capture": "7563ad7dea33419991eb71b9ce66f0c7.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 6,
+  "y": 7,
+  "px": 35,
+  "score": 0.86,
+  "capture": "7563ad7dea33419991eb71b9ce66f0c7.png"
+ },
+ {
+  "icon": "icon_00141",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 361,
+  "y": 569,
+  "px": 35,
+  "score": 0.965,
+  "capture": "f6ad33ffd4304696a8a2647a8a797409.png"
+ },
+ {
+  "icon": "icon_00148",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 312,
+  "y": 569,
+  "px": 35,
+  "score": 0.941,
+  "capture": "f6ad33ffd4304696a8a2647a8a797409.png"
+ },
+ {
+  "icon": "icon_00829",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 360,
+  "y": 395,
+  "px": 35,
+  "score": 0.922,
+  "capture": "f6ad33ffd4304696a8a2647a8a797409.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 345,
+  "y": 345,
+  "px": 35,
+  "score": 0.912,
+  "capture": "f6ad33ffd4304696a8a2647a8a797409.png"
+ },
+ {
+  "icon": "icon_00149",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 358,
+  "y": 77,
+  "px": 35,
+  "score": 0.871,
+  "capture": "f6ad33ffd4304696a8a2647a8a797409.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 6,
+  "y": 7,
+  "px": 35,
+  "score": 0.86,
+  "capture": "f6ad33ffd4304696a8a2647a8a797409.png"
+ },
+ {
+  "icon": "icon_00141",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 361,
+  "y": 569,
+  "px": 35,
+  "score": 0.965,
+  "capture": "b5063039e30b48609364caa0dac1fbdd.png"
+ },
+ {
+  "icon": "icon_00148",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 312,
+  "y": 569,
+  "px": 35,
+  "score": 0.941,
+  "capture": "b5063039e30b48609364caa0dac1fbdd.png"
+ },
+ {
+  "icon": "icon_00829",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 360,
+  "y": 395,
+  "px": 35,
+  "score": 0.922,
+  "capture": "b5063039e30b48609364caa0dac1fbdd.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 345,
+  "y": 345,
+  "px": 35,
+  "score": 0.912,
+  "capture": "b5063039e30b48609364caa0dac1fbdd.png"
+ },
+ {
+  "icon": "icon_00149",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 358,
+  "y": 77,
+  "px": 35,
+  "score": 0.871,
+  "capture": "b5063039e30b48609364caa0dac1fbdd.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 6,
+  "y": 7,
+  "px": 35,
+  "score": 0.86,
+  "capture": "b5063039e30b48609364caa0dac1fbdd.png"
+ },
+ {
+  "icon": "icon_00141",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 361,
+  "y": 569,
+  "px": 35,
+  "score": 0.965,
+  "capture": "b656d67465a8440ab0dc6e101e49e48f.png"
+ },
+ {
+  "icon": "icon_00148",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 312,
+  "y": 569,
+  "px": 35,
+  "score": 0.941,
+  "capture": "b656d67465a8440ab0dc6e101e49e48f.png"
+ },
+ {
+  "icon": "icon_00829",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 360,
+  "y": 395,
+  "px": 35,
+  "score": 0.922,
+  "capture": "b656d67465a8440ab0dc6e101e49e48f.png"
+ },
+ {
+  "icon": "icon_00280",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 345,
+  "y": 345,
+  "px": 35,
+  "score": 0.912,
+  "capture": "b656d67465a8440ab0dc6e101e49e48f.png"
+ },
+ {
+  "icon": "icon_00149",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 358,
+  "y": 77,
+  "px": 35,
+  "score": 0.871,
+  "capture": "b656d67465a8440ab0dc6e101e49e48f.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "笔刷属性",
+  "dpi": 168,
+  "x": 6,
+  "y": 7,
+  "px": 35,
+  "score": 0.86,
+  "capture": "b656d67465a8440ab0dc6e101e49e48f.png"
+ },
+ {
+  "icon": "icon_00102",
+  "panel": "色彩",
+  "dpi": 144,
+  "x": 306,
+  "y": 437,
+  "px": 30,
+  "score": 0.967,
+  "capture": "e8af12bf3f33489e9e76b5bb05fc7000.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.921,
+  "capture": "e8af12bf3f33489e9e76b5bb05fc7000.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.921,
+  "capture": "73e69fda53d1450fa0187116c35ccf38.png"
+ },
+ {
+  "icon": "icon_00102",
+  "panel": "色彩",
+  "dpi": 144,
+  "x": 306,
+  "y": 447,
+  "px": 30,
+  "score": 0.967,
+  "capture": "79c8f7d4beca422caeb1ada318460850.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.921,
+  "capture": "79c8f7d4beca422caeb1ada318460850.png"
+ },
+ {
+  "icon": "icon_00102",
+  "panel": "色彩",
+  "dpi": 144,
+  "x": 306,
+  "y": 447,
+  "px": 30,
+  "score": 0.967,
+  "capture": "7f8ad7e69f0741acb636e76e20a58dc1.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.921,
+  "capture": "7f8ad7e69f0741acb636e76e20a58dc1.png"
+ },
+ {
+  "icon": "icon_00102",
+  "panel": "色彩",
+  "dpi": 168,
+  "x": 358,
+  "y": 523,
+  "px": 35,
+  "score": 0.923,
+  "capture": "1bd7c7c3ad034c63952602f6337345e2.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩",
+  "dpi": 168,
+  "x": 6,
+  "y": 7,
+  "px": 35,
+  "score": 0.863,
+  "capture": "1bd7c7c3ad034c63952602f6337345e2.png"
+ },
+ {
+  "icon": "icon_00102",
+  "panel": "色彩",
+  "dpi": 168,
+  "x": 358,
+  "y": 523,
+  "px": 35,
+  "score": 0.923,
+  "capture": "55e81f95e73645f9923a44f2eee2e391.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩",
+  "dpi": 168,
+  "x": 6,
+  "y": 7,
+  "px": 35,
+  "score": 0.863,
+  "capture": "55e81f95e73645f9923a44f2eee2e391.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩",
+  "dpi": 168,
+  "x": 6,
+  "y": 8,
+  "px": 35,
+  "score": 0.866,
+  "capture": "6ef650d94924433e90183e62c0a34e35.png"
+ },
+ {
+  "icon": "icon_00102",
+  "panel": "色彩滑块",
+  "dpi": 144,
+  "x": 306,
+  "y": 437,
+  "px": 30,
+  "score": 0.967,
+  "capture": "290927d020774cd1a4c73777a5cb1afe.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩滑块",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.921,
+  "capture": "290927d020774cd1a4c73777a5cb1afe.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩滑块",
+  "dpi": 144,
+  "x": 6,
+  "y": 7,
+  "px": 30,
+  "score": 0.925,
+  "capture": "9fdbd46c02694567b7912dba0f25f836.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩滑块",
+  "dpi": 144,
+  "x": 6,
+  "y": 7,
+  "px": 30,
+  "score": 0.925,
+  "capture": "d382f690e9434d07ae6b2704c9ce4d7b.png"
+ },
+ {
+  "icon": "icon_00102",
+  "panel": "色彩滑块",
+  "dpi": 144,
+  "x": 306,
+  "y": 447,
+  "px": 30,
+  "score": 0.967,
+  "capture": "d6b34865ef6845608a1e74149e49650c.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩滑块",
+  "dpi": 144,
+  "x": 6,
+  "y": 6,
+  "px": 30,
+  "score": 0.921,
+  "capture": "d6b34865ef6845608a1e74149e49650c.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩滑块",
+  "dpi": 168,
+  "x": 6,
+  "y": 8,
+  "px": 35,
+  "score": 0.866,
+  "capture": "cc32c1dcfa1b4e90af10891c347ac2e3.png"
+ },
+ {
+  "icon": "icon_00850",
+  "panel": "色彩滑块",
+  "dpi": 168,
+  "x": 6,
+  "y": 8,
+  "px": 35,
+  "score": 0.866,
+  "capture": "8553ec9f1f904b009e399849784b74b8.png"
+ }
+]

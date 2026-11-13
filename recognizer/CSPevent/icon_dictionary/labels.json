@@ -1,0 +1,312 @@
+[
+ {
+  "match": {
+   "sheet": "sheet_210_420x320_a9144eaa.png",
+   "slot": 12
+  },
+  "name": "菜单",
+  "name_en": "Menu",
+  "category": "panel",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_130_420x160_5688cb34.png",
+   "slot": 3
+  },
+  "name": "删除图层",
+  "name_en": "Delete layer",
+  "category": "layer_toolbar",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_190_420x320_0163e1f4.png",
+   "slot": 7
+  },
+  "name": "显示/隐藏图层",
+  "name_en": "Show/hide layer",
+  "category": "layer_row",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_200_420x320_c15b6ba9.png",
+   "slot": 5
+  },
+  "name": "新建栅格图层",
+  "name_en": "New raster layer",
+  "category": "layer_toolbar",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_200_420x320_c15b6ba9.png",
+   "slot": 9
+  },
+  "name": "向下转写",
+  "name_en": "Transfer to lower layer",
+  "category": "layer_toolbar",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_141_420x160_08968fb2.png",
+   "slot": 6
+  },
+  "name": "编辑中的图层",
+  "name_en": "Editing layer",
+  "category": "layer_row",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_200_420x320_c15b6ba9.png",
+   "slot": 10
+  },
+  "name": "向下合并",
+  "name_en": "Merge with layer below",
+  "category": "layer_toolbar",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_164_420x240_8724197f.png",
+   "slot": 6
+  },
+  "name": "设置为参照图层",
+  "name_en": "Set as reference layer",
+  "category": "layer_toolbar",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_164_420x240_8724197f.png",
+   "slot": 5
+  },
+  "name": "图层",
+  "name_en": "Layer (tab)",
+  "category": "panel_tab",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_199_420x320_c03329ba.png",
+   "slot": 2
+  },
+  "name": "锁定透明像素",
+  "name_en": "Lock transparent pixels",
+  "category": "layer_toolbar",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_200_420x320_c15b6ba9.png",
+   "slot": 1
+  },
+  "name": "用下一图层剪裁",
+  "name_en": "Clip to layer below",
+  "category": "layer_toolbar",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_145_420x160_32994fdf.png",
+   "slot": 0
+  },
+  "name": "创建图层蒙版",
+  "name_en": "Create layer mask",
+  "category": "layer_toolbar",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_090_420x80_498eddd7.png",
+   "slot": 2
+  },
+  "name": "重置旋转",
+  "name_en": "Reset rotation",
+  "category": "navigator",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_168_420x240_ed35369c.png",
+   "slot": 1
+  },
+  "name": "缩小",
+  "name_en": "Zoom out",
+  "category": "navigator",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_143_420x160_6b61ded7.png",
+   "slot": 4
+  },
+  "name": "适合屏幕",
+  "name_en": "Fit to window",
+  "category": "navigator",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_168_420x240_ed35369c.png",
+   "slot": 6
+  },
+  "name": "向右旋转",
+  "name_en": "Rotate right",
+  "category": "navigator",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_168_420x240_ed35369c.png",
+   "slot": 5
+  },
+  "name": "向左旋转",
+  "name_en": "Rotate left",
+  "category": "navigator",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_168_420x240_ed35369c.png",
+   "slot": 0
+  },
+  "name": "放大",
+  "name_en": "Zoom in",
+  "category": "navigator",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_168_420x240_ed35369c.png",
+   "slot": 9
+  },
+  "name": "上下翻转",
+  "name_en": "Flip vertical",
+  "category": "navigator",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_168_420x240_ed35369c.png",
+   "slot": 8
+  },
+  "name": "左右翻转",
+  "name_en": "Flip horizontal",
+  "category": "navigator",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_168_420x240_ed35369c.png",
+   "slot": 3
+  },
+  "name": "实际像素",
+  "name_en": "Actual pixels",
+  "category": "navigator",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_134_420x160_7c666b70.png",
+   "slot": 5
+  },
+  "name": "复制子工具",
+  "name_en": "Duplicate sub tool",
+  "category": "tool_group",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_087_420x80_83e70b54.png",
+   "slot": 3
+  },
+  "name": "导入子工具",
+  "name_en": "Import sub tool",
+  "category": "tool_group",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_162_420x240_fb73b6b2.png",
+   "slot": 5
+  },
+  "name": "子工具选项",
+  "name_en": "Sub tool options",
+  "category": "tool_group",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_087_420x80_83e70b54.png",
+   "slot": 2
+  },
+  "name": "子工具详细设置",
+  "name_en": "Sub tool detail",
+  "category": "tool_property",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_090_420x80_498eddd7.png",
+   "slot": 3
+  },
+  "name": "锁定子工具设置",
+  "name_en": "Lock sub tool settings",
+  "category": "tool_property",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_209_420x320_42d2bd37.png",
+   "slot": 0
+  },
+  "name": "影响源设置",
+  "name_en": "Dynamics setting (off)",
+  "category": "tool_property",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_209_420x320_42d2bd37.png",
+   "slot": 1
+  },
+  "name": "影响源设置",
+  "name_en": "Dynamics setting",
+  "category": "tool_property",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_209_420x320_42d2bd37.png",
+   "slot": 3
+  },
+  "name": "将当前值登录为初始设置",
+  "name_en": "Register as initial value",
+  "category": "tool_property",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_209_420x320_42d2bd37.png",
+   "slot": 7
+  },
+  "name": "方向随笔触",
+  "name_en": "Direction follows stroke",
+  "category": "tool_property",
+  "source": "live capture, identified by eye 2026-11-10"
+ },
+ {
+  "match": {
+   "sheet": "sheet_146_420x160_79e78dee.png",
+   "slot": 3
+  },
+  "name": "展开",
+  "name_en": "Expand",
+  "category": "tool_property",
+  "source": "live capture, identified by eye 2026-11-10"
+ }
+]

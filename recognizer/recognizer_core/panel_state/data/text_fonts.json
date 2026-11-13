@@ -1,0 +1,17 @@
+{
+ "schemaVersion": 1,
+ "rule": "CSP draws panel text with the Windows default GUI font (GetStockObject(DEFAULT_GUI_FONT), registry GRE_Initialize GUIFont.Facename / GUIFont.Height), whatever CSP's UI language is. Pixel em = |height at 96 DPI| x capture DPI / 96.",
+ "body": {"source": "systemGuiFont"},
+ "tab": {"source": "systemGuiFont", "face": "Microsoft YaHei UI", "emScale": 0.78,
+         "note": "palette tab titles; measured only on this machine (Chinese Windows), not checked elsewhere"},
+ "knownSystemGuiFonts": {
+   "chinese_sc": {"face": "SimSun", "emPxAt96": 12},
+   "japanese": {"face": "MS UI Gothic", "emPxAt96": 12},
+   "default": {"face": "Tahoma", "emPxAt96": 11}
+ },
+ "evidence": [
+   "2026-11-10 this machine (Windows display language zh-CN, DEFAULT_GUI_FONT = SimSun -12): 504 live panel captures at 144/168 DPI, GDI SimSun at 12*dpi/96 px matches panel text (NCC 0.91-0.94; YaHei 0.30-0.56).",
+   "2026-11-11 official manual screenshots (help.clip-studio.com, en/fr/de/es/ja/zh-tw editions, known labels only, 60-70 lines each): MS UI Gothic at 12 px is the best font in every edition (mean NCC ja 0.52, zh-tw 0.62, de 0.76, es 0.76, fr 0.70, en 0.48) against Tahoma/Segoe UI/Arial/MS Sans Serif 0.29-0.40 and JhengHei/YaHei/SimSun 0.23-0.30. MS UI Gothic is the default GUI font of Japanese Windows: the manual was shot on Japanese Windows for every language, so the UI font follows Windows, not CSP's language.",
+   "Not verified: Korean edition (no known label read in its screenshots), non-Chinese/Japanese Windows (the 'default' entry is the usual Western DEFAULT_GUI_FONT, MS Shell Dlg -> Tahoma/MS Sans Serif, unmeasured). PMingLiU, Gulim, Meiryo UI are not installed here."
+ ]
+}

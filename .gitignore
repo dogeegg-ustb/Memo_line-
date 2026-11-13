@@ -53,3 +53,13 @@ Memoline_demo_csponly/Memoline.exe~*.TMP
 Memoline_demo_csponly/reports/**/*cache-*/
 Memoline_demo_csponly/reports/**/*.memoline
 Memoline_demo_csponly/reports/**/*.jsonl
+
+# per-machine brush-package words written by the recorder at catalog load
+recognizer/recorder_integration/text_dictionary.brushes.json
+# CSP's own assets derived from the local install / official manual: regenerate, do not publish
+recognizer/CSPevent/icon_dictionary/manual_cache/
+recognizer/CSPevent/icon_dictionary/masks.npz
+recognizer/CSPevent/icon_dictionary/index.html
+recognizer/CSPevent/icon_dictionary/sources.json
+recognizer/CSPevent/icon_dictionary/manual_meanings.json
+recognizer/recognizer_core/panel_state/data/text_words.json

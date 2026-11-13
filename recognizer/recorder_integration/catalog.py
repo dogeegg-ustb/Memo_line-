@@ -125,6 +125,12 @@ class Catalog:
             for node in self.tool_catalog['nodes'] if node['kind'] == 'group'
             or (node['kind'] == 'tool' and node['id'] not in tools_with_groups
                 and tool_descendants(self.tool_catalog, node['id']))]
+        # Brush-package names join the glyph reader's text dictionary on every catalog load (start, todb change).
+        try:
+            from recognizer_core.panel_state.text_dictionary import record_brush_packages
+            record_brush_packages(self.tool_catalog, Path(__file__).resolve().parent)
+        except (OSError, ImportError, ValueError) as ex:
+            self.warnings.append(f"笔刷包写入文字字典失败: {ex}")
         tool_nodes = {node['id']:node for node in self.tool_catalog['nodes']}
         tool_targets = {}
         try:
